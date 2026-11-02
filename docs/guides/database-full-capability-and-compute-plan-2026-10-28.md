@@ -274,6 +274,10 @@ M1後にDB-P7／8と独立して実施できる。既存のShirokuma内の検証
 
 ## 9 実装の進め方と直近の着手単位
 
+最優先の[DB-P6-4E（AI-06）](database-p6-4e-ai-settings-2026-11-02.md)は2026-11-02 JSTに限定技術受入を完了した。共有設定の取得・明示接続test・保存を真P・選択global adminへ接続し、既存LOCAL推論条件とDB閲覧権限の分離を維持した（全体回帰4,264成功・34 skip、両HTTP面84要求、実LOCAL疎通・ブラウザー・最終保全）。次の実装単位は[SQL-08／DB-P6-6Aの返却済み結果保存](database-p6-6a-result-save-contract-2026-11-02.md)であり、設計案は実装・受入済みとは扱わない。
+
+2026-11-02、所有者の指示により、残る必須機能の順序を、①[AI設定（AI-06／DB-P6-4E）](database-p6-4e-ai-settings-2026-11-02.md)、②Worksheet結果保存とclone／profiling／Table・Explorer lineage／Drop、③Computeの実使用量・容量・活動／起動履歴・停止理由・現在権限、④Bears／Policyの残るaction、⑤DB-P6-3・4・5・6と89行の全体照合、⑥DB-P6-7とM1本人受入、とする。探索の契約整理と読取り調査は並行できる。C2C1をglobal policy全体の完了へ広げず、dbtの別拡張を新しい必須範囲へ一括追加しない。DB-P7はM1後、DB-P8／P9は既存の採用条件と依存関係を維持する。
+
 [D1](database-p6-4d1-ai-audit-metadata-2026-11-01.md)と[P5B](database-p6-5b-platform-resources-2026-11-02.md)に続き、[DB-P6-5C](database-p6-5c-contract-2026-11-02.md)のCompute専用DB保存activity（query／job_runだけ）を限定技術受入済みとした。既存AUD-03を変更せず、self／databaseの現在認可とeffective DB admin例外を維持した独立した手動一覧・pageである。使用量・空き容量・resizeや包括的なactivity bundleは追加していない。その後続単位である[C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)の固定LOCAL宣言基準レビューも限定技術受入済みとした。usageやAI設定より先に進めたのは今回のCommander判断である。C2C1の結果をC2C全体のglobal policy／admission検査へ広げず、AI設定・live usage／capacityは別単位に残し、P6-4全体／P6-5全体／P6-7／M1本人受入は閉じない。
 
 Commanderが一unitごとに対象ファイル、禁止事項、検証コマンド、終了条件を固定し、既存のCommander／Workerモデルで実装・独立レビューする。機能開放は各unitの実機受入後に行い、feature flag解除を受入の代わりにしない。新しい監督サービスや汎用workflowを導入しない。

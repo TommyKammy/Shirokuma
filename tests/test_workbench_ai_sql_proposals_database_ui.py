@@ -290,7 +290,7 @@ await ready();await submit(pendingProposal());assert.equal(dbProposal.origin,'cu
 
     def test_availability_copy_is_worksheet_copilot_only_after_language_role_refresh(self):
         self.javascript(r'''
-const mainDataAction=document.createElement('button');mainDataAction.id='bear-data-run';$('bears').append(mainDataAction);await ready();const key='SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const mainDataAction=document.createElement('button');mainDataAction.id='bear-data-run';$('bears').append(mainDataAction);await ready();const key='SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.';
 for(const locale of ['en','ja']){setLanguage(locale);await dbRefreshContext();dbControls();assert.ok(t(dbExplanationFence).includes(t(key)));assert.ok(dbExplanationLead.includes('SRE and Policy show read-only Database observations with separate contexts.'));assert.ok(dbExplanationLead.includes('Other Bear actions remain unavailable.'));assert.doesNotMatch(t(dbExplanationFence),/SQL generation.*unavailable|SQL 生成.*未対応/);assert.equal($('copilot-generate').disabled,false);assert.equal($('copilot-generate').getAttribute('title'),undefined);assert.equal($('copilot-request').getAttribute('title'),undefined);for(const id of ['copilot-stage','copilot-publish','ai-settings-button','bear-data-run'])assert.equal($(id).disabled,true,id);currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();await choose();assert.equal($('copilot-generate').disabled,false);}
 ''')
 

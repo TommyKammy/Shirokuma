@@ -14,6 +14,7 @@ import db_bear_observations
 import db_platform_observations
 import db_platform_resources
 import db_platform_workload_baseline
+import db_ai_settings
 from warehouse_operations import OperationError
 from query_context import QueryError
 
@@ -21,6 +22,28 @@ from query_context import QueryError
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path in ('/api/v1/bears/ai-config', '/api/v1/bears/ai-test'):
+        if method not in (('GET', 'POST') if path.endswith('ai-config') else ('POST',)):
+            raise QueryError('NOT_FOUND', 404)
+        if ('?' in handler.path or '#' in handler.path or params
+                or handler.headers.get_all('Transfer-Encoding', [])
+                or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())):
+            raise QueryError('INVALID_INPUT', 400)
+        if method == 'GET':
+            if handler.headers.get_all('Content-Length', []) not in ([], ['0']):
+                raise QueryError('INVALID_INPUT', 400)
+            body, action = None, 'get'
+        else:
+            if len(handler.headers.get_all('Content-Type', [])) != 1:
+                raise QueryError('INVALID_INPUT', 400)
+            body = handler.database_body()
+            action = 'save' if path.endswith('ai-config') else 'test'
+        try:
+            result = db_ai_settings.perform(principal, role, action, body)
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        handler.respond(result, 200)
+        return True
     if path == '/api/v1/bears/platform-workload-baseline':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)

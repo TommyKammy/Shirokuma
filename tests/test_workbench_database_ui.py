@@ -162,7 +162,8 @@ for(const lang of ['ja','en']){
  setLanguage(lang);
  session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
  assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
- for(const id of ['ai-settings-button','wake','chill','quick-wake','quick-chill','copilot-generate','export-csv','export-json','copy-tsv','clone-table-btn','drop-table-btn','run-dbt-build','run-dbt-test']){
+ assert.equal($('ai-settings-button').disabled,true);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
+ for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','export-csv','export-json','copy-tsv','clone-table-btn','drop-table-btn','run-dbt-build','run-dbt-test']){
   assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
   const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
  }

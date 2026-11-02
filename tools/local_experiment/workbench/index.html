@@ -825,6 +825,7 @@ html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wr
 <dialog id="ai-settings" aria-labelledby="ai-settings-title">
 <form id="ai-settings-form">
 <h2 id="ai-settings-title">AI Model Settings</h2>
+<p id="ai-shared-help" class="help" hidden></p>
 <label for="ai-provider">Provider</label><select id="ai-provider"><option value="local-openai">local-openai</option><option value="openai">openai</option><option value="bedrock">bedrock</option><option value="custom">custom</option></select>
 <label for="ai-model">Model Name</label><input id="ai-model" required>
 <label for="ai-url">API URL</label><input id="ai-url" type="url" required>
@@ -2490,10 +2491,9 @@ const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。Native graph は適格な保存済み VIEW／TABLE／EPHEMERAL 全モデルを実行します。VIEW を含むグラフも、全体の構築・品質検証後に適格な TABLE 候補を公開できます。incremental は未対応です。品質テストは明示選択、保存済み品質テスト一式の合格後、適格なグラフの TABLE 候補を1件ずつ公開できます。",
- "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.": "Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。",
+ "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.": "Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開は未対応です。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
- "AI settings are unavailable in Database mode. Use SQL or Manual WAP.": "Database モードでは AI 設定は未対応です。SQL または手動 WAP を利用してください。",
  "Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.": "Database モードではウェアハウスの起動／休止操作は未対応です。共有ウェアハウスの状態はヘッダーで確認してください。",
  "Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.": "Database モードではワークシート結果の保存は未対応です。データ探索で許可されたテーブルを選び、「テーブルをエクスポート」を利用してください。",
  "Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.": "Database モードでは複製と削除は未対応です。許可されたテーブルのカラム・プレビュー・スナップショット・DDL を確認できます。",
@@ -2567,6 +2567,82 @@ const dbIdentity=()=>JSON.stringify([dbPrincipal,currentRole,dbEpoch]);
 const dbTabRole=()=>dbCurrent()?.selected_role;
 const dbRoleItems=role=>dbInventories.get(role)?.items||[];
 const dbTabItems=()=>dbRoleItems(dbTabRole());
+const dbAISettings={auth:'',revision:0,busy:null,loaded:false,installed:false};
+const dbAISettingsFields=['ai-provider','ai-model','ai-url','ai-key','ai-timeout'];
+const dbAISettingsHelp='Platform-shared settings; management requires current platform administrator (P) and global Admin. Database inference: local-openai only; HTTP URL with explicit loopback IP:port and /v1 or /v1/; model 1–128 characters [A-Za-z0-9_.:/-]; timeout ≤60s. Shared connection tests do not verify Database inference readiness.';
+Object.assign(i18n.ja,{'Platform-shared settings; management requires current platform administrator (P) and global Admin. Database inference: local-openai only; HTTP URL with explicit loopback IP:port and /v1 or /v1/; model 1–128 characters [A-Za-z0-9_.:/-]; timeout ≤60s. Shared connection tests do not verify Database inference readiness.':'設定はプラットフォーム共通。管理には現在のプラットフォーム管理者（P）とグローバル Admin が必要です。Database 推論：local-openai のみ、ループバック IP:port を明示した HTTP URL（/v1 または /v1/）、モデル名1～128文字 [A-Za-z0-9_.:/-]、タイムアウト60秒以下。共有接続テストでは Database 推論の準備は未確認です。','Shared connection succeeded {latency}ms; Database AI readiness is not verified.':'共有接続に成功しました（{latency}ms）。Database AI の利用準備は未確認です。'});
+function dbAISettingsPurge(){
+ const p=dbAISettings;++p.revision;p.busy=null;p.loaded=false;
+ for(const id of dbAISettingsFields)$(id).value='';
+ $('ai-config-status').hidden=true;
+}
+function dbAISettingsSync(){
+ if(!databaseMode)return;
+ const p=dbAISettings,auth=dbPlatformAuth(),allowed=dbObservationPlatform('admin');
+ if(auth!==p.auth||!allowed){
+  dbAISettingsPurge();p.auth=auth;
+  if($('ai-settings').open)$('ai-settings').close();
+ }
+ $('ai-settings-button').disabled=!allowed;
+ for(const id of dbAISettingsFields)$(id).disabled=!allowed||!p.loaded;
+ for(const id of ['ai-test','ai-save'])$(id).disabled=!allowed||!p.loaded||!!p.busy;
+}
+function dbAISettingsInstall(){
+ if(dbAISettings.installed)return;dbAISettings.installed=true;
+ $('ai-shared-help').hidden=false;ui($('ai-shared-help'),dbAISettingsHelp);
+ $('ai-settings-button').onclick=dbAISettingsOpen;
+ $('ai-test').onclick=()=>dbAISettingsAct('test');
+ $('ai-settings-form').onsubmit=event=>{event.preventDefault();return dbAISettingsAct('save');};
+ $('ai-settings-form').oninput=event=>{
+  if(['ai-provider','ai-url'].includes(event.target.id))$('ai-key').value='';
+  ++dbAISettings.revision;dbAISettingsStatus('Settings changed; test again.');
+ };
+ $('ai-close').onclick=()=>{$('ai-settings').close();dbAISettingsPurge();dbAISettingsSync();};
+ $('ai-settings').addEventListener('close',()=>{dbAISettingsPurge();dbAISettingsSync();});
+}
+function dbAISettingsCapture(){
+ const p=dbAISettings,token={},revision=p.revision,auth=dbPlatformAuth();p.busy=token;
+ return {token,current:()=>p.busy===token&&revision===p.revision&&auth===dbPlatformAuth()&&$('ai-settings').open&&dbObservationPlatform('admin')};
+}
+async function dbAISettingsAuth(read){
+ const response=await fetch('/api/session');if(!read.current())return false;
+ if([401,403].includes(response.status)){dbAdminSession({});return false;}
+ const session=await response.json();if(!read.current())return false;
+ dbAdminSession(response.ok?session:{});
+ if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+ return read.current();
+}
+function dbAISettingsStatus(key,values={},state=''){
+ const node=$('ai-config-status');node.hidden=false;node.className='badge '+state;ui(node,key,values);
+}
+async function dbAISettingsOpen(){
+ dbAISettingsSync();if(!dbObservationPlatform('admin')||$('ai-settings').open)return;
+ dbAISettingsPurge();$('ai-settings').showModal();const read=dbAISettingsCapture();dbAISettingsSync();
+ try{
+  if(!await dbAISettingsAuth(read))return;
+  const config=await dbAPI('/api/v1/bears/ai-config','admin',undefined,read.current);
+  if(!read.current()||!await dbAISettingsAuth(read))return;
+  for(const [id,key] of [['ai-provider','provider'],['ai-model','model'],['ai-url','api_url'],['ai-timeout','timeout']])$(id).value=config[key];
+  dbAISettings.loaded=true;
+ }catch{if(read.current())dbAISettingsStatus('Settings failed: {error}',{error:t('Unavailable')},'bad');}
+ finally{if(dbAISettings.busy===read.token)dbAISettings.busy=null;dbAISettingsSync();}
+}
+async function dbAISettingsAct(action){
+ dbAISettingsSync();const p=dbAISettings;
+ if(!dbObservationPlatform('admin')||!$('ai-settings').open||!p.loaded||p.busy||!$('ai-settings-form').reportValidity())return;
+ const body={provider:$('ai-provider').value,model:$('ai-model').value.trim(),api_url:$('ai-url').value.trim(),timeout:Number($('ai-timeout').value)};
+ if($('ai-key').value)body.api_key=$('ai-key').value;
+ const read=dbAISettingsCapture();dbAISettingsSync();
+ try{
+  if(!await dbAISettingsAuth(read))return;
+  const result=await dbAPI('/api/v1/bears/'+(action==='test'?'ai-test':'ai-config'),'admin',body,read.current);
+  if(!read.current()||!await dbAISettingsAuth(read))return;
+  if(action==='save'){$('ai-key').value='';dbAISettingsStatus('Settings saved',{},'good');}
+  else if(result.status==='connected'&&Number.isSafeInteger(result.latency_ms)&&result.latency_ms>=0)dbAISettingsStatus('Shared connection succeeded {latency}ms; Database AI readiness is not verified.',{latency:result.latency_ms},'good');
+  else dbAISettingsStatus('Connection failed: {error}',{error:t('Unavailable')},'bad');
+ }catch{if(read.current())dbAISettingsStatus(action==='test'?'Connection failed: {error}':'Settings failed: {error}',{error:t('Unavailable')},'bad');}
+ finally{if(p.busy===read.token)p.busy=null;dbAISettingsSync();}
+}
 const dbTabIdentity=()=>JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbTabRole()]);
 function dbSchemaKey(role,database){const d=dbRoleItems(role).find(d=>d.id===database);return JSON.stringify([dbPrincipal,dbEpoch,role,database,d?.binding_revision,d?.generation_id,d?.grant_revision??null]);}
 const dbSchemasFor=w=>dbSchemaCache.get(dbSchemaKey(w?.selected_role,w?.database_id))||[];
@@ -2578,10 +2654,13 @@ function dbError(data,status){
  const message=error?.message||data?.message;
  return Object.assign(Error(code+(message?' · '+message:'')),{code,status,details:data?.details||error?.details});
 }
-async function dbAPI(path,role,body){
+async function dbAPI(path,role,body,current){
  const headers={'X-Shirokuma-Role':role};
  const response=await fetch(path,body===undefined?{headers}:{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ if(current&&!current())throw Error('STALE');
+ if(current&&[401,403].includes(response.status)){dbAdminSession({});throw Error('ACCESS_DENIED');}
  const data=await response.json();
+ if(current&&!current())throw Error('STALE');
  if(!response.ok)throw dbError(data,response.status);
  return data;
 }
@@ -2615,7 +2694,7 @@ const dbExplanationLead='Query Doctor explains SQL using the active SQL workshee
 const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.';
+const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2665,7 +2744,7 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。'
+ [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開は未対応です。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -3390,7 +3469,7 @@ function dbProposalInstall(){
 const dbCuratorEndpoint='/api/v1/bears/catalog-proposals',dbCuratorKey='shirokuma.catalog-proposal-intents.v1';
 const dbCurator={installed:false,role:'',database:'',schema:'',databases:[],schemas:[],context:null,inventoryAuth:'',auth:'',epoch:0,objects:[],cursor:null,source:null,busy:null,record:null,origin:null,history:[],intents:[],proofs:new Map(),notice:''};
 Object.assign(i18n.ja,{
- 'SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.':'SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開・AI 設定は未対応です。',
+ 'SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.':'SQL 案はワークシートの Copilot で利用できます。他の Bear 操作・ステージング・公開は未対応です。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。',
  'Explain and draft descriptions':'説明と説明文案を作成',
  'Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.':'名前とカラムの型だけを LOCAL に送信します。説明文は推測による未適用の案です。内容を確認してください。カラム案は一部のみ、最大8件です。',
  'Catalog Curator drafts descriptions for one TABLE or VIEW using its own context.':'Catalog Curator は独自のコンテキストを使い、TABLE または VIEW 1件の説明文案を作成します。',
@@ -3819,6 +3898,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbActivitySync();
  dbBaselineSync();
+ dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
  if(!$('observation-compute-panel')?.dataset.installed)return;
@@ -4344,6 +4424,7 @@ function dbReason(w=dbCurrent()){
  return '';
 }
 function dbControls(){
+ dbAISettingsSync();
  dbExplanationSync();dbProposalSync();dbCuratorSync();dbObservationsSync();
  if(dbRuntime.installed)dbRuntimeSync();
  if(dbAudit.installed)dbAuditValidate();
@@ -5091,6 +5172,7 @@ function dbApplyRole(){
  dbControls();dbRenderRun();
 }
 async function initializeDatabaseUI(session){
+ dbAISettingsInstall();
  document.documentElement.dataset.dataMode='database';
  dbPrincipal=JSON.stringify([session.username,session.authenticated]);
  dbMaximumRole=session.maximum_role;dbUpdateMaximumRole(session.maximum_role);
@@ -5132,7 +5214,7 @@ async function initializeDatabaseUI(session){
  ],
  [
   "bears",
-  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable."
+  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin."
  ],
  [
   "pawprints",
@@ -5148,17 +5230,16 @@ async function initializeDatabaseUI(session){
  }
  // Jobs replaces its legacy contents with a Database panel.
  for(const node of $('jobs').querySelectorAll('button,input,select,textarea')){node.disabled=true;node.dataset.databaseUnavailable='true';}
- for(const id of ['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table','ai-settings-button','chill','wake']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';}
+ for(const id of ['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table','chill','wake']){$(id).disabled=true;$(id).dataset.databaseUnavailable='true';}
  for(const [controls,key] of [
   [['quick-wake','quick-chill','wake','chill'].map(id=>$(id)),'Warehouse wake/chill controls are unavailable in Database mode. Check shared warehouse state in the header.'],
-  [[$('ai-settings-button')],'AI settings are unavailable in Database mode. Use SQL or Manual WAP.'],
-  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.'],
+  [['copilot-generate','copilot-explain','copilot-stage','copilot-publish','copilot-request','copilot-stage-table'].map(id=>$(id)),'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.'],
   [['export-csv','export-json','copy-tsv'].map(id=>$(id)),'Worksheet result saving is unavailable in Database mode. Open Data Explorer and use Export Table for an authorized table.'],
   [['clone-table-btn','drop-table-btn'].map(id=>$(id)),'Clone and drop are unavailable in Database mode. Use columns, preview, snapshots or DDL to inspect an authorized table.'],
   [['run-dbt-build','run-dbt-test'].map(id=>$(id)),'Legacy dbt build/test is unavailable in Database mode. Use Manual WAP or Managed Marts with an authorized context.'],
   [[...document.querySelectorAll('[data-sample]')],'Fixed sample queries are unavailable in Database mode. Enter SQL for the selected database.']
  ])for(const node of controls){node.disabled=true;node.dataset.databaseUnavailable='true';node.setAttribute('title',t(key));uiAttributes.push({node,attribute:'title',key});}
- const copilot=$('copilot-result');ui(copilot,'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging, publishing and AI settings remain unavailable.');copilot.hidden=false;
+ const copilot=$('copilot-result');ui(copilot,'Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Other Bear actions, staging and publishing remain unavailable. Shared AI settings are available to platform administrators using global Admin.');copilot.hidden=false;
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
@@ -5268,6 +5349,7 @@ function dbAdminSession(session){
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
  dbBaselineSync();
+ dbAISettingsSync();
  dbAdminGate();
 }
 function dbAdminScope(){return JSON.stringify([dbIdentity(),dbAuthorizationVersion,dbRoleVersion('admin'),dbInventoryVersion,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,dbAdmin.selection,dbAdmin.database]);}

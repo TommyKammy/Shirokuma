@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+[DB-P6-4E](database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有設定・明示接続test・保存を通常Workbenchへ接続し、限定技術受入を完了した（全体回帰4,264成功・34 skip、両HTTP面84要求、実LOCAL疎通・日英ブラウザー、原設定と既存データの保全）。現在の真P・上限admin・選択global adminを検査し、DB閲覧・管理権限と分離する。共有設定の接続成功はDatabase推論の準備完了を意味せず、既存LOCAL推論の対応条件を維持する。次はSQL-08と残る探索操作であり、89項目全体とM1本人受入は継続する。
+
 [DB-P6-4C2C1](database-p6-4c2c1-workload-baseline-2026-11-02.md)はAI-04／AI-05／CMP-05へP専用の固定LOCAL宣言基準レビューを加えた限定技術受入単位である。旧4項目をmet／not_metで示す範囲に限定し、8 admission policyやglobal policy全体、実行許可にはしない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。
 
 [DB-P6-5C](database-p6-5c-contract-2026-11-02.md)はCMP-02へDB保存activityの手動一覧を追加したUIのみの限定技術受入済み単位である。既存AUD-03のself／database認可とeffective DB admin例外を保ち、P専用のCMP-05とは別に扱う。P5Cの限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,188成功・34 skip、既存AUD-03の実APIとWorkbenchの実画面、最終保全PASS）。
@@ -134,7 +136,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | AI-03 | Catalog Curator Bear | C1のmetadata説明・説明文案に条件付き対応 | V／E／A、独立contextと同じprimary schemaの安定TABLE／VIEW 1件、現在のquery権限とLOCAL AI。名前・列名・型による推定で、列文案は最大8列。未適用の提案であり、旧検索／lineage・説明保存は対象外 | DB-P6-4C1限定技術受入済み |
 | AI-04 | SRE Bear | C2AのDB内保存metadata・C2BのP専用固定LOCAL観測は限定技術受入済み。C2C1の宣言基準レビューも限定技術受入済み | DB内はV／E／A、本人・保存full9・primary schema権限。P専用は現在のP account・principal・上限admin・選択adminを独立検査しDB／grant不要。C2C1は固定2 templateの全ordinary／initに旧4宣言条件だけを確認し、SQL health・runtime security・旧SRE検査を保証しない | DB-P6-4C2A／C2B限定技術受入済み、[C2C1契約・限定技術受入](database-p6-4c2c1-workload-baseline-2026-11-02.md) |
 | AI-05 | Policy Gatekeeper Bear | C2Aの現在context権限・C2BのP専用保存設定観測は限定技術受入済み。C2C1の4宣言レビューも限定技術受入済み | DB内の現在schema権限・SQL mode上限とP専用scopeを分離。C2C1は現在真P・選択adminで手動取得し、nonRoot=trueかつUID未指定は旧ruleどおり許す。met／not_metとsource確認不可だけで、8 admission policy・global policy全体・個別SQL承認やaggregate allowを示さない | DB-P6-4C2A／C2B限定技術受入済み、[C2C1契約・限定技術受入](database-p6-4c2c1-workload-baseline-2026-11-02.md) |
-| AI-06 | AI provider／model／URL／key／timeout、接続test／保存 | 未接続 | 設定管理権限とDB閲覧権限を分離 | DB-P6-4 |
+| AI-06 | AI provider／model／URL／key／timeout、接続test／保存 | 対応。共有設定、現在の真P・上限admin・選択global admin | DB／grant不要。key保護・接続先変更時のcredential解除。Database推論は既存LOCAL契約を維持し、疎通成功と区別 | [DB-P6-4E限定技術受入](database-p6-4e-ai-settings-2026-11-02.md)、`/api/v1/bears/ai-config`・`ai-test` |
 | AUD-01 | Pawprints一覧・filter・status・更新 | 対応。P専用のglobal補助preview、最新100件以内 | Pが明示取得。DB／本人scopeへ帰属させず、耐久監査とは別表示 | DB-P6-1、旧API拒否は維持 |
 | AUD-02 | 旧runtime query／load履歴画面 | 未接続。個別query／Job履歴は対応 | 個別履歴へ案内 | SQL／Job／WAP |
 | AUD-03 | 統合Database監査の検索・詳細・download | 対応。保存metadataの検索・前後page・関連記録・JSON。D1のAI要約追加は限定技術受入済み | V／Eは本人・保存role・許可Schema、Aは対象DB。現在権限を再確認し、保存full9は内部整合のみ。Pのplatform scopeは基盤管理記録だけでAIを除外。本文・全遷移は対象外 | DB-P6-1実装契約、[D1保存AI要約](database-p6-4d1-ai-audit-metadata-2026-11-01.md)（既存event形状、source=ai、閉じた5種のaction、links=[]、内容field追加なし） |

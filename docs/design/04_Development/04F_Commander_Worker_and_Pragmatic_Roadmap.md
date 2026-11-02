@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-02
-version: "1.48"
+version: "1.49"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-02、[DB-P6-4E](../../guides/database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有AI設定をDatabaseモードの通常画面へ接続し、限定技術受入を完了した。現在の真P・上限admin・選択global adminをDB grantと独立して検査し、active設定・key保護・明示接続test・保存・遅着応答の無効化を実装した。既存LOCAL推論条件を維持し、全体回帰4,264成功・34 skip、両HTTP面84要求・実LOCAL疎通・ブラウザーと原設定／既存データの保全を確認した。次は[SQL-08／DB-P6-6A設計案](../../guides/database-p6-6a-result-save-contract-2026-11-02.md)に沿って結果保存を進め、P6全必須行とM1本人受入は継続する。
 
 2026-11-02、[DB-P6-4C2C1](../../guides/database-p6-4c2c1-workload-baseline-2026-11-02.md)で固定LOCAL Pod-template宣言基準の読取りレビューを実装した。現在の真P・上限admin・選択adminを全source取得前後に検査し、DB／schema／grantを前提にしない。固定2 Deploymentの全ordinary／initをordinalで扱い、旧Policyの意図を限定した4項目のmet／not_metだけを返す。nonRoot=trueかつUID未指定は旧宣言ruleどおり許し、native-baselineの8 admission policyやglobal policy全体の検証にはしない。不正・部分sourceは全体を確認不可とし、aggregate PASS／allowや操作許可を返さない。SRE／PolicyのPlatform scopeとComputeに独立共有cacheを手動表示し、旧C2B・P5A／P5B／P5Cを変更しない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。usage・AI設定より先に進めた順序は今回のCommander判断であり、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
@@ -41,6 +43,8 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 本ドキュメントは [ADR-0036](../07_ADR/ADR-0036_Adopt_Commander_Worker_Model_and_Pragmatic_Core_Reset.md) に基づき、2026年10月16日以降の Shirokuma の開発体制（**Antigravity 司令塔 × `codex-cli` GPT-6.1 Sol Medium 実装ワーカー**）および **Phase 0〜Phase 6 再起動ロードマップ** を定義する。
 
 ### Databaseコア機能統合とコンピュート拡張の後続計画
+
+2026-11-02、所有者の指示により、残件は[AI設定（AI-06／DB-P6-4E）](../../guides/database-p6-4e-ai-settings-2026-11-02.md)→Worksheet結果保存・探索操作→Compute観測／管理→Bears／Policy残件→89行とDB-P6-3・4・5・6の全体照合→DB-P6-7／M1本人受入の順で進める。探索の契約・読取り調査は並行できる。dbtの別拡張はTRF-11必須範囲と分け、実compute伸縮のDB-P7はM1後とする。
 
 2026-10-31、TRF-11の必須操作対応を確認し、[DB-P6-4A1](../../guides/database-p6-4a1-local-sql-explanation-2026-10-31.md)で許可されたSQLのローカル説明を実装した。Query Doctor／Copilotは保存キー・本人履歴・遅着ガードを共有し、SQL／planの実行や旧INTERNAL経路を使わない。2DB実推論とブラウザー検証を終え、canonical 89単位（3,595成功・34 skip）と文書検証を完了し、この限定範囲を技術受入済みとした。実行計画はA2へ分け、5 Bears全面対応やM1完了にはしない。
 

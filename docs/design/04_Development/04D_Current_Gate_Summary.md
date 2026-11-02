@@ -5,12 +5,14 @@ title: "Current local gate summary"
 status: active
 created: 2026-10-06
 updated: 2026-11-02
-version: "2.33.0"
+version: "2.34.0"
 area: development
 tags: [shirokuma, local, handoff, gates]
 ---
 
 # Current Gate Summary (Pragmatic Core Reset — 2026-10-16)
+
+2026-11-02、[DB-P6-4E](../../guides/database-p6-4e-ai-settings-2026-11-02.md)でAI-06の共有AI設定をDatabaseモードの通常画面へ接続し、限定技術受入を完了した。現在の真P・上限admin・選択global adminをDB grantと独立して検査し、active設定・key保護・明示接続test・保存・遅着応答の無効化を実装した。既存LOCAL推論条件を維持し、全体回帰4,264成功・34 skip、両HTTP面84要求・実LOCAL疎通・ブラウザーと原設定／既存データの保全を確認した。次は[SQL-08／DB-P6-6A設計案](../../guides/database-p6-6a-result-save-contract-2026-11-02.md)に沿って結果保存を進め、P6全必須行とM1本人受入は継続する。
 
 2026-11-02、[DB-P6-4C2C1](../../guides/database-p6-4c2c1-workload-baseline-2026-11-02.md)で固定LOCAL Pod-template宣言基準の読取りレビューを実装した。現在の真P・上限admin・選択adminを全source取得前後に検査し、DB／schema／grantを前提にしない。固定2 Deploymentの全ordinary／initをordinalで扱い、旧Policyの意図を限定した4項目のmet／not_metだけを返す。nonRoot=trueかつUID未指定は旧宣言ruleどおり許し、native-baselineの8 admission policyやglobal policy全体の検証にはしない。不正・部分sourceは全体を確認不可とし、aggregate PASS／allowや操作許可を返さない。SRE／PolicyのPlatform scopeとComputeに独立共有cacheを手動表示し、旧C2B・P5A／P5B／P5Cを変更しない。C2C1の限定範囲を2026-11-02 JSTに技術受入済みとした（全体回帰4,232成功・34 skip、両HTTP面の実APIとWorkbenchの3面表示、最終保全PASS）。usage・AI設定より先に進めた順序は今回のCommander判断であり、P6-4全体／P6-5全体／P6-7／M1本人受入は継続する。
 
