@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+2026-11-03 JST、[DB-P6-5D](database-p6-5d-platform-usage-2026-11-03.md)で固定LOCALのCPU・メモリ使用量をComputeの手動観測へ接続し、限定技術受入を完了した。現在P認可、コンテナ所有関係・再起動とsample期間、設定requests／limitsとの区別、両実APIと日英・390px／実200%の通常画面、114群と修正後Workbench 1,092件・保全を検証した。容量・履歴などの残件とP6全体／M1本人受入は継続する。
+
 2026-11-03 JST、[DB-P6-6E](database-p6-6e-table-drop-2026-11-02.md)でEXP-11を「カタログ解除・データ保持」として通常Explorerへ接続し、限定技術受入を完了した。正規の現在A権限、full9、Ref / headの確認と元keyのGET復旧を維持し、4表のACK・同名再作成保全・旧22ファイル保持を確認した。全体112群と最終backend / retirement / Workbenchの影響群、実API・通常画面・元台帳 / 設定保全を検証した。次はComputeの観測・管理を限定して進め、P6全体とM1本人受入は継続する。
 
 [DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md)でEXP-13／14の保存WAP／dbt lineageをTableタブとExplorerの可視ヘッダーへ接続し、限定技術受入を完了した。確定証跡と版を固定しない定義、現在／過去、計画中モデルと物理Refを分離する。canonical 110群と最終Workbench 1,058件、両HTTP 40ケース、通常画面と台帳／設定保全を確認した。次はEXP-11のDrop導線を別単位で進め、P6全体とM1本人受入は継続する。
@@ -154,7 +156,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | CMP-02 | Compute panelの共有状態・停止blocker・保存policy・DB保存activity | 共有runtimeは認証済みV／E／Aで技術受入済み。P5Cのquery／job_run保存metadata一覧も限定技術受入済み | 共有状態と物理状態／engine検証を区別。P5Cは独立した手動self／database一覧で、本人・保存role・現在DB／Schema権限と既存effective DB admin例外を維持。live activity・SQL／結果・詳細／復旧・exportは含めず、CMP-05のP専用観測を開放しない | 共有LOCAL panel／runtime GET、[P5C契約・限定技術受入](database-p6-5c-contract-2026-11-02.md) |
 | CMP-03 | quick／SQL／Computeの明示Wake／Chillと状態再検証 | logical_v1のP専用API／UI／HTTP CLIを実装。技術受入済み | 全DBへの影響を表示。元key／receipt保持、現在権限・admission／drain・全blockerを再確認。SQLは再送しない | runtime操作／operation照会。旧Database profileは未対応 |
 | CMP-04 | Auto-Chill設定と許可済みSQLのAuto-resume | logical_v1で設定CAS、server側休止、SQL共通経路の自動復帰を実装。技術受入済み、cold 30回はp50 26.44秒・p95 26.92秒（30回すべて成功） | 設定はP、0は無効。自動起動は元のDB／role／intentを認可し、同一初回POSTを再送しない。queued取消・UNKNOWN保護を維持 | Workbench／native／CLI、既存DataOps・Job・Stage・Mart・対応済みdbt・予定の共通SQL経路。AIは未接続 |
-| CMP-05 | ComputeのSRE check／Policy audit | P5Aの固定観測・P5Bの設定資源は限定技術受入済み。C2C1の宣言レビューも限定技術受入済み。旧SRE check／任意Policy baselineは未接続 | P専用の現在account・principal・上限admin・選択admin、DB／schema／grant不要。C2C1はSRE／Policy Platform・Computeの3面で独立cacheを明示共有し、固定2 templateの4宣言結果だけを表示。不正sourceは全体確認不可。既存C2B／P5B／P5Cと旧route拒否を維持し、security PASS・admission許可・usage／capacityや操作許可を示さない | P5A／[P5B](database-p6-5b-platform-resources-2026-11-02.md)限定技術受入済み、[C2C1契約・限定技術受入](database-p6-4c2c1-workload-baseline-2026-11-02.md)／DB-P6-4・5全体は未完了 |
+| CMP-05 | ComputeのSRE check／Policy audit | P5Aの固定観測・P5Bの設定資源・P5Dの実CPU／メモリ使用量は限定技術受入済み。C2C1の宣言レビューも限定技術受入済み。旧SRE check／任意Policy baselineは未接続 | P専用の現在account・principal・上限admin・選択admin、DB／schema／grant不要。C2C1はSRE／Policy Platform・Computeの3面で独立cacheを明示共有し、固定2 templateの4宣言結果だけを表示。不正sourceは全体確認不可。既存C2B／P5B／P5Cと旧route拒否を維持し、C2C1はsecurity PASS・admission許可・usage／capacityや操作許可を示さない | P5A／[P5B](database-p6-5b-platform-resources-2026-11-02.md)／[P5D](database-p6-5d-platform-usage-2026-11-03.md)限定技術受入済み、[C2C1契約・限定技術受入](database-p6-4c2c1-workload-baseline-2026-11-02.md)／DB-P6-4・5全体は未完了 |
 | CMP-06 | XS／Sの実サイズ、Worker増減、用途別Warehouse | 未実装。休止・復帰の対応から伸縮完了を推定しない | 同一computeのaliasを維持し、容量・実資源・性能の計測後に採用 | DB-P7／8 |
 | ADM-01 | DB管理一覧・選択・revision／binding情報 | 対応、P | A、Worksheetと独立 | `/api/v1/admin/databases` |
 | ADM-02 | 論理DB作成、作成capability、初期access | 対応、P、logical_v1の準備条件 | A、root／actor／環境／key | admin database-creations |

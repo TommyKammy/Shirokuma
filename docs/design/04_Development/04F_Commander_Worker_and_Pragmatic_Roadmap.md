@@ -4,13 +4,15 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-02
-version: "1.52"
+updated: 2026-11-03
+version: "1.53"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-03、[DB-P6-5D](../../guides/database-p6-5d-platform-usage-2026-11-03.md)で固定LOCALのCPU・メモリ実使用量をComputeの独立した手動観測へ接続し、限定技術受入を完了した。sourceの現在所有関係・コンテナ再起動・sample期間とP認可、設定requests／limitsとの区別、114群と修正後Workbench 1,092件・実API／画面・保全を検証した。次はComputeの容量／履歴等を限定単位で進め、Bears／Policy残件、89行の全体照合、DB-P6-7／M1本人受入の順序を維持する。
 
 2026-11-03、[DB-P6-6E](../../guides/database-p6-6e-table-drop-2026-11-02.md)でEXP-11のカタログ解除・データ保持を限定技術受入済みとした。現在Aの正規認可と不変Refを検査し、ACK／UNKNOWN、対象消失後とID未受領時の元key照会を分離する。canonical 112群と最終backend 40／retirement 28／Workbench 1,083、実4 ACK・同名再作成保全・22ファイル保持・通常画面と元行／設定保全を確認した。次はComputeの観測・管理を限定単位で進め、P6全必須行とM1本人受入、M1後の実コンピュート伸縮という順序は維持する。
 

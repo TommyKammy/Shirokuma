@@ -3902,6 +3902,7 @@ function dbPlatformSync(){
  }
  dbPlatformComputeSync();
  dbResourcesSync();
+ dbUsageSync();
  dbActivitySync();
  dbBaselineSync();
  dbAISettingsSync();
@@ -4231,6 +4232,123 @@ function dbResourcesRender(){
    line(t(item.kind==='container'?'Container':'Init container')+' '+item.index,'h4');
    for(const [key,title] of [['requests','request'],['limits','limit']])for(const field of ['cpu','memory'])line(t((field==='cpu'?'CPU':'Memory')+' '+title)+': '+(item[key][field]===null?t('Not specified'):item[key][field]));
   }
+ }
+}
+
+// Independent manual usage snapshot; DB selection never triggers a read.
+const dbUsage={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+Object.assign(i18n.ja,{
+ 'Shared LOCAL CPU and memory usage (P-only, read-only)':'共有 LOCAL の CPU・メモリ使用量（P のみ・読み取り専用）',
+ 'Fetch usage samples':'使用量サンプルを取得',
+ 'Usage authority verified. Select Fetch usage samples.':'権限を確認しました。「使用量サンプルを取得」を選んでください。',
+ 'Fetching usage samples.':'使用量サンプルを取得しています。',
+ 'Usage unavailable. Explicitly refresh authority or fetch again.':'使用量を取得できません。権限更新または再取得を明示的に行ってください。',
+ 'Shared LOCAL compute; not dedicated to a database. No capacity or headroom measurement.':'データベース専用ではない共有 LOCAL コンピュートです。容量・余力の測定は含みません。',
+ 'CPU is averaged over the sample window; memory is a working-set sample. Manual snapshot only.':'CPU はサンプル期間の平均、メモリはワーキングセットの測定値です。手動取得時点の記録です。',
+ 'Configured requests/limits are shown in “Configured LOCAL container resources (P-only, read-only)”.':'設定 requests／limits は「LOCAL コンテナの設定リソース」で確認できます。',
+ 'Usage source unavailable. No measured values.':'使用量の参照元を確認できません。測定値はありません。',
+ 'Sampled at':'サンプル時刻','CPU averaging window':'CPU 平均期間','CPU cores':'CPU コア数','CPU millicores':'CPU ミリコア数','Memory working set':'メモリワーキングセット','seconds':'秒','bytes':'バイト'
+});
+function dbUsageAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,'X-Shirokuma-Role:admin']);}
+function dbUsageLeave(){++dbUsage.epoch;dbUsage.busy=null;dbUsage.notice='';}
+function dbUsageSync(){
+ const p=dbUsage,auth=dbUsageAuth();
+ if(auth!==p.auth){dbUsageLeave();p.record=null;p.auth=auth;}
+ if(!dbObservationPlatform('admin'))p.record=null;
+ // Only navigation invalidates pending work. Completed same-authority data survives.
+ if(activeTab!==p.view){dbUsageLeave();p.view=activeTab;}
+ if(!$('observation-usage-panel')?.dataset.installed)return;
+ $('observation-usage-auth').disabled=!!p.busy||!dbPlatformCanRefresh();
+ $('observation-usage-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
+ dbUsageRender();
+}
+function dbUsageInstall(){
+ if($('observation-usage-panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-usage-panel',$('compute'));panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-usage-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-usage-title',head,'Shared LOCAL CPU and memory usage (P-only, read-only)');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';
+ dbAdminButton(toolbar,'observation-usage-auth','Refresh platform authority',dbUsageRefreshAuth);
+ dbAdminButton(toolbar,'observation-usage-fetch','Fetch usage samples',dbUsageFetch);
+ const output=dbAdminNode('div','observation-usage-output',body);output.className='table-wrap';output.setAttribute('style','overflow-wrap:anywhere;min-width:0');output.setAttribute('aria-live','polite');dbUsageSync();
+}
+function dbUsageCapture(){
+ const p=dbUsage,token={},epoch=++p.epoch,auth=dbUsageAuth(),view=activeTab;p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbUsageAuth()&&view===activeTab};
+}
+async function dbUsageRefreshAuth(){
+ dbUsageSync();if(dbUsage.busy||!dbPlatformCanRefresh())return;
+ const read=dbUsageCapture();dbUsage.notice='Refreshing platform authority.';dbUsageSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbUsage.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const session=await response.json();if(!read.current())return;
+  dbAdminSession(response.ok?session:{});
+  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbUsage.notice=dbObservationPlatform('admin')?'Usage authority verified. Select Fetch usage samples.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current())dbUsage.notice='Usage unavailable. Explicitly refresh authority or fetch again.';}
+ finally{if(dbUsage.busy===read.token)dbUsage.busy=null;dbUsageSync();}
+}
+async function dbUsageFetch(){
+ dbUsageSync();if(dbUsage.busy||!dbObservationPlatform('admin'))return;
+ const read=dbUsageCapture();dbUsage.notice='Fetching usage samples.';dbUsageSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-usage',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbUsage.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const body=await response.text();if(!read.current())return;
+  if(new TextEncoder().encode(body).length>32768)throw Error('INVALID_RESPONSE');const data=JSON.parse(body);
+  if(!response.ok)throw Error('UNAVAILABLE');dbUsage.record=dbUsageRecord(data);dbUsage.notice='';
+ }catch{if(read.current()){dbUsage.record=null;dbUsage.notice='Usage unavailable. Explicitly refresh authority or fetch again.';}}
+ finally{if(dbUsage.busy===read.token)dbUsage.busy=null;dbUsageSync();}
+}
+// Canonical decimal strings are bounded and compared with BigInt, never floats.
+function dbUsageDecimal(v,maxPower=24){
+ if(typeof v!=='string'||v.length>96||!/^(?:0|[1-9][0-9]*)(?:\.[0-9]*[1-9])?$/.test(v))throw Error('INVALID_RESPONSE');
+ const [whole,fraction='']=v.split('.');if(fraction.length>94||whole.length>maxPower+1||BigInt(whole)>10n**BigInt(maxPower)||whole===String(10n**BigInt(maxPower))&&fraction)throw Error('INVALID_RESPONSE');
+ const n=BigInt(whole+fraction);if(n>0n&&n*10n**30n<10n**BigInt(fraction.length))throw Error('INVALID_RESPONSE');
+ return {n,scale:fraction.length};
+}
+function dbUsageRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ const stamp=v=>{if(!dbObservationTime(v,true)||v.length>40||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(v))fail();return Date.parse(v);};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>32768||!exact(d,['scope','warehouse','selected_role','observed_at','coverage','availability','code','samples'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin')fail();
+ const observed=stamp(d.observed_at),now=Date.now();if(now-observed>120000||observed-now>5000)fail();
+ const c=d.coverage;if(!exact(c,['kind','cpu','memory','capacity','database_dedicated'])||c.kind!=='fixed_local_container_usage'||c.cpu!=='window_average'||c.memory!=='working_set_sample'||c.capacity!==false||c.database_dedicated!==false)fail();
+ if(!['available','unavailable'].includes(d.availability)||d.code!==(d.availability==='available'?null:'USAGE_UNAVAILABLE'))fail();
+ if(d.availability==='unavailable'){if(d.samples!==null)fail();}
+ else{
+  if(!Array.isArray(d.samples)||d.samples.length<2||d.samples.length>32)fail();
+  const counts={coordinator:0,worker:0},windows={};let worker=false;
+  for(const row of d.samples){
+   if(!exact(row,['role','container_ordinal','sampled_at','window_seconds','cpu_cores','cpu_millicores','memory_bytes'])||!Object.hasOwn(counts,row.role)||row.role==='coordinator'&&worker||row.container_ordinal!==++counts[row.role]||counts[row.role]>16)fail();
+   if(row.role==='worker')worker=true;
+   const samePod=JSON.stringify([row.sampled_at,row.window_seconds]);if(windows[row.role]&&windows[row.role]!==samePod)fail();windows[row.role]=samePod;
+   const sample=stamp(row.sampled_at);if(now-sample>120000||sample-now>5000||observed-sample>120000||sample-observed>5000)fail();
+   const window=dbUsageDecimal(row.window_seconds,3);if(window.scale>9||window.n===0n||window.n>120n*10n**BigInt(window.scale))fail();
+   const cpu=dbUsageDecimal(row.cpu_cores),milli=dbUsageDecimal(row.cpu_millicores,27);dbUsageDecimal(row.memory_bytes);
+   if(cpu.n*1000n*10n**BigInt(milli.scale)!==milli.n*10n**BigInt(cpu.scale))fail();
+  }
+  if(!counts.coordinator||!counts.worker)fail();
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbUsageRender(){
+ const node=$('observation-usage-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const p=dbUsage,r=dbObservationPlatform('admin')?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(r)line(t('Observed at')+': '+r.observed_at);
+ line(t('Shared LOCAL compute; not dedicated to a database. No capacity or headroom measurement.'));
+ line(t('CPU is averaged over the sample window; memory is a working-set sample. Manual snapshot only.'));
+ line(t('Configured requests/limits are shown in “Configured LOCAL container resources (P-only, read-only)”.'));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbObservationPlatform('admin')?'Usage authority verified. Select Fetch usage samples.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ if(r.availability==='unavailable'){line(t('Usage source unavailable. No measured values.'));return;}
+ for(const item of r.samples){
+  line(t(item.role==='coordinator'?'Coordinator':'Worker')+' · '+t('Container')+' '+item.container_ordinal,'h3');
+  line(t('Sampled at')+': '+item.sampled_at);
+  line(t('CPU averaging window')+': '+item.window_seconds+' '+t('seconds'));
+  line(t('CPU cores')+': '+item.cpu_cores+' cores');
+  line(t('CPU millicores')+': '+item.cpu_millicores+' mCPU');
+  line(t('Memory working set')+': '+item.memory_bytes+' '+t('bytes'));
  }
 }
 
@@ -5449,7 +5567,7 @@ function dbAdminClear(){
  dbCreationClear();
  dbAdmin.retirement=null;++dbAdmin.retireRead;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;
- $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();
+ $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
@@ -9785,7 +9903,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
