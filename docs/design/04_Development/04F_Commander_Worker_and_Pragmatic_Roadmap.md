@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-03
-version: "1.63"
+version: "1.64"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-03 JST、[DB-P6-4C2F](../../guides/database-p6-4c2f-live-pod-baseline-2026-11-03.md)で、旧Policyの実Pod分岐に対応する登録済みnamespaceの宣言レビューを限定技術受入済みとした。Policy Platform／Computeから、全Podの通常・init・ephemeral containerへ既存4項目を手動確認する。空一覧と取得不能を区別し、runtime強制・admission・aggregate allowは示さない。SRE readiness／raw logs、全controller template・任意manifestの残件と他namespaceの範囲判断、6F清掃、全89行とM1本人受入を継続する。実Compute伸縮はM1後とする。
 
 2026-11-03 JST、[DB-P6-4C2E](../../guides/database-p6-4c2e-recent-failures-2026-11-03.md)で旧SREの最新20件の失敗Pawprints出力との差を限定して補った。SRE Platform／Computeの独立した手動snapshotが、現在の真Pとadminを取得前後に検査し、source側でfailedを選んだ8項目・最大20 recordsを表示する。現在health・停止原因・DBへの対応付け・全体Policyを推定せず、既存Auditの最新100件previewを維持する。次は残るSRE readiness／raw logsと、Policyの実Pod／ephemeral／namespace／manifestの必須範囲を限定して照合する。6F清掃残件・全89行・M1本人受入は継続し、実Compute伸縮はM1後とする。
 

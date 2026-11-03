@@ -19,6 +19,7 @@ import db_platform_lifecycle_history
 import db_platform_workload_baseline
 import db_platform_foundation_baseline
 import db_platform_foundation_controllers
+import db_platform_pod_baseline
 import db_platform_recent_failures
 import db_ai_settings
 from warehouse_operations import OperationError
@@ -154,6 +155,24 @@ def dispatch(handler, method, path, params, principal, role):
             raise QueryError('INVALID_INPUT', 400)
         try:
             result = db_platform_recent_failures.observe(principal, role)
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        handler.respond(result, 200)
+        return True
+    if path == '/api/v1/bears/platform-pod-baseline':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if ('?' in handler.path or '#' in handler.path or params
+                or handler.headers.defects
+                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
+                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
+                       for k, v in handler.headers.raw_items())
+                or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
+                or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+            raise QueryError('INVALID_INPUT', 400)
+        try:
+            result = db_platform_pod_baseline.observe(principal, role)
         except OperationError as error:
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)
