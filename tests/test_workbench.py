@@ -1741,7 +1741,7 @@ const run=eval(HANDLER);
         dictionary = script[script.index('const i18n = '):script.index("let language = 'en';")]
         # Include the label constants used as computed translation keys, in source order.
         additions = re.findall(
-            r'const (?:dbCreationGuidance|dbPlanHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
+            r'const (?:dbCreationGuidance|dbPlanHelp|dbWorkflowHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
             r'|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', script)
         result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
                                  + '\nprocess.stdout.write(JSON.stringify(i18n.ja));'],

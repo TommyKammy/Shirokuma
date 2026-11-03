@@ -36,6 +36,58 @@ class AIWapDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP.replace("async function ready(", "async function readyDataops(") + COMMON + PROPOSAL + WAP + body)
 
+    def test_guides_mount_outside_legacy_panels_and_open_existing_copilot_from_details(self):
+        # The common notice and guide precede the forms in the Bears section,
+        # outside the disabled/hidden legacy Bear tabs.
+        self.assertIn("if(prefix==='bears')$('database-bears-notice').after(toolbar)", harness.HTML)
+        self.assertIn('id="bear-cards" class="bear-layout"', harness.HTML)
+        self.assertNotIn("$('bear-tab-data').disabled=false", harness.HTML)
+        self.javascript(r"""
+await ready();const cards=$('bear-cards'),legacy=$('bear-data-panel');$('bears').append(cards);cards.append(legacy);legacy.hidden=true;
+await activate($('tab-bears'));const guide=$('database-bears-workflows');assert.equal(guide.parentElement,$('bears'));const notice=$('database-bears-notice'),siblings=$('bears').children;assert.equal(notice.parentElement,guide.parentElement);assert.equal(siblings[siblings.indexOf(notice)+1],guide);assert.ok(siblings.indexOf(guide)<siblings.indexOf(cards));assert.ok(!cards.descendants().includes(guide));
+for(let n=$('bears-guide-copilot');n;n=n.parentElement){assert.equal(n.hidden,false);assert.equal(n.disabled,false);}
+assert.equal($('database-copilot-workflows').parentElement,$('copilot-stage').parentElement);assert.equal($('copilot-stage').disabled,true);assert.equal($('copilot-publish').disabled,true);
+request('retained request');editSQL('SELECT retained');queryResult={columns:['retained'],rows:[[9]]};const result=queryResult,w=dbCurrent(),context=JSON.stringify(dbContext(w)),inputs=JSON.stringify(dbInput(w)),count=worksheets.length,proposal=dbProposal.record;
+await activate($('tab-catalog'));assert.equal(dbWorkspacePane,'details');const before=calls.length;
+await $('bears-guide-copilot').onclick();assert.equal(activeTab,'warehouse');assert.equal(dbWorkspacePane,'worksheet');assert.equal($('copilot-request').closest('details.copilot').open,true);assert.equal(document.activeElement,$('copilot-request'));
+assert.equal(dbCurrent(),w);assert.equal(worksheets.length,count);assert.equal(JSON.stringify(dbInput(w)),inputs);assert.equal(JSON.stringify(dbContext(w)),context);assert.equal(queryResult,result);assert.equal(dbProposal.record,proposal);assert.equal($('copilot-request').value,'retained request');assert.equal(calls.length,before);assert.equal(submissions.length,0);
+""")
+
+    def test_wap_guide_preserves_dirty_draft_and_original_operation_handles_across_contexts(self):
+        self.javascript(r"""
+const p=await readyDataops('p35-wap');assert.equal(p.root.parentElement,$('transformation'));assert.ok(!$('transformation-models').descendants().includes(p.root));assert.ok(!$('transformation-marts').descendants().includes(p.root));
+// Panel DB, role and full context intentionally differ from the worksheet.
+Object.assign(p,{database:'separate-db',schema:'separate-schema',role:'data_engineer',context:{...p.context,database_id:'separate-db',schema_id:'separate-schema',sql_catalog:'separate_catalog',sql_schema:'separate_schema',selected_role:'data_engineer',binding_revision:8,generation_id:'separate-generation',grant_revision:23},model:{model_id:'retained',version:7},modelDirty:true});
+for(const [key,value] of Object.entries({'model-id':'retained','sql':'SELECT dirty FROM retained_source','target-schema':'separate-schema',name:'retained_target',target:'1',min:'11','not-null':'code',build:'original-build',audit:'original-audit',publication:'original-publication'}))$('p35-wap-'+key).value=value;
+p.sources[0].alias.value='retained_source';p.sources[0].table.value='1';
+p.op={state:'UNKNOWN',key:'original-key',context:structuredClone(p.context),operation:{id:'original-operation'}};p.requests=new Map([['original-request',p.op]]);p.actions=new Map([['original-action',p.op]]);p.pending=true;p.trackingPending=true;
+const handles=[p.model,p.context,p.sources,p.op,p.requests,p.actions,p.op.operation],beforeFields=fields(p),panel=JSON.stringify([p.database,p.schema,p.role,p.modelDirty,p.pending,p.trackingPending]),worksheet=JSON.stringify(dbInput(dbCurrent())),result=queryResult;
+await activate($('tab-bears'));const before=calls.length;
+for(const id of ['bears-guide-wap','copilot-guide-wap']){await $(id).onclick();await tick();assert.equal(activeTab,'transformation');assert.equal(document.activeElement,p.root);assert.deepEqual(p.root.scrolled,{block:'nearest'});assert.equal(fields(p),beforeFields);assert.equal(JSON.stringify([p.database,p.schema,p.role,p.modelDirty,p.pending,p.trackingPending]),panel);for(const [i,handle] of [p.model,p.context,p.sources,p.op,p.requests,p.actions,p.op.operation].entries())assert.equal(handle,handles[i]);assert.equal(JSON.stringify(dbInput(dbCurrent())),worksheet);assert.equal(queryResult,result);assert.ok(!p.aiPending);assert.ok(!p.aiOrigin);}
+assert.equal(calls.length,before);assert.equal(wapCalls().length,0);assert.equal(submissions.length,0);
+""")
+
+    def test_wap_guide_keeps_pending_proposal_and_first_open_only_reads_normal_metadata(self):
+        self.javascript(r"""
+await ready();const p=dataopsPanels.get('p35-wap');assert.ok(!p.started);const initial=calls.length;await $('bears-guide-wap').onclick();for(let i=0;i<12;i++)await tick();assert.equal(p.started,true);assert.ok(calls.length>initial);assert.ok(calls.slice(initial).every(c=>!c.options?.method&&!c.options?.body));assert.equal(proposalPosts().length,0);assert.equal(wapCalls().length,0);assert.ok(!p.aiPending);assert.ok(!p.aiOrigin);
+""")
+        self.javascript(r"""
+const p=await selected();const pending=p.aiPending;assert.ok(!p.started);await activate($('tab-bears'));const before=calls.length,form=fields(p),context=p.context;await $('bears-guide-wap').onclick();await tick();assert.equal(p.aiPending,pending);assert.equal(p.context,context);assert.equal(fields(p),form);assert.ok(!p.started);assert.ok(!p.aiOrigin);assert.equal(calls.length,before);assert.equal(wapCalls().length,0);assert.equal(submissions.length,0);
+""")
+
+    def test_guide_role_rechecks_hidden_marts_denial_locales_and_native_focus(self):
+        self.javascript(r"""
+await ready();for(const role of ['data_engineer','bi_viewer']){currentRole=role;dbControls();for(const locale of ['ja','en']){setLanguage(locale);assert.ok(visibleText($('database-bears-workflows')).includes(t(dbWorkflowHelp)));assert.notEqual(i18n.ja[dbWorkflowHelp],dbWorkflowHelp);for(const id of ['bears-guide-marts','copilot-guide-marts']){assert.equal($(id).disabled,true);const reason=$(id+'-reason');assert.equal(reason.hidden,false);assert.match(reason.textContent,/admin/);assert.equal($(id).getAttribute('aria-describedby').includes(reason.id),true);}assert.equal($('bears-guide-wap').disabled,role==='bi_viewer');if(role==='bi_viewer')assert.match($('bears-guide-wap-reason').textContent,/E\/A/);}
+await activate($('tab-bears'));const before=calls.length;await $('bears-guide-marts').onclick();await $('copilot-guide-marts').onclick();if(role==='bi_viewer')await $('bears-guide-wap').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);}
+currentRole='admin';dbControls();const tab=$('transformation-view-marts');for(const flag of ['hidden','disabled']){tab[flag]=true;const before=calls.length;await $('bears-guide-marts').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);assert.equal($('bears-guide-marts').disabled,true);tab[flag]=false;}
+dbWorkflowSync();assert.equal($('bears-guide-marts').disabled,false);
+// Direct handler invocation after render must consult the current ceiling.
+dbMaximumRole='bi_viewer';const before=calls.length;await $('bears-guide-wap').onclick();await $('bears-guide-marts').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);dbMaximumRole='admin';dbControls();
+let clicks=0;tab.addEventListener('click',()=>clicks++);await $('bears-guide-marts').onclick();assert.equal(clicks,1);assert.equal(activeTab,'transformation');assert.equal(tab.getAttribute('aria-selected'),'true');assert.equal($('transformation-marts').hidden,false);assert.equal(document.activeElement,$('db-marts-panel'));
+for(const id of ['bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts']){const n=$(id);assert.equal(n.tagName,'BUTTON');assert.equal(n.type,'button');assert.equal(typeof n.onclick,'function');assert.equal(n.onkeydown,undefined);assert.ok(n.getAttribute('aria-describedby'));}
+assert.equal($('copilot-stage').disabled,true);assert.equal($('copilot-publish').disabled,true);assert.equal(submissions.length,0);assert.equal(proposalPosts().length,0);assert.equal(wapCalls().length,0);
+""")
+
     def test_two_step_freezes_and_navigates_without_requests_or_form_changes(self):
         self.javascript(r'''
 const p=await selected();const o=p.aiPending;assert.ok(Object.isFrozen(o));assert.ok(Object.isFrozen(o.context));assert.ok(Object.isFrozen(o.refs[0]));assert.equal(wapCalls().length,0);assert.equal(submissions.length,0);assert.equal(p.model,null);assert.equal($('p35-wap-sql').value,'SELECT * FROM source');assert.equal($('p35-wap-ai-load').disabled,true);assert.equal(o.context.sql_schema,'marts');assert.match(visibleText(p.aiBar),/Original proposal context/);assert.ok(visibleText(p.aiBar).includes(o.request));
@@ -76,8 +128,46 @@ await ready();for(const r of [pendingProposal(),pendingProposal({state:'UNKNOWN'
             with self.subTest(change=change):
                 self.javascript("const p=await selected();await destination(p);" + change + r''';const before=fields(p),o=p.aiPending;await dataopsAiLoad(p);assert.equal(wapCalls().length,0);assert.equal(fields(p),before);assert.equal(p.aiPending,o);''')
 
+    def test_foreign_private_operation_does_not_block_own_draft_but_owner_and_busy_guards_do(self):
+        self.javascript(r'''
+const p=await selected();await destination(p);const origin=p.aiPending,context=p.context,form=fields(p),before=calls.length;
+const foreign={principal:JSON.stringify(['previous-owner',true]),state:'UNKNOWN',id:'private-old-id',key:'private-old-key',context:{...context,database_id:'private-old-db',sql_catalog:'private_old_catalog',sql_schema:'private_old_schema'},protected:true,operation:{state:'UNKNOWN',sql:'SELECT private_old_sql',result:{rows:[['private_old_result']]}}};p.op=foreign;const retained=JSON.stringify(foreign);
+dataopsRender(p);assert.equal(dataopsAiPristine(p),true);assert.equal($('p35-wap-ai-load').disabled,false);assert.doesNotMatch(visibleText(p.root),/private-old|private_old/);assert.equal(p.receipt.children.length,0);assert.equal(p.op,foreign);assert.equal(JSON.stringify(foreign),retained);
+// Current owner's unresolved operation still blocks the same empty draft.
+p.op={...foreign,principal:dbPrincipal};const own=p.op;dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,true);await dataopsAiLoad(p);assert.equal(p.op,own);assert.equal(calls.length,before);
+p.op=foreign;for(const flag of ['pending','trackingPending']){p[flag]=true;dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,true);await dataopsAiLoad(p);assert.equal(calls.length,before);p[flag]=false;}
+assert.equal(fields(p),form);assert.equal(p.aiPending,origin);assert.equal(p.context,context);assert.ok(!p.aiOrigin);assert.equal(submissions.length,0);
+dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,false);await load(p);assert.equal(wapCalls().length,1);assert.equal(p.aiOrigin.id,origin.id);assert.equal(p.op,foreign);assert.equal(JSON.stringify(foreign),retained);assert.doesNotMatch(visibleText(p.root),/private-old|private_old/);assert.equal(submissions.length,0);
+''')
+
+    def test_restored_unresolved_saved_panel_intents_block_explicit_and_forced_import(self):
+        for state, operation_id in [('UNCONFIRMED', None), ('UNKNOWN', 'saved-operation')]:
+            with self.subTest(state=state):
+                self.javascript("const state=" + repr(state) + ",savedID=" + ('null' if operation_id is None else repr(operation_id)) + r''';
+const p=await selected();await destination(p);assert.equal(dataopsAiPristine(p),true);p.op=null;
+// Restore through owner storage with an original context differing from
+// today's panel and from its current recovery selection.
+const handle={version:1,panel:p.id,action:'manual-wap-build',key:'saved-original-key',context:{...p.context,database_id:'original-db',schema_id:'original-sandbox',sql_catalog:'original_catalog',sql_schema:'original_sandbox',binding_revision:9,generation_id:'original-generation',grant_revision:17},time:Date.now(),id:savedID,state,uncertain:state==='UNKNOWN'};
+const key=dataopsRecoveryKey(dbPrincipal),raw=JSON.stringify([handle]);storage.set(key,raw);dataopsRecoveryOwners.delete(dbPrincipal);const store=dataopsRecoveryOwner(),original=store.ops[0];assert.equal(store.error,false);assert.equal(original.restored,true);assert.equal(original.operation,null);assert.equal(original.id,savedID);assert.equal(original.ambiguous,state==='UNKNOWN');
+p.recoverySelection='different-selection';dataopsLoadModel(p,null);assert.equal(p.op,null);assert.equal(dataopsAiPristine(p),false);dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,true);
+const origin=p.aiPending,context=p.context,form=fields(p),full9=JSON.stringify(p.context),requests=p.requests,actions=p.actions,selection=p.recoverySelection,before=calls.length;
+await dataopsAiLoad(p);assert.equal(calls.length,before);assert.equal(wapCalls().length,0);assert.equal(submissions.length,0);assert.equal(p.aiPending,origin);assert.ok(!p.aiOrigin);assert.equal(p.context,context);assert.equal(JSON.stringify(p.context),full9);assert.equal(fields(p),form);assert.equal(p.requests,requests);assert.equal(p.actions,actions);assert.equal(p.op,null);assert.equal(p.recoverySelection,selection);assert.equal(dataopsRecoveryOwner(),store);assert.equal(store.ops[0],original);assert.equal(storage.get(key),raw);assert.deepEqual(dataopsRecoveryDTO(original),handle);
+// Only a terminal, certain handle releases this prerequisite.
+original.state='FINISHED';original.ambiguous=false;dataopsAiRender(p);assert.equal(dataopsRecoveryHeld(p),false);assert.equal(dataopsAiPristine(p),true);assert.equal($('p35-wap-ai-load').disabled,false);assert.equal(calls.length,before);
+''')
+
+    def test_target_schema_must_match_panel_with_explicit_bilingual_prerequisites(self):
+        self.javascript(r'''
+const p=await selected();await destination(p);const origin=p.aiPending,context=p.context;assert.equal(dataopsAiPristine(p),true);
+$('p35-wap-target-schema').value='raw';dataopsChanged(p);const form=fields(p),before=calls.length;
+for(const locale of ['ja','en']){setLanguage(locale);dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,true);const copy=visibleText(p.aiBar);for(const word of ['data_engineer/admin','SANDBOX','Refresh panel context','New model','Load proposal draft'])assert.ok(copy.includes(word),word);assert.ok(copy.includes(locale==='ja'?'対象スキーマ':'target schema'));assert.ok(copy.includes(locale==='ja'?'既定 SQL':'default SQL'));assert.ok(copy.includes(locale==='ja'?'既定ソース1件':'one default source'));await dataopsAiLoad(p);assert.equal(fields(p),form);assert.equal(p.aiPending,origin);assert.equal(p.context,context);assert.ok(!p.aiOrigin);assert.equal(calls.length,before);}
+// Matching the field manually enables only the existing explicit Load.
+$('p35-wap-target-schema').value=p.schema;dataopsChanged(p);dataopsAiRender(p);assert.equal($('p35-wap-ai-load').disabled,false);assert.equal(p.aiPending,origin);assert.ok(!p.aiOrigin);assert.equal(calls.length,before);assert.equal(submissions.length,0);assert.equal(wapCalls().length,0);
+await load(p);assert.equal(wapCalls().length,1);assert.equal(p.aiPending,null);assert.equal(p.aiOrigin.id,origin.id);assert.equal(submissions.length,0);
+''')
+
     def test_all_nonpristine_fields_block_before_get_without_overwriting(self):
-        changes=["p.model={model_id:'saved',version:1}", "$('p35-wap-models').value='0'", "$('p35-wap-model-id').value='draft'", "$('p35-wap-name').value='target'", "$('p35-wap-target').value='0'", "$('p35-wap-not-null').value='n'", "$('p35-wap-target-schema').value='raw'", "$('p35-wap-sql').value='SELECT 2'", "$('p35-wap-min').value=2", "p.sources[0].alias.value='different'", "p.sources[0].table.value='0'", "dataopsAddSource(p,'other')", "$('p35-wap-build').value='build'", "$('p35-wap-audit').value='audit'", "$('p35-wap-publication').value='pub'", "$('p35-wap-metadata-id').value='old'", "p.metadata={id:'old'}", "p.pending=true", "p.trackingPending=true", "p.op={state:'UNKNOWN'}", "p.requests=new Map([['old',{operation:{state:'RUNNING'}}]])", "p.actions=new Map([['old',{operation:{state:'UNKNOWN'}}]])", "p.inventoryLoading=true", "p.inventoryReady=false", "p.inventoryContext={...p.context,grant_revision:99}"]
+        changes=["p.model={model_id:'saved',version:1}", "$('p35-wap-models').value='0'", "$('p35-wap-model-id').value='draft'", "$('p35-wap-name').value='target'", "$('p35-wap-target').value='0'", "$('p35-wap-not-null').value='n'", "$('p35-wap-target-schema').value='raw'", "$('p35-wap-sql').value='SELECT 2'", "$('p35-wap-min').value=2", "p.sources[0].alias.value='different'", "p.sources[0].table.value='0'", "dataopsAddSource(p,'other')", "$('p35-wap-build').value='build'", "$('p35-wap-audit').value='audit'", "$('p35-wap-publication').value='pub'", "$('p35-wap-metadata-id').value='old'", "p.metadata={id:'old'}", "p.pending=true", "p.trackingPending=true", "p.op={state:'UNKNOWN',principal:dbPrincipal}", "p.requests=new Map([['old',{operation:{state:'RUNNING'}}]])", "p.actions=new Map([['old',{operation:{state:'UNKNOWN'}}]])", "p.inventoryLoading=true", "p.inventoryReady=false", "p.inventoryContext={...p.context,grant_revision:99}"]
         for change in changes:
             with self.subTest(change=change):
                 self.javascript("const p=await selected();await destination(p);"+change+r''';const before=fields(p);await dataopsAiLoad(p);assert.equal(wapCalls().length,0);assert.equal(fields(p),before);assert.ok(p.aiPending);''')

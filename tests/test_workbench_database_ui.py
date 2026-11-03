@@ -28,13 +28,15 @@ class Node {
  constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.dataset={};this.value='';this.textContent='';this.disabled=false;this.hidden=false;this.selectionStart=0;this.selectionEnd=0;this.listeners={};}
  set id(value){this._id=value;nodes[value]=this;} get id(){return this._id;}
  append(...items){for(const item of items){if(item.parentElement)item.parentElement.children=item.parentElement.children.filter(c=>c!==item);this.children.push(item);item.parentElement=this;if(item.id)nodes[item.id]=item;}}
- prepend(...items){this.append(...items);this.children=[...items,...this.children.filter(c=>!items.includes(c))];} before(item){if(item.id)nodes[item.id]=item;}
- after(...items){for(const item of items)if(item.id)nodes[item.id]=item;}
+ prepend(...items){this.append(...items);this.children=[...items,...this.children.filter(c=>!items.includes(c))];} before(item){if(item.id)nodes[item.id]=item;const parent=this.parentElement;if(parent){parent.append(item);parent.children.splice(parent.children.indexOf(item),1);parent.children.splice(parent.children.indexOf(this),0,item);}}
+ after(...items){for(const item of items)if(item.id)nodes[item.id]=item;const parent=this.parentElement;if(parent){parent.append(...items);parent.children=parent.children.filter(n=>!items.includes(n));parent.children.splice(parent.children.indexOf(this)+1,0,...items);}}
  replaceChildren(...items){this.children=[];delete this.rows;this.textContent='';this.append(...items);}
  add(item){this.append(item);} get options(){return this.children;}
  setAttribute(key,value){this[key]=value;} getAttribute(key){return this[key];} removeAttribute(key){delete this[key];}
  addEventListener(key,fn){(this.listeners[key]??=[]).push(fn);} focus(){document.activeElement=this;}
- click(){return this.onclick?.();}
+ click(){if(this.disabled)return;const result=this.onclick?.();for(const fn of this.listeners.click||[])fn({type:'click',target:this});return result;}
+ scrollIntoView(options){this.scrolled=options;}
+ closest(selector){for(let n=this;n;n=n.parentElement)if(selector==='details.copilot'&&n.tagName==='DETAILS'&&n.className==='copilot')return n;return null;}
  dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);}
  setRangeText(value,start,end){this.value=this.value.slice(0,start)+value+this.value.slice(end);}
  setSelectionRange(start,end){this.selectionStart=start;this.selectionEnd=end;}
@@ -45,7 +47,7 @@ class Node {
 let strictRemoved=false;
 const $=id=>strictRemoved&&['worksheet-tree','worksheet-tree-filter'].includes(id)&&!nodes['worksheet-explorer']?.descendants().some(node=>node.id===id)?null:nodes[id]??=Object.assign(new Node(),{id});
 const sampleButtons=['orders','revenue','customers'].map(sample=>Object.assign(new Node('button'),{dataset:{sample}}));
-const document={createElement:tag=>new Node(tag),documentElement:{dataset:{}},querySelectorAll:selector=>selector==='[data-sample]'?sampleButtons:selector==='[data-tab]'?tabs:[]};
+const document={createElement:tag=>new Node(tag),documentElement:{dataset:{}},querySelectorAll:selector=>selector==='[data-sample]'?sampleButtons:selector==='[data-tab]'?tabs:selector.startsWith('[data-view=')?Object.values(nodes).filter(n=>n.dataset.view===selector.split('\"')[1]):[]};
 let narrow=false;const mediaListeners=[];const matchMedia=()=>({matches:narrow,addEventListener:(event,listener)=>mediaListeners.push(listener)});
 const Option=function(text,value){return Object.assign(new Node('option'),{textContent:text,value});};
 ''' + TRANSLATIONS + r'''
@@ -87,11 +89,12 @@ const fetch=async(path,options)=>{
 $('query-schema').parentElement=new Node();
 const layout=Object.assign(new Node(),{className:'sql-layout'}),main=Object.assign(new Node(),{className:'sql-main'}),editor=new Node(),results=new Node(),strip=new Node(),inspector=new Node(),head=new Node(),actions=new Node(),filter=new Node();
 $('warehouse').append(layout);layout.append($('worksheet-explorer'),main);$('worksheet-explorer').append(new Node('summary'),$('worksheet-tree-filter'),$('worksheet-tree'));
-main.append(editor,results);editor.append(strip,$('sql'));strip.append($('worksheet-tabs'),$('add-worksheet-tab'));results.append($('query-results'));
+main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('copilot-result'));editor.append(strip,$('sql'),copilot);
+for(const kind of ['models','marts']){const button=$('transformation-view-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls','transformation-'+kind);$('transformation').append(button,$('transformation-'+kind));button.onclick=()=>{if(button.hidden||button.disabled||kind==='marts'&&currentRole!=='admin')return;selectView(button);};}strip.append($('worksheet-tabs'),$('add-worksheet-tab'));results.append($('query-results'));
 head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),...Object.values(inspectorTargets).map($),$('snapshot-preview'));actions.append($('open-table-sql'));
 filter.append($('catalog-filter'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
@@ -750,7 +753,7 @@ assert.equal(queryResult,null);assert.equal($('run-query').disabled,true);assert
     def test_detail_query_pages_and_unresolved_views_and_disabled_actions(self):
         self.javascript(r'''
 for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])$(panel).append(new Node('button'),new Node('input'));
-await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-activity-panel'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models'].includes(n.id)).every(n=>n.disabled));
+await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-activity-panel'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts'].includes(n.id)).every(n=>n.disabled));
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);

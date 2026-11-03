@@ -851,7 +851,7 @@ assert.equal(dbExplanationIntent('sql_plan_explanation').key,intent.key);assert.
     def test_bilingual_computed_label_dependencies_extract_without_browser(self):
         dictionary = harness.SCRIPT[harness.SCRIPT.index('const i18n = '):harness.SCRIPT.index("let language = 'en';")]
         additions = re.findall(
-            r'const (?:dbCreationGuidance|dbPlanHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
+            r'const (?:dbCreationGuidance|dbPlanHelp|dbWorkflowHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
             r'|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', harness.SCRIPT)
         result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
                                  + '\nconsole.log(JSON.stringify(i18n.ja));'], capture_output=True, text=True)
