@@ -584,6 +584,66 @@ assert.equal(storage.get('shirokuma.worksheets.v1'),v1);assert.ok(writes.every(k
 assert.equal(storage.get('shirokuma.query_history.v1'),'legacy history');
 ''')
 
+    def test_sql01_plus_creates_empty_persisted_worksheet_with_current_context(self):
+        add_button = SCRIPT[SCRIPT.index("$('add-worksheet-tab').onclick="):].split(';', 1)[0] + ';'
+        self.javascript(add_button + r'''
+inventoryRoute=async(path,options)=>({items:inventory.map(d=>({...d,grant_revision:options.headers['X-Shirokuma-Role']==='data_engineer'?7:null}))});
+await boot([{...input(),name:'Worksheet 3',schema_id:'raw',selected_role:'data_engineer',mode:'sandbox-write',max_rows:37},
+ {...input('b'),name:'Worksheet 8',sql:'SELECT untouched',selected_role:'admin'}]);
+$('sql').value='SELECT edited_draft';$('sql').dispatchEvent({type:'input'});
+const original=dbCurrent(),before=structuredClone(worksheets),context=structuredClone(dbContext(original));
+const run={id:'saved-query',state:'FINISHED',settled:true,authorized:true,columns:[{name:'n',type:'bigint'}],rows:[[42]],
+ origin:{worksheet_id:original.id,request_id:'saved-request',principal:dbPrincipal,role:original.selected_role,
+ context:structuredClone(context),input:structuredClone(dbInput(original)),sql:'SELECT previous_run'}};
+dbRuns.set(original.id,run);const runBefore=structuredClone(run),requests=calls.length;
+assert.equal(context.grant_revision,7);assert.equal(currentRole,'admin');
+assert.equal(typeof $('add-worksheet-tab').onclick,'function');
+$('add-worksheet-tab').click();await tick();
+const blankID=worksheetId;
+assert.ok(blankID&&!['a','b'].includes(blankID));assert.equal(worksheets.length,3);
+assert.deepEqual(worksheets.map(w=>w.id),['a','b',blankID]);assert.equal(dbCurrent().name,'Worksheet 9');
+assert.equal($('sql').value,'');assert.equal(dbCurrent().sql,'');
+assert.deepEqual(dbInput(dbCurrent()),{...dbInput(before[0]),id:blankID,name:'Worksheet 9',sql:''});
+assert.deepEqual(dbContext(dbCurrent()),context);assert.equal(currentRole,'admin');
+assert.deepEqual(worksheets.slice(0,2),before);assert.equal(dbRuns.get('a'),run);assert.deepEqual(run,runBefore);
+assert.equal(dbRuns.has(blankID),false);assert.equal(queryResult,null);
+const persisted=JSON.parse(storage.get(dbWorksheetKey));
+assert.equal(persisted.active,blankID);assert.equal(persisted.tabs[2].sql,'');
+assert.deepEqual(persisted.tabs,worksheets.map(dbInput));
+assert.deepEqual(persisted.tabs.slice(0,2),before.map(dbInput));
+assert.ok(!storage.get(dbWorksheetKey).includes('saved-query'));
+assert.ok(calls.slice(requests).every(c=>!c.options?.method&&
+ (c.path==='/api/session'||c.path==='/api/v1/databases'||c.path.endsWith('/schemas')||c.path.startsWith('/api/v1/queries?'))));
+// Reinitialize from the actual saved inputs, discarding session-only worksheets/runs.
+worksheets=[];worksheetId='';dbRuns.clear();$('sql').value='discarded session text';
+await initializeDatabaseUI(session);await tick();
+assert.equal(worksheetId,blankID);assert.equal($('sql').value,'');assert.equal(dbCurrent().sql,'');
+assert.deepEqual(worksheets.map(dbInput),persisted.tabs);assert.deepEqual(dbContext(dbCurrent()),context);
+assert.equal(JSON.parse(storage.get(dbWorksheetKey)).tabs[2].sql,'');
+addWorksheet('SELECT explicit_argument');await tick();
+assert.equal(worksheets.length,4);assert.equal(dbCurrent().name,'Worksheet 10');
+assert.equal($('sql').value,'SELECT explicit_argument');assert.equal(dbCurrent().sql,'SELECT explicit_argument');
+assert.deepEqual(dbContext(dbCurrent()),context);
+assert.deepEqual(worksheets.slice(0,3).map(dbInput),persisted.tabs);
+assert.equal(JSON.parse(storage.get(dbWorksheetKey)).tabs[3].sql,'SELECT explicit_argument');
+assert.ok(calls.every(c=>c.options?.method!=='POST'));
+''')
+
+    def test_sql01_legacy_plus_retains_sample_default_and_explicit_sql(self):
+        add_button = SCRIPT[SCRIPT.index("$('add-worksheet-tab').onclick="):].split(';', 1)[0] + ';'
+        self.javascript("globalThis.worksheetKey='shirokuma.worksheets.v1';\n" + add_button + r'''
+databaseMode=false;worksheets=[{id:'legacy',name:'Worksheet 4',sql:'SELECT original'}];worksheetId='legacy';
+$('sql').value='SELECT legacy_draft';
+$('add-worksheet-tab').click();
+assert.equal(worksheets.length,2);assert.equal(worksheets[0].sql,'SELECT legacy_draft');
+assert.equal(dbCurrent().name,'Worksheet 5');assert.equal($('sql').value,samples.orders);assert.equal(dbCurrent().sql,samples.orders);
+assert.deepEqual(JSON.parse(storage.get(worksheetKey)),{active:worksheetId,tabs:worksheets});
+addWorksheet('SELECT legacy_explicit');
+assert.equal(worksheets.length,3);assert.equal(dbCurrent().name,'Worksheet 6');
+assert.equal($('sql').value,'SELECT legacy_explicit');assert.equal(dbCurrent().sql,'SELECT legacy_explicit');
+assert.equal(worksheets[1].sql,samples.orders);assert.equal(calls.length,0);
+''')
+
     def test_per_tab_inputs_and_new_tab_inheritance_and_history(self):
         self.javascript(r'''
 await boot([input(),{...input('b'),sql:'SELECT 2',schema_id:'raw',mode:'sandbox-write',max_rows:17}]);

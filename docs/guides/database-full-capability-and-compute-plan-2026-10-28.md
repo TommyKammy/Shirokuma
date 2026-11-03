@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-03 JST、[DB-P6-0R1](database-p6-0r1-capability-closure-audit-2026-11-03.md)で89行の実装・受入証拠・通常導線の監査とSQL-01の限定修正を完了した。新規Database Worksheetは空SQLで始まり、既存下書きと実行コンテキストを保持する。M1義務82行、既存計画の別track3行、範囲判断OPEN4行を区別し、必須範囲を無断で縮小しない。123群4,880成功・34 skip、通常画面の追加・reloadと台帳・設定保全を確認した。次はING-03／TRF-06のreload後の元operation再接続を実装し、続いてAI-02／SQL-12／13の既存WAPへの案内、AUD-02の履歴対応、旧SRE・global Policyの必要範囲を詰める。P6-7とM1本人受入は継続し、実Compute伸縮はM1後とする。
+
 2026-11-03 JST、[DB-P6-4C2D](database-p6-4c2d-foundation-controllers-2026-11-03.md)でstorage／catalogの管理対象3 Deploymentのcontroller記録を、SRE PlatformとComputeの独立手動snapshotへ接続し限定技術受入を完了した。未報告・実0・世代遅れ・surgeを区別し、取得時刻や件数からservice／SQL healthを保証しない。123群4,878成功・34 skip、両HTTP面と独立3 row照合、日英／390px／実200%、台帳・設定保全を確認した。次は89行の必須操作・実装・受入証拠・通常導線の閉鎖監査で残件を確定する。旧SRE全体・global Policy・P6全体／M1本人受入は継続し、実Compute伸縮はM1後とする。
 
 2026-11-03 JST、[DB-P6-4C2C2](database-p6-4c2c2-foundation-baseline-2026-11-03.md)で既存Bear action・必須行・通常導線を照合し、管理対象の論理基盤6 Deployment＋bootstrap Jobの4宣言レビューを限定技術受入済みとした。現在Pの前後検査とfoundation照合、独立した手動3面snapshotを提供し、C2C1を維持する。121群4,819成功・34 skip、両HTTP面・独立sourceの40判定、日英／390px／実200%、台帳・設定保全を確認した。次はstorage／catalogの3 Deploymentに対する受動的controller観測を限定する。旧SRE全体・namespace-wide Policy・native8強制・P6全体／M1本人受入は継続し、実Compute伸縮はM1後とする。

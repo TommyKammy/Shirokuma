@@ -6024,7 +6024,7 @@ async function initializeDatabaseUI(session){
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
- addWorksheet=(sql=samples.orders)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
+ addWorksheet=(sql='')=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
  renderResults=()=>{legacyRenderResults();dbExportControls();};
  download=dbExportResults;
  $('copy-tsv').hidden=true;$('copy-tsv').disabled=true;$('copy-tsv').onclick=()=>{};$('export-tsv').hidden=false;
