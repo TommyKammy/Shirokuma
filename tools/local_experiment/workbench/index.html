@@ -582,6 +582,10 @@ html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywh
 #db-drop-panel{min-width:0;max-width:100%;padding:16px;border-top:1px solid var(--line)}
 #db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;word-break:normal;min-width:0;max-width:100%}#db-drop-panel input{box-sizing:border-box;max-width:100%}#db-drop-panel .toolbar{flex-wrap:wrap}
 html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inline-block!important}
+
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) .toolbar{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -3860,7 +3864,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3905,7 +3909,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4126,6 +4130,145 @@ function dbBaselineRender(id){
  for(const row of r.baseline.deployments)for(const item of row.containers){
   line('LOCAL · '+row.component+' · '+t(item.kind==='container'?'Container':'Init container')+' '+item.ordinal,'h3');
   for(const [key,label] of Object.entries(dbBaselineChecks))line(t(label)+' '+t(item.checks[key]==='met'?'Declaration matches':'Declaration missing or mismatched'));
+ }
+}
+
+// Independent foundation declaration snapshot; shared only across its three mounts.
+const dbFoundationBaseline={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+const dbFoundationBaselineComponents={storage:['Deployment','Foundation storage'],catalog_database:['Deployment','Foundation catalog database'],catalog:['Deployment','Foundation catalog'],coordinator:['Deployment','Foundation coordinator'],worker:['Deployment','Foundation worker'],authorization:['Deployment','Foundation authorization'],catalog_bootstrap:['Job','Foundation catalog bootstrap']};
+const dbFoundationBaselineChecks={
+ read_only_root_filesystem:'Foundation root filesystem: container read-only declaration is true.',
+ non_root:'Foundation non-root: effective runAsNonRoot is true and UID is not 0; an absent UID is allowed.',
+ drop_all_capabilities:'Foundation capabilities: container drop list includes ALL.',
+ cpu_memory_limits:'Foundation limits: CPU and memory limits both have positive coefficients.'
+};
+Object.assign(i18n.ja,{
+ "Managed foundation template declarations": "管理対象の基盤テンプレート宣言",
+ "Review foundation declarations": "基盤宣言を確認",
+ "Foundation authority verified. Select Review foundation declarations.": "権限を確認しました。「基盤宣言を確認」を選んでください。",
+ "Reviewing foundation declarations.": "基盤宣言を確認しています。",
+ "Foundation declarations unavailable. Refresh authority or review again.": "基盤宣言を確認できません。権限更新または再取得を行ってください。",
+ "Foundation declaration matches": "基盤宣言に一致",
+ "Foundation declaration missing or mismatched": "基盤宣言不足・不一致",
+ "Foundation declarations cannot be verified": "基盤宣言は確認不可",
+ "Seven managed LOCAL Deployment and Job Pod templates, including every ordinary and init container (up to 64 total).": "管理対象の LOCAL Deployment・Job の7テンプレートを、通常・init コンテナすべて（合計64個まで）確認します。",
+ "Foundation template declarations only. Runtime security, admission decisions and global policy are outside this review; it grants no permission.": "基盤テンプレートの宣言だけを確認します。実行時のセキュリティ・受付判断・全体ポリシーは対象外で、操作権限は付与しません。",
+ "The complete seven-template source is unavailable; no foundation check results are shown.": "7テンプレートすべての参照元を取得できないため、基盤のチェック結果は表示しません。",
+ "Foundation root filesystem: container read-only declaration is true.": "基盤ルート：コンテナの読み取り専用宣言が true。",
+ "Foundation non-root: effective runAsNonRoot is true and UID is not 0; an absent UID is allowed.": "基盤 non-root：実効 runAsNonRoot が true、実効 UID が 0 以外。UID 未指定でも一致します。",
+ "Foundation capabilities: container drop list includes ALL.": "基盤 capability：コンテナの drop に ALL を含む。",
+ "Foundation limits: CPU and memory limits both have positive coefficients.": "基盤リソース上限：CPU・メモリ両方に正の係数を指定。",
+ "Foundation source observed at": "基盤参照元の観測時刻",
+ "Foundation storage": "基盤ストレージ",
+ "Foundation catalog database": "基盤カタログDB",
+ "Foundation catalog": "基盤カタログ",
+ "Foundation coordinator": "基盤コーディネーター",
+ "Foundation worker": "基盤ワーカー",
+ "Foundation authorization": "基盤認可",
+ "Foundation catalog bootstrap": "基盤カタログ初期化"
+});
+function dbFoundationBaselineAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbFoundationBaselineView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbFoundationBaselineAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbFoundationBaselineLeave(){++dbFoundationBaseline.epoch;dbFoundationBaseline.busy=null;dbFoundationBaseline.notice='';}
+function dbFoundationBaselineSync(){
+ const p=dbFoundationBaseline,auth=dbFoundationBaselineAuth(),view=dbFoundationBaselineView();
+ if(auth!==p.auth){dbFoundationBaselineLeave();p.record=null;p.auth=auth;}
+ if(!dbFoundationBaselineAllowed())p.record=null;
+ if(view!==p.view){dbFoundationBaselineLeave();p.view=view;}
+ // Always render every installed output, including hidden Bear scopes and Compute.
+ for(const kind of ['sre','policy','compute']){
+  const id=kind==='compute'?'observation-foundation-baseline-':'observation-'+kind+'-foundation-baseline-',panel=$(id+'panel');
+  if(!panel?.dataset.installed)continue;
+  panel.hidden=kind!=='compute'&&dbObservations[kind].scope!=='platform';
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbFoundationBaselineAllowed();
+  dbFoundationBaselineRender(id);
+ }
+}
+function dbFoundationBaselineInstall(){
+ for(const kind of ['sre','policy','compute']){
+  const id=kind==='compute'?'observation-foundation-baseline-':'observation-'+kind+'-foundation-baseline-';
+  if($(id+'panel')?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations[kind].installed?$('bear-panel-'+kind):null;
+  if(!host)continue;
+  const panel=dbAdminNode('section',id+'panel',host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head,'Managed foundation template declarations');
+  const body=dbAdminNode('div','',panel);body.className='panel-body';
+  dbAdminNode('p','',body,'Seven managed LOCAL Deployment and Job Pod templates, including every ordinary and init container (up to 64 total).');
+  dbAdminNode('p','',body,'Foundation template declarations only. Runtime security, admission decisions and global policy are outside this review; it grants no permission.');
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth','Refresh platform authority',dbFoundationBaselineRefreshAuth);
+  dbAdminButton(bar,id+'fetch','Review foundation declarations',dbFoundationBaselineFetch);
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbFoundationBaselineSync();
+}
+function dbFoundationBaselineCapture(){
+ const p=dbFoundationBaseline,token={},epoch=++p.epoch,auth=dbFoundationBaselineAuth(),view=dbFoundationBaselineView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbFoundationBaselineAuth()&&view===dbFoundationBaselineView()};
+}
+async function dbFoundationBaselineRefreshAuth(){
+ dbFoundationBaselineSync();if(dbFoundationBaseline.busy||!dbPlatformCanRefresh())return;
+ const read=dbFoundationBaselineCapture();dbFoundationBaseline.notice='Refreshing platform authority.';dbFoundationBaselineSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbFoundationBaseline.notice=dbFoundationBaselineAllowed()?'Foundation authority verified. Select Review foundation declarations.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current()){dbFoundationBaseline.record=null;dbFoundationBaseline.notice='Foundation declarations unavailable. Refresh authority or review again.';}}
+ finally{if(dbFoundationBaseline.busy===read.token)dbFoundationBaseline.busy=null;dbFoundationBaselineSync();}
+}
+async function dbFoundationBaselineFetch(){
+ dbFoundationBaselineSync();if(dbFoundationBaseline.busy||!dbFoundationBaselineAllowed())return;
+ const read=dbFoundationBaselineCapture();dbFoundationBaseline.notice='Reviewing foundation declarations.';dbFoundationBaselineSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-foundation-baseline',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>131072)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  dbFoundationBaseline.record=dbFoundationBaselineRecord(data);dbFoundationBaseline.notice='';
+ }catch{if(read.current()){dbFoundationBaseline.record=null;dbFoundationBaseline.notice='Foundation declarations unavailable. Refresh authority or review again.';}}
+ finally{if(dbFoundationBaseline.busy===read.token)dbFoundationBaseline.busy=null;dbFoundationBaselineSync();}
+}
+function dbFoundationBaselineRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>131072)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','baseline_version','coverage','baseline'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!dbObservationTime(d.observed_at,true)||d.baseline_version!=='foundation-container-declarations-v1')fail();
+ const c=d.coverage;if(!exact(c,['kind','pod_template','per_container','runtime_security','admission_decision','global_policy'])||c.kind!=='foundation_workload_container_declarations'||c.pod_template!==true||c.per_container!==true||c.runtime_security!==false||c.admission_decision!==false||c.global_policy!==false)fail();
+ const b=d.baseline;if(!exact(b,['availability','code','observed_at','workloads'])||!dbObservationTime(b.observed_at,true)||!['available','unavailable'].includes(b.availability)||b.code!==(b.availability==='available'?null:'FOUNDATION_BASELINE_UNAVAILABLE'))fail();
+ if(b.availability==='unavailable'){if(b.workloads!==null)fail();}
+ else{
+  if(!Array.isArray(b.workloads)||b.workloads.length!==7)fail();
+  const components=new Set();let total=0;
+  for(const row of b.workloads){
+   if(!exact(row,['component','kind','containers'])||!Object.hasOwn(dbFoundationBaselineComponents,row.component)||row.kind!==dbFoundationBaselineComponents[row.component][0]||row.component!==Object.keys(dbFoundationBaselineComponents)[components.size]||components.has(row.component)||!Array.isArray(row.containers))fail();
+   components.add(row.component);const ordinals={container:new Set(),init_container:new Set()};
+   for(const item of row.containers){
+    if(++total>64||!exact(item,['kind','ordinal','checks'])||!Object.hasOwn(ordinals,item.kind)||!Number.isSafeInteger(item.ordinal)||item.ordinal<1||ordinals[item.kind].has(item.ordinal))fail();
+    ordinals[item.kind].add(item.ordinal);
+    if(!exact(item.checks,Object.keys(dbFoundationBaselineChecks))||Object.values(item.checks).some(v=>!['met','not_met'].includes(v)))fail();
+   }
+   if(!ordinals.container.size)fail();
+   for(const set of Object.values(ordinals))if([...set].some(n=>n>set.size))fail();
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbFoundationBaselineRender(id){
+ const node=$(id+'output');node.replaceChildren();const line=(text,tag='p')=>dbAdminNode(tag,'',node).textContent=text;
+ const p=dbFoundationBaseline,r=dbFoundationBaselineAllowed()?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(p.notice)line(t(p.notice));
+ if(!r){if(!p.notice)line(t(dbFoundationBaselineAllowed()?'Foundation authority verified. Select Review foundation declarations.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(t('Observed at')+': '+r.observed_at);line(t('Foundation source observed at')+': '+r.baseline.observed_at);
+ if(r.baseline.availability==='unavailable'){line(t('Foundation declarations cannot be verified'));line(t('The complete seven-template source is unavailable; no foundation check results are shown.'));return;}
+ for(const row of r.baseline.workloads)for(const item of row.containers){
+  line('LOCAL · '+t(dbFoundationBaselineComponents[row.component][1])+' · '+row.kind+' · '+t(item.kind==='container'?'Container':'Init container')+' '+item.ordinal,'h3');
+  for(const [key,label] of Object.entries(dbFoundationBaselineChecks))line(t(label)+' '+t(item.checks[key]==='met'?'Foundation declaration matches':'Foundation declaration missing or mismatched'));
  }
 }
 
@@ -5853,7 +5996,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();
  dbAISettingsSync();
  dbAdminGate();
 }
@@ -10245,7 +10388,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
