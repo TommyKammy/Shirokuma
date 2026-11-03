@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-04 JST、[DB-P6-4C2H](database-p6-4c2h-sre-logs-2026-11-04.md)で専用ColimaのAgentHouse／Lokiを対象に、直近コンテナログの診断概要をSRE Platform／Computeに追加し、限定技術受入を完了した。取得範囲の行数・重大度別件数・警告以上の時刻をP管理者が手動確認する。生ログ本文の閲覧とLokiのerror／fatal検索は別の残件として扱う。Policyのcontroller／manifest検査、6F清掃、M1本人受入を継続する。
+
 2026-11-04 JST、[DB-P6-4C2G](database-p6-4c2g-sre-readiness-2026-11-04.md)でSRE Platform／ComputeにAgentHouseとLokiのHTTP応答を個別に確認する手動取得を限定技術受入済みとした。コンテナの実行状態、生ログ、Lokiのerror／fatal検索は別の観測対象として扱う。Policyのcontroller／manifest検査、6F清掃、M1本人受入を継続する。
 
 2026-11-03 JST、[DB-P6-4C2F](database-p6-4c2f-live-pod-baseline-2026-11-03.md)で、旧Policyの実Pod分岐に対応する登録済みnamespaceの宣言レビューを限定技術受入済みとした。Policy Platform／Computeから、全Podの通常・init・ephemeral containerへ既存4項目を手動確認する。空一覧と取得不能を区別し、runtime強制・admission・aggregate allowは示さない。SRE readiness／raw logs、全controller template・任意manifestの残件と他namespaceの範囲判断、6F清掃、全89行とM1本人受入を継続する。実Compute伸縮はM1後とする。

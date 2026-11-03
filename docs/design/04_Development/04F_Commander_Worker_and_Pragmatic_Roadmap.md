@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-04
-version: "1.65"
+version: "1.66"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-04 JST、[DB-P6-4C2H](../../guides/database-p6-4c2h-sre-logs-2026-11-04.md)で専用ColimaのAgentHouse／Lokiを対象に、直近コンテナログの診断概要をSRE Platform／Computeに追加し、限定技術受入を完了した。取得範囲の行数・重大度別件数・警告以上の時刻をP管理者が手動確認する。生ログ本文の閲覧とLokiのerror／fatal検索は別の残件として扱う。Policyのcontroller／manifest検査、6F清掃、M1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-4C2G](../../guides/database-p6-4c2g-sre-readiness-2026-11-04.md)でSRE Platform／ComputeにAgentHouseとLokiのHTTP応答を個別に確認する手動取得を限定技術受入済みとした。コンテナの実行状態、生ログ、Lokiのerror／fatal検索は別の観測対象として扱う。Policyのcontroller／manifest検査、6F清掃、M1本人受入を継続する。
 

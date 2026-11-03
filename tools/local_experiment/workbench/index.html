@@ -604,6 +604,10 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) .toolbar{flex-wrap:wrap}
 :is(#observation-sre-telemetry-readiness,#observation-telemetry-readiness-panel) .panel-body p{max-inline-size:min(75ch,100%)}
 :is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) :is(.panel-body,p,h2,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs){min-width:0;max-width:100%}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs) .toolbar{flex-wrap:wrap}
+:is(#observation-sre-telemetry-logs,#observation-telemetry-logs-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs) :is(.panel-body,p,h2,h3,button,li){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures){min-width:0;max-width:100%}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) :is(.panel-body,p,h2,button,table,th,td,details,summary,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) .toolbar{flex-wrap:wrap}
@@ -3900,7 +3904,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbPodBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3945,7 +3949,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4548,6 +4552,157 @@ function dbTelemetryReadinessRender(kind){
  for(const [name,label] of [['agenthouse','AgentHouse'],['loki','Loki']]){
   const observation=record[name];
   dbAdminNode('p','',node,label+' · '+local(observation.status)+' · '+local('observed')+' '+observation.observed_at);
+ }
+}
+
+const dbTelemetryLogs={sre:{auth:'',view:'',epoch:0,busy:null,record:null,verified:false,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,verified:false,notice:'',rendered:null}};
+const dbTelemetryLogsLabels={
+ title:['Telemetry container log sample','テレメトリのコンテナログ標本'],
+ about:['Per service: stdout and stderr from the last 10 minutes, up to 100 lines and 20 warning, error or fatal events.','サービスごとに直近10分の標準出力と標準エラー出力を最大100行、警告・エラー・致命的イベントを最大20件取得します。'],
+ boundary:['Each panel keeps its own sample of counts and event times.','各パネルは件数とイベント時刻の標本を個別に保持します。'],
+ auth:['Refresh platform authority','プラットフォーム権限を更新'],
+ fetch:['Fetch log sample','ログ標本を取得'],
+ refreshing:['Refreshing platform authority.','プラットフォーム権限を確認しています。'],
+ fetching:['Fetching log sample.','ログ標本を取得しています。'],
+ verified:['Authority verified. Select Fetch log sample.','権限を確認しました。「ログ標本を取得」を選んでください。'],
+ denied:['Refresh platform authority. Platform administrator access and current and maximum global Admin roles are required.','プラットフォーム権限を更新してください。プラットフォーム管理者で、現在と上限のグローバルロールが管理者である必要があります。'],
+ failed:['The log sample could not be loaded.','ログ標本を取得できませんでした。'],
+ available:['Sample available','標本を取得しました'],
+ empty:['Sample contains zero lines','標本は0行です'],
+ unavailable:['Sample unavailable','標本を取得できません'],
+ observed:['Sampled at (UTC)','標本取得時刻（UTC）'],
+ lines:['Sampled lines','取得行数'],
+ other:['Other lines','その他の行'],
+ warning:['Warning','警告'],
+ error:['Error','エラー'],
+ fatal:['Fatal','致命的'],
+ events:['Recent event times (UTC)','直近のイベント時刻（UTC）']
+};
+function dbTelemetryLogsText(key){return dbTelemetryLogsLabels[key][language==='ja'?1:0];}
+function dbTelemetryLogsID(kind){return 'observation-'+kind+'-telemetry-logs-';}
+function dbTelemetryLogsRoot(kind){return kind==='sre'?'observation-sre-telemetry-logs':'observation-telemetry-logs-panel';}
+function dbTelemetryLogsAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbTelemetryLogsView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbTelemetryLogsAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbTelemetryLogsLeave(p){++p.epoch;p.busy=null;p.notice='';}
+function dbTelemetryLogsSync(){
+ const auth=dbTelemetryLogsAuth(),view=dbTelemetryLogsView();
+ for(const [kind,p] of Object.entries(dbTelemetryLogs)){
+  if(auth!==p.auth){dbTelemetryLogsLeave(p);p.record=null;p.rendered=null;p.verified=false;p.auth=auth;}
+  if(!dbTelemetryLogsAllowed()){p.record=null;p.rendered=null;p.verified=false;}
+  if(view!==p.view){dbTelemetryLogsLeave(p);p.view=view;}
+  const panel=$(dbTelemetryLogsRoot(kind));if(!panel?.dataset.installed)continue;
+  panel.hidden=kind==='sre'&&dbObservations.sre.scope!=='platform';
+  const id=dbTelemetryLogsID(kind);
+  for(const key of ['title','about','boundary','auth','fetch'])$(id+key).textContent=dbTelemetryLogsText(key);
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!p.verified||!dbTelemetryLogsAllowed();
+  dbTelemetryLogsRender(kind);
+ }
+}
+function dbTelemetryLogsInstall(){
+ for(const kind of ['sre','compute']){
+  if($(dbTelemetryLogsRoot(kind))?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations.sre.installed?$('bear-panel-sre'):null;if(!host)continue;
+  const id=dbTelemetryLogsID(kind),panel=dbAdminNode('section',dbTelemetryLogsRoot(kind),host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head);
+  const body=dbAdminNode('div','',panel);body.className='panel-body';dbAdminNode('p',id+'about',body);dbAdminNode('p',id+'boundary',body);
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth',dbTelemetryLogsText('auth'),()=>dbTelemetryLogsRefreshAuth(kind));
+  dbAdminButton(bar,id+'fetch',dbTelemetryLogsText('fetch'),()=>dbTelemetryLogsFetch(kind));
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbTelemetryLogsSync();
+}
+function dbTelemetryLogsCapture(kind){
+ const p=dbTelemetryLogs[kind],token={},epoch=++p.epoch,auth=dbTelemetryLogsAuth(),view=dbTelemetryLogsView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbTelemetryLogsAuth()&&view===dbTelemetryLogsView()};
+}
+async function dbTelemetryLogsRefreshAuth(kind){
+ dbTelemetryLogsSync();const p=dbTelemetryLogs[kind];if(!p||p.busy||!dbPlatformCanRefresh()||(kind==='sre'&&dbObservations.sre.scope!=='platform'))return;
+ const read=dbTelemetryLogsCapture(kind);p.verified=false;p.notice='refreshing';dbTelemetryLogsSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  p.verified=dbTelemetryLogsAllowed();p.notice=p.verified?'verified':'denied';
+ }catch{if(read.current()){p.record=null;p.notice='failed';}}
+ finally{if(p.busy===read.token)p.busy=null;dbTelemetryLogsSync();}
+}
+async function dbTelemetryLogsFetch(kind){
+ dbTelemetryLogsSync();const p=dbTelemetryLogs[kind];if(!p||p.busy||!p.verified||!dbTelemetryLogsAllowed()||(kind==='sre'&&dbObservations.sre.scope!=='platform'))return;
+ const read=dbTelemetryLogsCapture(kind);p.notice='fetching';dbTelemetryLogsSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-telemetry-logs',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>4096)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  p.record=dbTelemetryLogsRecord(data);p.notice='';
+ }catch{if(read.current()){p.record=null;p.notice='failed';}}
+ finally{if(p.busy===read.token)p.busy=null;dbTelemetryLogsSync();}
+}
+
+function dbTelemetryLogsTimeKey(value){
+ if(typeof value!=='string'||!value.endsWith('Z')||!dbObservationTime(value,true))return '';
+ const parts=/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z$/.exec(value);
+ return parts?parts[1]+(parts[2]||'').padEnd(9,'0'):'';
+}
+function dbTelemetryLogsRecord(data){
+ const exact=dbSavedExact,levels=['warning','error','fatal'],fail=()=>{throw Error('INVALID_RESPONSE');};
+ const count=value=>Number.isInteger(value)&&value>=0&&value<=100;
+ if(!exact(data,['scope','agenthouse','loki']))fail();
+ const scope=data.scope;
+ if(!exact(scope,['since_minutes','tail_lines','event_limit','streams'])||scope.since_minutes!==10||scope.tail_lines!==100||scope.event_limit!==20||
+    !Array.isArray(scope.streams)||scope.streams.length!==2||scope.streams[0]!=='stdout'||scope.streams[1]!=='stderr')fail();
+ for(const name of ['agenthouse','loki']){
+  const item=data[name];
+  if(!exact(item,['observed_at','status','line_count','other_count','level_counts','events'])||
+     !dbTelemetryLogsTimeKey(item.observed_at)||!['available','unavailable'].includes(item.status)||
+     !count(item.line_count)||!count(item.other_count)||!exact(item.level_counts,levels)||
+     !levels.every(level=>count(item.level_counts[level]))||!Array.isArray(item.events))fail();
+  const total=levels.reduce((sum,level)=>sum+item.level_counts[level],0);
+  if(total+item.other_count!==item.line_count||item.events.length!==Math.min(total,scope.event_limit)||
+     (item.status==='unavailable'&&item.line_count!==0))fail();
+  const remaining={...item.level_counts};
+  let previous=null;
+  for(const event of item.events){
+   if(!exact(event,['timestamp','severity'])||!levels.includes(event.severity)||--remaining[event.severity]<0)fail();
+   const key=dbTelemetryLogsTimeKey(event.timestamp);
+   if(!key||(previous!==null&&previous<key))fail();
+   previous=key;
+   Object.freeze(event);
+  }
+  Object.freeze(item.level_counts);Object.freeze(item.events);Object.freeze(item);
+ }
+ Object.freeze(scope.streams);Object.freeze(scope);
+ return Object.freeze(data);
+}
+function dbTelemetryLogsRender(kind){
+ const node=$(dbTelemetryLogsID(kind)+'output'),p=dbTelemetryLogs[kind],allowed=dbTelemetryLogsAllowed(),record=allowed?p.record:null,old=p.rendered;
+ if(old&&old.record===record&&old.notice===p.notice&&old.language===language&&old.allowed===allowed&&old.verified===p.verified)return;
+ p.rendered={record,notice:p.notice,language,allowed,verified:p.verified};
+ node.replaceChildren();
+ const local=dbTelemetryLogsText;
+ if(p.notice||!record)dbAdminNode('p','',node,local(p.notice||(allowed&&p.verified?'verified':'denied')));
+ if(!record)return;
+ for(const [name,label] of [['agenthouse','AgentHouse'],['loki','Loki']]){
+  const observation=record[name];
+  const status=observation.status==='available'&&!observation.line_count?'empty':observation.status;
+  dbAdminNode('h3','',node,label);
+  dbAdminNode('p','',node,local(status)+' · '+local('observed')+' '+observation.observed_at);
+  if(observation.status!=='available')continue;
+  dbAdminNode('p','',node,[['lines',observation.line_count],['other',observation.other_count],...Object.entries(observation.level_counts)]
+   .map(([key,count])=>local(key)+' '+count).join(' · '));
+  if(!observation.events.length)continue;
+  dbAdminNode('p','',node,local('events'));
+  const events=dbAdminNode('ol','',node);
+  for(const event of observation.events){
+   const row=dbAdminNode('li','',events,local(event.severity)+' · ');
+   dbAdminNode('time','',row,event.timestamp).setAttribute('datetime',event.timestamp);
+  }
  }
 }
 
