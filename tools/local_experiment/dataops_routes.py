@@ -59,6 +59,43 @@ def _json_context(raw):
     return json.loads(raw, object_pairs_hook=pairs)
 
 
+_RECOVERY_ROUTES = frozenset(('manual-ingest', 'manual-wap-build', 'manual-wap-audit',
+    'manual-wap-publish', 'manual-wap-rollback'))
+_RECOVERY_STATES = frozenset(('ACTIVE', 'CANCELING', 'FINISHED', 'FAILED', 'CANCELED', 'UNKNOWN'))
+
+
+def _recovery_by_key(principal, context, route, key):
+    if (route not in _RECOVERY_ROUTES or not isinstance(key, str) or not key.strip()
+            or len(key) > 256 or any(ord(c) < 32 or ord(c) == 127 for c in key)):
+        raise ValueError('invalid recovery selection')
+    current_context(principal, context)
+    # This lookup does not inspect/reconcile an execution. Normal control-store
+    # bootstrap connections are permitted; only the selected columns are read.
+    unavailable = False
+    row = None
+    try:
+        with control_store.connect() as db:
+            row = db.execute('SELECT id,context,state FROM dataops_operations '
+                'WHERE actor=? AND route=? AND idempotency_key=?',
+                (principal.principal_id, route, key)).fetchone()
+    except Exception:
+        unavailable = True
+    finally:
+        # Revocation wins over missing/mismatched rows and source errors alike.
+        current_context(principal, context)
+    if unavailable:
+        raise QueryError('SERVICE_UNAVAILABLE', 502)
+    try:
+        if (row is None or context_value(_json_context(row['context']), context.selected_role) != context
+                or not isinstance(row['id'], str)
+                or re.fullmatch(r'[A-Za-z0-9_-]{1,128}', row['id']) is None
+                or row['state'] not in _RECOVERY_STATES):
+            raise ValueError('unavailable recovery')
+        return dict(operation_id=row['id'], route=route, state=row['state'])
+    except (ValueError, TypeError, KeyError, IndexError, RecursionError):
+        raise QueryError('OPERATION_NOT_FOUND', 404) from None
+
+
 def _key(handler):
     keys = handler.headers.get_all('Idempotency-Key', [])
     if len(keys) != 1 or not keys[0].strip() or len(keys[0]) > 256:
@@ -125,17 +162,26 @@ def _dispatch(handler, method, path, params, principal, role):
     if not any(path == '/api/v1/' + prefix or path.startswith('/api/v1/' + prefix + '/')
                for prefix in ('ingests', 'wap', 'table-exports', 'table-clones', 'table-profiles', 'table-drops', 'dataops')):
         return False
+    if path == '/api/v1/dataops/by-key':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        if (handler.headers.get_all('Transfer-Encoding', [])
+                or len(handler.headers.get_all('X-Shirokuma-Role', [])) != 1
+                or any(len(handler.headers.get_all(name, [])) > 1 for name in
+                    ('Authorization', 'Content-Type', 'Idempotency-Key'))):
+            raise ValueError('invalid recovery headers')
     if '#' in handler.path or handler.headers.get('Transfer-Encoding'):
         raise ValueError('invalid framing')
     if method == 'GET':
         if handler.headers.get_all('Content-Length', []) not in ([], ['0']):
             raise ValueError('GET body forbidden')
-        allowed = ({'context', 'key'} if path == '/api/v1/table-drops/by-key' else
+        allowed = ({'context', 'route', 'key'} if path == '/api/v1/dataops/by-key' else
+            {'context', 'key'} if path == '/api/v1/table-drops/by-key' else
             {'context', 'source'} if path == '/api/v1/table-drops/preview' else
             {'context', 'model_id', 'version'} if path == '/api/v1/wap/models' else {'context'})
         if set(params) - allowed or 'context' not in params or any(len(v) != 1 for v in params.values()):
             raise ValueError('invalid context parameters')
-        if path in ('/api/v1/table-drops/preview', '/api/v1/table-drops/by-key') and set(params) != allowed:
+        if path in ('/api/v1/dataops/by-key', '/api/v1/table-drops/preview', '/api/v1/table-drops/by-key') and set(params) != allowed:
             raise ValueError('exact preview parameters required')
         body = {}
         context = context_value(_json_context(params['context'][0]), role)
@@ -151,6 +197,12 @@ def _dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         envelope['operation'] = manual_table_drop.lookup_by_key(principal, context, params['key'][0])
+        handler.respond(envelope)
+        return True
+    if path == '/api/v1/dataops/by-key':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        envelope['recovery'] = _recovery_by_key(principal, context, params['route'][0], params['key'][0])
         handler.respond(envelope)
         return True
     match = re.fullmatch(r'/api/v1/dataops/([A-Za-z0-9_-]{1,128})(/cancel)?', path)

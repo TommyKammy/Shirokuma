@@ -1,5 +1,6 @@
 """Real HTTP serialization around authenticated dispatcher; no engine access."""
 import base64
+from contextlib import ExitStack
 from dataclasses import asdict
 from http.client import HTTPResponse
 import io
@@ -41,17 +42,17 @@ class HTTPRoutesTests(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
-    def request(self, path, body=None, role='data_engineer', key=None, extra=None):
+    def request(self, path, body=None, role='data_engineer', key=None, extra=None, handler=None, raw_headers=(), request_method=None, raw_body=None):
         headers = {'Authorization': 'Basic synthetic', 'X-Shirokuma-Role': role}
         if key:
             headers['Idempotency-Key'] = key
         if body is not None:
             headers['Content-Type'] = 'application/json'
         headers.update(extra or {})
-        raw = b'' if body is None else json.dumps(body).encode()
+        raw = raw_body if raw_body is not None else b'' if body is None else json.dumps(body).encode()
         headers.update({'Host': '127.0.0.1', 'Connection': 'close', 'Content-Length': str(len(raw))})
-        request = (('GET' if body is None else 'POST') + ' ' + path + ' HTTP/1.1\r\n' +
-            ''.join(k + ': ' + v + '\r\n' for k, v in headers.items()) + '\r\n').encode() + raw
+        request = ((request_method or ('GET' if body is None else 'POST')) + ' ' + path + ' HTTP/1.1\r\n' +
+            ''.join(k + ': ' + v + '\r\n' for k, v in [*headers.items(), *raw_headers]) + '\r\n').encode() + raw
         class Connection:
             def __init__(self, incoming):
                 self.incoming, self.outgoing = io.BytesIO(incoming), io.BytesIO()
@@ -61,10 +62,170 @@ class HTTPRoutesTests(unittest.TestCase):
                 self.outgoing.write(data)
         connection = Connection(request)
         with patch.object(wb.WorkbenchHandler, 'log_message'):
-            wb.WorkbenchHandler(connection, ('127.0.0.1', 1), SimpleNamespace())
+            (handler or wb.WorkbenchHandler)(connection, ('127.0.0.1', 1), SimpleNamespace())
         response = HTTPResponse(Connection(connection.outgoing.getvalue()))
         response.begin()
         return response.status, json.loads(response.read())
+
+    def native_handler(self):
+        # Construct the actual proxy class without binding a socket or starting a server.
+        import warehouse_resident as resident
+        import logical_creations
+        import database_creation_bridge
+        with patch.object(resident, '_profile_active', return_value=True), \
+                patch.object(resident.http.server, 'ThreadingHTTPServer') as server, \
+                patch.object(logical_creations, 'enabled', return_value=False), \
+                patch.object(database_creation_bridge, 'configure'):
+            resident.serve_endpoint(once=True)
+        return server.call_args.args[1]
+
+    def lookup(self, *, context=None, route='manual-ingest', key=' original ', handler=None, **kwargs):
+        query = urlencode(dict(context=json.dumps(asdict(C) if context is None else context), route=route, key=key))
+        return self.request('/api/v1/dataops/by-key?' + query, handler=handler, **kwargs)
+
+    def test_recovery_nel_is_a_valid_exact_key_and_unused_returns_not_found(self):
+        for handler in (wb.WorkbenchHandler, self.native_handler()):
+            with patch.object(routes.control_store, 'connect') as connect:
+                db = connect.return_value.__enter__.return_value
+                db.execute.return_value.fetchone.return_value = None
+                status, reply = self.lookup(key='x\x85', handler=handler)
+            self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+            self.assertEqual(db.execute.call_args.args[1], ('alice', 'manual-ingest', 'x\x85'))
+
+    def test_recovery_only_get_rejects_post_before_reading_any_body_on_both_faces(self):
+        for handler in (wb.WorkbenchHandler, self.native_handler()):
+            for raw in (b'', b'{', b'null', json.dumps(dict(context=asdict(C))).encode()):
+                with patch.object(routes.control_store, 'connect') as connect, \
+                        patch.object(handler, 'database_body', side_effect=AssertionError('must not parse body')) as body, \
+                        patch.object(routes, 'current_context') as authority:
+                    status, reply = self.request('/api/v1/dataops/by-key', handler=handler,
+                        request_method='POST', raw_body=raw)
+                self.assertEqual((status, reply['code']), (404, 'NOT_FOUND'))
+                connect.assert_not_called()
+                body.assert_not_called()
+                authority.assert_not_called()
+
+    def test_recovery_deep_or_malformed_stored_context_is_safe_after_postcheck(self):
+        for raw in ('['*2000 + ']'*2000, '{', '{"schema_id":NaN}', '"text"'):
+            with patch.object(routes.control_store, 'connect') as connect, \
+                    patch.object(routes, 'current_context') as authority:
+                connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = dict(
+                    id='op', context=raw, state='ACTIVE')
+                status, reply = self.lookup()
+            self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+            self.assertEqual(authority.call_count, 2)
+            self.assertNotIn('RecursionError', json.dumps(reply))
+            self.assertNotIn('context', reply.get('details', {}))
+
+    def test_recovery_both_http_faces_closed_projection_and_original_identity(self):
+        import query_service as qs
+        for handler in (wb.WorkbenchHandler, self.native_handler()):
+            for route in sorted(routes._RECOVERY_ROUTES):
+                row = dict(id='original-op', context=json.dumps(asdict(C)), state='ACTIVE')
+                with patch.object(routes.control_store, 'connect') as connect, \
+                        patch.object(routes.ds, 'begin') as begin, \
+                        patch.object(routes.ds, 'Execution') as execution, \
+                        patch.object(qs, '_best_cancel') as cancel, \
+                        patch.object(qs, '_transport') as transport, \
+                        patch.object(routes, 'current_context') as authority:
+                    db = connect.return_value.__enter__.return_value
+                    db.execute.return_value.fetchone.return_value = row
+                    status, reply = self.lookup(route=route, handler=handler)
+                self.assertEqual((status, reply), (200, dict(context=asdict(C),
+                    recovery=dict(operation_id='original-op', route=route, state='ACTIVE'))))
+                self.assertEqual(authority.call_count, 2)
+                self.assertEqual(db.execute.call_args.args[1], ('alice', route, ' original '))
+                self.assertTrue(db.execute.call_args.args[0].startswith('SELECT id,context,state '))
+                for forbidden in (begin, execution, cancel, transport):
+                    forbidden.assert_not_called()
+
+    def test_recovery_strict_query_framing_headers_both_actual_faces(self):
+        query = urlencode(dict(context=json.dumps(asdict(C)), route='manual-ingest', key='original'))
+        for handler in (wb.WorkbenchHandler, self.native_handler()):
+            for suffix in ('&key=again', '&route=manual-ingest', '&context={}', '&extra=x'):
+                self.assertEqual(self.request('/api/v1/dataops/by-key?' + query + suffix, handler=handler)[0], 400)
+            for missing in ('context', 'route', 'key'):
+                params = dict(context=json.dumps(asdict(C)), route='manual-ingest', key='original')
+                del params[missing]
+                self.assertEqual(self.request('/api/v1/dataops/by-key?' + urlencode(params), handler=handler)[0], 400)
+            for headers in ((('Content-Length', '0'),), (('Content-Length', '1'),),
+                            (('Transfer-Encoding', ''),), (('Transfer-Encoding', 'chunked'),),
+                            (('X-Shirokuma-Role', 'data_engineer'),), (('Authorization', 'Basic synthetic'),),
+                            (('Transfer-Encoding', ''), ('Transfer-Encoding', 'chunked'))):
+                with patch.object(routes.control_store, 'connect') as connect:
+                    self.assertEqual(self.request('/api/v1/dataops/by-key?' + query,
+                        handler=handler, raw_headers=headers)[0], 400)
+                    connect.assert_not_called()
+            for key in ('', ' ', 'x'*257, 'x\x00', 'x\x1f', 'x\x7f'):
+                self.assertEqual(self.lookup(key=key, handler=handler)[0], 400)
+            for route in ('manual-clone', 'manual-wap', '', 'manual-ingest/cancel'):
+                self.assertEqual(self.lookup(route=route, handler=handler)[0], 400)
+            duplicate = json.dumps(asdict(C))[:-1] + ',"schema_id":"sc"}'
+            self.assertEqual(self.request('/api/v1/dataops/by-key?' + urlencode(dict(
+                context=duplicate, route='manual-ingest', key='original')), handler=handler)[0], 400)
+            self.assertEqual(self.request('/api/v1/dataops/by-key', dict(context=asdict(C)), handler=handler)[0], 404)
+
+    def test_recovery_missing_and_every_stored_context_mismatch_are_indistinguishable(self):
+        missing = None
+        for field, value in asdict(C).items():
+            changed = asdict(C)
+            changed[field] = value + 1 if type(value) is int else str(value) + '-other'
+            row = dict(id='op', context=json.dumps(changed), state='FINISHED')
+            for selected in (None, row):
+                with patch.object(routes.control_store, 'connect') as connect:
+                    connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = selected
+                    status, reply = self.lookup()
+                self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+                # Request IDs differ; all public error semantics are identical.
+                public = {k: v for k, v in reply.items() if k != 'request_id'}
+                if missing is None:
+                    missing = public
+                self.assertEqual(public, missing)
+
+    def test_recovery_stored_duplicate_bool_nan_bad_id_and_state_fail_closed(self):
+        invalid_contexts = [json.dumps(dict(asdict(C), binding_revision=True)),
+            json.dumps(dict(asdict(C), grant_revision=True)),
+            json.dumps(dict(asdict(C), binding_revision=float('nan'))),
+            json.dumps(dict(asdict(C), grant_revision=float('nan'))),
+            json.dumps(asdict(C))[:-1] + ',"schema_id":"sc"}', 'null', '{}']
+        rows = [dict(id='op', context=c, state='ACTIVE') for c in invalid_contexts]
+        rows += [dict(id=value, context=json.dumps(asdict(C)), state='ACTIVE') for value in ('', 'x'*129, '../op', None)]
+        rows += [dict(id='op', context=json.dumps(asdict(C)), state=value) for value in ('REJECTED', 'private engine error', None)]
+        for row in rows:
+            with patch.object(routes.control_store, 'connect') as connect, \
+                    patch.object(routes, 'current_context') as authority:
+                connect.return_value.__enter__.return_value.execute.return_value.fetchone.return_value = row
+                status, reply = self.lookup()
+            self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+            self.assertEqual(authority.call_count, 2)
+            self.assertNotIn('private engine', json.dumps(reply))
+
+    def test_recovery_postcheck_revocation_wins_after_missing_mismatch_and_source_failure(self):
+        mismatch = dict(id='op', context=json.dumps(dict(asdict(C), schema_id='other')), state='ACTIVE')
+        for row in (None, mismatch, OSError('private source path')):
+            with patch.object(routes.control_store, 'connect') as connect, \
+                    patch.object(routes, 'current_context', side_effect=[None, QueryError('DB_ACCESS_REVOKED', 403)]) as authority:
+                execute = connect.return_value.__enter__.return_value.execute
+                if isinstance(row, Exception):
+                    execute.side_effect = row
+                else:
+                    execute.return_value.fetchone.return_value = row
+                status, reply = self.lookup()
+            self.assertEqual((status, reply['code']), (403, 'DB_ACCESS_REVOKED'))
+            self.assertEqual(authority.call_count, 2)
+            self.assertNotIn('private source', json.dumps(reply))
+        with patch.object(routes.control_store, 'connect') as connect, \
+                patch.object(routes, 'current_context', side_effect=QueryError('DB_ACCESS_REVOKED', 403)):
+            self.assertEqual(self.lookup()[0], 403)
+            connect.assert_not_called()
+
+    def test_recovery_source_error_sanitized_after_authority_postcheck(self):
+        with patch.object(routes.control_store, 'connect', side_effect=OSError('secret file')) as connect, \
+                patch.object(routes, 'current_context') as authority:
+            status, reply = self.lookup()
+        self.assertEqual((status, reply['code']), (502, 'SERVICE_UNAVAILABLE'))
+        self.assertEqual(authority.call_count, 2)
+        self.assertNotIn('secret file', json.dumps(reply))
 
     def upload(self):
         return dict(context=asdict(C), mode='create', destination=dict(database_id='db', schema_id='sc', physical_name='orders'),
@@ -301,6 +462,118 @@ class CoreHTTPTests(unittest.TestCase):
     def upload(self):
         return dict(context=asdict(self.context), mode='create', destination=asdict(self.boundary.locator('normal_http')),
             filename='data.csv', content_base64=base64.b64encode(b'id,label\n1,001\n2,\n').decode())
+
+    def test_recovery_real_authority_unused_key_has_no_effects_on_both_faces(self):
+        import query_service as qs
+        native = HTTPRoutesTests.native_handler(self)
+        query = urlencode(dict(context=json.dumps(asdict(self.context)), route='manual-ingest', key='unused'))
+        basic = 'Basic ' + base64.b64encode(b'alice:correct').decode()
+        def snapshot():
+            with routes.control_store.connect() as db:
+                return {table: [tuple(row) for row in db.execute('SELECT * FROM '+table)]
+                    for table in ('dataops_operations', 'dataops_queries', 'query_records', 'warehouse_admissions')}
+        before = snapshot()
+        with patch.object(routes.ds, 'begin') as begin, \
+                patch.object(routes.ds.Execution, 'inspect') as inspect, \
+                patch.object(qs, '_best_cancel') as cancel, patch.object(qs, '_transport') as transport, \
+                patch.object(qs, '_acquire_query_owner') as lease:
+            for handler in (wb.WorkbenchHandler, native):
+                status, reply = HTTPRoutesTests.request(self, '/api/v1/dataops/by-key?'+query,
+                    extra={'Authorization': basic}, handler=handler)
+                self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+                rejected, _ = HTTPRoutesTests.request(self, '/api/v1/dataops/by-key?'+query,
+                    extra={'Authorization': basic}, handler=handler, raw_headers=(('Authorization', basic),))
+                self.assertIn(rejected, (400, 401))
+            for forbidden in (begin, inspect, cancel, transport, lease):
+                forbidden.assert_not_called()
+        self.assertEqual(snapshot(), before)
+        self.assertFalse(self.boundary.calls)
+
+    def test_recovery_real_actor_route_key_full_context_and_platform_null(self):
+        import query_context
+        from grant_fixtures import verified_grants
+        principal = self.boundary.principal
+        context = self.context
+        with routes.control_store.connect() as db:
+            registry.create_grant(db, 'owner', context.database_id, 'data_engineer')
+            verified_grants(db)
+        context = self.boundary.context(context.database_id)
+        # Existing ledger records for each closed route, without engine submission.
+        for route in sorted(routes._RECOVERY_ROUTES):
+            execution = routes.ds.begin(principal, context, route=route, idempotency_key='same key', payload={})
+            path = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(context)), route=route, key='same key'))
+            status, reply = self.request(path)
+            self.assertEqual((status, reply['recovery']['operation_id']), (200, execution.id))
+            owner_context = query_context.resolve_context(self.boundary.fixture.principal('owner'),
+                context.database_id, context.schema_id, 'data_engineer', warehouse_id=context.warehouse_id,
+                expected_binding_revision=context.binding_revision)
+            self.assertEqual(asdict(owner_context), asdict(context))
+            other = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(owner_context)), route=route, key='same key'))
+            self.assertEqual(self.request(other, user='owner')[0], 404)
+        null_context = query_context.resolve_context(self.boundary.fixture.principal('owner'),
+            context.database_id, context.schema_id, 'admin', warehouse_id=context.warehouse_id,
+            expected_binding_revision=context.binding_revision)
+        self.assertIsNone(null_context.grant_revision)
+        execution = routes.ds.begin(self.boundary.fixture.principal('owner'), null_context,
+            route='manual-ingest', idempotency_key='platform', payload={})
+        path = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(null_context)), route='manual-ingest', key='platform'))
+        self.assertEqual(self.request(path, user='owner', role='admin')[1]['recovery']['operation_id'], execution.id)
+        forged = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(dict(asdict(context), grant_revision=None)), route='manual-ingest', key='same key'))
+        self.assertEqual(self.request(forged)[0], 409)
+        with routes.control_store.connect() as db:
+            db.execute("DELETE FROM grants WHERE principal_id='alice' AND database_id=?", (context.database_id,))
+        self.assertEqual(self.request(forged)[0], 403)
+        del self.boundary.fixture.users['alice']
+        self.boundary.fixture.save()
+        self.assertIn(self.request(forged)[0], (401, 403))
+
+    def test_recovery_real_current_other_db_schema_role_and_new_revision_hide_existence(self):
+        context = self.context
+        execution = routes.ds.begin(self.boundary.principal, context,
+            route='manual-ingest', idempotency_key='scoped', payload={})
+        selections = [self.boundary.context(self.boundary.databases[1]),
+            self.boundary.context(schema='sandbox'), self.boundary.context(schema='marts', role='bi_viewer')]
+        for current in selections:
+            path = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(current)), route='manual-ingest', key='scoped'))
+            status, reply = self.request(path, role=current.selected_role)
+            self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+            self.assertNotIn(execution.id, json.dumps(reply))
+
+        with routes.control_store.connect() as db:
+            db.execute("UPDATE effective_grants SET epoch=epoch+1 WHERE principal_id='alice' AND database_id=?", (context.database_id,))
+        current = self.boundary.context()
+        path = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(current)), route='manual-ingest', key='scoped'))
+        status, reply = self.request(path, role=current.selected_role)
+        self.assertEqual((status, reply['code']), (404, 'OPERATION_NOT_FOUND'))
+        self.assertNotIn(execution.id, json.dumps(reply))
+
+    def test_recovery_real_postread_account_revocation_wins_for_missing_mismatch_and_match(self):
+        original = routes.current_context
+        for key, stored in [('unused', None), ('mismatch', dict(asdict(self.context), sql_schema='other')),
+                            ('match', asdict(self.context))]:
+            if stored is not None:
+                execution = routes.ds.begin(self.boundary.principal, self.context,
+                    route='manual-ingest', idempotency_key=key, payload={})
+                with routes.control_store.connect() as db:
+                    db.execute('UPDATE dataops_operations SET context=? WHERE id=?', (json.dumps(stored), execution.id))
+            calls = []
+            account = dict(self.boundary.fixture.users['alice'])
+            def authority(principal, context):
+                if calls:
+                    del self.boundary.fixture.users['alice']
+                    self.boundary.fixture.save()
+                calls.append(True)
+                original(principal, context)
+            path = '/api/v1/dataops/by-key?' + urlencode(dict(context=json.dumps(asdict(self.context)), route='manual-ingest', key=key))
+            try:
+                with patch.object(routes, 'current_context', side_effect=authority):
+                    status, reply = self.request(path)
+                self.assertEqual(status, 403, reply)
+                self.assertEqual(len(calls), 2)
+                self.assertNotIn('recovery', reply)
+            finally:
+                self.boundary.fixture.users['alice'] = account
+                self.boundary.fixture.save()
 
     def test_retiring_cancel_requires_exact_owned_context_and_current_account(self):
         import query_service as qs

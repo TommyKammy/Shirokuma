@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+2026-11-03 JST、[DB-P6-6F](database-p6-6f-dataops-recovery-2026-11-03.md)でING-03／TRF-06の通常再接続導線を整備し、限定技術受入を完了した。ブラウザーには本人ごとの最小追跡情報だけを保存し、応答喪失・reload後は元キーlookupと元IDのGETで復旧する。現行権限と完全context、明示取消、入力保持を確認し、Ingestのcommitと清掃失敗も分離した。次はAI-02／SQL-12／13の通常WAPへの案内を整え、清掃失敗の照合・限定修正はM1残件として保持する。P6全体・M1本人受入は継続する。
+
 2026-11-03 JST、[DB-P6-0R1](database-p6-0r1-capability-closure-audit-2026-11-03.md)で全89行の実装・既存証拠・通常導線を照合した。M1義務を維持する82行、既存計画の別track3行、範囲判断OPEN4行を整理し、OPENを必須免除へ変換しない。SQL-01の新規Database Worksheetを空SQLへ修正し、CMP-04のAI計画取得に関する古い説明を既存受入へ合わせた。123群4,880成功・34 skip、通常画面の追加・reloadと台帳・設定保全を確認した。次はING-03／TRF-06のreload後の元operation再接続を限定して実装する。P6全体・統合受入・M1本人受入は継続する。
 
 2026-11-03 JST、[DB-P6-4C2D](database-p6-4c2d-foundation-controllers-2026-11-03.md)でstorage／catalogの管理対象3 Deploymentのcontroller記録を、SRE PlatformとComputeの独立手動snapshotへ接続し限定技術受入を完了した。未報告・実0・世代遅れ・surgeを区別し、取得時刻や件数からservice／SQL healthを保証しない。123群4,878成功・34 skip、両HTTP面と独立3 row照合、日英／390px／実200%、台帳・設定保全を確認した。次は89行の必須操作・実装・受入証拠・通常導線の閉鎖監査で残件を確定する。旧SRE全体・global Policy・P6全体／M1本人受入は継続し、実Compute伸縮はM1後とする。
@@ -123,7 +125,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | EXP-14 | dbtモデルlineage | 変換画面の保存planに加え、Explorer選択対象から関連する保存定義と確認済み証跡へ接続。計画中モデルと確定物理Refを区別 | Eは本人・保存role、Aは同DBの認可済みmetadata。定義は版を固定しない依存で、実行時固定版は確認済み証跡へ表示 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md) |
 | ING-01 | browser file／drop、型・delimiter等、preview | 対応、E／AかつRAW／SANDBOXのwrite | I、入力と設定のfingerprint | ファイル取り込み |
 | ING-02 | create／replace／append／upsertの明示確認 | 対応、previewと現在入力が一致 | I、固定payload／key | `/api/v1/ingests` |
-| ING-03 | 取込照会・取消・回復情報 | 対応、元本人／context | I、UNKNOWN再送なし | `/api/v1/dataops` |
+| ING-03 | 取込照会・取消・回復情報 | 通常Manual Ingestから元本人／contextの保存済み元処理へ再接続・照会・取消。実commitと清掃失敗を分離表示 | I、reload後の再接続はGETのみ（明示取消は既存API）。404／UNKNOWNから元要求を再POSTしない。owned-stage清掃失敗は残件 | Manual Ingest／`/api/v1/dataops/by-key`／元ID |
 | ING-04 | 旧server path／固定catalogフォーム | 非表示・未接続 | 新しいbrowser file入口を使用 | 旧ingest routeは拒否 |
 | ING-05 | Stage一覧・新規・Load・再Load・保存 | 対応、A、本人の同DB Stage | S、宣言済local rootとCAS | `/api/v1/stages` |
 | ING-06 | Stage file一覧・preview・単件取込確認 | 対応、上記条件と入力確認 | S＋I、設定／bytesを固定 | Stage files／ingest |
@@ -137,7 +139,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | TRF-03 | buildのaudit、build／audit／publication詳細 | 対応、E／A、同DB | W、E→Aのmetadata引渡し | WAP audit／details |
 | TRF-04 | 監査済みbuildのpublish | 対応、A | W、監査Snapshotから明示公開 | WAP publish |
 | TRF-05 | publication rollback | 対応、A | W、publication IDを固定 | WAP rollback |
-| TRF-06 | WAP operation照会・取消・metadata ID取得 | 対応、許可role／context | W、実行はcaller-bound、metadataはDB共有 | WAP／dataops |
+| TRF-06 | WAP operation照会・取消・metadata ID取得 | 通常Manual WAPからstage／audit／publish／rollbackの保存済み元処理へ再接続・照会・取消・metadata ID取得 | W、元本人・許可role・完全context。reload後の再接続はGETのみ（明示取消は既存API）。実行はcaller-bound、metadataはDB共有 | Manual WAP／`/api/v1/dataops/by-key`／元ID |
 | TRF-07 | Managed Mart新規・一覧・Load・保存・model版選択 | 対応、A、MARTS purpose、本人のMart | M、定義revisionと固定model版 | `/api/v1/marts` |
 | TRF-08 | 変更確認、無条件／条件付き全件更新 | 対応、上記条件。変更確認はwatch sourceが必要 | M、source Ref／Snapshot集合 | Mart check／refresh |
 | TRF-09 | Mart照会・履歴 | 対応、元owner／context | M、未知操作再送なし | Mart runs |

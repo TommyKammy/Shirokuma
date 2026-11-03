@@ -1,4 +1,5 @@
 """Execute the shipped DataOps handlers with the existing Node DOM/fetch adapter."""
+import json
 import unittest
 
 import test_workbench_database_ui as database_ui
@@ -37,6 +38,537 @@ async function preview(p){
 class DataopsUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP + '\n' + body)
+
+    def test_reloaded_selected_cleanup_cancel_needs_no_fresh_grant_or_context_reads(self):
+        for state in ('ACTIVE', 'CANCELING'):
+            with self.subTest(state=state):
+                self.javascript('const state='+json.dumps(state)+r'''
+let p=await ready();p.role='data_engineer';await dataopsRefresh(p);const record=await preview(p),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?accepted(JSON.parse(options.body).context,{id:'saved-active',state,result:{},committed:false}):original(path,options);
+await $('p35-ingest-confirm').onclick();const context=structuredClone(p.op.context),key=p.op.key;
+p.root.remove();dataopsPanels.delete(p.id);dataopsRecoveryOwners.clear();p=dataopsInstallIngest();dataopsRender(p);
+assert.equal(p.op,null);assert.equal(p.invalid,true);
+// Denied fresh grant/source context must not prevent saved-owner cleanup.
+inventory=[];sessionRoute=inventoryRoute=schemasRoute=async()=>{throw Error('cleanup must not read fresh context');};
+$('p35-ingest-recovery-select').value=key;$('p35-ingest-recovery-select').onchange();
+const restored=dataopsRecoverySelected(p);assert.equal(restored.payload,undefined);assert.equal($('p35-ingest-reconnect').disabled,true);assert.equal($('p35-ingest-recovery-cancel').disabled,false);
+const count=calls.length;let cancelCount=0;
+route=async(path,options)=>{
+ cancelCount++;assert.equal(path,'/api/v1/dataops/saved-active/cancel');assert.equal(options.method,'POST');assert.equal(options.headers['X-Shirokuma-Role'],'data_engineer');assert.deepEqual(JSON.parse(options.body),{context});
+ return accepted(context,{id:'saved-active',state:'CANCELED'});
+};
+await $('p35-ingest-recovery-cancel').onclick();assert.equal(cancelCount,1);assert.equal(calls.length,count+1);assert.equal(p.op,restored);assert.equal(restored.state,'CANCELED');assert.equal(restored.operation,null);
+''')
+
+    def test_selected_cleanup_cancel_denies_foreign_header_unknown_and_live_retarget(self):
+        self.javascript(r'''
+const p=await ready(),owner=dbPrincipal;
+const saved={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'saved',context:structuredClone(p.context),time:Date.now(),id:'saved-active',state:'ACTIVE',ambiguous:false,principal:owner,restored:true};
+dataopsRecoveryOwner().ops.push(saved);dataopsRecoverySave(saved);
+for(const guard of ['foreign','header','UNKNOWN','child-UNKNOWN','terminal','pending','tracking','live-unresolved']){
+ dbPrincipal=owner;currentRole='admin';p.pending=false;p.trackingPending=false;p.op=null;saved.state='ACTIVE';saved.ambiguous=false;p.recoveryOwner=owner;p.recoverySelection=saved.key;
+ if(guard==='foreign')dbPrincipal='["another",true]';
+ if(guard==='header')currentRole='bi_viewer';
+ if(guard==='UNKNOWN'){saved.state='UNKNOWN';saved.ambiguous=true;}
+ if(guard==='child-UNKNOWN')dataopsAccept(saved,{id:saved.id,state:'ACTIVE',queries:[{state:'UNKNOWN'}]},false);
+ if(guard==='terminal')saved.state='FINISHED';
+ if(['pending','tracking','live-unresolved'].includes(guard))p.op={principal:owner,key:'live',id:'live-id',context:saved.context,state:'ACTIVE',ambiguous:false};
+ if(guard==='pending')p.pending=true;
+ if(guard==='tracking')p.trackingPending=true;
+ const live=p.op,before=calls.length;dataopsRecoveryRender(p);assert.equal($('p35-ingest-recovery-cancel').disabled,true,guard);
+ await $('p35-ingest-recovery-cancel').onclick();assert.equal(calls.length,before,guard);assert.equal(p.op,live,guard);
+ if(guard==='foreign'){assert.equal(p.recoveryContext.textContent,'');assert.equal($('p35-ingest-recovery-select').value,'');}
+ if(guard==='terminal')assert.equal(saved.state,'FINISHED');
+}
+dbPrincipal=owner;currentRole='admin';p.pending=false;p.trackingPending=false;saved.state='ACTIVE';saved.ambiguous=false;p.recoveryOwner=owner;p.recoverySelection=saved.key;
+const foreign={principal:'["old-owner",true]',panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'foreign-private',id:'foreign-id',context:{...saved.context,sql_catalog:'foreign_catalog'},state:'ACTIVE',ambiguous:false,time:Date.now()};
+dataopsRecoveryOwner(foreign.principal).ops.push(foreign);p.op=foreign;
+const count=calls.length;route=async(path,options)=>{assert.equal(path,'/api/v1/dataops/saved-active/cancel');assert.deepEqual(JSON.parse(options.body).context,saved.context);return accepted(saved.context,{id:saved.id,state:'CANCELED'});};
+dataopsRecoveryRender(p);assert.equal($('p35-ingest-recovery-cancel').disabled,false);await $('p35-ingest-recovery-cancel').onclick();
+assert.equal(calls.length,count+1);assert.equal(p.op,saved);assert.equal(saved.state,'CANCELED');assert.equal(dataopsRecoveryOwners.get(foreign.principal).ops[0],foreign);assert.equal(foreign.state,'ACTIVE');
+''')
+
+    def test_actual_principal_switch_purges_private_inputs_but_keeps_inflight_owner_handle(self):
+        for loaded in (False, True):
+            with self.subTest(loaded=loaded):
+                self.javascript('const loaded='+json.dumps(loaded)+r'''
+const p=await ready(),wap=dataopsPanels.get('p35-wap');await dataopsRefresh(wap);const record=await preview(p),owner=dbPrincipal;
+$('p35-ingest-file').value='private-input.csv';
+if(loaded)dataopsLoadModel(wap,{model_id:'private_model',version:1,sql:'SELECT private_loaded FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});
+$('p35-wap-model-id').value='private_model';$('p35-wap-sql').value='SELECT private_manual_draft';$('p35-wap-name').value='private_target';$('p35-wap-metadata-id').value='private_metadata';
+wap.sources[0].alias.value='private_alias';wap.sources[0].table.value='0';wap.metadata={model_id:'private_metadata'};
+for(const key of ['build','audit','publication']){$('p35-wap-'+key).add(new Option('private-'+key,'private-'+key));$('p35-wap-'+key).value='private-'+key;}
+wap.requests=new Map([['private',{payload:{sql:'private-request'}}]]);wap.actions=new Map([['private',{payload:{sql:'private-action'}}]]);
+const wait=deferred(),original=route;route=async(path,options)=>path==='/api/v1/ingests'?wait.promise:original(path,options);
+const run=$('p35-ingest-confirm').onclick();await tick();const op=p.op;assert.equal(record.operation,op);
+for(const panel of [p,wap]){for(const key of ['database','schema'])$(panel.id+'-'+key).add(new Option('private old '+key,'private-old-'+key));}
+session={...session,username:'next-owner'};await dbRefreshAccess();
+const afterSwitch=calls.length;dataopsValidate();assert.equal(calls.length,afterSwitch);
+for(const panel of [p,wap]){
+ assert.deepEqual(panel.databases,[]);assert.deepEqual(panel.schemas,[]);assert.equal(panel.database,'');assert.equal(panel.schema,'');assert.equal(panel.context,null);assert.equal(panel.inventoryContext,null);assert.equal(panel.inventoryReady,false);
+ for(const key of ['database','schema']){const n=$(panel.id+'-'+key);assert.equal(n.value,'');assert.equal([...n.options].some(o=>o.value==='db'||o.value==='raw'||o.value==='private-old-'+key||o.textContent.includes('private old')),false);}
+ assert.equal($(panel.id+'-accepted-context').textContent,'');
+}
+// The new owner explicitly chooses its own fixture context after the purge.
+for(const panel of [p,wap]){panel.database='db';panel.schema='raw';}
+await dataopsRefresh(p);await dataopsRefresh(wap);
+assert.notEqual(dbPrincipal,owner);assert.equal(p.file,null);assert.equal($('p35-ingest-file').value,'');assert.equal(p.preview,null);assert.equal(p.requests.size,0);
+assert.equal(wap.model,null);assert.equal(wap.metadata,null);assert.equal(wap.requests.size,0);assert.equal(wap.actions.size,0);
+for(const key of ['model-id','sql','name','metadata-id'])assert.equal($('p35-wap-'+key).value,'',key);
+for(const key of ['build','audit','publication'])assert.equal($('p35-wap-'+key).value,'',key);
+assert.equal(wap.sources[0].alias.value,'');assert.equal(wap.sources[0].table.value,'');
+assert.throws(()=>dataopsIngestPayload(p));assert.throws(()=>dataopsWapPayload(wap));assert.equal(p.op,op);assert.equal(record.operation,op);
+assert.equal(dataopsRecoveryOwners.get(owner).ops[0],op);assert.equal(op.key,record.key);assert.equal(op.payload.content_base64,record.payload.content_base64);
+const newer={};p.submitToken=newer;p.pending=true;
+wait.resolve(accepted(op.context,{id:'late-original',state:'ACTIVE',result:{private:'old-owner result'}}));await run;
+assert.equal(p.op,op);assert.equal(record.operation,op);assert.equal(op.id,'late-original');assert.equal(op.operation,null);assert.equal(op.protected,false);assert.equal(p.pending,true);assert.equal(p.submitToken,newer);assert.equal(p.file,null);
+''')
+
+    def test_same_owner_refresh_and_navigation_keep_private_manual_drafts(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),wap=dataopsPanels.get('p35-wap');await dataopsRefresh(wap);
+const file=p.file,owner=dbPrincipal;
+$('p35-wap-model-id').value='manual_model';$('p35-wap-sql').value='SELECT unsaved_private_sql';$('p35-wap-name').value='manual_target';wap.sources[0].alias.value='manual_alias';
+assert.equal(wap.model,null);
+await dataopsRefresh(p);await dataopsRefresh(wap);activate($('tab-warehouse'));activate($('tab-ingestion'));activate($('tab-transformation'));
+assert.equal(dbPrincipal,owner);assert.equal(p.file,file);assert.ok([...p.requests.values()].includes(record));
+assert.equal($('p35-wap-model-id').value,'manual_model');assert.equal($('p35-wap-sql').value,'SELECT unsaved_private_sql');assert.equal($('p35-wap-name').value,'manual_target');assert.equal(wap.sources[0].alias.value,'manual_alias');assert.equal(submissions.length,0);
+''')
+
+    def test_recovery_context_help_controls_and_scoped_long_label_constraints(self):
+        html = database_ui.HTML
+        for rule in (
+            '#p35-ingest-recovery,#p35-wap-recovery{min-width:0;max-width:100%;flex-wrap:wrap}',
+            '#p35-ingest-recovery>*,#p35-wap-recovery>*{min-width:0;max-width:100%}',
+            '#p35-ingest-recovery select,#p35-wap-recovery select{min-width:0;max-width:100%}',
+            '#p35-ingest-recovery .help,#p35-wap-recovery .help{flex-basis:100%;overflow-wrap:anywhere;white-space:normal}',
+        ):
+            self.assertIn(rule, html)
+        self.javascript(r'''
+const p=await ready();
+assert.equal(dataopsRecoveryText('x\x85'),true);for(const key of ['x\x00','x\x1f','x\x7f'])assert.equal(dataopsRecoveryText(key),false);
+const op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'x\x85',context:{...p.context,sql_catalog:'original_catalog_'+ 'c'.repeat(80),sql_schema:'original_schema'},time:Date.now(),id:'o'.repeat(128),state:'ACTIVE',ambiguous:false,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);assert.equal(dataopsRecoveryWrite(dataopsRecoveryOwner()),true);p.recoverySelection=op.key;const before=calls.length;dataopsRecoveryRender(p);
+const help=$('p35-ingest-recovery-context'),cancel=$('p35-ingest-recovery-cancel');
+assert.equal(help.parentElement,p.recovery);assert.equal(cancel.parentElement,p.recovery);assert.equal($('p35-ingest-recovery-select').parentElement.parentElement,p.recovery);assert.equal(p.receipt.descendants().includes(help),false);assert.equal(p.receipt.descendants().includes(cancel),false);
+assert.equal(help.hidden,false);assert.ok(help.textContent.includes(op.context.sql_catalog+' / original_schema / admin / LOCAL'));assert.match(help.textContent,/Match the original database, schema and execution role manually/);assert.equal($('p35-ingest-reconnect').disabled,true);assert.equal(cancel.disabled,false);
+assert.ok($('p35-ingest-recovery-select').options.some(o=>o.textContent.length>128));
+assert.ok([...$('p35-ingest-recovery-select').options].find(o=>o.value===op.key).textContent.startsWith(t('Ingest')+' · '));
+for(const [action,label] of [['manual-ingest','Ingest'],['manual-wap-build','Stage'],['manual-wap-audit','Audit'],['manual-wap-publish','Publish'],['manual-wap-rollback','Rollback']])assert.equal(dataopsRecoveryActionLabel(action),t(label));
+setLanguage('ja');assert.equal(t('Saved original request'),'保存済みの処理');assert.equal($('p35-ingest-remove-handle').textContent,'終了済みの追跡情報を削除');assert.ok(help.textContent.includes(op.context.sql_catalog));assert.match(help.textContent,/手動で選び/);assert.equal(cancel.textContent,'選択した保存済み処理をキャンセル');
+dbPrincipal='["foreign",true]';dataopsValidate();setLanguage('en');assert.equal(help.textContent,'');assert.equal(help.hidden,true);assert.equal($('p35-ingest-recovery-select').value,'');assert.equal([...$('p35-ingest-recovery-select').options].some(o=>o.value===op.key||o.textContent.includes(op.id)),false);assert.equal(cancel.disabled,true);assert.equal(calls.length,before);
+''')
+
+    def test_all_five_preflight_failures_leave_no_durable_intent_or_mutation(self):
+        actions = [('manual-ingest', 'confirm'), ('manual-wap-build', 'build-action'),
+                   ('manual-wap-audit', 'audit-action'), ('manual-wap-publish', 'publish'),
+                   ('manual-wap-rollback', 'rollback')]
+        for action, control in actions:
+            for failure in ('session-auth', 'network', 'schema-denied', 'schema-missing', 'context-change'):
+                with self.subTest(action=action, failure=failure):
+                    self.javascript('const action='+json.dumps(action)+';const control='+json.dumps(control)+';const failure='+json.dumps(failure)+r'''
+const p=await ready(action==='manual-ingest'?'p35-ingest':'p35-wap');let record;
+if(action==='manual-ingest')record=await preview(p);
+else{
+ dataopsLoadModel(p,{model_id:'saved',version:1,sql:'SELECT * FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'raw',physical_name:'target'},min_rows:1,not_null:[]});
+ for(const name of ['build','audit','publication']){$(p.id+'-'+name).add(new Option(name,name));$(p.id+'-'+name).value=name;}
+ $('p35-wap-metadata-id').value='unsaved input';
+}
+const old={id:'old-receipt',key:'old-key',principal:dbPrincipal,context:p.context,state:'FINISHED',ambiguous:false,protected:false};p.op=old;
+const original=route;let mutations=0;
+route=async(path,options)=>{if(path===dataopsRecoveryPaths[action])mutations++;return original(path,options);};
+if(failure==='session-auth')sessionRoute=async()=>({http:403,get body(){throw SyntaxError('invalid JSON');}});
+if(failure==='network')sessionRoute=async()=>{throw Error('offline');};
+if(failure==='schema-denied')schemasRoute=async()=>({items:schemas.map(s=>({...s,capabilities:{...s.capabilities,query:false}}))});
+if(failure==='schema-missing')schemasRoute=async()=>({items:[]});
+if(failure==='context-change')schemasRoute=async()=>{dataopsChanged(p);return {items:structuredClone(schemas)};};
+await $(p.id+'-'+control).onclick();
+record??=[...p.actions.values()][0];assert.ok(record.key);assert.notEqual(record.submitted,true);assert.equal(record.operation,undefined);
+assert.equal(mutations,0);assert.equal(p.op,old);assert.equal(old.state,'FINISHED');
+assert.equal(dataopsRecoveryOwner().ops.length,0);assert.equal(storage.has(dataopsRecoveryKey(dbPrincipal)),false);assert.equal(p.pending,false);
+if(action==='manual-ingest'){assert.equal($('p35-ingest-name').value,'chosen_table');assert.ok(p.file);}
+else assert.equal($('p35-wap-metadata-id').value,'unsaved input');
+''')
+
+    def test_malformed_auth_status_at_each_recovery_boundary_redacts_current_loaded_data(self):
+        for boundary in ('session', 'inventory', 'schema', 'by-key', 'operation'):
+            for status in (401, 403):
+                with self.subTest(boundary=boundary, status=status):
+                    self.javascript('const boundary='+json.dumps(boundary)+';const status='+str(status)+r'''
+const p=await ready('p35-wap');
+dataopsLoadModel(p,{model_id:'protected_model',version:1,sql:'SELECT private_loaded_sql FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});
+p.metadata={model_id:'private_metadata',count:1};
+const op={version:1,panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'recover',context:structuredClone(p.context),time:Date.now(),id:boundary==='by-key'?null:'known',state:boundary==='by-key'?'UNCONFIRMED':'FINISHED',ambiguous:boundary==='by-key',principal:dbPrincipal,restored:true,protected:false};
+const store=dataopsRecoveryOwner();store.ops.push(op);assert.equal(dataopsRecoveryWrite(store),true);p.recoverySelection=op.key;
+const denied=()=>({http:status,get body(){throw SyntaxError('invalid JSON');}});
+if(boundary==='session')sessionRoute=async()=>denied();
+if(boundary==='inventory')inventoryRoute=async()=>denied();
+if(boundary==='schema')schemasRoute=async()=>denied();
+if(boundary==='by-key'||boundary==='operation')route=async()=>denied();
+await dataopsReconnect(p);
+assert.equal(p.invalid,true);assert.equal(p.model,null);assert.equal(p.metadata,null);assert.equal($('p35-wap-sql').value,'');
+assert.equal(op.state,boundary==='by-key'?'UNCONFIRMED':'FINISHED');assert.equal(op.operation,null);assert.equal(op.protected,false);
+assert.equal(dataopsRecoveryOwner().ops[0],op);
+''')
+
+    def test_current_schema_denial_redacts_loaded_metadata_but_keeps_plain_draft(self):
+        for missing in (False, True):
+            with self.subTest(missing=missing):
+                self.javascript('const missing='+json.dumps(missing)+r'''
+const p=await ready('p35-wap');
+const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'recover',context:structuredClone(p.context),time:Date.now(),id:'known',state:'FINISHED',ambiguous:false,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;
+dataopsLoadModel(p,{model_id:'loaded',version:1,sql:'SELECT protected_sql FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});p.metadata={model_id:'protected'};
+schemasRoute=async()=>({items:missing?[]:schemas.map(s=>({...s,capabilities:{...s.capabilities,query:false}}))});
+await dataopsReconnect(p);assert.equal(p.invalid,true);assert.equal(p.model,null);assert.equal(p.metadata,null);assert.equal($('p35-wap-sql').value,'');assert.equal(op.state,'FINISHED');
+schemasRoute=null;await dataopsRefresh(p);p.recoverySelection=op.key;
+$('p35-wap-sql').value='SELECT unsaved_user_draft';assert.equal(p.model,null);
+schemasRoute=async()=>({items:[]});await dataopsReconnect(p);assert.equal($('p35-wap-sql').value,'SELECT unsaved_user_draft');
+''')
+
+    def test_stale_malformed_denial_and_schema_response_never_purge_newer_loaded_form(self):
+        for boundary in ('session', 'inventory', 'schema', 'by-key', 'operation', 'schema-empty'):
+            with self.subTest(boundary=boundary):
+                self.javascript('const boundary='+json.dumps(boundary)+r'''
+const p=await ready('p35-wap');
+const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'recover',context:structuredClone(p.context),time:Date.now(),id:boundary==='by-key'?null:'known',state:boundary==='by-key'?'UNCONFIRMED':'FINISHED',ambiguous:boundary==='by-key',principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;const wait=deferred();
+if(boundary==='session')sessionRoute=()=>wait.promise;
+if(boundary==='inventory')inventoryRoute=()=>wait.promise;
+if(boundary==='schema'||boundary==='schema-empty')schemasRoute=()=>wait.promise;
+if(boundary==='by-key'||boundary==='operation')route=()=>wait.promise;
+const work=dataopsReconnect(p);await tick();
+dataopsLoadModel(p,{model_id:'newer_model',version:2,sql:'SELECT newer_form_sql FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});p.metadata={model_id:'newer_metadata'};
+const model=p.model,metadata=p.metadata;
+wait.resolve(boundary==='schema-empty'?{items:[]}:{http:403,get body(){throw SyntaxError('invalid JSON');}});await work;
+assert.equal(p.model,model);assert.equal(p.metadata,metadata);assert.equal(p.invalid,false);assert.equal($('p35-wap-sql').value,'SELECT newer_form_sql FROM source');
+''')
+
+    def test_reconnect_wap_metadata_options_preserve_all_selections_and_draft_fields(self):
+        for blank in (False, True):
+            with self.subTest(blank=blank):
+                self.javascript('const blank='+json.dumps(blank)+r'''
+const p=await ready('p35-wap');
+dataopsLoadModel(p,{model_id:'saved_model',version:2,sql:'SELECT saved_sql FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});
+for(const key of ['build','audit','publication']){const n=$(p.id+'-'+key);n.replaceChildren();if(!blank)n.add(new Option('old-'+key,'old-'+key));n.value=blank?'':'old-'+key;}
+const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'recover',context:structuredClone(p.context),time:Date.now(),id:'known',state:'FINISHED',ambiguous:false,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;
+const model=p.model,context=p.context,source=p.sources[0].table.value,target=$('p35-wap-target').value,sql=$('p35-wap-sql').value;
+route=async()=>accepted(op.context,{id:'known',state:'FINISHED',result:{build_id:'recovered-build',audit_id:'recovered-audit',publication_id:'recovered-publication',build:{model_id:'recovered_model'}},committed:true});
+await dataopsReconnect(p);
+for(const key of ['build','audit','publication']){const n=$(p.id+'-'+key);assert.ok([...n.options].some(o=>o.value==='recovered-'+key));assert.equal(n.value,blank?'':'old-'+key);}
+assert.equal(p.model,model);assert.equal(p.context,context);assert.equal(p.sources[0].table.value,source);assert.equal($('p35-wap-target').value,target);assert.equal($('p35-wap-sql').value,sql);assert.equal(op.protected,true);
+''')
+
+    def test_stale_lookup_cannot_regress_newer_terminal_fact_or_retarget_original_handle(self):
+        for stale in ('newer-fact', 'sequence', 'aba'):
+            with self.subTest(stale=stale):
+                self.javascript('const stale='+json.dumps(stale)+r'''
+const p=await ready(),op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'original',context:structuredClone(p.context),time:Date.now(),id:null,state:'UNCONFIRMED',ambiguous:true,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;
+const wait=deferred();let getCount=0;route=async(path,options)=>{assert.equal(options?.method,undefined);getCount++;assert.ok(path.includes('/by-key?'));return wait.promise;};
+const work=dataopsReconnect(p);await tick();assert.equal(p.op,op);
+if(stale!=='aba'){dataopsAccept(op,{id:'newer-terminal',state:'FINISHED'},false);if(stale==='sequence')op.sequence++;}
+else{dataopsRecoveryBoundary();dataopsRecoveryBoundary();}
+const durable=storage.get(dataopsRecoveryKey(dbPrincipal));
+wait.resolve({context:op.context,recovery:{operation_id:'old-active',route:'manual-ingest',state:'ACTIVE'}});await work;
+assert.equal(p.op,op);assert.equal(getCount,1);assert.equal(op.id,stale==='aba'?null:'newer-terminal');assert.equal(op.state,stale==='aba'?'UNCONFIRMED':'FINISHED');assert.equal(storage.get(dataopsRecoveryKey(dbPrincipal)),durable);
+''')
+
+    def test_foreign_owner_selection_redacted_new_owner_can_submit_and_returning_owner_stays_held(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),original=route,owner=dbPrincipal;
+route=async(path,options)=>path==='/api/v1/ingests'?Promise.reject(Error('lost')):original(path,options);
+await $('p35-ingest-confirm').onclick();const old=p.op;p.recoverySelection=old.key;dataopsRecoveryRender(p);
+session={...session,username:'next-owner'};await dbRefreshAccess();p.database='db';p.schema='raw';await dataopsRefresh(p);dataopsRender(p);
+const select=$('p35-ingest-recovery-select');assert.equal(select.value,'');assert.equal([...select.options].some(o=>o.value===old.key||o.textContent.includes(old.key)),false);assert.equal(p.receipt.children.length,0);
+assert.equal($('p35-ingest-observe').hidden,true);assert.equal($('p35-ingest-cancel').hidden,true);assert.equal(dataopsRecoveryHeld(p),false);
+route=original;await preview(p);await $('p35-ingest-confirm').onclick();assert.notEqual(p.op,old);assert.equal(p.op.principal,dbPrincipal);assert.equal(p.op.state,'FINISHED');
+assert.equal(dataopsRecoveryOwners.get(owner).ops[0],old);assert.equal(old.id,null);assert.equal(old.state,'UNCONFIRMED');
+session={...session,username:'owner'};await dbRefreshAccess();p.database='db';p.schema='raw';await dataopsRefresh(p);assert.equal(dbPrincipal,owner);assert.equal(dataopsRecoveryHeld(p),true);assert.equal($('p35-ingest-confirm').disabled,true);
+''')
+
+    def test_wap_action_records_are_owned_so_foreign_unresolved_key_does_not_block_new_owner(self):
+        self.javascript(r'''
+const p=await ready('p35-wap'),original=route,owner=dbPrincipal;
+const model={model_id:'saved',version:1,sql:'SELECT * FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'raw',physical_name:'target'},min_rows:1,not_null:[]};
+dataopsLoadModel(p,structuredClone(model));
+route=async(path,options)=>path==='/api/v1/wap/build'?Promise.reject(Error('lost')):original(path,options);
+await $('p35-wap-build-action').onclick();const old=p.op,oldRecord=[...p.actions.values()][0];assert.equal(oldRecord.operation,old);
+session={...session,username:'next-owner'};await dbRefreshAccess();p.database='db';p.schema='raw';await dataopsRefresh(p);dataopsLoadModel(p,structuredClone(model));
+route=original;await $('p35-wap-build-action').onclick();assert.notEqual(p.op,old);assert.equal(p.op.principal,dbPrincipal);assert.equal(p.op.state,'FINISHED');assert.notEqual(p.op.key,old.key);assert.equal(oldRecord.operation,old);assert.equal(dataopsRecoveryOwners.get(owner).ops[0],old);
+''')
+
+    def test_stale_malformed_live_observe_denial_does_not_purge_after_language_aba(self):
+        self.javascript(r'''
+const p=await ready('p35-wap');
+dataopsLoadModel(p,{model_id:'saved',version:1,sql:'SELECT protected_model_sql FROM source',sources:{source:ref('orders')},target:ref('orders'),min_rows:1,not_null:[]});
+const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'original',context:structuredClone(p.context),time:Date.now(),id:'known',state:'FINISHED',ambiguous:false,principal:dbPrincipal,protected:false};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.op=op;const wait=deferred();route=()=>wait.promise;
+const work=dataopsObserve(p,false);await tick();setLanguage('ja');setLanguage('en');const model=p.model;
+wait.resolve({http:403,get body(){throw SyntaxError('invalid JSON');}});await work;
+assert.equal(p.model,model);assert.equal(p.invalid,false);assert.equal($('p35-wap-sql').value,'SELECT protected_model_sql FROM source');assert.equal(op.state,'FINISHED');
+''')
+
+    def test_stale_reconnect_finalizer_does_not_clear_new_tracking_busy(self):
+        self.javascript(r'''
+const p=await ready(),op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'original',context:structuredClone(p.context),time:Date.now(),id:null,state:'UNCONFIRMED',ambiguous:true,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;const wait=deferred();route=()=>wait.promise;
+const work=dataopsReconnect(p);await tick();const newer={};p.trackingToken=newer;p.trackingPending=true;op.sequence++;
+wait.resolve({context:op.context,recovery:{operation_id:'old',route:'manual-ingest',state:'ACTIVE'}});await work;
+assert.equal(p.trackingToken,newer);assert.equal(p.trackingPending,true);assert.equal(p.op,op);assert.equal(op.id,null);assert.equal(op.state,'UNCONFIRMED');
+''')
+
+    def test_late_foreign_mutation_keeps_private_identity_and_cannot_clear_new_busy_token(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),wait=deferred(),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?wait.promise:original(path,options);
+const run=$('p35-ingest-confirm').onclick();await tick();const op=p.op,owner=dbPrincipal;
+assert.equal(record.operation,op);session={...session,username:'other'};await dbRefreshAccess();await dataopsRefresh(p);
+const newer={};p.submitToken=newer;p.pending=true;
+wait.resolve(accepted(op.context,{id:'late-original',state:'ACTIVE',result:{private:'old-owner result'}}));await run;
+assert.equal(p.submitToken,newer);assert.equal(p.pending,true);assert.equal(record.operation,op);assert.equal(dataopsRecoveryOwners.get(owner).ops[0],op);assert.equal(op.id,'late-original');assert.equal(op.operation,null);assert.equal(op.protected,false);
+''')
+
+    def test_valid_disk_drift_and_duplicate_keys_fail_closed_without_overwriting(self):
+        for drift in ('valid-other-tab', 'duplicate-disk', 'duplicate-memory'):
+            with self.subTest(drift=drift):
+                self.javascript('const drift='+json.dumps(drift)+r'''
+const p=await ready(),record=await preview(p),store=dataopsRecoveryOwner(),key=dataopsRecoveryKey(dbPrincipal);
+const external={version:1,panel:'p35-wap',action:'manual-wap-build',key:'other-tab-unresolved',context:structuredClone(p.context),time:Date.now(),id:null,state:'UNCONFIRMED',uncertain:true};
+if(drift==='valid-other-tab')storage.set(key,JSON.stringify([external]));
+if(drift==='duplicate-disk')storage.set(key,JSON.stringify([external,external]));
+if(drift==='duplicate-memory'){const op={...external,principal:dbPrincipal,ambiguous:true};store.ops=[op,{...op}];}
+const before=storage.get(key);await $('p35-ingest-confirm').onclick();
+assert.equal(submissions.length,0);assert.notEqual(record.submitted,true);assert.equal(storage.get(key),before);assert.equal(store.error,true);assert.match(p.recoveryNotice.textContent,/storage unavailable/);
+if(drift!=='duplicate-memory'){dataopsRecoveryOwners.clear();const reloaded=dataopsRecoveryOwner();assert.equal(reloaded.error,drift==='duplicate-disk');if(drift==='valid-other-tab')assert.equal(reloaded.ops[0].key,external.key);}
+''')
+
+    def test_owner_cap_split_between_panels_blocks_fresh_before_io_but_allows_terminal_remove(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),wap=dataopsPanels.get('p35-wap'),store=dataopsRecoveryOwner();await dataopsRefresh(wap);
+for(let i=0;i<25;i++)store.ops.push({panel:i<21?p.id:wap.id,action:i<21?'manual-ingest':'manual-wap-build',path:i<21?'/api/v1/ingests':'/api/v1/wap/build',key:'saved-'+i,context:structuredClone(p.context),time:Date.now(),id:'saved-'+i,state:'FINISHED',ambiguous:false,principal:dbPrincipal});
+assert.equal(dataopsRecoveryWrite(store),true);dataopsRender(p);dataopsRender(wap);
+assert.match(p.recoveryNotice.textContent,/storage unavailable or full/);assert.match(wap.recoveryNotice.textContent,/storage unavailable or full/);assert.equal($('p35-ingest-confirm').disabled,true);
+const count=calls.length;await $('p35-ingest-confirm').onclick();assert.equal(calls.length,count);assert.equal(submissions.length,0);
+p.recoverySelection='saved-0';dataopsRecoveryRender(p);assert.equal($('p35-ingest-remove-handle').disabled,false);await $('p35-ingest-remove-handle').onclick();assert.equal(store.ops.length,24);assert.equal(calls.length,count);assert.equal(dataopsRecoveryHeld(p),false);assert.equal(p.recoveryNotice.textContent,'');assert.equal(wap.recoveryNotice.textContent,'');
+''')
+
+    def test_all_five_real_actions_save_before_io_then_reload_and_reconnect_original_id(self):
+        for action, control in [('manual-ingest', 'confirm'), ('manual-wap-build', 'build-action'),
+                                ('manual-wap-audit', 'audit-action'), ('manual-wap-publish', 'publish'),
+                                ('manual-wap-rollback', 'rollback')]:
+            for observation in (False, True):
+                with self.subTest(action=action, observation=observation):
+                    self.javascript('const action='+json.dumps(action)+';const observation='+json.dumps(observation)+';const control='+json.dumps(control)+r'''
+let p=await ready(action==='manual-ingest'?'p35-ingest':'p35-wap');
+if(action==='manual-ingest')await preview(p);
+else{
+ dataopsLoadModel(p,{model_id:'private_model',version:2,sql:'SELECT private_literal FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'raw',physical_name:'private_target'},min_rows:1,not_null:[]});
+ for(const name of ['build','audit','publication']){$(p.id+'-'+name).add(new Option('private-'+name,'private-'+name));$(p.id+'-'+name).value='private-'+name;}
+}
+const original=route;let postCount=0;
+route=async(path,options)=>{
+ if(path===dataopsRecoveryPaths[action]&&options?.method==='POST'){
+  postCount++;const durable=JSON.parse(storage.get(dataopsRecoveryKey(dbPrincipal)));
+  assert.equal(durable.length,1);assert.equal(durable[0].id,null);assert.equal(durable[0].state,'UNCONFIRMED');
+  assert.equal(durable[0].key,options.headers['Idempotency-Key']);assert.equal(durable[0].action,action);
+  const context=JSON.parse(options.body).context,operation={id:'original-id',state:'FINISHED',committed:true,result:{private:'private-result',backend_query_id:'backend-secret'},cleanup_error:'private-error'};
+  return observation?{http:502,body:{code:'SERVICE_UNAVAILABLE',details:{context,operation}}}:accepted(context,operation);
+ }
+ return original(path,options);
+};
+await $(p.id+'-'+control).onclick();assert.equal(postCount,1);assert.equal(p.op.id,'original-id');
+const durable=storage.get(dataopsRecoveryKey(dbPrincipal)),h=JSON.parse(durable)[0],originalContext=structuredClone(p.op.context);
+assert.deepEqual(Object.keys(h).sort(),['version','panel','action','key','context','time','id','state','uncertain'].sort());
+for(const secret of ['content_base64','payload','filename','private_model','private_literal','private_target','private-result','backend-secret','private-error','result','columns','queries'])assert.equal(durable.includes(secret),false,secret);
+const before=calls.length;
+// Reload the normal panel and storage bootstrap, without retaining its live op/body.
+p.root.remove();dataopsPanels.delete(p.id);dataopsRecoveryOwners.clear();
+p=action==='manual-ingest'?dataopsInstallIngest():dataopsInstallWap();dataopsRender(p);
+assert.equal(p.op,null);assert.equal(p.pending,false);assert.equal(calls.length,before);
+p.started=true;await dataopsRefresh(p);
+const restored=dataopsRecoveryOwner().ops[0];assert.equal(restored.payload,undefined);assert.equal(restored.restored,true);
+const draft=action==='manual-ingest'?$('p35-ingest-name'):$('p35-wap-sql');draft.value='new unsent draft';
+const worksheetsBefore=JSON.stringify(worksheets),contextBefore=JSON.stringify(p.context),sqlBefore=$('sql').value;
+$(p.id+'-recovery-select').value=h.key;$(p.id+'-recovery-select').onchange();
+const reconnectCalls=[];route=async(path,options)=>{reconnectCalls.push({path,options});assert.equal(options?.method,undefined);return accepted(originalContext,{id:'original-id',state:'FINISHED',committed:true,result:{},cleanup_error:null});};
+await $(p.id+'-reconnect').onclick();
+assert.equal(reconnectCalls.length,1);assert.ok(reconnectCalls[0].path.startsWith('/api/v1/dataops/original-id?'));
+assert.deepEqual(JSON.parse(new URL('http://local'+reconnectCalls[0].path).searchParams.get('context')),originalContext);
+assert.equal(reconnectCalls[0].options.headers['X-Shirokuma-Role'],originalContext.selected_role);
+assert.equal(p.op,restored);assert.equal(p.op.protected,true);assert.equal(draft.value,'new unsent draft');
+assert.equal(JSON.stringify(worksheets),worksheetsBefore);assert.equal(JSON.stringify(p.context),contextBefore);assert.equal($('sql').value,sqlBefore);assert.equal(postCount,1);
+''')
+
+    def test_pending_reload_lookup_then_id_get_never_posts_or_replays_payload(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?Promise.reject(Error('lost private error')):original(path,options);
+await $('p35-ingest-confirm').onclick();assert.equal(p.op.id,null);
+dataopsRecoveryOwners.clear();p.op=null;const restored=dataopsRecoveryOwner().ops[0];
+assert.equal(restored.payload,undefined);p.recoverySelection=restored.key;let paths=[];
+route=async(path,options)=>{
+ assert.equal(options?.method,undefined);paths.push(path);
+ if(path.includes('/by-key?')){const q=new URL('http://local'+path).searchParams;assert.equal(q.get('key'),record.key);assert.equal(q.get('route'),'manual-ingest');return {context:restored.context,recovery:{operation_id:'found',route:'manual-ingest',state:'ACTIVE'}};}
+ return accepted(restored.context,{id:'found',state:'ACTIVE',result:{},queries:[],committed:false});
+};
+await dataopsReconnect(p);assert.equal(paths.length,2);assert.ok(paths[0].includes('/by-key?'));assert.ok(paths[1].startsWith('/api/v1/dataops/found?'));
+assert.equal(p.op,restored);assert.equal(p.op.id,'found');assert.equal($('p35-ingest-confirm').disabled,true);
+const count=paths.length;setLanguage('ja');setLanguage('en');dataopsValidate();dataopsOpen('ingestion');assert.equal(paths.length,count);
+''')
+
+    def test_missing_delayed_lookup_stays_held_and_known_terminal_failure_stays_terminal(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?Promise.reject(Error('lost')):original(path,options);
+await $('p35-ingest-confirm').onclick();dataopsRecoveryOwners.clear();p.op=null;
+const op=dataopsRecoveryOwner().ops[0];p.recoverySelection=op.key;let posts=0;
+route=async(path,options)=>{if(options?.method)posts++;return {http:404,body:{code:'OPERATION_NOT_FOUND'}};};
+await dataopsReconnect(p);assert.equal(op.id,null);assert.equal(op.state,'UNCONFIRMED');assert.equal(dataopsUnresolved(op),true);
+assert.equal($('p35-ingest-confirm').disabled,true);assert.equal($('p35-ingest-remove-handle').disabled,true);
+for(const state of ['FINISHED','FAILED','CANCELED','REJECTED'])for(const status of [403,404,409]){
+ op.state=state;op.ambiguous=false;op.id=state==='REJECTED'?null:'known';dataopsRecoverySave(op);
+ route=async(path,options)=>{assert.equal(options?.method,undefined);return {http:status,body:{code:status===403?'DB_ACCESS_REVOKED':'OPERATION_NOT_FOUND',details:{context:op.context,operation:{id:op.id||'unexpected',state:'UNKNOWN'}}}};};
+ await dataopsReconnect(p);assert.equal(op.state,state);assert.equal(op.ambiguous,false);assert.equal(op.protected,false);assert.equal(op.operation,null);
+}
+assert.equal(posts,0);
+''')
+
+    def test_malformed_lookup_dtos_never_trigger_receipt_get(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?Promise.reject(Error('lost')):original(path,options);
+await $('p35-ingest-confirm').onclick();dataopsRecoveryOwners.clear();p.op=null;const op=dataopsRecoveryOwner().ops[0];p.recoverySelection=op.key;
+const good={context:op.context,recovery:{operation_id:'found',route:'manual-ingest',state:'ACTIVE'}};
+for(const bad of [{},{context:op.context,recovery:{}},{...good,extra:true},{context:op.context,recovery:{...good.recovery,extra:true}},
+ {context:op.context,recovery:{...good.recovery,operation_id:''}},{context:op.context,recovery:{...good.recovery,route:'manual-wap-build'}},
+ {context:op.context,recovery:{...good.recovery,state:'RUNNING'}},{...good,context:{...op.context,grant_revision:true}}]){
+ let requests=0;route=async(path,options)=>{requests++;assert.equal(options?.method,undefined);assert.ok(path.includes('/by-key?'));return bad;};
+ await dataopsReconnect(p);assert.equal(requests,1);assert.equal(op.id,null);assert.equal(dataopsUnresolved(op),true);
+}
+''')
+
+    def test_storage_failures_block_before_post_preserving_input_and_key(self):
+        for failure in ('unavailable', 'corrupt', 'unknown-version', 'quota', 'readback'):
+            with self.subTest(failure=failure):
+                self.javascript('const failure='+json.dumps(failure)+r'''
+const p=await ready(),record=await preview(p),key=record.key,payload=record.payload;
+const ownerKey=dataopsRecoveryKey(dbPrincipal),get=localStorage.getItem,set=localStorage.setItem;
+if(failure==='unavailable')localStorage.getItem=()=>{throw Error('absent');};
+if(failure==='corrupt')storage.set(ownerKey,'{bad');
+if(failure==='unknown-version')storage.set(ownerKey,JSON.stringify([{version:99}]));
+if(failure==='quota')localStorage.setItem=()=>{throw Error('quota');};
+if(failure==='readback')localStorage.setItem=(key,value)=>{};
+await $('p35-ingest-confirm').onclick();
+assert.equal(submissions.length,0);assert.equal(record.submitted,false);assert.equal(record.key,key);assert.equal(record.payload,payload);
+assert.equal($('p35-ingest-name').value,'chosen_table');assert.match(p.recoveryNotice.textContent,/storage unavailable or full/);
+localStorage.getItem=get;localStorage.setItem=set;
+''')
+
+    def test_owner_cap_never_evicts_and_explicit_terminal_remove_has_no_backend_action(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),store=dataopsRecoveryOwner();
+for(let i=0;i<25;i++)store.ops.push({version:1,panel:p.id,action:'manual-ingest',key:'saved-'+i,context:structuredClone(p.context),time:Date.now(),id:'old-'+i,state:i===24?'FINISHED':'UNKNOWN',ambiguous:i!==24,principal:dbPrincipal,path:'/api/v1/ingests'});
+assert.equal(dataopsRecoveryWrite(store),true);const before=storage.get(dataopsRecoveryKey(dbPrincipal));
+p.recoverySelection='saved-24';dataopsRender(p);await $('p35-ingest-confirm').onclick();assert.equal(submissions.length,0);assert.equal(store.ops.length,25);assert.equal(storage.get(dataopsRecoveryKey(dbPrincipal)),before);
+const callsBefore=calls.length;await $('p35-ingest-remove-handle').onclick();assert.equal(calls.length,callsBefore);assert.equal(store.ops.length,24);
+assert.equal(store.ops.filter(op=>op.state==='UNKNOWN').length,24);assert.equal(dataopsRecoveryHeld(p),true);
+const heldCalls=calls.length;await $('p35-ingest-confirm').onclick();assert.equal(calls.length,heldCalls);assert.equal(submissions.length,0);assert.equal(p.recoveryNotice.textContent,'');assert.equal(p.recoveryHeldHelp.hidden,false);assert.match(p.recoveryHeldHelp.textContent,/Select the saved operation and reconnect or cancel/);assert.equal(p.recoverySelection,'');
+p.recoverySelection='saved-0';await $('p35-ingest-remove-handle').onclick();assert.equal(store.ops.length,24);
+''')
+
+    def test_late_persistence_failure_keeps_durable_sentinel_and_memory_effect(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),wait=deferred(),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?wait.promise:original(path,options);
+const run=$('p35-ingest-confirm').onclick();await tick();const op=p.op,durable=storage.get(dataopsRecoveryKey(dbPrincipal));
+localStorage.setItem=()=>{throw Error('quota after effect');};
+wait.resolve(accepted(op.context,{id:'effect-id',state:'FINISHED',committed:true,result:{},cleanup_error:null}));await run;
+assert.equal(p.op,op);assert.equal(record.operation,op);assert.equal(op.id,'effect-id');assert.equal(op.state,'FINISHED');assert.equal(record.submitted,true);
+assert.equal(storage.get(dataopsRecoveryKey(dbPrincipal)),durable);assert.equal(JSON.parse(durable)[0].id,null);assert.equal(dataopsRecoveryHeld(p),true);assert.match(p.recoveryNotice.textContent,/storage unavailable/);
+''')
+
+    def test_inflight_selection_owner_aba_and_late_body_cannot_retarget_original_record(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),wait=deferred(),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?wait.promise:original(path,options);
+const run=$('p35-ingest-confirm').onclick();await tick();const op=p.op,owner=dbPrincipal;
+const terminal={...op,key:'terminal',id:'other',state:'FINISHED',ambiguous:false,payload:undefined};dataopsRecoveryOwner().ops.push(terminal);dataopsRecoverySave(terminal);
+$('p35-ingest-recovery-select').value=terminal.key;$('p35-ingest-recovery-select').onchange();assert.equal(p.op,op);assert.equal(record.operation,op);
+setLanguage('ja');setLanguage('en');dataopsChanged(p);
+dbPrincipal='["other",true]';dataopsValidate();assert.equal(p.receipt.children.length,0);assert.equal($('p35-ingest-observe').hidden,true);assert.equal($('p35-ingest-cancel').hidden,true);
+assert.equal(dataopsRecoveryOwner().ops.length,0);dbPrincipal=owner;dataopsRecoveryBoundary();
+wait.resolve(accepted(op.context,{id:'late-original',state:'ACTIVE',committed:false,result:{private:'must not resurrect'},cleanup_error:null}));await run;
+assert.equal(p.op,op);assert.equal(record.operation,op);assert.equal(op.id,'late-original');assert.equal(op.operation,null);assert.equal(op.protected,false);
+assert.equal($('p35-ingest-confirm').disabled,true);assert.equal(dataopsRecoveryOwner().ops.find(h=>h.key===op.key),op);
+''')
+
+    def test_reconnect_checks_current_authority_before_and_after_and_saved_cancel_survives_grant_loss(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p);await $('p35-ingest-confirm').onclick();const op=p.op;
+op.state='ACTIVE';op.ambiguous=false;op.operation=null;dataopsRecoverySave(op);p.recoverySelection=op.key;
+const original=route,wait=deferred();let gets=0,posts=0;
+route=async(path,options)=>{if(path.startsWith('/api/v1/dataops/')){if(options?.method){posts++;return accepted(op.context,{id:op.id,state:'CANCELED'});}gets++;return wait.promise;}return original(path,options);};
+const work=dataopsReconnect(p);await tick();inventory[0].grant_revision++;await dbRefreshAccess();wait.resolve(accepted(op.context,{id:op.id,state:'ACTIVE',result:{private:'hidden'}}));await work;
+assert.equal(gets,1);assert.equal(op.operation,null);assert.equal(op.protected,false);assert.equal(op.state,'ACTIVE');
+await dataopsReconnect(p);assert.equal(gets,1);assert.equal(posts,0);
+await $('p35-ingest-cancel').onclick();assert.equal(posts,1);assert.equal(op.state,'CANCELED');assert.equal(op.operation,null);
+''')
+
+    def test_pending_404_can_only_reconnect_same_key_after_delayed_admission(self):
+        self.javascript(r'''
+const p=await ready(),record=await preview(p),original=route;
+route=async(path,options)=>path==='/api/v1/ingests'?Promise.reject(Error('lost')):original(path,options);
+await $('p35-ingest-confirm').onclick();dataopsRecoveryOwners.clear();p.op=null;const op=dataopsRecoveryOwner().ops[0];p.recoverySelection=op.key;
+let admitted=false,lookups=0,gets=0;
+route=async(path,options)=>{
+ assert.equal(options?.method,undefined);
+ if(path.includes('/by-key?')){lookups++;assert.equal(new URL('http://local'+path).searchParams.get('key'),record.key);return admitted?{context:op.context,recovery:{operation_id:'delayed',route:'manual-ingest',state:'ACTIVE'}}:{http:404,body:{code:'OPERATION_NOT_FOUND'}};}
+ gets++;return accepted(op.context,{id:'delayed',state:'ACTIVE',result:{}});
+};
+await dataopsReconnect(p);assert.equal(dataopsRecoveryHeld(p),true);assert.equal(gets,0);assert.equal(op.id,null);
+admitted=true;await dataopsReconnect(p);assert.equal(lookups,2);assert.equal(gets,1);assert.equal(op.id,'delayed');assert.equal(op.key,record.key);assert.equal(dataopsRecoveryHeld(p),true);
+''')
+
+    def test_normal_navigation_language_role_and_context_aba_hide_late_protected_reply(self):
+        for change in ('language', 'navigation', 'role', 'context', 'body'):
+            with self.subTest(change=change):
+                self.javascript('const change='+json.dumps(change)+r'''
+const p=await ready();await preview(p);await $('p35-ingest-confirm').onclick();const op=p.op,wait=deferred(),original=route;
+p.recoverySelection=op.key;let getCount=0,posts=0;
+route=async(path,options)=>{if(path.startsWith('/api/v1/dataops/')){assert.equal(options?.method,undefined);getCount++;return wait.promise;}if(options?.method)posts++;return original(path,options);};
+const reconnect=dataopsReconnect(p);await tick();assert.equal(getCount,1);
+if(change==='language'){setLanguage('ja');setLanguage('en');}
+if(change==='navigation'){activate($('tab-warehouse'));activate($('tab-ingestion'));}
+if(change==='role'){
+ $('role-selector').value='data_engineer';await $('role-selector').onchange();
+ $('role-selector').value='admin';await $('role-selector').onchange();
+}
+if(change==='context'){p.schema='schema';dataopsChanged(p);p.schema='raw';dataopsChanged(p);}
+if(change==='body'){$('p35-ingest-name').value='new draft';$('p35-ingest-name').oninput();}
+wait.resolve(accepted(op.context,{id:op.id,state:'FINISHED',result:{private:'late protected result'}}));await reconnect;
+assert.equal(p.op,op);assert.equal(op.state,'FINISHED');assert.equal(op.operation,null);assert.equal(op.protected,false);assert.equal(posts,0);assert.equal(getCount,1);
+if(change==='body')assert.equal($('p35-ingest-name').value,'new draft');
+''')
+
+    def test_reconnect_postreply_current_session_loss_hides_known_terminal_receipt(self):
+        self.javascript(r'''
+const p=await ready();await preview(p);await $('p35-ingest-confirm').onclick();const op=p.op,owner=dbPrincipal;p.recoverySelection=op.key;
+route=async(path,options)=>{assert.equal(options?.method,undefined);session={...session,username:'another-owner'};return accepted(op.context,{id:op.id,state:'FINISHED',result:{private:'protected'}});};
+await dataopsReconnect(p);assert.notEqual(dbPrincipal,owner);assert.equal(op.state,'FINISHED');assert.equal(op.operation,null);assert.equal(op.protected,false);assert.equal(p.receipt.children.length,0);
+assert.equal(dataopsRecoveryOwners.get(owner).ops[0],op);assert.equal(dataopsRecoveryOwner().ops.length,0);
+''')
+
+    def test_unknown_parent_and_child_remain_held_and_cannot_cancel(self):
+        self.javascript(r'''
+const p=await ready();await preview(p);await $('p35-ingest-confirm').onclick();const op=p.op;
+for(const operation of [{id:op.id,state:'UNKNOWN'},{id:op.id,state:'ACTIVE',queries:[{id:'child',state:'UNKNOWN'}]}]){
+ dataopsAccept(op,operation,true);dataopsRender(p);assert.equal(dataopsUnresolved(op),true);assert.equal($('p35-ingest-cancel').disabled,true);
+ const before=calls.length;await $('p35-ingest-cancel').onclick();assert.equal(calls.length,before);
+ dataopsRecoveryOwners.clear();p.op=null;const restored=dataopsRecoveryOwner().ops[0];assert.equal(dataopsUnresolved(restored),true);assert.equal(dataopsCanCancel(restored),false);dataopsRecoveryOwners.get(dbPrincipal).ops=[op];p.op=op;
+}
+''')
 
     def test_panel_availability_missing_own_context_and_localized_recovery(self):
         self.javascript(r'''
@@ -214,13 +746,14 @@ route=async(path,options)=>{if(path==='/api/v1/ingests'){posts++;throw Error('re
 await $('p35-ingest-confirm').onclick();await $('p35-ingest-confirm').onclick();
 assert.equal(posts,1);assert.equal(p.op.key,saved.key);assert.equal(p.op.ambiguous,true);assert.equal($('p35-ingest-confirm').disabled,true);
 assert.ok(p.receipt.descendants().some(n=>n.textContent.includes('Outcome unknown')));
+assert.equal(p.op.state,'UNCONFIRMED');assert.equal(p.op.operation,null);assert.equal(p.op.protected,false);
 ''')
 
     def test_followups_keep_original_role_and_context_after_grant_loss(self):
         self.javascript(r'''
 const p=await ready();p.role='data_engineer';await dataopsRefresh(p);await preview(p);await $('p35-ingest-confirm').onclick();
 const frozen=structuredClone(p.op.context);assert.equal(frozen.selected_role,'data_engineer');
-p.op.state='RUNNING';p.op.operation.state='RUNNING';
+p.op.state='ACTIVE';p.op.operation.state='ACTIVE';
 p.role='admin';dataopsInvalidate(p);let captured;
 route=async(path,options)=>{captured={path,options};const c=options?.body?JSON.parse(options.body).context:JSON.parse(new URL('http://localhost'+path).searchParams.get('context'));return accepted(c);};
 await $('p35-ingest-cancel').onclick();
@@ -413,14 +946,14 @@ assert.deepEqual(dataopsWapPayload(p).sources.source,ref('other'));assert.deepEq
         self.javascript(r'''
 const p=await ready(),saved=await preview(p),original=route;let posts=[];
 route=async(path,options)=>{
- if(path==='/api/v1/ingests'){posts.push({body:JSON.parse(options.body),key:options.headers['Idempotency-Key']});if(posts.length===1)throw Error('response lost');return accepted(posts.at(-1).body.context,{id:'recovered',state:'RUNNING',result:{},committed:false});}
+ if(path==='/api/v1/ingests'){posts.push({body:JSON.parse(options.body),key:options.headers['Idempotency-Key']});if(posts.length===1)throw Error('response lost');return accepted(posts.at(-1).body.context,{id:'recovered',state:'ACTIVE',result:{},committed:false});}
  return original(path,options);
 };
 await $('p35-ingest-confirm').onclick();const op=p.op;assert.equal(op.id,null);assert.equal($('p35-ingest-observe').disabled,false);
 $('p35-ingest-name').value='another_destination';$('p35-ingest-name').oninput();await $('p35-ingest-preview').onclick();
 assert.equal(p.preview,null);assert.equal(p.op,op);assert.equal(posts.length,1);
 await $('p35-ingest-observe').onclick();assert.equal(posts.length,2);assert.deepEqual(posts[0],posts[1]);
-assert.deepEqual(posts[1].body,saved.payload);assert.equal(p.op.id,'recovered');assert.equal(p.op.state,'RUNNING');assert.equal($('p35-ingest-preview').disabled,true);
+assert.deepEqual(posts[1].body,saved.payload);assert.equal(p.op.id,'recovered');assert.equal(p.op.state,'ACTIVE');assert.equal($('p35-ingest-preview').disabled,true);
 assert.equal($('p35-ingest-cancel').disabled,false);
 ''')
 
@@ -497,18 +1030,18 @@ await busy(legacy,async()=>{});assert.equal(legacy.disabled,true);
 const p=await ready(),saved=await preview(p),original=deferred();let posts=[];
 route=async(path,options)=>{
  const body=options?.body&&JSON.parse(options.body),context=body?.context||saved.payload.context;
- if(path==='/api/v1/ingests'){posts.push({body,key:options.headers['Idempotency-Key']});if(posts.length===1)return original.promise;return accepted(context,{id:'active-ingest',state:'RUNNING',committed:false,result:{},replayed:true});}
+ if(path==='/api/v1/ingests'){posts.push({body,key:options.headers['Idempotency-Key']});if(posts.length===1)return original.promise;return accepted(context,{id:'active-ingest',state:'ACTIVE',committed:false,result:{},replayed:true});}
  if(path.endsWith('/cancel'))return accepted(context,{id:'active-ingest',state:'CANCELED',committed:false,result:{}});
  throw Error('unexpected '+path);
 };
-const submit=$('p35-ingest-confirm').onclick();await tick();assert.equal(p.pending,true);assert.equal(p.op.id,null);
+const submit=$('p35-ingest-confirm').onclick();await tick();assert.equal(p.pending,true);assert.equal(p.op.id,null);const op=p.op;assert.equal(saved.operation,op);
 assert.equal($('p35-ingest-observe').disabled,false);assert.equal($('p35-ingest-cancel').disabled,true);
-await $('p35-ingest-observe').onclick();assert.equal(p.pending,true);assert.equal(p.op.id,'active-ingest');assert.deepEqual(posts[0],posts[1]);assert.equal($('p35-ingest-cancel').disabled,false);
+await $('p35-ingest-observe').onclick();assert.equal(p.op,op);assert.equal(saved.operation,op);assert.equal(p.pending,true);assert.equal(p.op.id,'active-ingest');assert.deepEqual(posts[0],posts[1]);assert.equal($('p35-ingest-cancel').disabled,false);
 assert.equal($('p35-ingest-confirm').disabled,true);await $('p35-ingest-confirm').onclick();assert.equal(posts.length,2);
 await $('p35-ingest-cancel').onclick();assert.equal(p.op.state,'CANCELED');assert.equal(p.pending,true);
 const cancel=calls.find(c=>c.path.endsWith('/active-ingest/cancel'));assert.equal(cancel.options.headers['X-Shirokuma-Role'],saved.payload.context.selected_role);assert.deepEqual(JSON.parse(cancel.options.body).context,saved.payload.context);
 original.resolve(accepted(saved.payload.context,{id:'active-ingest',state:'FINISHED',committed:true,result:{late:'private'}}));await submit;
-assert.equal(p.pending,false);assert.equal(p.op.state,'CANCELED');assert.equal(p.op.operation.state,'CANCELED');assert.equal(p.op.operation.result.late,undefined);
+assert.equal(p.pending,false);assert.equal(p.op,op);assert.equal(saved.operation,op);assert.equal(p.op.state,'CANCELED');assert.equal(p.op.id,'active-ingest');assert.equal(p.op.operation,null);assert.equal(p.receipt.descendants().some(n=>n.textContent.includes('private')),false);
 ''')
 
     def test_pending_export_tracking_cancel_survives_late_original_after_navigation(self):
@@ -557,14 +1090,14 @@ assert.equal($('p35-ingest-preview').disabled,true);assert.equal($('p35-ingest-o
 const p=await ready(),saved=await preview(p);let posts=0;
 route=async()=>{if(++posts===1)throw Error('lost response');return {http:400,body:{code:'INVALID_INPUT',details:{}}};};
 await $('p35-ingest-confirm').onclick();await $('p35-ingest-observe').onclick();
-assert.equal(p.op.state,undefined);assert.equal(p.op.ambiguous,true);assert.equal(p.op.key,saved.key);assert.equal($('p35-ingest-preview').disabled,true);
+assert.equal(posts,2);await $('p35-ingest-confirm').onclick();assert.equal(posts,2);assert.equal(p.op.operation,null);assert.equal(p.op.state,'UNCONFIRMED');assert.equal(p.op.ambiguous,true);assert.equal(p.op.key,saved.key);assert.equal($('p35-ingest-preview').disabled,true);
 ''')
 
     def test_mismatched_accepted_error_cannot_prove_rejection_or_expose_results(self):
         self.javascript(r'''
-const p=await ready(),saved=await preview(p);
-route=async()=>({http:400,body:{code:'INVALID_INPUT',details:{context:{...saved.payload.context,selected_role:'bi_viewer'},operation:{id:'foreign-op',state:'FINISHED',committed:true,result:{private:'protected value'}}}}});
-await $('p35-ingest-confirm').onclick();assert.equal(p.op.id,null);assert.equal(p.op.state,undefined);assert.equal(p.op.ambiguous,true);assert.equal(p.op.operation,null);
+const p=await ready(),saved=await preview(p);let posts=0;
+route=async()=>{posts++;return {http:400,body:{code:'INVALID_INPUT',details:{context:{...saved.payload.context,selected_role:'bi_viewer'},operation:{id:'foreign-op',state:'FINISHED',committed:true,result:{private:'protected value'}}}}};};
+await $('p35-ingest-confirm').onclick();await $('p35-ingest-confirm').onclick();assert.equal(posts,1);assert.equal(p.op.id,null);assert.equal(p.op.state,'UNCONFIRMED');assert.equal(p.op.ambiguous,true);assert.equal(p.op.operation,null);
 assert.equal($('p35-ingest-preview').disabled,true);assert.equal(p.receipt.descendants().some(n=>n.textContent.includes('protected value')),false);
 ''')
 

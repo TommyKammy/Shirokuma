@@ -170,6 +170,10 @@ html:not([data-role="admin"]) [data-admin-view]{display:none!important}
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toolbar label{margin:0}
 .toolbar select,.toolbar input{width:auto}
+#p35-ingest-recovery,#p35-wap-recovery{min-width:0;max-width:100%;flex-wrap:wrap}
+#p35-ingest-recovery>*,#p35-wap-recovery>*{min-width:0;max-width:100%}
+#p35-ingest-recovery select,#p35-wap-recovery select{min-width:0;max-width:100%}
+#p35-ingest-recovery .help,#p35-wap-recovery .help{flex-basis:100%;overflow-wrap:anywhere;white-space:normal}
 .detail-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);border-top:1px solid var(--line)}
 .detail-grid>*{min-width:0}
 .detail-grid>*+*{border-left:1px solid var(--line)}
@@ -1164,6 +1168,7 @@ function pruneUIBindings() {
 }
 function setLanguage(lang) {
  if (!['en','ja'].includes(lang)) return;
+ if(typeof dataopsRecoveryBoundary==='function')dataopsRecoveryBoundary();
  language = lang; document.documentElement.lang = lang;
  for (const code of ['en','ja']) $('lang-'+code).setAttribute('aria-pressed', String(code === lang));
  try { localStorage.setItem(languageKey, lang); } catch { /* Storage is optional. */ }
@@ -2671,12 +2676,18 @@ function dbError(data,status){
  const message=error?.message||data?.message;
  return Object.assign(Error(code+(message?' · '+message:'')),{code,status,details:data?.details||error?.details});
 }
+async function dbResponseJSON(response){
+ try{return await response.json();}catch(error){
+  if([401,403].includes(response.status))return {code:response.status===401?'AUTHENTICATION_REQUIRED':'DB_ACCESS_REVOKED'};
+  throw error;
+ }
+}
 async function dbAPI(path,role,body,current){
  const headers={'X-Shirokuma-Role':role};
  const response=await fetch(path,body===undefined?{headers}:{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
  if(current&&!current())throw Error('STALE');
  if(current&&[401,403].includes(response.status)){dbAdminSession({});throw Error('ACCESS_DENIED');}
- const data=await response.json();
+ const data=await dbResponseJSON(response);
  if(current&&!current())throw Error('STALE');
  if(!response.ok)throw dbError(data,response.status);
  return data;
@@ -5209,14 +5220,14 @@ function dbInventoryCurrent(items){return dbAuthorizationCurrent(dbAuthorization
 function dbCheckAuthorization(read){
  if(!dbAuthorizationCurrent(read))throw Object.assign(Error('Authorization changed; response ignored.'),{code:'AUTH_READ_STALE'});
 }
-async function dbReadInventory(role,current){
+async function dbReadInventory(role,current,onDenied){
  // A session maximum_role is not a grant epoch. Always read the inventory too.
  const request=(dbInventoryRequests.get(role)||0)+1;dbInventoryRequests.set(role,request);
  const read={principal:dbPrincipal,epoch:dbEpoch,version:dbAuthorizationVersion,roleVersion:dbRoleVersion(role),role,request,current},principal=dbPrincipal;
  let sessionResponse,session;
- try{sessionResponse=await fetch('/api/session',current?{headers:{'X-Shirokuma-Role':role}}:undefined);session=await sessionResponse.json();}catch(error){dbCheckAuthorization(read);throw error;}
+ try{sessionResponse=await fetch('/api/session',current?{headers:{'X-Shirokuma-Role':role}}:undefined);session=await dbResponseJSON(sessionResponse);}catch(error){dbCheckAuthorization(read);throw error;}
  dbCheckAuthorization(read);
- if(!sessionResponse.ok){dbAdmin.platform=false;dbAdminClear();const error=dbError(session,sessionResponse.status);if(['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED'].includes(error.code))dbInvalidateReceipt(role,true);throw error;}
+ if(!sessionResponse.ok){dbAdmin.platform=false;dbAdminClear();const error=dbError(session,sessionResponse.status);if(onDenied&&dataopsAuthError(error))onDenied(error);if(['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED'].includes(error.code))dbInvalidateReceipt(role,true);throw error;}
  const identity=JSON.stringify([session.username,session.authenticated]);
  if(identity!==principal||session.data_mode!=='database'){
   if(dbAudit.installed)dbAuditPurge();
@@ -5227,7 +5238,7 @@ async function dbReadInventory(role,current){
  if(principal===dbPrincipal){dbAdminSession(session);dbUpdateMaximumRole(session.maximum_role);}
  read.version=dbAuthorizationVersion;
  let result;
- try{result=dbRoleWithinHeader(role)?await dbAPI('/api/v1/databases',role):{items:[]};}catch(error){dbCheckAuthorization(read);if(['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED','STALE_BINDING','STALE_CONTEXT','CONTEXT_MISMATCH','UNKNOWN_CONTEXT'].includes(error.code))dbInvalidateReceipt(role,error.code==='AUTHENTICATION_REQUIRED');throw error;}
+ try{result=dbRoleWithinHeader(role)?await dbAPI('/api/v1/databases',role):{items:[]};}catch(error){dbCheckAuthorization(read);if(onDenied&&dataopsAuthError(error))onDenied(error);if(['DB_ACCESS_REVOKED','AUTHENTICATION_REQUIRED','STALE_BINDING','STALE_CONTEXT','CONTEXT_MISMATCH','UNKNOWN_CONTEXT'].includes(error.code))dbInvalidateReceipt(role,error.code==='AUTHENTICATION_REQUIRED');throw error;}
  dbCheckAuthorization(read);
  const items=result.items||[];dbAuthorizationReads.set(items,read);return items;
 }
@@ -6039,8 +6050,8 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
- $('role-selector').onchange=async()=>{dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
+ activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
  $('query-schema').onchange=async()=>{dbCurrent().schema_id=$('query-schema').value;await dbReselect();dbSave();dbRenderRun();};
@@ -6590,7 +6601,7 @@ const dataopsState=op=>op?.state||op?.operation?.state;
 const dataopsTerminal=op=>!!op&&!op.ambiguous&&['FINISHED','FAILED','CANCELED','REJECTED'].includes(dataopsState(op));
 const dataopsUnresolved=op=>!!op&&!dataopsTerminal(op);
 const dataopsCanObserve=op=>!!op&&dataopsState(op)!=='REJECTED'&&!!(op.id||op.path);
-const dataopsCanCancel=op=>!!op?.id&&!['UNKNOWN','FINISHED','FAILED','CANCELED'].includes(dataopsState(op));
+const dataopsCanCancel=op=>!!op?.id&&(!op.panel||!op.ambiguous)&&!['UNKNOWN','FINISHED','FAILED','CANCELED'].includes(dataopsState(op));
 function dataopsRejectBeforeAdmission(op,error){
  // Only a fresh request's definite validation rejection proves no execution began.
  // A replay after a lost response, authorization failure or server error stays unresolved.
@@ -6599,8 +6610,13 @@ function dataopsRejectBeforeAdmission(op,error){
  op.state='REJECTED';op.ambiguous=false;return true;
 }
 function dataopsAccept(op,operation,visible){
- op.id=operation.id;op.state=operation.state;op.ambiguous=operation.state==='UNKNOWN';op.protected=visible;op.operation=visible?operation:null;
+ if(op.panel&&(!operation||!dataopsRecoveryID(operation.id)||!dataopsRecoveryStates.slice(1,-1).includes(operation.state)||op.id&&operation.id!==op.id))throw Error(t('Invalid recovery response.'));
+ op.id=operation.id;op.state=operation.state;op.ambiguous=operation.state==='UNKNOWN';
+ if(op.panel)op.ambiguous=op.ambiguous||operation.child_unknown===true||operation.queries?.some(q=>q.state==='UNKNOWN')===true;
+ op.protected=visible;op.operation=visible?operation:null;
+ if(op.panel){const p=dataopsPanels.get(op.panel);if(visible&&p)op.capture=dataopsRecoveryStamp(p);dataopsRecoverySave(op);}
 }
+
 function dataopsAllowed(p,cap){
  if(p.invalid||!p.context||p.principal!==dbPrincipal||!dbRoleWithinHeader(p.role))return false;
  const d=dbRoleItems(p.role).find(d=>d.id===p.database),s=p.schemas.find(s=>s.id===p.schema),c=p.context;
@@ -6616,6 +6632,28 @@ function dataopsPurgeLoadedModel(p){
  $(p.id+'-model-id').readOnly=false;$(p.id+'-min').value='1';
  for(const source of p.sources||[]){source.alias.value='';source.table.replaceChildren();}
 }
+function dataopsPurgeForeignDraft(p){
+ if(p.draftPrincipal===dbPrincipal)return;
+ // Only an actual identity change purges browser inputs. Saved operations and
+ // their original live objects remain private in the original owner's store.
+ p.draftPrincipal=dbPrincipal;p.file=null;p.preview=null;
+ p.databases=[];p.schemas=[];p.database='';p.schema='';p.context=null;p.inventoryContext=null;p.inventoryReady=false;p.inventoryLoading=false;
+ p.role=['admin','data_engineer','bi_viewer'].find(dbRoleWithinHeader)||'';
+ for(const key of ['role','database','schema']){const n=$(p.id+'-'+key);n.replaceChildren();n.value='';delete n.dataset.options;}
+ dataopsOptions($(p.id+'-role'),['admin','data_engineer','bi_viewer'].filter(dbRoleWithinHeader).map(role=>[role,role]),p.role,'Execution role');
+ p.requests?.clear();p.actions?.clear();
+ if(p.id==='p35-ingest'){
+  for(const key of ['file','name','hints','keys']){const n=$(p.id+'-'+key);if(n)n.value='';}
+ }else{
+  for(const key of ['model-id','sql','name','not-null','metadata-id'])$(p.id+'-'+key).value='';
+  $(p.id+'-model-id').readOnly=false;$(p.id+'-min').value='1';
+  for(const key of ['models','target','target-schema','build','audit','publication']){const n=$(p.id+'-'+key);n.replaceChildren();n.value='';}
+  for(const source of p.sources||[]){source.alias.value='';source.table.replaceChildren();source.table.value='';}
+ }
+ p.recoverySelection='';p.receipt?.replaceChildren();
+ const context=$(p.id+'-accepted-context');if(context)context.textContent='';
+ dataopsInvalidate(p);
+}
 function dataopsInvalidate(p){
  p.aiPending=null;p.aiOrigin=null;p.aiToken=null;
  dataopsPurgeLoadedModel(p);
@@ -6629,8 +6667,12 @@ function dataopsInvalidate(p){
 }
 function dataopsValidate(){
  for(const p of dataopsPanels.values()){
+  dataopsPurgeForeignDraft(p);
   if(p.context&&!p.invalid&&!dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models'))dataopsInvalidate(p);
   else dataopsRenderAvailability(p);
+  dataopsRecoveryRender(p);
+  $(p.id+'-accepted-context').hidden=p.principal!==dbPrincipal;
+  if(p.op?.principal!==undefined&&p.op.principal!==dbPrincipal){dataopsRenderOperation(p);$(p.id+'-observe').hidden=true;$(p.id+'-cancel').hidden=true;$(p.id+'-observe-help').hidden=true;}
   if(p.id==='p35-wap')dataopsAiRender(p);
  }
  if(dataopsExport&&!dataopsExport.invalid&&!dataopsExportAuthorized(dataopsExport)){dataopsExport.invalid=true;dataopsExport.receipt=null;dataopsExport.operation=null;dataopsExportRender();}
@@ -6652,7 +6694,7 @@ async function dataopsRequest(path,context,body,key){
  const headers={'X-Shirokuma-Role':context.selected_role};if(key)headers['Idempotency-Key']=key;
  const url=body===undefined?path+(path.includes('?')?'&':'?')+'context='+encodeURIComponent(JSON.stringify(context)):path;
  const response=await fetch(url,body===undefined?{headers}:{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({...body,context})});
- const data=await response.json();if(!response.ok){const error=dbError(data,response.status),details=data.details||data.error?.details;
+ const data=await dbResponseJSON(response);if(!response.ok){const error=dbError(data,response.status),details=data?.details||data?.error?.details;
   if(error.code==='JOB_INPUT_REJECTED')error.jobRejectionOnly=Object.keys(details||{}).length===1&&[data,data.error].filter(v=>v&&typeof v==='object').every(v=>Object.keys(v).every(k=>['code','message','request_id','retryable','details','error'].includes(k))&&(!v.details||(Object.keys(v.details).length===1&&v.details.admission==='NOT_ATTEMPTED')));
   if(error.code==='STAGE_INPUT_REJECTED')error.stageRejectionOnly=dbStagesRejectionOnly(data);
   if(details?.operation&&dataopsSameContext(context,details.context))error.observation=details.operation;throw error;}
@@ -6660,11 +6702,12 @@ async function dataopsRequest(path,context,body,key){
  return data;
 }
 async function dataopsTask(p,task){
- if(p.pending||p.trackingPending)return;p.pending=true;const epoch=p.epoch;p.status.className='status-line';p.status.setAttribute('role','status');ui(p.status,'Pending');dataopsRender(p);
- try{await task(()=>epoch===p.epoch&&!p.invalid&&p.principal===dbPrincipal);}catch(error){if(epoch===p.epoch){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}}
+ if(p.pending||p.trackingPending)return;p.pending=true;const epoch=p.epoch,stamp=dataopsRecoveryStamp(p);p.status.className='status-line';p.status.setAttribute('role','status');ui(p.status,'Pending');dataopsRender(p);
+ try{await task(()=>epoch===p.epoch&&!p.invalid&&p.principal===dbPrincipal);}catch(error){if(epoch===p.epoch&&stamp===dataopsRecoveryStamp(p)&&p.principal===dbPrincipal){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}}
  finally{p.pending=false;dataopsRender(p);}
 }
 async function dataopsRefresh(p){
+ dataopsPurgeForeignDraft(p);
  p.started=true;++p.epoch;p.inventoryLoading=true;p.inventoryReady=false;p.aiOrigin=null;const epoch=p.epoch,role=p.role,database=p.database,schema=p.schema,principal=dbPrincipal;
  dataopsPurgeLoadedModel(p);
  p.metadata=null;if(p.op){p.op.protected=false;p.op.operation=null;}
@@ -6694,10 +6737,163 @@ async function dataopsRefresh(p){
   if(current()){p.inventoryLoading=false;p.inventoryReady=!p.invalid;p.inventoryContext=p.context;ui(p.status,p.invalid?'Choose an authorized context.':'Ready');dataopsRender(p,true);}
  }catch(error){if(current()){p.inventoryLoading=false;dataopsInvalidate(p);ui(p.status,error.message);}}
 }
+
+// Manual Ingest/WAP recovery stores intent handles only, never replay bodies.
+const dataopsRecoveryPaths=Object.freeze({'manual-ingest':'/api/v1/ingests','manual-wap-build':'/api/v1/wap/build','manual-wap-audit':'/api/v1/wap/audit','manual-wap-publish':'/api/v1/wap/publish','manual-wap-rollback':'/api/v1/wap/rollback'});
+const dataopsRecoveryStates=['UNCONFIRMED','ACTIVE','CANCELING','UNKNOWN','FINISHED','FAILED','CANCELED','REJECTED'];
+const dataopsRecoveryOwners=new Map();let dataopsRecoveryRevision=0;
+const dataopsRecoveryKey=owner=>'shirokuma.manual-dataops.v1.'+encodeURIComponent(owner);
+const dataopsRecoveryText=value=>typeof value==='string'&&!!value.trim()&&value.length<=256&&!/[\x00-\x1f\x7f]/.test(value);
+const dataopsRecoveryID=value=>typeof value==='string'&&/^[A-Za-z0-9_-]{1,128}$/.test(value);
+function dataopsRecoveryContext(c){return dbExplanationSameContext(c,c)&&dbExplanationContextKeys.every(k=>['binding_revision','grant_revision'].includes(k)?(k==='grant_revision'&&c[k]===null)||Number.isSafeInteger(c[k])&&c[k]>0:typeof c[k]==='string'&&!!c[k].trim());}
+function dataopsRecoveryValid(h){
+ return dbSavedExact(h,['version','panel','action','key','context','time','id','state','uncertain'])&&h.version===1&&Object.hasOwn(dataopsRecoveryPaths,h.action)&&h.panel===(h.action==='manual-ingest'?'p35-ingest':'p35-wap')&&dataopsRecoveryText(h.key)&&dataopsRecoveryContext(h.context)&&Number.isSafeInteger(h.time)&&h.time>0&&(h.id===null||dataopsRecoveryID(h.id))&&dataopsRecoveryStates.includes(h.state)&&typeof h.uncertain==='boolean';
+}
+function dataopsRecoveryList(saved){return Array.isArray(saved)&&saved.length<=25&&saved.every(dataopsRecoveryValid)&&new Set(saved.map(h=>h.key)).size===saved.length;}
+function dataopsRecoveryOwner(owner=dbPrincipal){
+ if(dataopsRecoveryOwners.has(owner))return dataopsRecoveryOwners.get(owner);
+ const store={owner,ops:[],error:false,lastRaw:null};dataopsRecoveryOwners.set(owner,store);
+ try{
+  const raw=localStorage.getItem(dataopsRecoveryKey(owner)),saved=raw===null?[]:JSON.parse(raw);
+  if(!dataopsRecoveryList(saved))throw Error('storage');
+  store.lastRaw=raw;
+  store.ops=saved.map(h=>({...h,context:dataopsFreeze(h.context),path:dataopsRecoveryPaths[h.action],principal:owner,restored:true,ambiguous:h.uncertain,protected:false,operation:null}));
+ }catch{store.error=true;}
+ return store;
+}
+function dataopsRecoveryDTO(op){return {version:1,panel:op.panel,action:op.action,key:op.key,context:op.context,time:op.time,id:op.id,state:dataopsState(op)||'UNCONFIRMED',uncertain:!!op.ambiguous};}
+function dataopsRecoveryWrite(store){
+ try{
+  // Recheck storage on every write, including fresh submission preflight.
+  const raw=localStorage.getItem(dataopsRecoveryKey(store.owner));
+  if(store.error||raw!==store.lastRaw||raw!==null&&!dataopsRecoveryList(JSON.parse(raw)))throw Error('storage');
+  const next=store.ops.map(dataopsRecoveryDTO);if(!dataopsRecoveryList(next))throw Error('storage');
+  const rawNext=JSON.stringify(next);
+  localStorage.setItem(dataopsRecoveryKey(store.owner),rawNext);
+  if(localStorage.getItem(dataopsRecoveryKey(store.owner))!==rawNext)throw Error('storage');
+  store.lastRaw=rawNext;return true;
+ }catch{store.error=true;return false;}
+}
+function dataopsRecoveryNotice(p){ui(p.recoveryNotice,'Recovery storage unavailable or full. Keep the original key and draft; a fresh request is blocked.');}
+function dataopsRecoverySave(op){
+ if(!op.panel)return;
+ const store=dataopsRecoveryOwner(op.principal);
+ if(!dataopsRecoveryWrite(store)){for(const p of dataopsPanels.values())if(p.id===op.panel&&dbPrincipal===op.principal)dataopsRecoveryNotice(p);}
+}
+function dataopsRecoveryHeld(p){const store=dataopsRecoveryOwner();return store.error||store.ops.length>=25||store.ops.some(op=>op.panel===p.id&&dataopsUnresolved(op));}
+const dataopsOwnedUnresolved=p=>p.op?.principal===dbPrincipal&&dataopsUnresolved(p.op);
+function dataopsRecoverySelected(p){return dataopsRecoveryOwner().ops.find(op=>op.panel===p.id&&op.key===p.recoverySelection);}
+function dataopsRecoveryBoundary(){++dataopsRecoveryRevision;}
+function dataopsRecoveryStamp(p){return JSON.stringify([dataopsRecoveryRevision,p.epoch,dbPrincipal,currentRole,dbMaximumRole,dbEpoch,dbAuthorizationVersion,dbRoleVersion(p.role),p.role,p.context,activeTab,language]);}
+function dataopsRecoveryAuthorized(p,op){
+ try{return op.principal===dbPrincipal&&p.principal===dbPrincipal&&!p.invalid&&p.inventoryReady&&!p.inventoryLoading&&dataopsExportAuthorized(op)&&dataopsSameContext(p.inventoryContext,op.context)&&dataopsSameContext(p.context,op.context)&&dataopsSameContext(dataopsContext(p),op.context);}
+ catch{return false;}
+}
+async function dataopsRecoveryAccess(p,op,current){
+ const deny=()=>{if(current())dataopsInvalidate(p);};
+ const items=await dbReadInventory(op.context.selected_role,current,deny);
+ if(!current()||!dbInventoryCurrent(items))return false;
+ if(!items.some(d=>d.id===op.context.database_id&&d.sql_catalog===op.context.sql_catalog)){deny();return false;}
+ dbApplyInventory(items,op.context.selected_role);
+ if(!current()||!dataopsRecoveryAuthorized(p,op))return false;
+ try{
+  const reply=await dbAPI('/api/v1/databases/'+encodeURIComponent(op.context.database_id)+'/schemas',op.context.selected_role);
+  if(!current())return false;
+  if(!Array.isArray(reply?.items)||!reply.items.some(s=>s.id===op.context.schema_id&&s.database_id===op.context.database_id&&s.sql_name===op.context.sql_schema&&s.capabilities?.query===true)){deny();return false;}
+  return dataopsRecoveryAuthorized(p,op);
+ }catch(error){if(dataopsAuthError(error))deny();throw error;}
+}
+
+function dataopsRecoveryCanCancel(p,op){
+ return !!op&&op.principal===dbPrincipal&&dbRoleWithinHeader(op.context.selected_role)&&dataopsCanCancel(op)&&!p.pending&&!p.trackingPending&&!(p.op!==op&&dataopsOwnedUnresolved(p));
+}
+function dataopsRecoveryCancel(p){
+ const op=dataopsRecoverySelected(p);if(!dataopsRecoveryCanCancel(p,op))return;
+ p.op=op;return dataopsObserve(p,true);
+}
+const dataopsRecoveryActionLabel=action=>t({'manual-ingest':'Ingest','manual-wap-build':'Stage','manual-wap-audit':'Audit','manual-wap-publish':'Publish','manual-wap-rollback':'Rollback'}[action]);
+function dataopsRecoveryRender(p){
+ if(!p.recovery)return;
+ const store=dataopsRecoveryOwner(),items=store.ops.filter(op=>op.panel===p.id);
+ if(p.recoveryOwner!==dbPrincipal||!items.some(op=>op.key===p.recoverySelection))p.recoverySelection='';
+ p.recoveryOwner=dbPrincipal;
+ dataopsOptions($(p.id+'-recovery-select'),items.map(op=>[op.key,[dataopsRecoveryActionLabel(op.action),op.id||t('UNCONFIRMED'),t(dataopsState(op)),new Date(op.time).toLocaleString()].join(' · ')]),p.recoverySelection,'Saved original request');
+ const op=dataopsRecoverySelected(p),held=items.some(item=>dataopsUnresolved(item));
+ p.recoveryHeldHelp.hidden=!held;ui(p.recoveryHeldHelp,held?'Select the saved operation and reconnect or cancel it before creating a fresh request.':'');
+ p.recoveryContext.hidden=!op;
+ if(op)ui(p.recoveryContext,'Saved request context: {context}. {guidance}',()=>({context:[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role,op.context.warehouse_id].join(' / '),guidance:t(dataopsRecoveryAuthorized(p,op)?'Refresh panel context if access changed, then reconnect explicitly.':'Match the original database, schema and execution role manually, then refresh panel context.')}));
+ else ui(p.recoveryContext,'');
+ $(p.id+'-recovery-cancel').disabled=!dataopsRecoveryCanCancel(p,op);
+ $(p.id+'-reconnect').disabled=!!(p.pending||p.trackingPending)||!op||!dataopsRecoveryAuthorized(p,op);
+ $(p.id+'-remove-handle').disabled=!!(p.pending||p.trackingPending)||!op||!dataopsTerminal(op);
+ if(store.error||store.ops.length>=25)dataopsRecoveryNotice(p);else ui(p.recoveryNotice,'');
+}
+function dataopsRecoveryInstall(p){
+ p.recovery=dataopsNode('div',p.id+'-recovery',p.body);p.recovery.className='toolbar';
+ dataopsField(p.recovery,p.id+'-recovery-select','Saved original request','select').onchange=()=>{p.recoverySelection=$(p.id+'-recovery-select').value;dataopsRecoveryBoundary();dataopsRecoveryRender(p);};
+ dataopsButton(p.recovery,p.id+'-reconnect','Reconnect original operation',()=>dataopsReconnect(p));
+ dataopsButton(p.recovery,p.id+'-recovery-cancel','Cancel selected saved operation',()=>dataopsRecoveryCancel(p));
+ p.recoveryContext=dataopsNode('p',p.id+'-recovery-context',p.recovery);p.recoveryContext.className='help';p.recoveryContext.setAttribute('role','status');p.recoveryContext.setAttribute('aria-live','polite');
+ dataopsButton(p.recovery,p.id+'-remove-handle','Remove terminal handle',()=>{
+  const op=dataopsRecoverySelected(p);if(p.pending||p.trackingPending||!op||!dataopsTerminal(op))return;
+  const store=dataopsRecoveryOwner(),previous=store.ops;store.ops=previous.filter(item=>item!==op);
+  if(!dataopsRecoveryWrite(store)){store.ops=previous;dataopsRecoveryNotice(p);return;}
+  p.recoverySelection='';if(p.op===op)p.op=null;for(const panel of dataopsPanels.values())dataopsRender(panel);
+ });
+ dataopsNode('p','',p.recovery,'Choose the original account, role, database and schema, then refresh panel context and reconnect. Reconnect inspects the saved operation without resubmitting SQL; normal inspection may reconcile state or attempt cancellation after access loss. A missing key does not prove the request was unsent. Removing a terminal handle only removes this browser handle.').className='help';
+ p.recoveryHeldHelp=dataopsNode('p',p.id+'-recovery-held',p.recovery);p.recoveryHeldHelp.className='help';p.recoveryHeldHelp.setAttribute('role','status');
+ p.recoveryNotice=dataopsNode('p',p.id+'-recovery-notice',p.recovery);p.recoveryNotice.setAttribute('role','status');p.recoveryNotice.setAttribute('aria-live','polite');
+ for(const event of ['input','change'])p.form.addEventListener(event,dataopsRecoveryBoundary);
+}
+async function dataopsReconnect(p){
+ const op=dataopsRecoverySelected(p);if(p.pending||p.trackingPending||!op||!dataopsRecoveryAuthorized(p,op))return;
+ p.op=op;op.protected=false;op.operation=null;const tracking={};p.trackingToken=tracking;p.trackingPending=true;
+ const stamp=dataopsRecoveryStamp(p),sequence=op.sequence=(op.sequence||0)+1;
+ const current=()=>p.op===op&&sequence===op.sequence&&stamp===dataopsRecoveryStamp(p)&&dataopsRecoveryAuthorized(p,op);
+ dataopsRender(p);
+ try{
+  // Refresh current account and role-specific inventory before requesting saved data.
+  if(!await dataopsRecoveryAccess(p,op,current))return;
+  if(!op.id){
+   const reply=await dataopsRequest('/api/v1/dataops/by-key?route='+encodeURIComponent(op.action)+'&key='+encodeURIComponent(op.key),op.context),r=reply.recovery;
+   if(!dbSavedExact(reply,['context','recovery'])||!dbSavedExact(r,['operation_id','route','state'])||r.route!==op.action||!dataopsRecoveryID(r.operation_id)||!dataopsRecoveryStates.slice(1,-1).includes(r.state)||!dataopsSameContext(reply.context,op.context))throw Error(t('Invalid recovery response.'));
+   if(!current()||op.id||dataopsTerminal(op))return;
+   op.id=r.operation_id;op.state=r.state;op.ambiguous=r.state==='UNKNOWN';dataopsRecoverySave(op);
+  }
+  if(!current())return;
+  const reply=await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id),op.context);
+  if(!current())return;
+  dataopsAccept(op,reply.operation,false);
+  const visible=await dataopsRecoveryAccess(p,op,current);
+  if(visible&&current())dataopsAccept(op,reply.operation,true);
+  if(op.protected){dataopsCaptureWap(p,op.operation,true);ui(p.status,op.state);}
+ }catch(error){
+  if(sequence!==op.sequence)return;
+  if(current()&&error.observation&&!dataopsTerminal(op))dataopsAccept(op,error.observation,false);
+  op.protected=false;op.operation=null;
+  if(current()&&dataopsAuthError(error))dataopsInvalidate(p);
+  if(stamp===dataopsRecoveryStamp(p))ui(p.status,'Reconnect unavailable. Keep the original handle; missing does not mean unsent.');
+ }finally{if(p.trackingToken===tracking){p.trackingToken=null;p.trackingPending=false;dataopsRender(p);}}
+}
+Object.assign(i18n.ja,{
+ 'Cancel selected saved operation':'選択した保存済み処理をキャンセル',
+ 'Saved request context: {context}. {guidance}':'保存した要求のコンテキスト：{context}。{guidance}',
+ 'Match the original database, schema and execution role manually, then refresh panel context.':'元のデータベース・スキーマ・実行ロールを手動で選び、パネルのコンテキストを更新してください。',
+ 'Refresh panel context if access changed, then reconnect explicitly.':'アクセスが変わった場合はパネルのコンテキストを更新し、明示的に再接続してください。',
+ 'Select the saved operation and reconnect or cancel it before creating a fresh request.':'新しい要求を作成する前に、保存済みの処理を選び、再接続またはキャンセルしてください。',
+ 'Saved original request':'保存済みの処理','Reconnect original operation':'元の処理へ再接続','Remove terminal handle':'終了済みの追跡情報を削除','UNCONFIRMED':'受付未確認',
+ 'Recovery storage unavailable or full. Keep the original key and draft; a fresh request is blocked.':'復旧用ストレージが使用不可または上限に達しました。元のキーと入力を保持してください。新規要求は停止しています。',
+ 'Reconnect unavailable. Keep the original handle; missing does not mean unsent.':'再接続できません。元のハンドルを保持してください。未検出でも未送信とは限りません。',
+ 'Invalid recovery response.':'復旧応答が不正です。',
+ 'Resending uses the original request body and key and may accept execution if the first request never arrived. Reloaded handles cannot resend.':'再送は元の本文とキーを使用し、初回要求が届いていなければ実行を受け付ける可能性があります。再読み込みしたハンドルからの再送はできません。',
+ 'Resend original request (may accept execution)':'元の要求を再送（実行を受け付ける可能性あり）',
+ 'Choose the original account, role, database and schema, then refresh panel context and reconnect. Reconnect inspects the saved operation without resubmitting SQL; normal inspection may reconcile state or attempt cancellation after access loss. A missing key does not prove the request was unsent. Removing a terminal handle only removes this browser handle.':'元のアカウント・ロール・DB・スキーマを選び、パネルのコンテキストを更新して再接続してください。SQLの再送信は行わず、保存済み処理を通常の方法で確認します。状態調整やアクセス喪失後のキャンセルを試みる場合があります。キー未検出でも未送信とは限りません。終了済みハンドルの削除はこのブラウザ内の記録のみを削除します。'
+});
+
 function dataopsPanel(id,title,parent){
  const root=dataopsNode('section',id,parent);root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,title);
  const form=dataopsNode('form',id+'-form',body),fields=dataopsNode('div','',form);fields.className='job-fields';
- const p={id,root,body,form,fields,epoch:0,pending:false,invalid:true,databases:[],schemas:[],tables:[],objects:[],models:[],role:dbCurrent()?.selected_role||currentRole,database:dbCurrent()?.database_id||'',schema:dbCurrent()?.schema_id||'',context:null,op:null,model:null,modelDirty:true,principal:dbPrincipal};dataopsPanels.set(id,p);
+ const p={id,root,body,form,fields,epoch:0,pending:false,invalid:true,databases:[],schemas:[],tables:[],objects:[],models:[],role:dbCurrent()?.selected_role||currentRole,database:dbCurrent()?.database_id||'',schema:dbCurrent()?.schema_id||'',context:null,op:null,model:null,modelDirty:true,principal:dbPrincipal,draftPrincipal:dbPrincipal};dataopsPanels.set(id,p);
  for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){
   const n=dataopsField(fields,id+'-'+key,label,'select');n.onchange=()=>{p[key]=n.value;dataopsChanged(p);return dataopsRefresh(p);};
  }
@@ -6708,22 +6904,27 @@ function dataopsPanel(id,title,parent){
  p.receipt=dataopsNode('div',id+'-operation',body);p.receipt.setAttribute('aria-live','polite');
  dataopsButton(body,id+'-observe','Observe operation',()=>dataopsObserve(p,false));
  dataopsButton(body,id+'-cancel','Cancel operation',()=>dataopsObserve(p,true));
+ dataopsNode('p',id+'-observe-help',body,'Resending uses the original request body and key and may accept execution if the first request never arrived. Reloaded handles cannot resend.').className='help';
+ dataopsRecoveryInstall(p);
  return p;
 }
 function dataopsRenderOperation(p){
  const area=p.receipt;area.replaceChildren();const op=p.op;
+ if(p.principal!==dbPrincipal)return;
  if(p.metadata&&!p.invalid)dataopsRenderWapMetadata(area,p.metadata);
- if(!op)return;
+ if(!op||op.principal!==undefined&&op.principal!==dbPrincipal)return;
+ if(op.protected&&(!dataopsRecoveryAuthorized(p,op)||op.capture!==undefined&&op.capture!==dataopsRecoveryStamp(p))){op.protected=false;op.operation=null;}
  const row=(key,value)=>{const line=dataopsNode('p','',area),label=dataopsNode('strong','',line,key);line.append(': '+String(value??''));return label;};
  row('Idempotency key',op.key);row('Operation ID',op.id||'UNKNOWN');
  row('Accepted context',[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role].join(' / '));
  if(dataopsState(op))row('Status',t(dataopsState(op)));
+ if(op.ambiguous||dataopsState(op)==='UNCONFIRMED')dataopsNode('p','',area,'Outcome unknown. Observe with the saved key; do not submit again.');
+ if(dataopsState(op)==='UNKNOWN')dataopsNode('p','',area,'Unknown execution requires manual reconciliation. Observe the saved operation.');
  if(!op.protected){dataopsNode('p','',area,'Results hidden until access is revalidated.');return;}
  if(op.operation){row('Committed',op.operation.committed);row('Cleanup error',op.operation.cleanup_error||'');
   const result=op.operation.result;if(result){const metadata=result.build||result.audit||result.publication;if(metadata)dataopsRenderWapMetadata(area,metadata);else{const pre=dataopsNode('pre','',area);pre.textContent=JSON.stringify(result,null,2);}}}
- if(op.ambiguous)dataopsNode('p','',area,'Outcome unknown. Observe with the saved key; do not submit again.');
- if(dataopsState(op)==='UNKNOWN')dataopsNode('p','',area,'Unknown execution requires manual reconciliation. Observe the saved operation.');
 }
+
 function dataopsRenderWapMetadata(area,record){
  const row=(label,value)=>{if(value===undefined||value===null)return;const line=dataopsNode('p','',area);dataopsNode('strong','',line,label);line.append(': '+String(value));};
  row('Model ID',record.model_id);row('Version',record.version);row('Stage snapshot',record.stage?.snapshot??record.stage?.snapshot_id);row('Target snapshot',record.target?.snapshot??record.target?.snapshot_id);row('Rows',record.count);
@@ -6758,11 +6959,16 @@ function dataopsRender(p,inventory=false){
  // Context selectors remain usable for explicit recovery. Never blindly enable after await.
  for(const n of p.form.querySelectorAll('input,select,textarea,button'))n.disabled=waiting||!allowed;
  for(const k of ['role','database','schema','refresh'])$(id+'-'+k).disabled=waiting;
- $(id+'-observe').disabled=!!p.trackingPending||!dataopsCanObserve(p.op);$(id+'-cancel').disabled=!!p.trackingPending||!dataopsCanCancel(p.op);
+ const owner=!!p.op&&p.op.principal===dbPrincipal;
+ $(id+'-observe').hidden=!!p.op&&!owner;$(id+'-cancel').hidden=!!p.op&&!owner;
+ $(id+'-observe').disabled=!!p.trackingPending||!owner||!!p.op?.restored||!dataopsCanObserve(p.op);$(id+'-cancel').disabled=!!p.trackingPending||!owner||!dbRoleWithinHeader(p.op.context.selected_role)||!dataopsCanCancel(p.op);
+ $(id+'-observe-help').hidden=!owner||!!p.op.id||!!p.op.restored;
+ ui($(id+'-observe'),p.op&&!p.op.id?'Resend original request (may accept execution)':'Observe operation');
+ dataopsRecoveryRender(p);
  if(id==='p35-ingest'){
   const create=$(id+'-mode').value==='create';$(id+'-name').disabled=!allowed||waiting||!create;$(id+'-target').disabled=!allowed||waiting||create;
-  $(id+'-preview').disabled=waiting||!allowed||dataopsUnresolved(p.op);
-  $(id+'-confirm').disabled=waiting||!allowed||!p.preview||!!p.preview.submitted||dataopsUnresolved(p.op);
+  $(id+'-preview').disabled=waiting||!allowed||dataopsOwnedUnresolved(p);
+  $(id+'-confirm').disabled=waiting||!allowed||!p.preview||!!p.preview.submitted||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p));
   if(inventory)dataopsOptions($(id+'-target'),p.objects.map((o,i)=>[String(i),o.label]),'');
  }else{
   if(inventory){
@@ -6774,46 +6980,69 @@ function dataopsRender(p,inventory=false){
   const existing=$(id+'-target').value!=='';
   $(id+'-name').disabled=waiting||!allowed||existing;$(id+'-target-schema').disabled=waiting||!allowed||existing;
   for(const [action,capability] of [['build-action','wap_build'],['audit-action','wap_audit'],['publish','wap_publish'],['rollback','wap_rollback']]){
-   $(id+'-'+action).disabled=waiting||dataopsUnresolved(p.op)||!dataopsAllowed(p,capability)||(action==='build-action'&&(!p.model||p.modelDirty))||(action==='audit-action'&&!$(id+'-build').value)||(action==='publish'&&(!$(id+'-build').value||!$(id+'-audit').value))||(action==='rollback'&&!$(id+'-publication').value);
+   $(id+'-'+action).disabled=waiting||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p))||!dataopsAllowed(p,capability)||(action==='build-action'&&(!p.model||p.modelDirty))||(action==='audit-action'&&!$(id+'-build').value)||(action==='publish'&&(!$(id+'-build').value||!$(id+'-audit').value))||(action==='rollback'&&!$(id+'-publication').value);
   }
  }
  dataopsRenderOperation(p);
  if(id==='p35-wap')dataopsAiRender(p);
 }
 async function dataopsSubmit(p,path,body,record){
- // A record owns one immutable payload and key, including an ambiguous response.
- if(p.pending||p.trackingPending||p.invalid||record.submitted||dataopsUnresolved(p.op))return;record.submitted=true;
- const op={path,key:record.key||crypto.randomUUID(),context:record.payload?.context||dataopsFreeze(dataopsClone(p.context)),payload:record.payload||dataopsFreeze(dataopsClone({...body,context:p.context})),principal:dbPrincipal,protected:true,id:null,operation:null};p.op=op;record.operation=op;
- const sequence=op.sequence=1;
- await dataopsTask(p,async current=>{
-  try{const reply=await dataopsRequest(path,op.context,op.payload,op.key);if(sequence!==op.sequence)return;dataopsAccept(op,reply.operation,current()&&dataopsExportAuthorized(op)&&dataopsSameContext(p.context,op.context));
-   if(!op.protected)return;dataopsCaptureWap(p,op.operation);ui(p.status,reply.operation.state);
-  }catch(error){
-   if(sequence!==op.sequence)return;
-   if(error.observation){dataopsAccept(op,error.observation,current()&&dataopsExportAuthorized(op)&&dataopsSameContext(p.context,op.context));if(op.protected)dataopsCaptureWap(p,op.operation);}
-   else if(!dataopsRejectBeforeAdmission(op,error))op.ambiguous=true;
-   if(current()&&op.ambiguous)ui(p.status,'Outcome unknown. Observe with the saved key; do not submit again.');throw error;
+ if(p.pending||p.trackingPending||p.invalid||record.submitted||dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p)){const store=dataopsRecoveryOwner();if(store.error||store.ops.length>=25)dataopsRecoveryNotice(p);else dataopsRecoveryRender(p);return;}
+ record.key??=crypto.randomUUID();
+ const op={path,key:record.key,context:record.payload?.context||dataopsFreeze(dataopsClone(p.context)),payload:record.payload||dataopsFreeze(dataopsClone({...body,context:p.context})),principal:dbPrincipal,protected:false,id:null,operation:null};
+ const action=Object.keys(dataopsRecoveryPaths).find(action=>dataopsRecoveryPaths[action]===path),store=dataopsRecoveryOwner();
+ if(!action||store.error||store.ops.length>=25){dataopsRecoveryNotice(p);return;}
+ Object.assign(op,{panel:p.id,action,time:Date.now(),state:'UNCONFIRMED',ambiguous:true,sequence:1});
+ const token={},old=p.op,stamp=dataopsRecoveryStamp(p);p.submitToken=token;p.pending=true;
+ const current=()=>p.submitToken===token&&stamp===dataopsRecoveryStamp(p)&&p.principal===dbPrincipal&&!p.invalid;
+ const visible=()=>current()&&dataopsRecoveryAuthorized(p,op);
+ let attempted=false;p.status.className='status-line';p.status.setAttribute('role','status');ui(p.status,'Pending');dataopsRender(p);
+ try{
+  // Authorization finishes before a durable intent exists. No await is allowed
+  // between the synchronous sentinel write and the mutation request's fetch.
+  if(!await dataopsRecoveryAccess(p,op,visible)||!visible()||p.op!==old)return;
+  if(dataopsRecoveryHeld(p)){dataopsRecoveryRender(p);return;}
+  store.ops.push(op);
+  if(!dataopsRecoveryWrite(store)){store.ops.pop();dataopsRecoveryNotice(p);return;}
+  record.submitted=true;record.operation=op;p.op=op;p.recoveryOwner=dbPrincipal;p.recoverySelection=op.key;
+  attempted=true;op.ambiguous=false;
+  const request=dataopsRequest(path,op.context,op.payload,op.key);dataopsRender(p);
+  const reply=await request;if(op.sequence!==1)return;
+  dataopsAccept(op,reply.operation,false);
+  const authorized=visible()&&await dataopsRecoveryAccess(p,op,visible);
+  if(authorized&&visible())dataopsAccept(op,reply.operation,true);
+  if(op.protected){dataopsCaptureWap(p,op.operation);ui(p.status,reply.operation.state);}
+ }catch(error){
+  if(attempted&&op.sequence===1){
+   if(error.observation){dataopsAccept(op,error.observation,false);let authorized=false;try{authorized=visible()&&await dataopsRecoveryAccess(p,op,visible);}catch{/* Keep the original minimal observation. */}if(authorized&&visible())dataopsAccept(op,error.observation,true);if(op.protected)dataopsCaptureWap(p,op.operation);}
+   else if(!op.id&&!dataopsRejectBeforeAdmission(op,error))op.ambiguous=true;
+   dataopsRecoverySave(op);
   }
- });
+  if(current()){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}
+ }finally{if(p.submitToken===token){p.submitToken=null;p.pending=false;dataopsRender(p);}}
 }
 async function dataopsObserve(p,cancel){
- const op=p.op;if(!op||p.trackingPending||(cancel?!dataopsCanCancel(op):!dataopsCanObserve(op)))return;
- p.trackingPending=true;const epoch=p.epoch,sequence=op.sequence=(op.sequence||0)+1;
+ const op=p.op;if(!op||op.principal!==dbPrincipal||!dbRoleWithinHeader(op.context.selected_role)||!cancel&&op.restored||p.trackingPending||(cancel?!dataopsCanCancel(op):!dataopsCanObserve(op)))return;
+ if(!cancel&&!dataopsRecoveryAuthorized(p,op))return;
+ const stamp=dataopsRecoveryStamp(p);
+ const tracking={};p.trackingToken=tracking;p.trackingPending=true;const epoch=p.epoch,sequence=op.sequence=(op.sequence||0)+1;
  const current=()=>p.op===op&&sequence===op.sequence&&epoch===p.epoch&&!p.invalid&&p.principal===dbPrincipal;
- const visible=()=>current()&&dataopsExportAuthorized(op)&&dataopsSameContext(p.context,op.context);
+ const visible=()=>!cancel&&current()&&stamp===dataopsRecoveryStamp(p)&&dataopsRecoveryAuthorized(p,op);
  p.status.className='status-line';p.status.setAttribute('role','status');ui(p.status,'Pending');dataopsRender(p);
  try{
+  if(!cancel&&!await dataopsRecoveryAccess(p,op,visible))return;
   const reply=op.id?await dataopsRequest('/api/v1/dataops/'+encodeURIComponent(op.id)+(cancel?'/cancel':''),op.context,cancel?{}:undefined):await dataopsRequest(op.path,op.context,op.payload,op.key);
-  if(p.op!==op||sequence!==op.sequence)return;dataopsAccept(op,reply.operation,visible());if(op.protected)dataopsCaptureWap(p,op.operation);if(epoch===p.epoch)ui(p.status,reply.operation.state);
+  if(p.op!==op||sequence!==op.sequence)return;dataopsAccept(op,reply.operation,false);const authorized=!cancel&&visible()&&await dataopsRecoveryAccess(p,op,visible);if(authorized&&visible())dataopsAccept(op,reply.operation,true);if(op.protected)dataopsCaptureWap(p,op.operation);if(epoch===p.epoch)ui(p.status,reply.operation.state);
  }catch(error){
   if(p.op!==op||sequence!==op.sequence)return;
-  if(error.observation){dataopsAccept(op,error.observation,visible());if(op.protected)dataopsCaptureWap(p,op.operation);}
-  if(epoch===p.epoch){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}
- }finally{p.trackingPending=false;dataopsRender(p);}
+  op.protected=false;op.operation=null;
+  if(error.observation&&!dataopsTerminal(op)){dataopsAccept(op,error.observation,false);let authorized=false;try{authorized=!cancel&&visible()&&await dataopsRecoveryAccess(p,op,visible);}catch{/* Retain state without protected results. */}if(authorized&&visible())dataopsAccept(op,error.observation,true);if(op.protected)dataopsCaptureWap(p,op.operation);}
+  if(current()&&stamp===dataopsRecoveryStamp(p)){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}
+ }finally{if(p.trackingToken===tracking){p.trackingToken=null;p.trackingPending=false;dataopsRender(p);}}
 }
-function dataopsCaptureWap(p,operation){
+function dataopsCaptureWap(p,operation,preserveSelection=false){
  if(p.id!=='p35-wap'||!operation?.result)return;
- for(const [kind,key] of [['build','build_id'],['audit','audit_id'],['publication','publication_id']])if(operation.result[key]){const n=$(p.id+'-'+kind),value=operation.result[key];if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));n.value=value;}
+ for(const [kind,key] of [['build','build_id'],['audit','audit_id'],['publication','publication_id']])if(operation.result[key]){const n=$(p.id+'-'+kind),value=operation.result[key],selected=n.value;if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));n.value=preserveSelection?selected:value;}
 }
 async function dataopsReadFile(p,file){
  dataopsChanged(p);p.file=null;const epoch=p.epoch;if(!file)return;
@@ -6848,7 +7077,7 @@ function dataopsInstallIngest(){
  const sample=dataopsNode('div',id+'-sample',p.body);sample.className='table-wrap';sample.setAttribute('aria-live','polite');
  dataopsNode('p','',p.body,'Input preview only. Existing target types are checked at execution.');
  dataopsButton(p.form,id+'-preview','Preview Schema & Sample Rows',()=>dataopsTask(p,async current=>{
-  if(dataopsUnresolved(p.op))return;
+  if(dataopsOwnedUnresolved(p))return;
   p.preview=null;const payload=dataopsIngestPayload(p),reply=await dataopsRequest('/api/v1/ingests/preview',payload.context,payload);if(!current())return;
   const preview=reply.preview;if(!preview?.request_fingerprint)throw Error(t('Preview required after every input change.'));
   const signature=JSON.stringify([dbPrincipal,payload.context,preview.request_fingerprint]);p.requests??=new Map();
@@ -6902,10 +7131,10 @@ function dataopsInstallWap(){
  }));
  for(const [action,label,path,cap] of [['build-action','Build saved version','build','wap_build'],['audit-action','Audit build','audit','wap_audit'],['publish','Publish audited build (admin)','publish','wap_publish'],['rollback','Rollback publication (admin)','rollback','wap_rollback']]){
   dataopsButton(p.form,id+'-'+action,label,()=>{
-   if(!dataopsAllowed(p,cap)||dataopsUnresolved(p.op))return;
+   if(!dataopsAllowed(p,cap)||dataopsOwnedUnresolved(p))return;
    const body=path==='build'?{model_id:p.model?.model_id,version:p.model?.version}:path==='audit'?{build_id:$(id+'-build').value}:path==='publish'?{build_id:$(id+'-build').value,audit_id:$(id+'-audit').value}:{publication_id:$(id+'-publication').value};
    if(path==='build'&&(!p.model||p.modelDirty))return;
-   const signature=JSON.stringify([path,p.context,body]);p.actions??=new Map();if(!p.actions.has(signature)||dataopsTerminal(p.actions.get(signature).operation))p.actions.set(signature,{});
+   const signature=JSON.stringify([dbPrincipal,path,p.context,body]);p.actions??=new Map();if(!p.actions.has(signature)||dataopsTerminal(p.actions.get(signature).operation))p.actions.set(signature,{});
    return dataopsSubmit(p,'/api/v1/wap/'+path,body,p.actions.get(signature));
   });
  }
