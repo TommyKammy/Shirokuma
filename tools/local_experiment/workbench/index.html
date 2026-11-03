@@ -540,6 +540,7 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #runtime-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 #runtime-panel .runtime-actions{margin-block:12px}
 #runtime-panel .help{color:var(--muted)}
+#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}
 #observation-compute-panel,#observation-resources-panel{min-width:0;max-width:100%}
 #observation-compute-panel .panel-body,#observation-compute-output,#observation-resources-panel .panel-body,#observation-resources-output{min-width:0;max-width:100%}
 #observation-compute-output p,#observation-resources-output p{max-width:75ch;overflow-wrap:anywhere}
@@ -9994,6 +9995,32 @@ Object.assign(i18n.ja,{
  'Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.':'許可済み SQL は共有 LOCAL を自動起動します。DB 作成には基盤管理者が Compute で LOCAL を明示起動する必要があります。'
 });
 for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
+Object.assign(i18n.ja,{
+ "Runtime transitioning": "遷移中",
+ "Conditions observed at {time}. Captured eligibility is not current permission, admission, success or health assurance. The server rechecks when an operation is requested. Use “{refresh}” for a new observation.": "条件の観測時刻: {time}。観測時点の選択条件であり、現在の権限・受付・成功・健全性を保証しません。実際の操作時にサーバーが再確認します。新しい観測は「{refresh}」を利用してください。",
+ "Selectable in this observation. Rechecked when operated.": "この観測では選択できます。操作時に再確認します。",
+ "This profile does not support shared runtime controls.": "このプロファイルは共有ランタイム操作に対応していません。",
+ "Profile support is unconfirmed.": "プロファイルの対応は未確認です。",
+ "Current platform authority, maximum admin role and selected admin role are required.": "現在の基盤管理権限・上限 admin・選択 admin が必要です。",
+ "No runtime observation is available.": "ランタイムの観測がありません。",
+ "This action was not advertised in the captured observation.": "この操作は観測時の利用可能な操作に含まれていません。",
+ "A local request is in flight.": "ローカルの要求を送信中です。",
+ "Original acceptance is unconfirmed. Check original receipt may POST the original body with the same key; it does not create a new intent.": "元の受付は未確認です。「元の受付を確認」は同じキーと元の本文で POST する場合があります。新しい要求意図は作りません。",
+ "A local operation is accepted or running.": "ローカルの操作は受付済みまたは実行中です。",
+ "A shared operation was accepted or running in this observation.": "この観測では共有操作が受付済みまたは実行中です。",
+ "Chill is blocked by observed categories: {counts}.": "休止を妨げる観測カテゴリ: {counts}。",
+ "The stored policy or its revision is unconfirmed.": "保存済み設定またはその revision は未確認です。",
+ "No unsaved policy changes.": "未保存の設定変更はありません。",
+ "Enter an integer from 0 to 1440; 0 disables Auto-Chill.": "0〜1440 の整数を入力してください。0 は自動休止を無効にします。",
+ "No original receipt awaits confirmation.": "確認待ちの元の受付はありません。",
+ "The active observation means the fixed Deployments matched expected replica counts and generation conditions. It does not confirm live SQL health.": "稼働状態の観測は、固定 Deployment が期待されるレプリカ数と世代の条件を満たしたことを示します。現在の SQL の健全性は確認していません。",
+ "Chilled was observed; its cause and actual stop time are unconfirmed.": "休止状態を観測しました。原因と実際の停止時刻は未確認です。",
+ "Transitioning may include starting or stopping.": "遷移中には起動中と停止中の両方が含まれます。",
+ "Physical state is unconfirmed; do not assume it is stopped.": "物理状態は未確認です。停止したとは判断できません。",
+ "Engine verification is historical evidence, not live health. Saved policy and “{history}” do not establish the current stop cause.": "エンジン検証は過去の証跡であり、現在の健全性を示しません。保存済み設定や「{history}」から現在の停止原因は判断できません。",
+ "{action}: {condition}": "{action}: {condition}"});
+Object.assign(i18n.en,{'Runtime transitioning':'Transitioning'});
+for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
 function dbRuntimeStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAdmin.platform,dbAuthorizationVersion]);}
 function dbRuntimePurge(){
  const p=dbRuntime;++p.serial;p.scope='';p.status=null;p.operation=null;p.intent=null;p.pending=false;p.reading=false;p.observing=false;p.dirty=false;p.base=null;p.conflict=false;
@@ -10025,9 +10052,35 @@ function dbRuntimeBlockers(){
  return items.every(([,value])=>Number.isSafeInteger(value)&&value>=0)&&counts.unknown<=counts.admissions?items:null;
 }
 function dbRuntimeCanChill(){const counts=dbRuntimeBlockers();return !!counts&&counts.every(([,value])=>value===0);}
-function dbRuntimePhysicalLabel(state){return t(({active:'Active',chilled:'Chilled',starting:'Starting',unknown:'Unknown'})[state]||'Unknown');}
+function dbRuntimePhysicalLabel(state){return t(({active:'Active',chilled:'Chilled',starting:'Runtime transitioning',unknown:'Unknown'})[state]||'Unknown');}
 function dbRuntimePhaseLabel(phase){return t(({ACCEPTED:'Accepted',RUNNING:'Running',SUCCEEDED:'Completed',FINISHED:'Completed',FAILED:'Failed',UNKNOWN:'Unknown',RECONCILED:'Revalidated'})[phase]||'Unknown');}
 function dbRuntimeActionLabel(action){return t(({WAREHOUSE_WAKE:'Wake',WAREHOUSE_CHILL:'Chill',WAREHOUSE_AUTO_CHILL:'Auto-Chill',WAREHOUSE_RECONCILE:'Revalidate state'})[action]||'Unknown action');}
+// Pure explanations reuse the operation guards; observations never add age or health gates.
+function dbRuntimeDraftMinutes(){const text=$('runtime-minutes').value,minutes=Number(text);return text.trim()&&Number.isInteger(minutes)&&minutes>=0&&minutes<=1440?minutes:null;}
+function dbRuntimeCondition(action){
+ const p=dbRuntime,data=p.status;
+ if(dbRuntimeSupport()!=='logical')return dbRuntimeSupport()==='unsupported'?'This profile does not support shared runtime controls.':'Profile support is unconfirmed.';
+ if(!dbAdminAllowed())return 'Current platform authority, maximum admin role and selected admin role are required.';
+ if(!data)return 'No runtime observation is available.';
+ const advertised=action==='save'||action==='reload'?'auto-chill':action==='receipt'?p.intent?.action:action;
+ if(action==='receipt'&&!p.intent)return 'No original receipt awaits confirmation.';
+ if(!dbRuntimeAllowed(advertised))return 'This action was not advertised in the captured observation.';
+ if(p.pending)return 'A local request is in flight.';
+ if(p.intent)return 'Original acceptance is unconfirmed. Check original receipt may POST the original body with the same key; it does not create a new intent.';
+ if(['ACCEPTED','RUNNING'].includes(p.operation?.phase))return 'A local operation is accepted or running.';
+ if(['wake','chill','reconcile'].includes(action)&&['ACCEPTED','RUNNING'].includes(data.operation_phase))return 'A shared operation was accepted or running in this observation.';
+ if(action==='chill'){
+  const counts=dbRuntimeBlockers();if(!counts)return 'Blocker observation unavailable; stopping safety is unverified.';
+  if(!dbRuntimeCanChill())return 'Chill is blocked by observed categories: {counts}.';
+ }
+ if(action==='save'){
+  const policy=data.policy;if(!Number.isSafeInteger(policy?.minutes)||policy.minutes<0||policy.minutes>1440||!Number.isSafeInteger(policy?.revision)||policy.revision<0)return 'The stored policy or its revision is unconfirmed.';
+  if(p.conflict)return 'Policy changed elsewhere. Reload / discard draft before saving.';
+  if(!p.dirty)return 'No unsaved policy changes.';
+  if(dbRuntimeDraftMinutes()===null)return 'Enter an integer from 0 to 1440; 0 disables Auto-Chill.';
+ }
+ return 'Selectable in this observation. Rechecked when operated.';
+}
 function dbRuntimeRender(){
  const p=dbRuntime;if(!p.installed)return;const data=p.status,op=p.operation;
  const state=['active','chilled','starting','unknown'].includes(data?.physical_state)?data.physical_state:'unknown';
@@ -10054,11 +10107,19 @@ function dbRuntimeRender(){
  for(const action of ['wake','chill','reconcile'])for(const id of [action==='reconcile'?'runtime-reconcile':'runtime-'+action,...(action==='reconcile'?[]:[action,'quick-'+action])]){
   const node=$(id);node.disabled=!dbRuntimeAllowed(action)||dbRuntimeLocked()||action==='chill'&&!dbRuntimeCanChill()||['ACCEPTED','RUNNING'].includes(data?.operation_phase);node.dataset.databaseUnavailable=String(node.disabled);
  }
- $('runtime-save').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked()||!valid||!p.dirty||p.conflict;
+ $('runtime-save').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked()||!valid||!p.dirty||p.conflict||dbRuntimeDraftMinutes()===null;
  $('runtime-minutes').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked()||!valid;
  $('runtime-reload').disabled=!dbRuntimeAllowed('auto-chill')||dbRuntimeLocked();
  $('runtime-receipt').hidden=!p.intent;$('runtime-receipt').disabled=p.pending||!p.intent||!dbRuntimeAllowed(p.intent?.action);
  ui($('runtime-authority'),dbAdminAllowed()?'':'Platform authority and the selected admin header role are required.');
+ ui($('runtime-conditions-scope'),'Conditions observed at {time}. Captured eligibility is not current permission, admission, success or health assurance. The server rechecks when an operation is requested. Use “{refresh}” for a new observation.',()=>({time:observed,refresh:t('Refresh status')}));
+ ui($('runtime-physical-meaning'),({active:'The active observation means the fixed Deployments matched expected replica counts and generation conditions. It does not confirm live SQL health.',chilled:'Chilled was observed; its cause and actual stop time are unconfirmed.',starting:'Transitioning may include starting or stopping.',unknown:'Physical state is unconfirmed; do not assume it is stopped.'})[state]);
+ ui($('runtime-evidence-meaning'),'Engine verification is historical evidence, not live health. Saved policy and “{history}” do not establish the current stop cause.',()=>({history:t('Saved shared LOCAL operation history')}));
+ for(const [action,label] of [['wake','Wake'],['chill','Chill'],['reconcile','Revalidate state'],['save','Save Auto-Chill'],['reload','Reload / discard draft'],['receipt','Check original receipt']]){
+  ui($('runtime-condition-'+action),'{action}: {condition}',()=>({action:t(label),condition:t(dbRuntimeCondition(action),{counts:(dbRuntimeBlockers()||[]).filter(([,value])=>value>0).map(([key,value])=>t(key)+': '+value).join(' · ')})}));
+ }
+ $('runtime-condition-receipt').hidden=!p.intent;
+
 }
 async function dbRuntimeRequest(path,{body,key,stamp=dbRuntimeStamp()}={}){
  const current=()=>stamp===dbRuntimeStamp();
@@ -10104,7 +10165,7 @@ async function dbRuntimeAct(action){
  const p=dbRuntime;dbRuntimeSync();if(!dbRuntimeAllowed(action)||dbRuntimeLocked()||action==='chill'&&!dbRuntimeCanChill()||action!=='auto-chill'&&['ACCEPTED','RUNNING'].includes(p.status?.operation_phase))return;
  let body={};if(action==='auto-chill'){
   if(!p.dirty)return;
-  const text=$('runtime-minutes').value,minutes=Number(text);if(!text.trim()||!Number.isInteger(minutes)||minutes<0||minutes>1440||!Number.isSafeInteger(p.base)||p.conflict)return;
+  const minutes=dbRuntimeDraftMinutes();if(minutes===null||!Number.isSafeInteger(p.base)||p.conflict)return;
   body={minutes,expected_revision:p.base};
  }
  p.intent={action,body,key:crypto.randomUUID()};p.operation=null;return dbRuntimeReceipt();
@@ -10157,6 +10218,7 @@ function dbRuntimeInstall(){
  dbAdminNode('h3','runtime-policy-title',policy,'Auto-Chill');
  for(const [host,ids] of [[physical,['physical','proof']],[operation,['operation','receipt-info','observation']],[controls,['guidance','authority','message']],[safety,['blockers']],[policy,['policy','draft']]])for(const id of ids){const node=dbAdminNode('p','runtime-'+id,host);node.setAttribute('role','status');node.setAttribute('aria-atomic','true');}
  dbAdminNode('p','runtime-safety-help',safety,'Chill requires all observed categories to be clear. The backend rechecks before stopping.').className='help';
+ for(const [host,ids] of [[physical,['physical-meaning','evidence-meaning']],[controls,['conditions-scope','condition-wake','condition-reconcile','condition-receipt']],[safety,['condition-chill']],[policy,['condition-save','condition-reload']]])for(const id of ids)dbAdminNode('p','runtime-'+id,host).className='runtime-condition help';
  const actions=dbAdminNode('div','runtime-actions',controls);actions.className='toolbar runtime-actions';
  for(const [action,label] of [['wake','Wake'],['chill','Chill'],['reconcile','Revalidate state']])dbAdminButton(actions,'runtime-'+action,label,()=>dbRuntimeAct(action));
  const reconcileKey='Recheck shared LOCAL state. SQL is never resent.';$('runtime-reconcile').title=t(reconcileKey);uiAttributes.push({node:$('runtime-reconcile'),attribute:'title',key:reconcileKey});
@@ -10175,6 +10237,7 @@ function dbRuntimeInstall(){
   $(id).title=t('All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.');
   uiAttributes.push({node:$(id),attribute:'title',key:'All databases share this compute. Wake and Chill affect all databases; data storage and catalog remain.'});
  }
+ for(const [id,description] of [['runtime-wake','runtime-condition-wake'],['runtime-chill','runtime-condition-chill'],['runtime-reconcile','runtime-condition-reconcile'],['runtime-save','runtime-condition-save'],['runtime-reload','runtime-condition-reload'],['runtime-receipt','runtime-condition-receipt'],['runtime-minutes','runtime-condition-save']]){const node=$(id);node.setAttribute('aria-describedby',[...new Set((node.getAttribute('aria-describedby')||'').split(' ').filter(Boolean).concat(description))].join(' '));}
  $('compute-refresh').disabled=false;$('compute-refresh').dataset.databaseUnavailable='false';$('compute-refresh').onclick=()=>refreshStatus();
  // Preserve legacy IDs and handlers; Database mode uses the single shared runtime surface.
  $('compute-legacy-overview').hidden=true;

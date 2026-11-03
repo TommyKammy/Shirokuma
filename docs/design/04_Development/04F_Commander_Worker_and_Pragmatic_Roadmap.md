@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-03
-version: "1.55"
+version: "1.56"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-03 JST、[DB-P6-5G](../../guides/database-p6-5g-compute-explanations-2026-11-03.md)でComputeの観測済み操作条件と停止状態の説明を既存panelへ追加し、限定技術受入を完了した。取得済み候補と現在認可・受付・成功を区別し、Chillだけの6区分条件、元要求の保持、停止原因不明と保存engine証跡の意味を説明する。API・取得契機を増やさず、無効な設定入力だけを従来の送信前検証に合わせてSaveへ反映した。119群4,752成功・34 skip、Workbench実statusの認可境界、日英／390px／実200%と保全を確認した。次はBears／Policyの既存action・必須行・通常導線を照合して残件を限定する。P6全体／M1本人受入は継続し、実伸縮はM1後とする。
 
 2026-11-03、[DB-P6-5F](../../guides/database-p6-5f-compute-history-2026-11-03.md)で共有LOCALの保存済み操作履歴をP専用の手動Compute一覧へ接続し、限定技術受入を完了した。4action・policy変更と保存状態／時刻・要求分類を区別し、実停止や現在原因を推定しない。118群4,722成功・34 skip、実API全144件、日英／390px／実200%と保全を確認した。次は現在権限と停止理由の説明を既存対応と照合して限定実装し、Bears／Policy残件、89行の全体閉鎖、DB-P6-7／M1本人受入という順序を維持する。
 
