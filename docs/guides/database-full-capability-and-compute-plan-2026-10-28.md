@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-03、[DB-P6-5F](database-p6-5f-compute-history-2026-11-03.md)で共有LOCALの保存済み操作履歴の限定技術受入を完了した。現在P認可の下で4actionを手動pageし、policy保存・no-op・照合と、保存時刻／要求分類・実停止の原因を分ける。118群4,722成功・34 skip、両実APIの144件全項目照合、日英／390px／実200%と保全を確認した。現在の権限・停止理由の説明等の残件、Bears／Policy、89行閉鎖、DB-P6-7／M1本人受入へ進め、実伸縮はM1後とする。
+
 2026-11-03、[DB-P6-5E](database-p6-5e-platform-capacity-2026-11-03.md)で登録Nodeの容量・利用可能量の限定技術受入を完了した。現在P認可と固定Nodeの対応を検査し、capacity／allocatable・メモリavailable推定・3種類のFSを独立表示する。116群4,663成功・34 skip、実API／日英・390px／実200%画面と保全を確認した。Mac全体・PVC／S3 quota・安全な伸縮予算は示さず、履歴／停止理由と現在の権限説明などの残件、P6全体／M1本人受入を継続する。DB-P7はM1後に扱う。
 
 2026-11-03、[DB-P6-5D](database-p6-5d-platform-usage-2026-11-03.md)で固定LOCALのCPU平均・メモリworking setを手動観測する機能の限定技術受入を完了した。P専用の現在認可、Pod／container incarnationとsample期間、設定資源との区別、114群と修正後Workbench 1,092件・実API／画面・保全を検証した。容量／空き容量・履歴／停止理由などの残件は別単位で扱い、DB-P6全体・M1本人受入とM1後のDB-P7という順序を維持する。

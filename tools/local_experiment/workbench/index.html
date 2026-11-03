@@ -3902,7 +3902,7 @@ function dbPlatformSync(){
  }
  dbPlatformComputeSync();
  dbResourcesSync();
- dbUsageSync();dbCapacitySync();
+ dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
  dbBaselineSync();
  dbAISettingsSync();
@@ -4236,6 +4236,95 @@ function dbResourcesRender(){
 }
 
 // Independent manual configured-node snapshot; DB selection never triggers a read.
+
+// Independent manual saved operation history. No lifecycle inspection or auto fetch.
+const dbLifecycleHistory={auth:'',epoch:0,busy:null,record:null,notice:'',view:'',stack:[],index:-1};
+Object.assign(i18n.ja,{
+ 'Saved shared LOCAL operation history':'共有LOCALの保存済み操作履歴',
+ 'Latest saved history':'最新の保存履歴を取得','Newer saved page':'新しい保存ページ','Older saved page':'古い保存ページ',
+ 'Select Latest saved history.':'「最新の保存履歴を取得」を選んでください。','Fetching saved history.':'保存済み履歴を取得しています。',
+ 'History unavailable. Select Latest saved history to retry.':'履歴を取得できません。「最新の保存履歴を取得」で手動更新してください。',
+ 'Saved summaries in insertion order; not a full transition log or a liveness check.':'挿入順の最新保存サマリーです。全状態遷移や生存確認ではありません。',
+ 'Paging excludes later inserts; saved row updates remain visible. Refresh Latest to include new operations.':'ページ移動では後から追加された行を除外します。既存行の保存更新は反映されます。新規操作は最新取得で確認してください。',
+ 'Times are saved phase timestamps, not actual boot or stop times. Missing times are unrecorded.':'時刻は保存された段階の記録であり、実起動・停止時刻ではありません。欠落時刻は未記録です。',
+ 'Succeeded can include no-op or renewed-activity busy outcomes. A dispatch marker records only the saved physical_started flag, not an effect or proof of no dispatch.':'成功には変更不要や活動再開によるbusyも含まれます。dispatch記録は保存physical_startedフラグのみを示し、実作用や未送信を証明しません。',
+ 'Reconciled records a saved observation, not original outcome success or current health.':'照合済みは保存時点の観測であり、元操作の成功や現在の健全性ではありません。',
+ 'Saved request category follows the saved action, not actual stop cause, effect, minutes, human intent or SQL cause.':'休止要求の種別は保存actionの分類です。実際の停止原因・作用・分数・人の意図・SQL起因は示しません。',
+ 'For current physical state, permissions and checks, use the existing shared runtime panel.':'現在の物理状態・権限・確認事項は既存の共有runtimeパネルで確認してください。',
+ 'Saved summaries only. Use the shared runtime panel for current state and permissions.':'保存された操作の要約です。現在の状態・操作条件は「共有 LOCAL コンピュート」で確認できます。',
+ 'Saved completion may be a no-op; phase times are not actual stop times.':'成功には変更不要だった場合も含まれます。表示時刻は操作記録のもので、実際の起動・停止時刻を確定するものではありません。',
+ 'Unrecorded Wake does not imply manual start or SQL autoresume; current policy does not explain historic reasons.':'未記録の起動要求から人の操作やSQL自動復帰は推定できません。現在のポリシーは過去の理由を示しません。',
+ 'History coverage':'履歴の範囲','Saved details':'保存された詳細','Saved operation ID':'保存操作ID','Saved action':'保存action','Saved origin':'保存された操作元','Saved page':'保存ページ','Items':'件数',
+ 'Wake failed':'起動失敗','Admission conflict':'受付競合','Engine access denied':'エンジンアクセス拒否','Warehouse busy':'共有runtimeが使用中','Warehouse stop failed':'休止失敗','Warehouse observation failed':'保存観測失敗','Warehouse unavailable':'共有runtime利用不可','Warehouse recovery required':'共有runtimeの復旧確認が必要','Operation forbidden':'操作拒否','Runtime operation failed':'runtime操作失敗','Policy unavailable':'ポリシー利用不可','Wake canceled':'起動取消','Foundation not ready':'基盤未準備','Policy write failed':'ポリシー保存失敗','Warehouse stop unknown':'休止結果不明','Other runtime error':'その他のruntimeエラー',
+ 'No saved operations on this page.':'このページに保存済み操作はありません。','History source unavailable.':'履歴の参照元を確認できません。',
+ 'Scanned / omitted':'走査 / 省略','Saved phase':'保存状態','Saved chill request category':'保存された休止要求の種別','Saved dispatch marker':'保存dispatch記録','Saved observation':'保存時点の観測',
+ 'Explicit saved request':'明示要求の保存記録','Unrecorded':'未記録','Policy save':'ポリシー保存','Wake request':'起動要求','Chill request':'休止要求','Automatic chill':'自動停止要求','Reconcile':'照合要求',
+ 'Recorded':'記録あり','Not recorded':'記録なし','Unknown trigger':'契機不明','Automatic idle request':'自動idle要求','Stop request':'停止要求',
+ 'Accepted time':'受付時刻','Started time':'開始記録時刻','Completed time':'完了記録時刻','Reconciled time':'照合記録時刻','Saved error category':'保存エラー分類','Saved error code':'保存されたエラーコード'
+});
+function dbLifecycleHistoryAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,'X-Shirokuma-Role:admin']);}
+function dbLifecycleHistoryLeave(){++dbLifecycleHistory.epoch;dbLifecycleHistory.busy=null;dbLifecycleHistory.notice='';}
+function dbLifecycleHistorySync(){
+ const p=dbLifecycleHistory,auth=dbLifecycleHistoryAuth();
+ if(auth!==p.auth){dbLifecycleHistoryLeave();p.record=null;p.stack=[];p.index=-1;p.auth=auth;}
+ if(!dbObservationPlatform('admin')){p.record=null;p.stack=[];p.index=-1;}
+ // Only navigation invalidates pending work. Completed same-authority data survives.
+ if(activeTab!==p.view){dbLifecycleHistoryLeave();p.view=activeTab;}
+ if(!$('observation-history-panel')?.dataset.installed)return;
+ $('observation-history-auth').disabled=!!p.busy||!dbPlatformCanRefresh();
+ $('observation-history-fetch').disabled=!!p.busy||!dbObservationPlatform('admin');
+ $('observation-history-older').disabled=!!p.busy||!p.record?.next_cursor;
+ $('observation-history-newer').disabled=!!p.busy||p.index<=0;
+ dbLifecycleHistoryRender();
+}
+function dbLifecycleHistoryInstall(){
+ if($('observation-history-panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-history-panel',$('compute'));panel.dataset.installed='true';panel.className='panel';panel.setAttribute('style','min-width:0;overflow-wrap:anywhere');panel.setAttribute('role','region');panel.setAttribute('aria-labelledby','observation-history-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2','observation-history-title',head,'Saved shared LOCAL operation history');
+ const body=dbAdminNode('div','',panel);body.className='panel-body';const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';toolbar.setAttribute('style','display:flex;flex-wrap:wrap;min-width:0');
+ dbAdminButton(toolbar,'observation-history-auth','Refresh platform authority',dbLifecycleHistoryRefreshAuth);
+ dbAdminButton(toolbar,'observation-history-fetch','Latest saved history',()=>dbLifecycleHistoryFetch('latest'));
+ dbAdminButton(toolbar,'observation-history-newer','Newer saved page',()=>dbLifecycleHistoryFetch('newer'));
+ dbAdminButton(toolbar,'observation-history-older','Older saved page',()=>dbLifecycleHistoryFetch('older'));
+ for(const button of toolbar.children)button.setAttribute('style','max-width:100%;white-space:normal;overflow-wrap:anywhere');
+ const output=dbAdminNode('div','observation-history-output',body);output.className='table-wrap';output.setAttribute('style','overflow-wrap:anywhere;min-width:0');output.setAttribute('aria-live','polite');dbLifecycleHistorySync();
+}
+function dbLifecycleHistoryCapture(){
+ const p=dbLifecycleHistory,token={},epoch=++p.epoch,auth=dbLifecycleHistoryAuth(),view=activeTab;p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbLifecycleHistoryAuth()&&view===activeTab};
+}
+async function dbLifecycleHistoryRefreshAuth(){
+ dbLifecycleHistorySync();if(dbLifecycleHistory.busy||!dbPlatformCanRefresh())return;
+ const read=dbLifecycleHistoryCapture();dbLifecycleHistory.notice='Refreshing platform authority.';dbLifecycleHistorySync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbLifecycleHistory.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const session=await response.json();if(!read.current())return;
+  dbAdminSession(response.ok?session:{});
+  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbLifecycleHistory.notice=dbObservationPlatform('admin')?'Select Latest saved history.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current())dbLifecycleHistory.notice='History unavailable. Select Latest saved history to retry.';}
+ finally{if(dbLifecycleHistory.busy===read.token)dbLifecycleHistory.busy=null;dbLifecycleHistorySync();}
+}
+async function dbLifecycleHistoryFetch(direction='latest'){
+ dbLifecycleHistorySync();if(dbLifecycleHistory.busy||!dbObservationPlatform('admin'))return;
+ const p=dbLifecycleHistory;
+ if(direction==='older'&&!p.record?.next_cursor||direction==='newer'&&p.index<=0)return;
+ const cursor=direction==='older'?p.record.next_cursor:direction==='newer'?p.stack[p.index-1]:null;
+ const read=dbLifecycleHistoryCapture();dbLifecycleHistory.notice='Fetching saved history.';dbLifecycleHistorySync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-runtime-history?limit=20'+(cursor?'&cursor='+encodeURIComponent(cursor):''),{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});dbLifecycleHistory.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
+  const body=await response.text();if(!read.current())return;
+  if(new TextEncoder().encode(body).length>32768)throw Error('INVALID_RESPONSE');const data=JSON.parse(body);
+  if(!response.ok)throw Error('UNAVAILABLE');const record=dbLifecycleHistoryRecord(data);
+  if(cursor&&record.availability==='available'&&record.page_cursor!==cursor)throw Error('INVALID_RESPONSE');
+  if(record.availability==='available'){if(direction==='latest'){p.stack=[record.page_cursor];p.index=0;}else if(direction==='older'){p.stack=p.stack.slice(0,p.index+1);p.stack.push(record.page_cursor);if(p.stack.length>50)p.stack.shift();p.index=p.stack.length-1;}else p.index--;}
+  p.record=record;p.notice='';
+ }catch{if(read.current()){dbLifecycleHistory.record=null;dbLifecycleHistory.stack=[];dbLifecycleHistory.index=-1;dbLifecycleHistory.notice='History unavailable. Select Latest saved history to retry.';}}
+ finally{if(dbLifecycleHistory.busy===read.token)dbLifecycleHistory.busy=null;dbLifecycleHistorySync();}
+}
+
 const dbCapacity={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
 Object.assign(i18n.ja,{
  'Shared configured node capacity (P-only, read-only)':'登録済み共有 Node の容量・利用可能量（P のみ・読み取り専用）',
@@ -4304,6 +4393,74 @@ async function dbCapacityFetch(){
   if(!response.ok)throw Error('UNAVAILABLE');dbCapacity.record=dbCapacityRecord(data);dbCapacity.notice='';
  }catch{if(read.current()){dbCapacity.record=null;dbCapacity.notice='Capacity unavailable. Explicitly refresh authority or fetch again.';}}
  finally{if(dbCapacity.busy===read.token)dbCapacity.busy=null;dbCapacitySync();}
+}
+
+function dbLifecycleHistoryRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');},cursor=v=>typeof v==='string'&&v.length<=2048&&/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(v);
+ const count=v=>Number.isSafeInteger(v)&&v>=0&&v<=20;
+ if(new TextEncoder().encode(JSON.stringify(d)).length>32768||!exact(d,['scope','warehouse','selected_role','observed_at','coverage','availability','code','items','page_cursor','next_cursor','scanned_count','omitted_count','limit'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||d.limit!==20)fail();
+ const observed=dbCapacityTime(d.observed_at),now=BigInt(Date.now())*1000000n;
+ if(now-observed>120000000000n||observed-now>5000000000n)fail();
+ const coverage={kind:'latest_saved_summary',ordering:'insertion_order',full_transitions:false,liveness:false,current_probe:false};
+ if(!exact(d.coverage,Object.keys(coverage))||Object.entries(coverage).some(([k,v])=>d.coverage[k]!==v)||!count(d.scanned_count)||!count(d.omitted_count)||d.omitted_count>d.scanned_count)fail();
+ if(!['available','unavailable'].includes(d.availability)||d.code!==(d.availability==='available'?null:'HISTORY_UNAVAILABLE'))fail();
+ if(d.availability==='unavailable'){if(d.items!==null||d.page_cursor!==null||d.next_cursor!==null||d.scanned_count!==0||d.omitted_count!==0)fail();}
+ else{
+  if(!Array.isArray(d.items)||d.items.length+d.omitted_count!==d.scanned_count||!cursor(d.page_cursor)||d.next_cursor!==null&&(!cursor(d.next_cursor)||d.next_cursor===d.page_cursor||d.scanned_count!==20))fail();
+  const ids=new Set(),actions={WAKE:'WAREHOUSE_WAKE',CHILL:'WAREHOUSE_CHILL',AUTO_CHILL:'WAREHOUSE_AUTO_CHILL',POLICY_SAVE:'WAREHOUSE_AUTO_CHILL',RECONCILE:'WAREHOUSE_RECONCILE'};
+  const errors=['WAREHOUSE_BUSY','WAREHOUSE_STOP_FAILED','WAREHOUSE_OBSERVATION_FAILED','WAREHOUSE_UNAVAILABLE','WAREHOUSE_RECOVERY_REQUIRED','OPERATION_FORBIDDEN','RUNTIME_OPERATION_FAILED','POLICY_UNAVAILABLE','WAKE_FAILED','ADMISSION_CONFLICT','ENGINE_ACCESS_DENIED','WAREHOUSE_WAKE_FAILED','WAKE_CANCELED','FOUNDATION_NOT_READY','POLICY_WRITE_FAILED','WAREHOUSE_STOP_UNKNOWN','OTHER_RUNTIME_ERROR'];
+  for(const r of d.items){
+   if(!exact(r,['operation_id','kind','action','saved_state','origin','stop_trigger','accepted_at','started_at','completed_at','reconciled_at','error_category','dispatch_marker','reconciled_observed_state'])||typeof r.operation_id!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(r.operation_id)||ids.has(r.operation_id)||!Object.hasOwn(actions,r.kind)||r.action!==actions[r.kind]||!['ACCEPTED','RUNNING','SUCCEEDED','FAILED','UNKNOWN','RECONCILED'].includes(r.saved_state)||!['explicit_request','unrecorded'].includes(r.origin)||!['auto_idle_request','stop_request','unknown'].includes(r.stop_trigger)||!['recorded','not_recorded'].includes(r.dispatch_marker)||r.error_category!==null&&!errors.includes(r.error_category)||r.reconciled_observed_state!==null&&!['active','chilled'].includes(r.reconciled_observed_state))fail();
+   ids.add(r.operation_id);for(const k of ['accepted_at','started_at','completed_at','reconciled_at'])if(r[k]!==null)dbCapacityTime(r[k]);
+   if(r.stop_trigger!==({CHILL:'stop_request',AUTO_CHILL:'auto_idle_request'}[r.kind]||'unknown')||r.kind==='AUTO_CHILL'&&r.origin==='explicit_request'||r.saved_state!=='RECONCILED'&&r.reconciled_observed_state!==null)fail();
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbLifecycleHistoryRender(){
+ const node=$('observation-history-output'),p=dbLifecycleHistory,r=dbObservationPlatform('admin')?p.record:null;
+ // Same cached record keeps the disclosure and summary nodes, including keyboard focus.
+ let view=node.historyView;
+ if(!view||view.record!==r){
+  node.replaceChildren();view={record:r,bindings:[]};node.historyView=view;
+  const add=(parent,tag,text)=>{const n=document.createElement(tag);parent.append(n);if(text)view.bindings.push(()=>{n.textContent=text();});return n;};
+  const line=(parent,text)=>add(parent,'p',text);
+  line(node,()=>t('Saved summaries only. Use the shared runtime panel for current state and permissions.'));
+  line(node,()=>t('Saved completion may be a no-op; phase times are not actual stop times.'));
+  const coverage=add(node,'details');add(coverage,'summary',()=>t('History coverage'));
+  for(const key of ['Saved summaries in insertion order; not a full transition log or a liveness check.','Paging excludes later inserts; saved row updates remain visible. Refresh Latest to include new operations.','Times are saved phase timestamps, not actual boot or stop times. Missing times are unrecorded.','Succeeded can include no-op or renewed-activity busy outcomes. A dispatch marker records only the saved physical_started flag, not an effect or proof of no dispatch.','Reconciled records a saved observation, not original outcome success or current health.','Saved request category follows the saved action, not actual stop cause, effect, minutes, human intent or SQL cause.','Unrecorded Wake does not imply manual start or SQL autoresume; current policy does not explain historic reasons.'])line(coverage,()=>t(key));
+  view.notice=line(node,()=>p.notice?t(p.notice):!r?t(dbObservationPlatform('admin')?'Select Latest saved history.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'):'');
+  if(r){
+   line(node,()=>t('Observed at')+': '+r.observed_at);
+   if(r.availability==='unavailable')line(node,()=>t('History source unavailable.'));
+   else{
+    line(node,()=>t('Saved page')+': '+(p.index+1)+' · '+t('Items')+': '+r.items.length+' · '+t('Scanned / omitted')+': '+r.scanned_count+' / '+r.omitted_count);
+    if(!r.items.length)line(node,()=>t('No saved operations on this page.'));
+    const list=add(node,'ul');list.setAttribute('style','min-width:0;overflow-wrap:anywhere;padding-inline-start:1.25rem');
+    const kinds={WAKE:'Wake request',CHILL:'Chill request',AUTO_CHILL:'Automatic chill',POLICY_SAVE:'Policy save',RECONCILE:'Reconcile'};
+    const phases={ACCEPTED:['Accepted','受付済み'],RUNNING:['Running','実行中'],SUCCEEDED:['Succeeded','成功'],FAILED:['Failed','失敗'],UNKNOWN:['Outcome unknown','結果不明'],RECONCILED:['Reconciled','照合済み']};
+    const errors={WAKE_FAILED:'Wake failed',WAREHOUSE_WAKE_FAILED:'Wake failed',ADMISSION_CONFLICT:'Admission conflict',ENGINE_ACCESS_DENIED:'Engine access denied',WAREHOUSE_BUSY:'Warehouse busy',WAREHOUSE_STOP_FAILED:'Warehouse stop failed',WAREHOUSE_OBSERVATION_FAILED:'Warehouse observation failed',WAREHOUSE_UNAVAILABLE:'Warehouse unavailable',WAREHOUSE_RECOVERY_REQUIRED:'Warehouse recovery required',OPERATION_FORBIDDEN:'Operation forbidden',RUNTIME_OPERATION_FAILED:'Runtime operation failed',POLICY_UNAVAILABLE:'Policy unavailable',WAKE_CANCELED:'Wake canceled',FOUNDATION_NOT_READY:'Foundation not ready',POLICY_WRITE_FAILED:'Policy write failed',WAREHOUSE_STOP_UNKNOWN:'Warehouse stop unknown',OTHER_RUNTIME_ERROR:'Other runtime error'};
+    for(const row of r.items){
+     const item=add(list,'li');item.setAttribute('style','min-width:0;overflow-wrap:anywhere;margin-block:0.75rem');
+     add(item,'h3',()=>t(kinds[row.kind])+' · '+t('Saved phase')+': '+phases[row.saved_state][language==='ja'?1:0]);
+     const times=[['reconciled_at','Reconciled time'],['completed_at','Completed time'],['started_at','Started time'],['accepted_at','Accepted time']].filter(([k])=>row[k]!==null);
+     if(times.length)line(item,()=>t(times[0][1])+': '+row[times[0][0]]);
+     if(row.error_category!==null)line(item,()=>t('Saved error category')+': '+t(errors[row.error_category]));
+     const detail=add(item,'details');add(detail,'summary',()=>t('Saved details'));
+     line(detail,()=>t('Saved operation ID')+': '+row.operation_id);
+     if(row.error_category!==null)line(detail,()=>t('Saved error code')+': '+row.error_category);
+     line(detail,()=>t('Saved action')+': '+row.action);
+     for(const [key,label] of times.slice(1))line(detail,()=>t(label)+': '+row[key]);
+     line(detail,()=>t('Saved origin')+': '+t(row.origin==='explicit_request'?'Explicit saved request':'Unrecorded'));
+     line(detail,()=>t('Saved chill request category')+': '+t({unknown:'Unknown trigger',auto_idle_request:'Automatic idle request',stop_request:'Stop request'}[row.stop_trigger]));
+     line(detail,()=>t('Saved dispatch marker')+': '+t(row.dispatch_marker==='recorded'?'Recorded':'Not recorded'));
+     if(row.reconciled_observed_state!==null)line(detail,()=>t('Saved observation')+': '+t(row.reconciled_observed_state));
+    }
+   }
+  }
+ }
+ for(const update of view.bindings)update();
+ view.notice.hidden=!view.notice.textContent;
 }
 
 function dbCapacityUint(v){
@@ -5689,7 +5846,7 @@ function dbAdminClear(){
  dbCreationClear();
  dbAdmin.retirement=null;++dbAdmin.retireRead;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;
- $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();dbCapacitySync();
+ $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
 }
 function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
@@ -10025,7 +10182,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

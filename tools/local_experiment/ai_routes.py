@@ -15,6 +15,7 @@ import db_platform_observations
 import db_platform_resources
 import db_platform_usage
 import db_platform_capacity
+import db_platform_lifecycle_history
 import db_platform_workload_baseline
 import db_ai_settings
 from warehouse_operations import OperationError
@@ -24,6 +25,33 @@ from query_context import QueryError
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path == '/api/v1/bears/platform-runtime-history':
+        if method != 'GET':
+            raise QueryError('NOT_FOUND', 404)
+        raw = handler.path.partition('?')[2]
+        if ('#' in handler.path or handler.headers.defects
+                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
+                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
+                       for k, v in handler.headers.raw_items())
+                or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
+                or handler.headers.get_all('Transfer-Encoding', [])
+                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])
+                or '?' in handler.path and not raw
+                or raw and not re.fullmatch(r'(?:limit=[1-9][0-9]?|cursor=[A-Za-z0-9_.-]{1,2048})(?:&(?:limit=[1-9][0-9]?|cursor=[A-Za-z0-9_.-]{1,2048}))*', raw)):
+            raise QueryError('INVALID_INPUT', 400)
+        parts = [p.split('=', 1) for p in raw.split('&')] if raw else []
+        if len({p[0] for p in parts}) != len(parts):
+            raise QueryError('INVALID_INPUT', 400)
+        values = dict(parts)
+        limit = int(values.get('limit', '20'))
+        if not 1 <= limit <= 50:
+            raise QueryError('INVALID_INPUT', 400)
+        try:
+            result = db_platform_lifecycle_history.observe(principal, role, limit=limit, cursor=values.get('cursor'))
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        handler.respond(result, 200)
+        return True
     if path in ('/api/v1/bears/ai-config', '/api/v1/bears/ai-test'):
         if method not in (('GET', 'POST') if path.endswith('ai-config') else ('POST',)):
             raise QueryError('NOT_FOUND', 404)
