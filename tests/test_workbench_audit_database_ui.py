@@ -78,7 +78,7 @@ assert.ok(calls.some(c=>c.path.includes('/events/'+encodeURIComponent(event.id)+
 assert.match(auditText($('db-audit-detail')),/Committed.*Yes.*Cleanup failure.*Yes/);
 assert.match(auditText($('db-audit-rows')),/UNKNOWN/);assert.match(auditText($('db-audit-rows')),/Not recorded/);
 assert.doesNotMatch(auditText($('db-audit-panel')),/SECRET|https:\/\/never/);
-assert.match(auditText($('db-audit-detail')),/query · query · related/);
+assert.ok(auditText($('db-audit-detail')).includes('query · '+t('Saved SQL queries')+' · related'));
 assert.match(auditText($('db-audit-context')),/finance/);auditNoLegacy();
 assert.equal(dbAuditTime('2026-10-29T09:00:00+09:00'),'2026-10-29T00:00:00.000Z');
 ''')
@@ -407,7 +407,7 @@ for(const lang of ['ja','en']){
  assert.equal(label(options[0][2]),lang==='ja'?'DB 管理情報':'DB administration');
  assert.equal(label(options[0][3]),lang==='ja'?'基盤管理記録':'Platform management');
  for(const [i,key] of [[0,'Scope'],[1,'Reference role'],[2,'Choose database'],[3,'All sources']])assert.equal(label(options[i][0]),t(key));
- assert.equal(label(options[3][1]),'query');
+ assert.equal(label(options[3][1]),t('Saved SQL queries'));
  const before=auditRequests().length;await periodicRefresh();
  assert.equal(auditRequests().length,before);assert.equal(document.activeElement,$('db-audit-search'));assert.equal($('db-audit-search').selectionStart,2);assert.equal($('db-audit-search').selectionEnd,5);
  assert.equal($('db-audit-rows').children[0],row);assert.equal($('db-audit-detail').children[0],detail);assert.equal($('db-audit-form'),form);assert.equal(disclosure.open,true);
@@ -448,6 +448,97 @@ assert.equal(dbAudit.applied.state,'');assert.match($('db-audit-status').textCon
 assert.equal(auditRequests().at(-1).options.headers['X-Shirokuma-Role'],'bi_viewer');
 await exploreFinance();assert.equal(dbAudit.database,'db');assert.equal(dbAudit.role,'bi_viewer');assert.equal(dbAudit.items.length,1);auditNoLegacy();
 ''')
+    def test_source_presets_are_native_local_drafts_and_preserve_context(self):
+        self.run_audit(r'''
+const sources=['query','dataops','stage_run','job_run','wap_build','wap_audit','wap_publication','ai'];
+auditCapabilities=()=>({scopes:['self','database'],sources});await auditBoot();await dbAuditSearch();await dbAuditDetail(dbAudit.items[0].id);
+const bar=$('db-audit-presets'),buttons=bar.descendants().filter(n=>n.tagName==='BUTTON');
+assert.deepEqual(buttons.map(b=>b.id),sources.map(s=>'db-audit-preset-'+s));
+assert.equal(bar.getAttribute('role'),'group');assert.equal(bar.getAttribute('aria-describedby'),'db-audit-presets-help');
+for(const [key,value] of Object.entries({from:'2026-10-28T14:30',to:'2026-10-29T14:30',state:'UNKNOWN',search:'keep text',limit:'2'})){$('db-audit-'+key).value=value;$('db-audit-'+key).oninput();}
+$('sql').value='SELECT 42 AS unsaved';$('p35-wap-sql').value='SELECT 7 AS wap_draft';
+const preserved=()=>JSON.stringify({audit:Object.fromEntries(Object.entries(dbAudit).filter(([k])=>k!=='draft')),draft:Object.fromEntries(Object.entries(dbAudit.draft).filter(([k])=>k!=='source')),fields:['from','to','state','search','limit'].map(k=>$('db-audit-'+k).value),worksheet:dbInput(dbCurrent()),explorer:dbExplorer,sql:$('sql').value,wap:$('p35-wap-sql').value,storage:[...storage],writes:[...writes],tab:activeTab});
+const before=preserved(),rows=$('db-audit-rows').children[0],detail=$('db-audit-detail').children[0],proof=dbAudit.proof,count=calls.length;
+let forbidden=0;dbAuditSearch=()=>{forbidden++;};dbAuditDetail=()=>{forbidden++;};dbAuditOpen=()=>{forbidden++;};dbAuditDownload=()=>{forbidden++;};activate=()=>{forbidden++;};download=()=>{forbidden++;};
+for(const [i,button] of buttons.entries()){
+ assert.equal(button.tagName,'BUTTON');assert.equal(button.type,'button');assert.equal(button.disabled,false);assert.equal(button.dataset.source,sources[i]);assert.equal(button.getAttribute('aria-describedby'),'db-audit-presets-help');
+ button.focus();assert.equal(document.activeElement,button);button.click();assert.equal($('db-audit-source').value,sources[i]);assert.equal(dbAudit.draft.source,sources[i]);assert.equal(document.activeElement,$('db-audit-source'));
+ assert.match($('db-audit-status').textContent,/pending/);assert.equal(preserved(),before);assert.equal(dbAudit.proof,proof);assert.equal($('db-audit-rows').children[0],rows);assert.equal($('db-audit-detail').children[0],detail);
+}
+assert.equal(forbidden,0);assert.equal(calls.length,count);auditNoLegacy();
+''')
+
+    def test_source_preset_during_search_keeps_original_request_and_pending_draft(self):
+        self.run_audit(r'''
+auditCapabilities=()=>({scopes:['self'],sources:['query','dataops']});await auditBoot();
+$('db-audit-source').value='query';$('db-audit-source').oninput();const held=deferred();let reply;
+auditList=(p,o)=>{reply=auditEnvelope(p,o,auditEvent('original'));return held.promise;};
+const pending=dbAuditSearch();await tick();const count=calls.length;
+$('db-audit-preset-dataops').click();assert.equal(calls.length,count);assert.equal($('db-audit-source').value,'dataops');
+held.resolve(reply);await pending;
+assert.equal(auditRequests().length,1);assert.equal(new URLSearchParams(auditRequests()[0].path.split('?')[1]).get('source'),'query');assert.equal(dbAudit.applied.source,'query');assert.equal(dbAudit.items[0].id,'original');
+assert.equal($('db-audit-source').value,'dataops');assert.equal(dbAudit.draft.source,'dataops');assert.match($('db-audit-status').textContent,/pending/);auditNoLegacy();
+''')
+
+    def test_source_preset_rechecks_offered_options_capability_and_authorization(self):
+        self.run_audit(r'''
+auditCapabilities=()=>({scopes:['self','database'],sources:['query','dataops']});await auditBoot();
+const button=$('db-audit-preset-query'),source=$('db-audit-source');
+const denied=()=>{const count=calls.length,value=source.value,draft=JSON.stringify(dbAudit.draft);dbAuditPresets();assert.equal(button.disabled,true);button.click();button.onclick();assert.equal(source.value,value);assert.equal(JSON.stringify(dbAudit.draft),draft);assert.equal(calls.length,count);};
+const proof=dbAudit.proof,cap=dbAudit.capabilities;
+dbAudit.capabilities=null;denied();dbAudit.capabilities=cap;
+cap.sources=['dataops'];denied();cap.sources=['query','dataops'];
+let option=source.options.find(o=>o.value==='query');option.disabled=true;denied();option.disabled=false;
+dbAuditSelectOptions('db-audit-source',[{value:'dataops',label:'dataops'}],'','All sources');denied();await dbAuditOpen();
+dbAudit.role='bi_viewer';denied();dbAudit.role=proof.role;
+dbAudit.scope='platform';denied();dbAudit.scope=proof.scope;
+dbAudit.database='missing';denied();dbAudit.database=proof.database;
+const item=dbInventories.get(dbAudit.role).items.find(d=>d.id===dbAudit.database),binding=item.binding_revision;
+item.binding_revision++;denied();item.binding_revision=binding;
+await dbAuditOpen();assert.equal(button.disabled,false);
+auditCapabilities=()=>({scopes:['self'],sources:['dataops']});await dbAuditRefreshAuthorization();denied();
+dbAuditPurge();denied();auditNoLegacy();
+''')
+
+    def test_all_twenty_sources_localize_in_place_and_unknowns_keep_wire_strings(self):
+        self.run_audit(r'''
+const expected={query:'Saved SQL queries',dataops:'DataOps operations',job_run:'Job runs',job_step:'Job steps',stage_run:'Stage runs',stage_scan:'Stage scans',mart_run:'Managed Mart runs',dbt:'Database dbt runs',schedule:'Saved schedules',schedule_tick:'Schedule ticks',alert:'Saved alerts',wap_model_version:'WAP model versions',wap_build:'WAP builds',wap_audit:'WAP audits',wap_publication:'WAP publications',database_creation:'Database creation records',database_request:'Database requests',logical_request:'Logical resource requests',management:'Management operations',ai:'Saved AI metadata'};
+const sources=[...Object.keys(expected),'operation','future_source'];auditCapabilities=()=>({scopes:['self'],sources});await auditBoot();
+const events=sources.map((source,i)=>auditEvent('source-'+i,{source,action:source==='ai'?'sql_proposal':'execute',state:source==='ai'?'SUCCEEDED':'UNKNOWN',links:[]}));
+auditList=(p,o)=>({...auditEnvelope(p,o),items:events});await dbAuditSearch();
+assert.equal(Object.keys(expected).length,20);assert.deepEqual($('db-audit-source').options.map(o=>o.value),['',...sources]);
+for(const event of events){
+ auditDetail=(p,o)=>auditEnvelope(p,o,event);await dbAuditDetail(event.id);
+ const options=[...$('db-audit-source').options],row=$('db-audit-rows').children[0],detail=$('db-audit-detail').children[0];$('db-audit-source').value=event.source;$('db-audit-source').focus();
+ for(const lang of ['ja','en']){
+  const count=calls.length;
+  setLanguage(lang);const label=expected[event.source]?t(expected[event.source]):event.source;
+  assert.equal(options.find(o=>o.value===event.source).textContent,label);assert.ok(auditText(row).includes(label+' / '));assert.ok(auditText(detail).includes(label));
+  if(lang==='ja'&&expected[event.source])assert.notEqual(label,expected[event.source]);
+  assert.equal($('db-audit-rows').children[0],row);assert.equal($('db-audit-detail').children[0],detail);assert.equal(document.activeElement,$('db-audit-source'));assert.equal(calls.length,count);
+  await dbAuditRefreshAuthorization();options.forEach((option,i)=>assert.equal($('db-audit-source').options[i],option));assert.equal($('db-audit-source').value,event.source);assert.equal($('db-audit-rows').children[0],row);assert.equal($('db-audit-detail').children[0],detail);
+ }
+ assert.equal(dbAudit.detail.source,event.source);assert.equal(dbAudit.items[Number(event.id.split('-')[1])].source,event.source);
+}
+assert.equal($('db-audit-presets').descendants().some(n=>n.dataset.source==='future_source'),false);auditNoLegacy();
+''')
+
+    def test_history_guide_crosswalk_is_text_only_and_coverage_is_separate(self):
+        self.run_audit(r'''
+await auditBoot();const guide=$('db-audit-guide'),count=calls.length;
+assert.equal(guide.tagName,'DETAILS');assert.equal(guide.parentElement,$('db-audit-panel'));assert.equal(guide.children[0].tagName,'SUMMARY');
+assert.equal(guide.descendants().filter(n=>n.tagName==='LI').length,4);assert.equal(guide.descendants().some(n=>['A','BUTTON','INPUT','SELECT'].includes(n.tagName)),false);
+for(const lang of ['en','ja']){
+ setLanguage(lang);const text=auditText(guide),panel=auditText($('db-audit-panel'));
+ for(const term of ['query','lake.ingest','lake.export','catalog.clone','catalog.drop','bear.data_engineer','Worksheet','Ingestion','Stages','Manual WAP','Managed Marts','Jobs','Database dbt','QUEUED/RUNNING','50','100'])assert.ok(text.includes(term),term);
+ if(lang==='en'){for(const term of ['Worksheet Recent Query History restores SQL/context only; it does not execute SQL or retrieve result rows.','ingestion/export records (stage_run)','bear.data_engineer → Saved AI metadata (ai)','data kept','no physical deletion or automatic Undrop','not arbitrary snapshot rollback','not a new DataOps write operation','not imported into DB audit','schedules and ticks'])assert.ok(text.includes(term),term);assert.match(panel,/not a full transition history/);assert.match(panel,/AI success does not prove a SQL data commit/);}
+ if(lang==='ja'){for(const term of ['SQL とコンテキストだけを復元','SQL の実行や結果行の取得は行いません','取込・出力記録（stage_run）','保存済み AI メタデータ（ai）'])assert.ok(text.includes(term),term);}
+ assert.doesNotMatch(text,/History → detail|SQL and results access|saved AI drafts|保存済み AI 下書き|履歴 → 詳細/);
+ assert.doesNotMatch(text,/SECRET|\/api\/|SELECT |https?:/);assert.equal(calls.length,count);
+}
+auditNoLegacy();
+''')
+
     def test_ai_fresh_capability_five_localized_kinds_and_wire_preserving_private_free_download(self):
         self.run_audit(r'''
 await auditBoot();assert.equal($('db-audit-source').options.some(o=>o.value==='ai'),false);
@@ -517,7 +608,7 @@ route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQu
 route=runtimeFixtureRoute;await refreshStatus();$('runtime-minutes').value='47';$('runtime-minutes').oninput();actionRoute=async()=>{throw Error('lost ACK');};await dbRuntimeAct('wake');assert.ok(dbRuntime.intent);const receipt=dbRuntime.intent;
 route=auditFixtureRoute;await dbAuditOpen();const event=auditEvent('ai:metadata',{source:'ai',action:'saved_plan_explanation',state:'UNKNOWN',links:[],committed:null});auditList=(p,o)=>auditEnvelope(p,o,event);auditDetail=(p,o)=>auditEnvelope(p,o,event);auditDownload=(p,o)=>auditEnvelope(p,o,event);
 URL.createObjectURL=()=> 'blob:ai';URL.revokeObjectURL=()=>{};const before=otherState(),runtimeBefore=JSON.stringify(dbRuntime),count=calls.length;
-await dbAuditSearch();await dbAuditDetail(event.id);await dbAuditDownload();assert.equal(otherState(),before);assert.equal(JSON.stringify(dbRuntime),runtimeBefore);assert.equal(dbRuntime.intent,receipt);assert.equal(dbObservations.sre.record,sre);assert.equal(dbObservations.policy.record,policy);assert.equal(dbPlatform.record,platform);assert.equal(dbRuns.get(worksheetId).state,'UNKNOWN');assert.equal($('sql').value,'SELECT kept SQL');assert.equal($('bear-query-sql').value,'SELECT kept Doctor');assert.equal($('copilot-request').value,'kept Copilot');assert.equal($('p35-wap-sql').value,'SELECT kept WAP');
+await dbAuditSearch();await dbAuditDetail(event.id);await dbAuditDownload();const presetCalls=calls.length;$('db-audit-preset-query').click();assert.equal(calls.length,presetCalls);assert.equal(otherState(),before);assert.equal(JSON.stringify(dbRuntime),runtimeBefore);assert.equal(dbRuntime.intent,receipt);assert.equal(dbObservations.sre.record,sre);assert.equal(dbObservations.policy.record,policy);assert.equal(dbPlatform.record,platform);assert.equal(dbRuns.get(worksheetId).state,'UNKNOWN');assert.equal($('sql').value,'SELECT kept SQL');assert.equal($('bear-query-sql').value,'SELECT kept Doctor');assert.equal($('copilot-request').value,'kept Copilot');assert.equal($('p35-wap-sql').value,'SELECT kept WAP');
 assert.ok(calls.slice(count).every(c=>['/api/session','/api/v1/databases','/api/v1/audit/capabilities'].includes(c.path)||c.path.startsWith('/api/v1/audit/events')));assert.ok(calls.slice(count).every(c=>!c.options?.method&&!c.options?.body));
 ''')
 

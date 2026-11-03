@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-03
-version: "1.61"
+version: "1.62"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-03 JST、[DB-P6-1A](../../guides/database-p6-1a-history-wayfinding-2026-11-03.md)でAUD-02のquery／load／actionと現在の保存履歴を通常監査画面へ対応付けた。20種の表示名と8種のsource選択を日英で整え、条件の下書きだけを選んで明示検索する導線とした。適用済み履歴・詳細・ページと独立contextを保持し、保存metadataと全状態遷移、AI成功とcommit、commitと清掃失敗を区別する。次はAI-04／AI-05／CMP-05の既存必須操作と現行観測・通常導線を限定して照合し、6F清掃残件・P6全必須行・M1本人受入を継続する。実Compute伸縮はM1後とする。
 
 2026-11-03 JST、[DB-P6-4B3](../../guides/database-p6-4b3-wap-guidance-2026-11-03.md)でAI-02／SQL-12／SQL-13の通常導線を整備した。Bears共通領域とCopilotから既存のManual WAP・Managed Martsへ移動でき、独立context・未保存draft・元の追跡情報を保持する。B2の明示取込と保存以降の認可・操作を維持し、旧Bear／Copilot直接実行は閉じたままとする。次はAUD-02の履歴と通常導線の対応付けを進め、6FのIngest清掃失敗、旧SRE／Policy必須操作、P6全必須行とM1本人受入は継続する。実Compute伸縮はM1後とする。
 

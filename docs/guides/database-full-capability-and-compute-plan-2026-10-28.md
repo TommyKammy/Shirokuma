@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-03 JST、[DB-P6-1A](database-p6-1a-history-wayfinding-2026-11-03.md)でAUD-02のquery／load／actionと現在の保存履歴を通常監査画面へ対応付けた。20種の表示名と8種のsource選択を日英で整え、条件の下書きだけを選んで明示検索する導線とした。適用済み履歴・詳細・ページと独立contextを保持し、保存metadataと全状態遷移、AI成功とcommit、commitと清掃失敗を区別する。次はAI-04／AI-05／CMP-05の既存必須操作と現行観測・通常導線を限定して照合し、6F清掃残件・P6全必須行・M1本人受入を継続する。実Compute伸縮はM1後とする。
+
 2026-11-03 JST、[DB-P6-4B3](database-p6-4b3-wap-guidance-2026-11-03.md)でAI-02／SQL-12／SQL-13の通常導線を整備した。Bears共通領域とCopilotから既存のManual WAP・Managed Martsへ移動でき、独立context・未保存draft・元の追跡情報を保持する。B2の明示取込と保存以降の認可・操作を維持し、旧Bear／Copilot直接実行は閉じたままとする。次はAUD-02の履歴と通常導線の対応付けを進め、6FのIngest清掃失敗、旧SRE／Policy必須操作、P6全必須行とM1本人受入は継続する。実Compute伸縮はM1後とする。
 
 2026-11-03 JST、[DB-P6-6F](database-p6-6f-dataops-recovery-2026-11-03.md)でING-03／TRF-06の通常再接続を限定技術受入済みとした。元本人・完全contextの最小追跡情報を保存し、IngestとWAP buildの応答喪失後に、再送0で同じ元処理・版・結果を復旧した。重点186件と123群4,924成功・34 skip、両HTTP面のlookup 32件、元台帳・設定と追加37行のID graph保全を確認した。次はAI-02／SQL-12／13の通常WAP案内へ進み、Ingest owned-stage清掃失敗の照合・限定修正はM1残件として保持する。P6-7／M1本人受入は継続し、実Compute伸縮はM1後とする。

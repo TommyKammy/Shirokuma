@@ -10056,6 +10056,18 @@ const dbAudit={installed:false,scope:'self',role:'',database:'',epoch:0,list:0,s
  draft:{},applied:null,cursors:[],cursor:'',next:null,items:[],selected:'',detail:null,proof:null,capabilities:null,url:null,preview:null,previewStamp:null};
 Object.assign(i18n.ja,{
  'Saved AI metadata':'AI の保存済みメタデータ','Saved SQL explanation':'保存済み SQL の説明','Saved SQL execution plan explanation':'保存済み SQL 実行計画の説明','Saved-plan re-explanation':'保存済み計画の再説明','Saved SQL proposal':'保存済み SQL 案','Saved catalog description proposal':'保存済みカタログ説明文案',
+ 'Saved SQL queries':'保存済み SQL クエリ','DataOps operations':'DataOps 操作','Job runs':'ジョブ実行','Job steps':'ジョブの処理',
+ 'Stage runs':'ステージ実行（取込・出力）','Stage scans':'ステージ確認','Managed Mart runs':'Managed Marts の実行','Database dbt runs':'Database dbt 実行',
+ 'Saved schedules':'保存済みスケジュール','Schedule ticks':'スケジュールの予定消費','Saved alerts':'保存済みアラート','WAP model versions':'WAP モデルの版',
+ 'WAP builds':'WAP ビルド','WAP audits':'WAP 監査','WAP publications':'WAP 公開','Database creation records':'データベース作成記録',
+ 'Database requests':'データベース要求','Logical resource requests':'論理リソース要求','Management operations':'管理操作',
+ 'History guide':'履歴の見方','Source presets':'記録元のプリセット',
+ 'Choose only a source draft, then Search to apply. Availability follows this reference context; records may be absent.':'記録元の下書きだけを選び、検索で適用します。利用可否はこの参照コンテキストに従います。記録がない場合もあります。',
+ 'Runtime SQL queries → saved SQL queries (query). Worksheet Recent Query History restores SQL/context only; it does not execute SQL or retrieve result rows.':'runtime SQL queries → 保存済み SQL クエリ（query）。Worksheet の Recent Query History は SQL とコンテキストだけを復元します。SQL の実行や結果行の取得は行いません。',
+ 'lake.ingest → DataOps manual ingestion; Ingestion → Stages → ingestion/export records (stage_run) and scan history (stage_scan) for registered Stages. lake.export → DataOps table export. Worksheet result CSV/JSON/TSV downloads belong to the original query, not a new DataOps write operation.':'lake.ingest → DataOps の手動取込。登録済み Stages は Ingestion → Stages → 取込・出力記録（stage_run）と確認履歴（stage_scan）。lake.export → DataOps のテーブル出力。Worksheet の結果 CSV/JSON/TSV ダウンロードは元クエリに属し、新しい DataOps 書込操作ではありません。',
+ 'catalog.clone → DataOps clone operation. catalog.drop → DataOps catalog unregister with data kept; no physical deletion or automatic Undrop.':'catalog.clone → DataOps の複製操作。catalog.drop → データを保持する DataOps のカタログ登録解除。物理削除や自動 Undrop ではありません。',
+ 'bear.data_engineer → Saved AI metadata (ai), then explicit Manual WAP → model versions / builds / audits / publications and DataOps. Refresh history: Managed Marts → runs. This is not arbitrary snapshot rollback. Other paths: Jobs → run / step history; Database dbt → runs; Jobs / Stages / Managed Marts → schedules and ticks.':'bear.data_engineer → 保存済み AI メタデータ（ai）、続いて明示的な Manual WAP → モデルの版／ビルド／監査／公開と DataOps。更新履歴は Managed Marts → 実行へ。任意 snapshot へのロールバックとは異なります。その他は Jobs → 実行／処理履歴、Database dbt → 実行、Jobs／Stages／Managed Marts → スケジュールと予定消費。',
+ 'Saved QUEUED/RUNNING is not current health. Committed and cleanup are separate. Old raw engine last 50 and Pawprints historical samples (at most 100) are not imported into DB audit.':'保存済み QUEUED/RUNNING は現在の稼働状態を保証しません。コミットと清掃は別です。旧 engine の直近50件と Pawprints の過去サンプル（最大100件）は DB 監査に取り込みません。',
  'Saved metadata audit':'保存済みメタデータの監査','Scope':'参照範囲','My DB records':'自分の DB 記録','DB administration':'DB 管理情報','Platform management':'基盤管理記録',
  'Reference role':'参照ロール','Start UTC':'開始 UTC','End UTC':'終了 UTC','Source':'記録元','State':'保存状態','Search':'検索','Page size':'取得件数','Search / Refresh':'検索／更新',
  'All sources':'すべての記録元','Filters pending. Search to apply.':'条件は未適用です。検索で適用します。',
@@ -10226,6 +10238,9 @@ function dbActivityRender(){
 
 const dbAuditFields=['id','source','source_id','action','actor','database_id','schema_id','warehouse_id','saved_role','state','created_at','updated_at','finished_at','revision','committed','has_cleanup_error'];
 const dbAuditAIKinds={sql_explanation:'Saved SQL explanation',sql_plan_explanation:'Saved SQL execution plan explanation',saved_plan_explanation:'Saved-plan re-explanation',sql_proposal:'Saved SQL proposal',catalog_proposal:'Saved catalog description proposal'};
+const dbAuditSourceLabels={query:'Saved SQL queries',dataops:'DataOps operations',job_run:'Job runs',job_step:'Job steps',stage_run:'Stage runs',stage_scan:'Stage scans',mart_run:'Managed Mart runs',dbt:'Database dbt runs',schedule:'Saved schedules',schedule_tick:'Schedule ticks',alert:'Saved alerts',wap_model_version:'WAP model versions',wap_build:'WAP builds',wap_audit:'WAP audits',wap_publication:'WAP publications',database_creation:'Database creation records',database_request:'Database requests',logical_request:'Logical resource requests',management:'Management operations',ai:'Saved AI metadata'};
+const dbAuditPresetSources=['query','dataops','stage_run','job_run','wap_build','wap_audit','wap_publication','ai'];
+const dbAuditSourceKey=source=>Object.hasOwn(dbAuditSourceLabels,source)?dbAuditSourceLabels[source]:null;
 const dbAuditTelemetryFields=['event_id','timestamp','agent_id','action_type','target_system','status','trace_id','duration_ms'];
 const dbAuditContextFields=['scope','principal_id','selected_role','database_id','binding_revision','generation_id','grant_revision','platform_admin'];
 const dbAuditScalar=v=>typeof v==='string'||typeof v==='number'||typeof v==='boolean';
@@ -10269,7 +10284,7 @@ function dbAuditPaging(){
  telemetry.disabled=!dbAuditTelemetryAllowed();
  $('db-audit-preview-controls').hidden=telemetry.disabled;$('db-audit-preview').hidden=telemetry.disabled;
  const filterDisabled=telemetry.disabled||dbAudit.preview?.availability!=='available';
- $('db-audit-preview-search').disabled=filterDisabled;$('db-audit-preview-status').disabled=filterDisabled;
+ $('db-audit-preview-search').disabled=filterDisabled;$('db-audit-preview-status').disabled=filterDisabled;dbAuditPresets();
 }
 function dbAuditSelectOptions(id,items,value,placeholder){
  const signature=JSON.stringify([items,placeholder,items.some(item=>item.value===value)?null:value]),select=$(id);
@@ -10278,6 +10293,22 @@ function dbAuditSelectOptions(id,items,value,placeholder){
  // Bind the actual Option nodes so language changes preserve selection and focus.
  const options=$(id).options;ui(options[0],placeholder);
  items.forEach((item,i)=>{if(item.labelKey)ui(options[i+1],item.labelKey);});
+}
+function dbAuditPresetAllowed(source){
+ const p=dbAudit.proof,cap=dbAudit.capabilities,select=$('db-audit-source');
+ if(!p||dbAuditReason()||p.role!==dbAudit.role||p.scope!==dbAudit.scope||p.database!==dbAudit.database||!dbInventoryCurrent(p.items)||!cap?.scopes?.includes(dbAudit.scope)||!cap?.sources?.includes(source))return false;
+ if(dbAudit.scope!=='platform'){
+  const d=dbInventories.get(dbAudit.role)?.items?.find(d=>d.id===dbAudit.database);
+  if(!d||d.state!=='READY'||!d.allowed_roles?.includes(dbAudit.role)||dbAuditBinding(d)!==p.binding)return false;
+ }
+ return !select.disabled&&Array.from(select.options).some(option=>option.value===source&&!option.disabled);
+}
+function dbAuditPresets(){
+ for(const source of dbAuditPresetSources){const button=$('db-audit-preset-'+source);if(button)button.disabled=!dbAuditPresetAllowed(source);}
+}
+function dbAuditPreset(source){
+ if(!dbAuditPresetAllowed(source)){dbAuditPresets();return;}
+ const select=$('db-audit-source');select.value=source;select.oninput();select.focus();
 }
 function dbAuditChoices(items=[]){
  // Reference context follows the ceiling without changing worksheet ownership.
@@ -10360,7 +10391,7 @@ async function dbAuditSearch(direction='search'){
   const items=data.items.map(dbAuditEvent);
   dbAudit.items=items;dbAudit.applied={...filters};dbAudit.cursor=data.page_cursor;dbAudit.cursors=stack;dbAudit.next=data.next_cursor||null;
   const source=$('db-audit-source'),value=source.value;
-  dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:value==='ai'?'Saved AI metadata':undefined})),value,'All sources');
+  dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:dbAuditSourceKey(value)})),value,'All sources');dbAuditPresets();
   ui($('db-audit-context'),'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}',{scope:t({self:'My DB records',database:'DB administration',platform:'Platform management'}[dbAudit.scope]),role:dbAudit.role,database:dbAudit.scope==='platform'?t('Platform management'):dbAudit.database,filters:JSON.stringify(filters)});
   dbAuditRenderRows();dbAuditPaging();
   let pending=true;try{pending=JSON.stringify(dbAuditFilters())!==JSON.stringify(filters);}catch{}
@@ -10373,7 +10404,7 @@ function dbAuditRenderRows(){
  const table=document.createElement('table'),head=document.createElement('thead'),hr=document.createElement('tr'),body=document.createElement('tbody');
  for(const key of ['Time UTC','Source / action','Target IDs','Actor','State','Details']){const th=document.createElement('th');th.scope='col';ui(th,key);hr.append(th);}head.append(hr);table.append(head,body);host.append(table);
  for(const event of dbAudit.items){const row=document.createElement('tr');
-  for(const [i,value] of [dbAuditTime(event.created_at),[event.source,event.action].filter(Boolean).join(' / '),[event.database_id,event.schema_id,event.warehouse_id,event.source_id].filter(Boolean).join(' · '),event.actor,event.state].entries()){const cell=document.createElement('td');if(i===1&&event.source==='ai')ui(cell,'{source} / {action}',()=>({source:t('Saved AI metadata'),action:t(dbAuditAIKinds[event.action])}));else dbAuditValue(cell,value);row.append(cell);}
+  for(const [i,value] of [dbAuditTime(event.created_at),[event.source,event.action].filter(Boolean).join(' / '),[event.database_id,event.schema_id,event.warehouse_id,event.source_id].filter(Boolean).join(' · '),event.actor,event.state].entries()){const cell=document.createElement('td');if(i===1)ui(cell,'{source} / {action}',()=>({source:dbAuditSourceKey(event.source)?t(dbAuditSourceKey(event.source)):event.source,action:event.source==='ai'?t(dbAuditAIKinds[event.action]):event.action||''}));else dbAuditValue(cell,value);row.append(cell);}
   const cell=document.createElement('td');dbAdminButton(cell,'','Details',()=>dbAuditDetail(event.id));row.append(cell);body.append(row);
  }
 }
@@ -10388,12 +10419,12 @@ async function dbAuditDetail(id){
 function dbAuditRenderDetail(event){
  const host=$('db-audit-detail');host.replaceChildren();const list=document.createElement('dl');host.append(list);
  const labels=['Event ID','Source','Source ID','Action','Actor','Database','Schema','Warehouse','Saved role','State','Created UTC','Updated UTC','Finished UTC','Revision','Committed','Cleanup failure'];
- dbAuditFields.forEach((key,i)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,labels[i]);if(event.source==='ai'&&['source','action'].includes(key))ui(dd,key==='source'?'Saved AI metadata':dbAuditAIKinds[event.action]);else dbAuditValue(dd,key.endsWith('_at')?dbAuditTime(event[key]):event[key]);list.append(dt,dd);});
+ dbAuditFields.forEach((key,i)=>{const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,labels[i]);if(key==='source'&&dbAuditSourceKey(event.source))ui(dd,dbAuditSourceKey(event.source));else if(event.source==='ai'&&key==='action')ui(dd,dbAuditAIKinds[event.action]);else dbAuditValue(dd,key.endsWith('_at')?dbAuditTime(event[key]):event[key]);list.append(dt,dd);});
  const dt=document.createElement('dt'),dd=document.createElement('dd');ui(dt,'Related IDs');list.append(dt,dd);
  const stamp=dbAuditStamp(),selection=dbAudit.selection,serial=dbAudit.detailRequest;
  if(!event.links.length)dbAuditValue(dd,null);
  for(const link of event.links){
-  const row=document.createElement('p');row.textContent=[link.relation,link.source,link.source_id].join(' · ');dd.append(row);
+  const row=document.createElement('p'),caption=document.createElement('span');row.append(caption);ui(caption,'{relation} · {source} · {id}',()=>({relation:link.relation,source:dbAuditSourceKey(link.source)?t(dbAuditSourceKey(link.source)):link.source,id:link.source_id}));dd.append(row);
   if(link.event_id)dbAdminButton(row,'','View linked audit metadata',()=>{
    if(stamp!==dbAuditStamp()||selection!==dbAudit.selection||serial!==dbAudit.detailRequest||dbAudit.detail!==event)return;
    return dbAuditDetail(link.event_id);
@@ -10459,7 +10490,7 @@ async function dbAuditOpen(){
  const reason=dbAuditReason();if(reason){dbAuditPurge();ui($('db-audit-status'),reason);return;}
  const stamp=dbAuditStamp();try{const p=await dbAuditAuthorize(stamp,undefined,true);if(!p||stamp!==dbAuditStamp())return;
   dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
-  dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:value==='ai'?'Saved AI metadata':undefined})),$('db-audit-source').value,'All sources');
+  dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:dbAuditSourceKey(value)})),$('db-audit-source').value,'All sources');dbAuditPresets();
  }catch(error){if(stamp===dbAuditStamp()){
   // A missing selected DB does not hide other DBs from this fresh inventory.
   const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
@@ -10474,6 +10505,14 @@ function dbAuditInstall(){
  dbAdminNode('p','database-pawprints-notice',panel,'Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.');
  dbAdminNode('p','',panel,'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.');
  dbAdminNode('p','',panel,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.');
+ const guide=dbAdminNode('details','db-audit-guide',panel);
+ dbAdminNode('summary','',guide,'History guide');
+ const paths=dbAdminNode('ul','',guide);
+ dbAdminNode('li','',paths,'Runtime SQL queries → saved SQL queries (query). Worksheet Recent Query History restores SQL/context only; it does not execute SQL or retrieve result rows.');
+ dbAdminNode('li','',paths,'lake.ingest → DataOps manual ingestion; Ingestion → Stages → ingestion/export records (stage_run) and scan history (stage_scan) for registered Stages. lake.export → DataOps table export. Worksheet result CSV/JSON/TSV downloads belong to the original query, not a new DataOps write operation.');
+ dbAdminNode('li','',paths,'catalog.clone → DataOps clone operation. catalog.drop → DataOps catalog unregister with data kept; no physical deletion or automatic Undrop.');
+ dbAdminNode('li','',paths,'bear.data_engineer → Saved AI metadata (ai), then explicit Manual WAP → model versions / builds / audits / publications and DataOps. Refresh history: Managed Marts → runs. This is not arbitrary snapshot rollback. Other paths: Jobs → run / step history; Database dbt → runs; Jobs / Stages / Managed Marts → schedules and ticks.');
+ dbAdminNode('p','',guide,'Saved QUEUED/RUNNING is not current health. Committed and cleanup are separate. Old raw engine last 50 and Pawprints historical samples (at most 100) are not imported into DB audit.');
  const form=dbAdminNode('form','db-audit-form',panel);form.className='toolbar';
  for(const [key,label,tag] of [['scope','Scope','select'],['role','Reference role','select'],['database','Database','select'],['from','Start UTC','input'],['to','End UTC','input'],['source','Source','select'],['state','State','input'],['search','Search','input'],['limit','Page size','input']]){
   const field=dbAdminNode('div','',form);field.className='field';const l=dbAdminNode('label','',field,label);l.htmlFor='db-audit-'+key;
@@ -10485,6 +10524,10 @@ function dbAuditInstall(){
  }
  const search=dbAdminButton(form,'db-audit-submit','Search / Refresh',()=>dbAuditSearch());search.type='submit';search.onclick=undefined;
  form.onsubmit=e=>{e.preventDefault();return dbAuditSearch();};
+ const presets=dbAdminNode('div','db-audit-presets',panel);presets.className='toolbar';presets.setAttribute('role','group');presets.setAttribute('aria-labelledby','db-audit-presets-label');presets.setAttribute('aria-describedby','db-audit-presets-help');
+ dbAdminNode('span','db-audit-presets-label',presets,'Source presets');
+ for(const source of dbAuditPresetSources){const button=dbAdminButton(presets,'db-audit-preset-'+source,dbAuditSourceKey(source),()=>dbAuditPreset(source));button.type='button';button.dataset.source=source;button.setAttribute('aria-describedby','db-audit-presets-help');}
+ dbAdminNode('p','db-audit-presets-help',panel,'Choose only a source draft, then Search to apply. Availability follows this reference context; records may be absent.');
  const status=dbAdminNode('p','db-audit-status',panel,'Search to load saved metadata.');status.setAttribute('role','status');
  dbAdminNode('p','db-audit-context',panel,'Search to load saved metadata.');
  const rows=dbAdminNode('div','db-audit-rows',panel);rows.className='table-wrap';
