@@ -586,6 +586,12 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel){min-width:0;max-width:100%}
 :is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) .toolbar{flex-wrap:wrap}
+
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel){min-width:0;max-width:100%}
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel) :is(.panel-body,p,h3,button,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel) .toolbar{flex-wrap:wrap}
+.foundation-controller-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:8px 16px}
+.foundation-controller-counts>div{min-width:0;border-bottom:1px solid var(--line);padding:4px 0}.foundation-controller-counts dt{color:var(--muted)}.foundation-controller-counts dd{margin:4px 0;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -3864,7 +3870,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3909,7 +3915,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4269,6 +4275,135 @@ function dbFoundationBaselineRender(id){
  for(const row of r.baseline.workloads)for(const item of row.containers){
   line('LOCAL · '+t(dbFoundationBaselineComponents[row.component][1])+' · '+row.kind+' · '+t(item.kind==='container'?'Container':'Init container')+' '+item.ordinal,'h3');
   for(const [key,label] of Object.entries(dbFoundationBaselineChecks))line(t(label)+' '+t(item.checks[key]==='met'?'Foundation declaration matches':'Foundation declaration missing or mismatched'));
+ }
+}
+
+// Independent manual capture shared only by SRE Platform and Compute.
+const dbFoundationControllers={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
+const dbFoundationControllersComponents=['storage','catalog_database','catalog'];
+const dbFoundationControllersFields=['generation','observed_generation','desired_replicas','replicas','updated_replicas','ready_replicas','available_replicas','unavailable_replicas'];
+const dbFoundationControllersLabels={title:'Foundation Deployment controller records',about:'Three managed storage and catalog Deployments. Counts are displayed as reported.',boundary:'Service connectivity, SQL health and policy decisions are unverified. Capture times do not indicate controller heartbeat, last update or readiness.',auth:'Refresh platform authority',fetch:'Fetch foundation controller records'};
+const dbFoundationControllersJA={
+ 'Foundation Deployment controller records':'基盤 Deployment controller の記録',
+ 'Three managed storage and catalog Deployments. Counts are displayed as reported.':'管理対象のストレージ・カタログ3 Deployment。count は報告値のまま表示します。',
+ 'Service connectivity, SQL health and policy decisions are unverified. Capture times do not indicate controller heartbeat, last update or readiness.':'サービス疎通・SQL健全性・ポリシー判断は未検証です。取得時刻は controller の heartbeat・最終更新・readiness を示しません。',
+ 'Fetch foundation controller records':'基盤 controller 記録を取得',
+ 'Controller authority verified. Select Fetch foundation controller records.':'権限を確認しました。「基盤 controller 記録を取得」を選んでください。',
+ 'Fetching foundation controller records.':'基盤 controller 記録を取得しています。',
+ 'Foundation controller records unavailable. Refresh authority or fetch again.':'基盤 controller 記録を取得できません。権限更新または再取得を行ってください。',
+ 'Foundation controller source unavailable; all three records are withheld.':'基盤 controller 参照元を取得できないため、3件すべての記録を表示しません。',
+ 'API capture time':'API 取得時刻','Controller record capture time':'controller 記録の取得時刻',
+ 'Not reported (zero may be omitted)':'未報告（0省略の場合あり）',
+ 'Controller observed generation unreported in captured record':'取得記録の controller 報告世代は未報告',
+ 'Controller observed generation behind Deployment generation in captured record':'取得記録の controller 報告世代は Deployment の世代より前',
+ 'Controller observed generation matches Deployment generation in captured record':'取得記録の controller 報告世代は Deployment の世代と一致',
+ 'Storage':'ストレージ','Catalog database':'カタログDB','Catalog':'カタログ',
+ 'Deployment generation':'Deployment の世代','Controller observed generation':'controller の報告世代','Desired replicas':'指定 replica 数',
+ 'Reported replicas':'報告 replica 数','Updated replicas':'更新済み replica 数',
+ 'Ready replicas':'ready replica 数','Available replicas':'available replica 数','Unavailable replicas':'unavailable replica 数'
+};
+function dbFoundationControllersText(key){return language==='ja'&&Object.hasOwn(dbFoundationControllersJA,key)?dbFoundationControllersJA[key]:t(key);}
+function dbFoundationControllersAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbFoundationControllersView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbFoundationControllersAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbFoundationControllersLeave(){++dbFoundationControllers.epoch;dbFoundationControllers.busy=null;dbFoundationControllers.notice='';}
+function dbFoundationControllersSync(){
+ const p=dbFoundationControllers,auth=dbFoundationControllersAuth(),view=dbFoundationControllersView();
+ if(auth!==p.auth){dbFoundationControllersLeave();p.record=null;p.auth=auth;}
+ if(!dbFoundationControllersAllowed())p.record=null;
+ if(view!==p.view){dbFoundationControllersLeave();p.view=view;}
+ // Always render every installed output, including hidden Bear scopes and Compute.
+ for(const kind of ['sre','compute']){
+  const id=kind==='compute'?'observation-foundation-controllers-':'observation-'+kind+'-foundation-controllers-',panel=$(id+'panel');
+  if(!panel?.dataset.installed)continue;
+  panel.hidden=kind!=='compute'&&dbObservations[kind].scope!=='platform';
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbFoundationControllersAllowed();
+  for(const [suffix,key] of Object.entries(dbFoundationControllersLabels))$(id+suffix).textContent=dbFoundationControllersText(key);
+  dbFoundationControllersRender(id);
+ }
+}
+function dbFoundationControllersInstall(){
+ for(const kind of ['sre','compute']){
+  const id=kind==='compute'?'observation-foundation-controllers-':'observation-'+kind+'-foundation-controllers-';
+  if($(id+'panel')?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations[kind].installed?$('bear-panel-'+kind):null;
+  if(!host)continue;
+  const panel=dbAdminNode('section',id+'panel',host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head,'Foundation Deployment controller records');
+  const body=dbAdminNode('div','',panel);body.className='panel-body';
+  dbAdminNode('p',id+'about',body,'Three managed storage and catalog Deployments. Counts are displayed as reported.');
+  dbAdminNode('p',id+'boundary',body,'Service connectivity, SQL health and policy decisions are unverified. Capture times do not indicate controller heartbeat, last update or readiness.');
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth','Refresh platform authority',dbFoundationControllersRefreshAuth);
+  dbAdminButton(bar,id+'fetch','Fetch foundation controller records',dbFoundationControllersFetch);
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbFoundationControllersSync();
+}
+function dbFoundationControllersCapture(){
+ const p=dbFoundationControllers,token={},epoch=++p.epoch,auth=dbFoundationControllersAuth(),view=dbFoundationControllersView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbFoundationControllersAuth()&&view===dbFoundationControllersView()};
+}
+async function dbFoundationControllersRefreshAuth(){
+ dbFoundationControllersSync();if(dbFoundationControllers.busy||!dbPlatformCanRefresh())return;
+ const read=dbFoundationControllersCapture();dbFoundationControllers.notice='Refreshing platform authority.';dbFoundationControllersSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  dbFoundationControllers.notice=dbFoundationControllersAllowed()?'Controller authority verified. Select Fetch foundation controller records.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current()){dbFoundationControllers.record=null;dbFoundationControllers.notice='Foundation controller records unavailable. Refresh authority or fetch again.';}}
+ finally{if(dbFoundationControllers.busy===read.token)dbFoundationControllers.busy=null;dbFoundationControllersSync();}
+}
+async function dbFoundationControllersFetch(){
+ dbFoundationControllersSync();if(dbFoundationControllers.busy||!dbFoundationControllersAllowed())return;
+ const read=dbFoundationControllersCapture();dbFoundationControllers.notice='Fetching foundation controller records.';dbFoundationControllersSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-foundation-controllers',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>65536)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  dbFoundationControllers.record=dbFoundationControllersRecord(data);dbFoundationControllers.notice='';
+ }catch{if(read.current()){dbFoundationControllers.record=null;dbFoundationControllers.notice='Foundation controller records unavailable. Refresh authority or fetch again.';}}
+ finally{if(dbFoundationControllers.busy===read.token)dbFoundationControllers.busy=null;dbFoundationControllersSync();}
+}
+function dbFoundationControllersRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>65536)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','controller_version','coverage','controllers'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!dbObservationTime(d.observed_at,true)||d.controller_version!=='foundation-storage-catalog-controllers-v1')fail();
+ const c=d.coverage;if(!exact(c,['kind','managed_foundation','service_connectivity','sql_health','policy_decision'])||c.kind!=='deployment_controller_counts'||c.managed_foundation!==true||c.service_connectivity!==false||c.sql_health!==false||c.policy_decision!==false)fail();
+ const b=d.controllers;if(!exact(b,['availability','code','observed_at','deployments'])||!dbObservationTime(b.observed_at,true)||!['available','unavailable'].includes(b.availability)||b.code!==(b.availability==='available'?null:'FOUNDATION_CONTROLLERS_UNAVAILABLE'))fail();
+ if(b.availability==='unavailable'){if(b.deployments!==null)fail();}
+ else{
+  if(!Array.isArray(b.deployments)||b.deployments.length!==3)fail();
+  for(const [i,row] of b.deployments.entries()){
+   if(!exact(row,['component',...dbFoundationControllersFields])||row.component!==dbFoundationControllersComponents[i])fail();
+   for(const field of dbFoundationControllersFields){const v=row[field];if(v===null&&!['generation','desired_replicas'].includes(field))continue;if(!Number.isSafeInteger(v)||v<0||Object.is(v,-0))fail();}
+   if(row.generation<1||row.observed_generation!==null&&row.observed_generation>row.generation)fail();
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbFoundationControllersRender(id){
+ const node=$(id+'output');node.replaceChildren();const local=dbFoundationControllersText,line=(text,tag='p',host=node)=>dbAdminNode(tag,'',host).textContent=text;
+ const p=dbFoundationControllers,r=dbFoundationControllersAllowed()?p.record:null;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(p.notice)line(local(p.notice));
+ if(!r){if(!p.notice)line(local(dbFoundationControllersAllowed()?'Controller authority verified. Select Fetch foundation controller records.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(local('API capture time')+': '+r.observed_at);line(local('Controller record capture time')+': '+r.controllers.observed_at);
+ if(r.controllers.availability==='unavailable'){line(local('Foundation controller source unavailable; all three records are withheld.'));return;}
+ const labels=['Deployment generation','Controller observed generation','Desired replicas','Reported replicas','Updated replicas','Ready replicas','Available replicas','Unavailable replicas'];
+ for(const [i,row] of r.controllers.deployments.entries()){
+  line(local(['Storage','Catalog database','Catalog'][i])+' · Deployment','h3');
+  line(local(row.observed_generation===null?'Controller observed generation unreported in captured record':row.observed_generation<row.generation?'Controller observed generation behind Deployment generation in captured record':'Controller observed generation matches Deployment generation in captured record'));
+  const list=dbAdminNode('dl','',node);list.className='foundation-controller-counts';
+  for(const [j,field] of dbFoundationControllersFields.entries()){
+   const entry=dbAdminNode('div','',list);line(local(labels[j]),'dt',entry);line(row[field]===null?local('Not reported (zero may be omitted)'):String(row[field]),'dd',entry);
+  }
  }
 }
 
@@ -5996,7 +6131,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();dbFoundationBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();
  dbAISettingsSync();
  dbAdminGate();
 }

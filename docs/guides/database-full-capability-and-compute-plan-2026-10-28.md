@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-03 JST、[DB-P6-4C2D](database-p6-4c2d-foundation-controllers-2026-11-03.md)でstorage／catalogの管理対象3 Deploymentのcontroller記録を、SRE PlatformとComputeの独立手動snapshotへ接続し限定技術受入を完了した。未報告・実0・世代遅れ・surgeを区別し、取得時刻や件数からservice／SQL healthを保証しない。123群4,878成功・34 skip、両HTTP面と独立3 row照合、日英／390px／実200%、台帳・設定保全を確認した。次は89行の必須操作・実装・受入証拠・通常導線の閉鎖監査で残件を確定する。旧SRE全体・global Policy・P6全体／M1本人受入は継続し、実Compute伸縮はM1後とする。
+
 2026-11-03 JST、[DB-P6-4C2C2](database-p6-4c2c2-foundation-baseline-2026-11-03.md)で既存Bear action・必須行・通常導線を照合し、管理対象の論理基盤6 Deployment＋bootstrap Jobの4宣言レビューを限定技術受入済みとした。現在Pの前後検査とfoundation照合、独立した手動3面snapshotを提供し、C2C1を維持する。121群4,819成功・34 skip、両HTTP面・独立sourceの40判定、日英／390px／実200%、台帳・設定保全を確認した。次はstorage／catalogの3 Deploymentに対する受動的controller観測を限定する。旧SRE全体・namespace-wide Policy・native8強制・P6全体／M1本人受入は継続し、実Compute伸縮はM1後とする。
 
 2026-11-03 JST、[DB-P6-5G](database-p6-5g-compute-explanations-2026-11-03.md)でComputeの観測済み操作条件と停止状態の説明を既存panelへ追加し、限定技術受入を完了した。取得済み候補と現在認可・受付・成功を区別し、Chillだけの6区分条件、元要求の保持、停止原因不明と保存engine証跡の意味を説明する。API・取得契機を増やさず、無効な設定入力だけを従来の送信前検証に合わせてSaveへ反映した。119群4,752成功・34 skip、Workbench実statusの認可境界、日英／390px／実200%と保全を確認した。次はBears／Policyの既存action・必須行・通常導線を照合して残件を限定する。P6全体／M1本人受入は継続し、実伸縮はM1後とする。
