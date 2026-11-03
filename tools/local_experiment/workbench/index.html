@@ -599,6 +599,12 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel) .toolbar{flex-wrap:wrap}
 .foundation-controller-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:8px 16px}
 .foundation-controller-counts>div{min-width:0;border-bottom:1px solid var(--line);padding:4px 0}.foundation-controller-counts dt{color:var(--muted)}.foundation-controller-counts dd{margin:4px 0;font-variant-numeric:tabular-nums}
+
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures){min-width:0;max-width:100%}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) :is(.panel-body,p,h2,button,table,th,td,details,summary,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) .toolbar{flex-wrap:wrap}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) table{table-layout:fixed;width:100%;min-width:0}
+:is(#observation-sre-recent-failures,#observation-recent-failures-panel) .panel-body p{max-inline-size:min(75ch,100%)}
 </style>
 </head>
 <body>
@@ -3884,7 +3890,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3929,7 +3935,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4293,6 +4299,140 @@ function dbFoundationBaselineRender(id){
 }
 
 // Independent manual capture shared only by SRE Platform and Compute.
+
+// Each manual panel owns its receipt and pending operation. No result cache is shared.
+const dbRecentFailures={sre:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null}};
+const dbRecentFailuresFields=['event_id','timestamp','agent_id','action_type','target_system','status','trace_id','duration_ms'];
+const dbRecentFailuresJA={
+ 'Recent failed Pawprint records':'最近の失敗 Pawprint 記録',
+ 'Latest saved failed records, globally uncorrelated with databases. Up to 20 source records; event IDs may repeat and events may be old.':'DBとの対応付けのない、全体の保存済み失敗記録です。最大20件の参照元レコードで、event IDの重複や古いイベントを含む場合があります。',
+ 'Event time is historical; capture time is API snapshot creation time. Neither proves failure cause, current health, stoppage or a global policy decision. This is metadata, without raw logs or complete history.':'イベント時刻は過去の記録、取得時刻はAPI記録作成時刻です。失敗原因・現在の健全性・停止・global Policy判断の証明ではありません。raw logや完全な履歴を含まないmetadataです。',
+ 'Fetch recent failed records':'最近の失敗記録を取得',
+ 'Authority verified. Select Fetch recent failed records.':'権限を確認しました。「最近の失敗記録を取得」を選んでください。',
+ 'Fetching recent failed records.':'最近の失敗記録を取得しています。',
+ 'Recent failed records unavailable. Refresh authority or fetch again.':'最近の失敗記録を取得できません。権限更新または再取得を行ってください。',
+ 'Failed record source unavailable; no records can be verified.':'失敗記録の参照元を取得できず、記録を確認できません。',
+ 'No failed records returned by the source. This does not establish current health.':'参照元から返された失敗記録は0件です。現在の健全性を示すものではありません。',
+ 'API snapshot creation time':'API記録作成時刻','Source records':'参照元の記録件数',
+ 'More saved failed records exist beyond these 20.':'この20件より前にも保存済みの失敗記録があります。',
+ 'Historical event time (UTC)':'過去のイベント時刻（UTC）','Record metadata':'記録のmetadata','Duration (ms, exact)':'所要時間（ms、正確な値）',
+ 'Event ID':'イベントID','Agent ID':'エージェントID','Action type':'アクション種別','Target system':'対象システム','Saved status':'保存された状態','Trace ID':'トレースID','Failed':'失敗','(empty)':'（空文字）'
+};
+function dbRecentFailuresText(key){return language==='ja'&&Object.hasOwn(dbRecentFailuresJA,key)?dbRecentFailuresJA[key]:t(key);}
+function dbRecentFailuresID(kind){return 'observation-'+kind+'-recent-failures-';}
+function dbRecentFailuresRoot(kind){return kind==='sre'?'observation-sre-recent-failures':'observation-recent-failures-panel';}
+function dbRecentFailuresAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbRecentFailuresView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbRecentFailuresAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbRecentFailuresLeave(p){++p.epoch;p.busy=null;p.notice='';}
+function dbRecentFailuresSync(){
+ const auth=dbRecentFailuresAuth(),view=dbRecentFailuresView();
+ for(const [kind,p] of Object.entries(dbRecentFailures)){
+  if(auth!==p.auth){dbRecentFailuresLeave(p);p.record=null;p.rendered=null;p.auth=auth;}
+  if(!dbRecentFailuresAllowed()){p.record=null;p.rendered=null;}
+  if(view!==p.view){dbRecentFailuresLeave(p);p.view=view;}
+  const panel=$(dbRecentFailuresRoot(kind));if(!panel?.dataset.installed)continue;
+  panel.hidden=kind==='sre'&&dbObservations.sre.scope!=='platform';
+  const id=dbRecentFailuresID(kind);
+  for(const [suffix,label] of [['title','Recent failed Pawprint records'],['about','Latest saved failed records, globally uncorrelated with databases. Up to 20 source records; event IDs may repeat and events may be old.'],['boundary','Event time is historical; capture time is API snapshot creation time. Neither proves failure cause, current health, stoppage or a global policy decision. This is metadata, without raw logs or complete history.'],['auth','Refresh platform authority'],['fetch','Fetch recent failed records']])$(id+suffix).textContent=dbRecentFailuresText(label);
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbRecentFailuresAllowed();
+  dbRecentFailuresRender(kind);
+ }
+}
+function dbRecentFailuresInstall(){
+ for(const kind of ['sre','compute']){
+  if($(dbRecentFailuresRoot(kind))?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations.sre.installed?$('bear-panel-sre'):null;if(!host)continue;
+  const id=dbRecentFailuresID(kind),panel=dbAdminNode('section',dbRecentFailuresRoot(kind),host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head);
+  const body=dbAdminNode('div','',panel);body.className='panel-body';dbAdminNode('p',id+'about',body);dbAdminNode('p',id+'boundary',body);
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth','Refresh platform authority',()=>dbRecentFailuresRefreshAuth(kind));
+  dbAdminButton(bar,id+'fetch','Fetch recent failed records',()=>dbRecentFailuresFetch(kind));
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbRecentFailuresSync();
+}
+function dbRecentFailuresCapture(kind){
+ const p=dbRecentFailures[kind],token={},epoch=++p.epoch,auth=dbRecentFailuresAuth(),view=dbRecentFailuresView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbRecentFailuresAuth()&&view===dbRecentFailuresView()};
+}
+async function dbRecentFailuresRefreshAuth(kind){
+ dbRecentFailuresSync();const p=dbRecentFailures[kind];if(!p||p.busy||!dbPlatformCanRefresh())return;
+ const read=dbRecentFailuresCapture(kind);p.notice='Refreshing platform authority.';dbRecentFailuresSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  p.notice=dbRecentFailuresAllowed()?'Authority verified. Select Fetch recent failed records.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current()){p.record=null;p.notice='Recent failed records unavailable. Refresh authority or fetch again.';}}
+ finally{if(p.busy===read.token)p.busy=null;dbRecentFailuresSync();}
+}
+async function dbRecentFailuresFetch(kind){
+ dbRecentFailuresSync();const p=dbRecentFailures[kind];if(!p||p.busy||!dbRecentFailuresAllowed())return;
+ const read=dbRecentFailuresCapture(kind);p.notice='Fetching recent failed records.';dbRecentFailuresSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-recent-failures',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>65536)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  p.record=dbRecentFailuresRecord(data);p.notice='';
+ }catch{if(read.current()){p.record=null;p.notice='Recent failed records unavailable. Refresh authority or fetch again.';}}
+ finally{if(p.busy===read.token)p.busy=null;dbRecentFailuresSync();}
+}
+function dbRecentFailuresRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(new TextEncoder().encode(JSON.stringify(d)).length>65536)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','source','availability','code','coverage','items','truncated'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!dbObservationTime(d.observed_at,true)||d.source!=='agenthouse_pawprints'||!['available','unavailable'].includes(d.availability)||d.code!==(d.availability==='available'?null:'RECENT_FAILURES_UNAVAILABLE'))fail();
+ const c=d.coverage;if(!exact(c,['kind','limit','server_filtered','database_correlation','raw_logs','health_check','policy_audit','complete_history'])||c.kind!=='recent_failed_pawprints_metadata'||c.limit!==20||c.server_filtered!==true||['database_correlation','raw_logs','health_check','policy_audit','complete_history'].some(k=>c[k]!==false))fail();
+ if(!Array.isArray(d.items)||d.items.length>20)fail();
+ if(d.availability==='unavailable'){if(d.items.length!==0||d.truncated!==null)fail();}
+ else{
+  if(typeof d.truncated!=='boolean'||d.truncated&&d.items.length!==20)fail();
+  for(const row of d.items){
+   if(!exact(row,dbRecentFailuresFields)||row.status!=='failed')fail();
+   for(const key of dbRecentFailuresFields){const v=row[key];
+    if(key==='duration_ms'){if(typeof v!=='string'||!/^(?:0|[1-9][0-9]{0,19})$/.test(v)||v.length===20&&v>'18446744073709551615')fail();}
+    else if(key==='timestamp'){if(typeof v!=='string'||!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(v)||!dbObservationTime(v,true))fail();}
+    else if(typeof v!=='string'||[...v].length>256||/[\u0000-\u001f\u007f\uD800-\uDFFF]/u.test(v))fail();
+   }
+  }
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbRecentFailuresRender(kind){
+ const id=dbRecentFailuresID(kind),node=$(id+'output'),p=dbRecentFailures[kind],allowed=dbRecentFailuresAllowed(),r=allowed?p.record:null,auth=dbRecentFailuresAuth(),old=p.rendered;
+ if(old&&old.auth===auth&&old.record===r&&old.notice===p.notice&&old.language===language&&old.role===currentRole&&old.allowed===allowed)return;
+ // Positions belong only to this exact receipt, never to event IDs (which may repeat).
+ const retain=!!r&&old?.record===r&&old.auth===auth&&old.allowed===allowed;
+ const disclosures=retain?Array.from(node.querySelectorAll('details')):[],open=disclosures.map(d=>d.open),focused=disclosures.findIndex(d=>d.querySelector('summary')===document.activeElement);
+ p.rendered={auth,record:r,notice:p.notice,language,role:currentRole,allowed};
+ node.replaceChildren();const local=dbRecentFailuresText,line=(text,tag='p',host=node)=>dbAdminNode(tag,'',host).textContent=text;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(p.notice)line(local(p.notice));
+ if(!r){if(!p.notice)line(local(dbRecentFailuresAllowed()?'Authority verified. Select Fetch recent failed records.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(local('API snapshot creation time')+': '+r.observed_at);
+ if(r.availability==='unavailable'){line(local('Failed record source unavailable; no records can be verified.'));return;}
+ line(local('Source records')+': '+String(r.items.length));
+ if(!r.items.length){line(local('No failed records returned by the source. This does not establish current health.'));return;}
+ if(r.truncated)line(local('More saved failed records exist beyond these 20.'));
+ const table=dbAdminNode('table','',node),head=dbAdminNode('thead','',table),tr=dbAdminNode('tr','',head);
+ for(const label of ['Historical event time (UTC)','Record metadata','Duration (ms, exact)']){const th=dbAdminNode('th','',tr,local(label));th.setAttribute('scope','col');}
+ const body=dbAdminNode('tbody','',table);
+ for(const row of r.items){
+  const tr=dbAdminNode('tr','',body);line(row.timestamp,'td',tr);const cell=dbAdminNode('td','',tr),details=dbAdminNode('details','',cell);
+  line((row.action_type||local('(empty)'))+' · '+(row.event_id||local('(empty)')),'summary',details);
+  const dl=dbAdminNode('dl','',details);
+  for(const [field,label] of [['event_id','Event ID'],['agent_id','Agent ID'],['action_type','Action type'],['target_system','Target system'],['status','Saved status'],['trace_id','Trace ID']]){line(local(label),'dt',dl);line(field==='status'?local('Failed'):row[field]||local('(empty)'),'dd',dl);}
+  line(row.duration_ms,'td',tr); // Never convert a UInt64 duration to Number.
+ }
+ if(retain)for(const [index,details] of Array.from(node.querySelectorAll('details')).entries()){details.open=!!open[index];if(index===focused)details.querySelector('summary').focus();}
+}
+
 const dbFoundationControllers={auth:'',epoch:0,busy:null,record:null,notice:'',view:''};
 const dbFoundationControllersComponents=['storage','catalog_database','catalog'];
 const dbFoundationControllersFields=['generation','observed_generation','desired_replicas','replicas','updated_replicas','ready_replicas','available_replicas','unavailable_replicas'];
@@ -6190,7 +6330,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();
  dbAISettingsSync();
  dbAdminGate();
 }
@@ -10843,7 +10983,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbRecentFailuresInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

@@ -34,8 +34,7 @@ class SREPolicyDatabaseUI(unittest.TestCase):
         # until production installation appends them. This catches first-load bugs.
         run = harness.subprocess.run
         def strict_run(args, **kwargs):
-            args = list(args)
-            args[2] = args[2].replace(
+            kwargs['input'] = kwargs['input'].replace(
                 'const $=id=>strictRemoved',
                 "const $=id=>(/^observation-(sre|policy)-panel$/.test(id)||id==='curator-panel')&&!nodes[id]?.parentElement?null:strictRemoved")
             return run(args, **kwargs)

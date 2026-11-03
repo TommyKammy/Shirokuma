@@ -28,13 +28,11 @@ class ComputeGovernanceDatabaseUI(unittest.TestCase):
         run = harness.subprocess.run
 
         def stdin_run(args, **kwargs):
-            args = list(args)
-            if args[:2] == ['node', '-e']:
-                source = args[2].replace(
+            if list(args) == ['node', '-']:
+                kwargs['input'] = kwargs['input'].replace(
                     'const $=id=>',
                     "const $=id=>id==='observation-compute-panel'&&!nodes[id]?.parentElement?null:",
                     1)
-                return run(['node', '-'], input=source, **kwargs)
             return run(args, **kwargs)
 
         with patch.object(harness.subprocess, 'run', stdin_run):

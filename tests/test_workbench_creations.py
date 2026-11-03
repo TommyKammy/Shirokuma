@@ -1382,8 +1382,8 @@ assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
         run = subprocess.run
         legacy = False
         def strict_heading_lookup(argv, *args, **kwargs):
-            self.assertEqual(argv[:2], ['node', '-e'])
-            source = argv[2]
+            self.assertEqual(argv, ['node', '-'])
+            source = kwargs['input']
             needle = 'const $=id=>strictRemoved&&'
             self.assertEqual(source.count(needle), 1)
             source = source.replace(needle, "const $=id=>id==='db-creation-heading'&&document.getElementById?document.getElementById(id):strictRemoved&&", 1)
@@ -1391,7 +1391,8 @@ assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
                 fixed = "function dbCreationStage(stage){dbCreation.stage=stage;dbCreationRender();$('db-creation-heading')?.focus();}"
                 self.assertEqual(source.count(fixed), 1)
                 source = source.replace(fixed, fixed.replace('?.focus()', '.focus()'), 1)
-            return run([*argv[:2], source], *args, **kwargs)
+            kwargs['input'] = source
+            return run(argv, *args, **kwargs)
         with patch.object(subprocess, 'run', side_effect=strict_heading_lookup):
             self.javascript(body)
             legacy = True

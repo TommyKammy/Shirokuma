@@ -119,7 +119,7 @@ async function exploreFinance(){
 const treeActions=action=>$('catalog-tree').descendants().filter(node=>node.dataset.action===action);
 const objectButtons=()=>treeActions('select-object').filter(node=>node.dataset.treeKey.startsWith('object:'+dbExplorer.database_id+':'+dbExplorer.schema_id+':'));
 ''' + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_async_finally_cannot_reenable_a_database_blocked_action(self):
@@ -753,7 +753,7 @@ assert.equal(queryResult,null);assert.equal($('run-query').disabled,true);assert
     def test_detail_query_pages_and_unresolved_views_and_disabled_actions(self):
         self.javascript(r'''
 for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])$(panel).append(new Node('button'),new Node('input'));
-await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-activity-panel'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts'].includes(n.id)).every(n=>n.disabled));
+await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-sre-recent-failures','observation-recent-failures-panel','observation-activity-panel'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts'].includes(n.id)).every(n=>n.disabled));
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);

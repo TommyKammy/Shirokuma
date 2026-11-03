@@ -29,8 +29,7 @@ class CuratorDatabaseUI(unittest.TestCase):
     def javascript(self, body, strict_dom=False):
         run = harness.subprocess.run
         def strict_run(args, **kwargs):
-            args = list(args)
-            args[2] = args[2].replace(
+            kwargs['input'] = kwargs['input'].replace(
                 'const $=id=>strictRemoved',
                 "const $=id=>id==='curator-panel'&&!nodes[id]?.parentElement?null:strictRemoved")
             return run(args, **kwargs)
