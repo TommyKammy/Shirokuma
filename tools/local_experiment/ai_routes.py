@@ -21,6 +21,7 @@ import db_platform_foundation_baseline
 import db_platform_foundation_controllers
 import db_platform_pod_baseline
 import db_platform_recent_failures
+import db_platform_telemetry_readiness
 import db_ai_settings
 from warehouse_operations import OperationError
 from query_context import QueryError
@@ -141,7 +142,7 @@ def dispatch(handler, method, path, params, principal, role):
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)
         return True
-    if path == '/api/v1/bears/platform-recent-failures':
+    if path in ('/api/v1/bears/platform-recent-failures', '/api/v1/bears/platform-telemetry-readiness'):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
@@ -154,7 +155,9 @@ def dispatch(handler, method, path, params, principal, role):
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
             raise QueryError('INVALID_INPUT', 400)
         try:
-            result = db_platform_recent_failures.observe(principal, role)
+            source = (db_platform_telemetry_readiness if path.endswith('telemetry-readiness')
+                      else db_platform_recent_failures)
+            result = source.observe(principal, role)
         except OperationError as error:
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)

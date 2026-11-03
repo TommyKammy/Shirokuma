@@ -600,6 +600,10 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 .foundation-controller-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:8px 16px}
 .foundation-controller-counts>div{min-width:0;border-bottom:1px solid var(--line);padding:4px 0}.foundation-controller-counts dt{color:var(--muted)}.foundation-controller-counts dd{margin:4px 0;font-variant-numeric:tabular-nums}
 
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness){min-width:0;max-width:100%}
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) .toolbar{flex-wrap:wrap}
+:is(#observation-sre-telemetry-readiness,#observation-telemetry-readiness-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) :is(.panel-body,p,h2,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures){min-width:0;max-width:100%}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) :is(.panel-body,p,h2,button,table,th,td,details,summary,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) .toolbar{flex-wrap:wrap}
@@ -3896,7 +3900,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbPodBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbPodBaselineInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3941,7 +3945,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbPodBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4437,6 +4441,114 @@ function dbRecentFailuresRender(kind){
   line(row.duration_ms,'td',tr); // Never convert a UInt64 duration to Number.
  }
  if(retain)for(const [index,details] of Array.from(node.querySelectorAll('details')).entries()){details.open=!!open[index];if(index===focused)details.querySelector('summary').focus();}
+}
+
+const dbTelemetryReadiness={sre:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null}};
+const dbTelemetryReadinessLabels={
+ title:['Telemetry endpoint checks','テレメトリのHTTP応答確認'],
+ about:['Fetch one recorded endpoint observation per service. Each panel keeps its own snapshot.','サービスごとにHTTP応答を1回確認します。各パネルは個別に結果を保持します。'],
+ boundary:['These observations describe endpoint responses at the recorded times. Service health, ingestion and container state are outside this check.','記録時刻のHTTP応答を表示します。サービス全体の健全性、データ取り込み、コンテナの状態は確認対象外です。'],
+ auth:['Refresh platform authority','プラットフォーム権限を更新'],
+ fetch:['Fetch endpoint observations','HTTP応答を取得'],
+ refreshing:['Refreshing platform authority.','プラットフォーム権限を確認しています。'],
+ fetching:['Fetching endpoint observations.','HTTP応答を取得しています。'],
+ verified:['Authority verified. Select Fetch endpoint observations.','権限を確認しました。「HTTP応答を取得」を選んでください。'],
+ denied:['Refresh platform authority. Platform administrator access and current and maximum global Admin roles are required.','プラットフォーム権限を更新してください。プラットフォーム管理者で、現在と上限のグローバルロールが管理者である必要があります。'],
+ failed:['Endpoint observations could not be loaded.','HTTP応答の観測結果を取得できませんでした。'],
+ responsive:['Responded','応答あり'],
+ ready:['Reports ready','準備完了'],
+ not_ready:['Reports not ready','準備未完了'],
+ unavailable:['Observation unavailable','応答を確認できません'],
+ observed:['Observed at (UTC)','観測時刻（UTC）']
+};
+function dbTelemetryReadinessText(key){return dbTelemetryReadinessLabels[key][language==='ja'?1:0];}
+function dbTelemetryReadinessID(kind){return 'observation-'+kind+'-telemetry-readiness-';}
+function dbTelemetryReadinessRoot(kind){return kind==='sre'?'observation-sre-telemetry-readiness':'observation-telemetry-readiness-panel';}
+function dbTelemetryReadinessAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbTelemetryReadinessView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbTelemetryReadinessAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbTelemetryReadinessLeave(p){++p.epoch;p.busy=null;p.notice='';}
+function dbTelemetryReadinessSync(){
+ const auth=dbTelemetryReadinessAuth(),view=dbTelemetryReadinessView();
+ for(const [kind,p] of Object.entries(dbTelemetryReadiness)){
+  if(auth!==p.auth){dbTelemetryReadinessLeave(p);p.record=null;p.rendered=null;p.auth=auth;}
+  if(!dbTelemetryReadinessAllowed()){p.record=null;p.rendered=null;}
+  if(view!==p.view){dbTelemetryReadinessLeave(p);p.view=view;}
+  const panel=$(dbTelemetryReadinessRoot(kind));if(!panel?.dataset.installed)continue;
+  panel.hidden=kind==='sre'&&dbObservations.sre.scope!=='platform';
+  const id=dbTelemetryReadinessID(kind);
+  for(const key of ['title','about','boundary','auth','fetch'])$(id+key).textContent=dbTelemetryReadinessText(key);
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbTelemetryReadinessAllowed();
+  dbTelemetryReadinessRender(kind);
+ }
+}
+function dbTelemetryReadinessInstall(){
+ for(const kind of ['sre','compute']){
+  if($(dbTelemetryReadinessRoot(kind))?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations.sre.installed?$('bear-panel-sre'):null;if(!host)continue;
+  const id=dbTelemetryReadinessID(kind),panel=dbAdminNode('section',dbTelemetryReadinessRoot(kind),host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head);
+  const body=dbAdminNode('div','',panel);body.className='panel-body';dbAdminNode('p',id+'about',body);dbAdminNode('p',id+'boundary',body);
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth',dbTelemetryReadinessText('auth'),()=>dbTelemetryReadinessRefreshAuth(kind));
+  dbAdminButton(bar,id+'fetch',dbTelemetryReadinessText('fetch'),()=>dbTelemetryReadinessFetch(kind));
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbTelemetryReadinessSync();
+}
+function dbTelemetryReadinessCapture(kind){
+ const p=dbTelemetryReadiness[kind],token={},epoch=++p.epoch,auth=dbTelemetryReadinessAuth(),view=dbTelemetryReadinessView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbTelemetryReadinessAuth()&&view===dbTelemetryReadinessView()};
+}
+async function dbTelemetryReadinessRefreshAuth(kind){
+ dbTelemetryReadinessSync();const p=dbTelemetryReadiness[kind];if(!p||p.busy||!dbPlatformCanRefresh())return;
+ const read=dbTelemetryReadinessCapture(kind);p.notice='refreshing';dbTelemetryReadinessSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  p.notice=dbTelemetryReadinessAllowed()?'verified':'denied';
+ }catch{if(read.current()){p.record=null;p.notice='failed';}}
+ finally{if(p.busy===read.token)p.busy=null;dbTelemetryReadinessSync();}
+}
+async function dbTelemetryReadinessFetch(kind){
+ dbTelemetryReadinessSync();const p=dbTelemetryReadiness[kind];if(!p||p.busy||!dbTelemetryReadinessAllowed())return;
+ const read=dbTelemetryReadinessCapture(kind);p.notice='fetching';dbTelemetryReadinessSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-telemetry-readiness',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>1024)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  p.record=dbTelemetryReadinessRecord(data);p.notice='';
+ }catch{if(read.current()){p.record=null;p.notice='failed';}}
+ finally{if(p.busy===read.token)p.busy=null;dbTelemetryReadinessSync();}
+}
+
+function dbTelemetryReadinessRecord(data){
+ if(!dbSavedExact(data,['agenthouse','loki']))throw Error('INVALID_RESPONSE');
+ for(const [name,statuses] of [['agenthouse',['responsive','unavailable']],['loki',['ready','not_ready','unavailable']]]){
+  const observation=data[name];
+  if(!dbSavedExact(observation,['observed_at','status'])||!dbObservationTime(observation.observed_at,true)||!statuses.includes(observation.status))throw Error('INVALID_RESPONSE');
+  Object.freeze(observation);
+ }
+ return Object.freeze(data);
+}
+function dbTelemetryReadinessRender(kind){
+ const node=$(dbTelemetryReadinessID(kind)+'output'),p=dbTelemetryReadiness[kind],allowed=dbTelemetryReadinessAllowed(),record=allowed?p.record:null,old=p.rendered;
+ if(old&&old.record===record&&old.notice===p.notice&&old.language===language&&old.allowed===allowed)return;
+ p.rendered={record,notice:p.notice,language,allowed};
+ node.replaceChildren();
+ const local=dbTelemetryReadinessText;
+ if(p.notice||!record)dbAdminNode('p','',node,local(p.notice||(allowed?'verified':'denied')));
+ if(!record)return;
+ for(const [name,label] of [['agenthouse','AgentHouse'],['loki','Loki']]){
+  const observation=record[name];
+  dbAdminNode('p','',node,label+' · '+local(observation.status)+' · '+local('observed')+' '+observation.observed_at);
+ }
 }
 
 const dbPodBaseline={policy:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null}};
@@ -6486,7 +6598,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbPodBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();
  dbAISettingsSync();
  dbAdminGate();
 }
@@ -11139,7 +11251,7 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbRecentFailuresInstall();dbPodBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbPodBaselineInstall();dbActivityInstall();dbRuntimeSync();
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
