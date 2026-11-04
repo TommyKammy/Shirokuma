@@ -1,4 +1,5 @@
 """Strict Database SQL explanation adapter for both HTTP surfaces."""
+import json
 import re
 from urllib.parse import unquote_to_bytes
 
@@ -20,6 +21,7 @@ import db_platform_workload_baseline
 import db_platform_foundation_baseline
 import db_platform_foundation_controllers
 import db_platform_pod_baseline
+import db_platform_manifest_advisory
 import db_platform_controller_baseline
 import db_platform_recent_failures
 import db_platform_telemetry_logs
@@ -29,9 +31,58 @@ from warehouse_operations import OperationError
 from query_context import QueryError
 
 
+MANIFEST_ADVISORY_PATH = '/api/v1/bears/platform-manifest-advisory'
+
+
+def _read_advisory_manifest(handler, params):
+    headers = handler.headers
+    length = headers.get('Content-Length', '')
+    if (handler.path != MANIFEST_ADVISORY_PATH or params or headers.defects
+            or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", key)
+                   or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in value)
+                   for key, value in headers.raw_items())
+            or any(len(headers.get_all(key)) != 1 for key in headers.keys())
+            or headers.get_all('Transfer-Encoding')
+            or len(headers.get_all('Content-Type', [])) != 1
+            or headers.get_content_type() != 'application/json'
+            or not re.fullmatch(r'[1-9][0-9]{0,5}', length)
+            or int(length) > 128 * 1024):
+        raise ValueError()
+
+    # Require a complete UTF-8 frame. The generic reader accepts short reads
+    # and auto-detects UTF-16/32, neither of which is part of this endpoint.
+    size = int(length)
+    raw = handler.rfile.read(size)
+    if len(raw) != size:
+        raise ValueError()
+
+    def fields(pairs):
+        if len(pairs) != 1 or pairs[0][0] != 'manifest':
+            raise ValueError()
+        return dict(pairs)
+
+    body = json.loads(raw.decode('utf-8'), object_pairs_hook=fields)
+    if not isinstance(body, dict) or type(body['manifest']) is not str:
+        raise ValueError()
+    return body['manifest']
+
+
 def dispatch(handler, method, path, params, principal, role):
     if path != '/api/v1/bears' and not path.startswith('/api/v1/bears/'):
         return False
+    if path == MANIFEST_ADVISORY_PATH:
+        handler.close_connection = True
+        if method != 'POST':
+            raise QueryError('NOT_FOUND', 404)
+        try:
+            result = db_platform_manifest_advisory.advise(
+                principal, role, lambda: _read_advisory_manifest(handler, params))
+        except OperationError as error:
+            raise QueryError(error.code, error.status) from None
+        except (ValueError, RecursionError):
+            raise QueryError('INVALID_INPUT', 400) from None
+        handler.respond(result, 200)
+        return True
     if path == '/api/v1/bears/platform-runtime-history':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)

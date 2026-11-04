@@ -40,6 +40,8 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_platform_pod_baseline_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_controller_baseline.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_platform_controller_baseline_database_ui.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_manifest_advisory.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_platform_manifest_advisory_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_recent_failures.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_platform_recent_failures_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_platform_telemetry_readiness.py'

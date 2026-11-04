@@ -624,6 +624,10 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .toolbar{flex-wrap:wrap}
 :is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) table{table-layout:fixed;width:100%;min-width:0}
 :is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+#observation-policy-manifest-advisory{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#observation-policy-manifest-advisory .panel-body p{max-inline-size:min(75ch,100%)}
+#observation-policy-manifest-advisory textarea{display:block;inline-size:min(75ch,100%);box-sizing:border-box;resize:vertical}
+#observation-policy-manifest-advisory .toolbar{flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -3909,7 +3913,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbManifestAdvisoryInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3954,7 +3958,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();dbControllerBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4859,6 +4863,141 @@ function dbPodBaselineRender(kind){
   }
  }
  if(retain)for(const [index,details] of Array.from(node.querySelectorAll('details')).entries()){details.open=!!open[index];if(index===focused)details.querySelector('summary').focus();}
+}
+
+const dbManifestAdvisory={auth:'',view:'',busy:null,verified:false,record:null,notice:''};
+const dbManifestPrefix='observation-policy-manifest-advisory';
+const dbManifestKinds=['Pod','Deployment','StatefulSet','DaemonSet','Job','CronJob'];
+const dbManifestContainerKinds=['container','init_container','ephemeral_container'];
+const dbManifestChecks=['read_only_root_filesystem','non_root','drop_all_capabilities','cpu_memory_limits'];
+const dbManifestCopy={
+ 'Manifest declaration review':'マニフェストの宣言確認',
+ 'Workload manifest (YAML or JSON)':'ワークロードのマニフェスト（YAML または JSON）',
+ 'Paste one Pod, Deployment, StatefulSet, DaemonSet, Job or CronJob document, up to 64 KiB.':'Pod、Deployment、StatefulSet、DaemonSet、Job、CronJob のいずれか1文書（64 KiB まで）を貼り付けてください。',
+ 'Reviews four declarations per container. Cluster state, admission and full Kubernetes validation are outside this review.':'コンテナごとに4つの宣言を確認します。クラスターの状態、admission、Kubernetes の完全な検証は対象外です。',
+ 'Review manifest':'マニフェストを確認',
+ 'Refresh authority to enable review.':'確認を行うには権限を更新してください。',
+ 'Platform authority verified. Paste or review a manifest.':'プラットフォーム権限を確認しました。マニフェストを貼り付けるか、確認を実行してください。',
+ 'Reviewing manifest.':'マニフェストの宣言を確認しています。',
+ 'Review complete.':'宣言の確認が完了しました。',
+ 'Use one supported workload with valid declarations and within the size limit.':'対応するワークロード1文書を使い、宣言の形式とサイズ上限を確認してください。',
+ 'Manifest review unavailable. Refresh authority or try again.':'マニフェストを確認できません。権限を更新するか、もう一度実行してください。'
+};
+function dbManifestText(label){return language==='ja'&&Object.hasOwn(dbManifestCopy,label)?dbManifestCopy[label]:dbPodBaselineText(label);}
+function dbManifestNode(suffix){return $(dbManifestPrefix+'-'+suffix);}
+function dbManifestVisible(){const policy=dbObservations.policy;return databaseMode&&activeTab==='bears'&&policy.selected&&policy.scope==='platform';}
+function dbManifestAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbManifestAdvisoryInstall(){
+ if($(dbManifestPrefix)?.dataset.installed)return;
+ const panel=dbAdminNode('section',dbManifestPrefix,$('bear-panel-policy'));
+ panel.dataset.installed='true';panel.className='panel';panel.setAttribute('aria-labelledby',dbManifestPrefix+'-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';
+ const body=dbAdminNode('div','',panel);body.className='panel-body';
+ dbAdminNode('h2',dbManifestPrefix+'-title',head);
+ dbAdminNode('p',dbManifestPrefix+'-about',body);
+ dbAdminNode('p',dbManifestPrefix+'-boundary',body);
+ const label=dbAdminNode('label',dbManifestPrefix+'-label',body);
+ label.htmlFor=dbManifestPrefix+'-draft';
+ const draft=dbAdminNode('textarea',label.htmlFor,body);
+ draft.rows=8;draft.spellcheck=false;draft.autocomplete='off';
+ draft.setAttribute('aria-describedby',dbManifestPrefix+'-about '+dbManifestPrefix+'-boundary');
+ draft.oninput=()=>{Object.assign(dbManifestAdvisory,{busy:null,record:null,notice:''});dbManifestAdvisorySync();};
+ const toolbar=dbAdminNode('div','',body);toolbar.className='toolbar';
+ dbAdminButton(toolbar,dbManifestPrefix+'-auth','Refresh platform authority',()=>dbManifestRequest(true));
+ dbAdminButton(toolbar,dbManifestPrefix+'-submit','Review manifest',()=>dbManifestRequest(false));
+ dbAdminNode('p',dbManifestPrefix+'-status',body).setAttribute('role','status');
+ dbAdminNode('div',dbManifestPrefix+'-result',body);
+}
+function dbManifestAdvisorySync(){
+ const panel=$(dbManifestPrefix);
+ if(!panel?.dataset.installed)return;
+ const state=dbManifestAdvisory,draft=dbManifestNode('draft'),auth=dbPlatformAuth();
+ const visible=dbManifestVisible(),allowed=dbManifestAllowed(),view=JSON.stringify([visible,language]);
+ if(auth!==state.auth||!allowed){
+  draft.value='';Object.assign(state,{verified:false,record:null});
+  if(auth!==state.auth)Object.assign(state,{auth,busy:null,notice:''});
+ }
+ if(view!==state.view){Object.assign(state,{view,busy:null,notice:''});if(!visible)state.record=null;}
+ panel.hidden=!visible;
+ for(const [suffix,label] of [
+  ['title','Manifest declaration review'],['label','Workload manifest (YAML or JSON)'],
+  ['about','Paste one Pod, Deployment, StatefulSet, DaemonSet, Job or CronJob document, up to 64 KiB.'],
+  ['boundary','Reviews four declarations per container. Cluster state, admission and full Kubernetes validation are outside this review.'],
+  ['auth','Refresh platform authority'],['submit','Review manifest']
+ ])dbManifestNode(suffix).textContent=dbManifestText(label);
+ draft.disabled=!allowed;
+ dbManifestNode('auth').disabled=!!state.busy||!dbPlatformCanRefresh();
+ dbManifestNode('submit').disabled=!!state.busy||!allowed||!state.verified||!draft.value.trim();
+ const notice=dbManifestText(state.notice||(state.record?'Review complete.':state.verified?'Platform authority verified. Paste or review a manifest.':'Refresh authority to enable review.'));
+ const status=dbManifestNode('status');if(status.textContent!==notice)status.textContent=notice;
+ dbManifestRender();
+}
+function dbManifestRecord(data){
+ if(!dbSavedExact(data,['kind','containers'])||!dbManifestKinds.includes(data.kind)
+    ||!Array.isArray(data.containers)||!data.containers.length||data.containers.length>64)throw Error();
+ const counts=[0,0,0];let previous=0;
+ for(const row of data.containers){
+  if(!dbSavedExact(row,['kind','ordinal','checks']))throw Error();
+  const rank=dbManifestContainerKinds.indexOf(row.kind);
+  if(rank<previous||rank===2&&data.kind!=='Pod'||row.ordinal!==++counts[rank]
+     ||!dbSavedExact(row.checks,dbManifestChecks)
+     ||dbManifestChecks.some(key=>!['met','not_met'].includes(row.checks[key])))throw Error();
+  previous=rank;
+ }
+ if(!counts[0])throw Error();
+ return data;
+}
+function dbManifestRender(){
+ const node=dbManifestNode('result'),data=dbManifestAdvisory.record;
+ node.replaceChildren();
+ if(!data)return;
+ const line=(tag,parent,label)=>{const n=document.createElement(tag);n.textContent=label;parent.append(n);return n;};
+ line('h3',node,data.kind);
+ for(const row of data.containers){
+  line('h4',node,dbManifestText(['Container','Init container','Ephemeral container'][dbManifestContainerKinds.indexOf(row.kind)])+' '+row.ordinal);
+  const list=line('ul',node,'');
+  for(const [index,label] of ['Read-only root filesystem','Non-root execution','Drop ALL capabilities','Positive CPU and memory limits'].entries()){
+   const outcome=row.checks[dbManifestChecks[index]]==='met'?'Declaration matches':'Declaration missing or mismatched';
+   line('li',list,dbManifestText(label)+' · '+dbManifestText(outcome));
+  }
+ }
+}
+async function dbManifestRequest(refresh){
+ dbManifestAdvisorySync();
+ const state=dbManifestAdvisory;
+ if(!dbManifestVisible()||state.busy||(refresh?dbManifestNode('auth').disabled:dbManifestNode('submit').disabled))return;
+ const token={},auth=dbPlatformAuth(),view=state.view;
+ const current=()=>state.busy===token&&dbManifestVisible()&&state.view===view&&dbPlatformAuth()===auth;
+ const manifest=refresh?'':dbManifestNode('draft').value;
+ const body=refresh?null:JSON.stringify({manifest});
+ const encoder=new TextEncoder();
+ if(!refresh&&(encoder.encode(manifest).length>65536||encoder.encode(body).length>131072)){
+  state.notice='Use one supported workload with valid declarations and within the size limit.';dbManifestAdvisorySync();return;
+ }
+ Object.assign(state,{busy:token,record:null,notice:refresh?'Refreshing platform authority.':'Reviewing manifest.'});
+ if(refresh)state.verified=false;
+ dbManifestAdvisorySync();
+ try{
+  const response=refresh?await fetch('/api/session'):await fetch('/api/v1/bears/platform-manifest-advisory',{
+   method:'POST',headers:{'Content-Type':'application/json','X-Shirokuma-Role':'admin'},body
+  });
+  if(!current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  if(!refresh&&response.status===400){state.notice='Use one supported workload with valid declarations and within the size limit.';return;}
+  if(!response.ok)throw Error();
+  if(refresh){
+   const session=await response.json();if(!current())return;
+   dbAdminSession(session);
+   if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+   state.verified=dbManifestAllowed();
+  }else{
+   const raw=await response.text();if(!current())return;
+   if(new TextEncoder().encode(raw).length>65536)throw Error();
+   state.record=dbManifestRecord(JSON.parse(raw));
+  }
+  state.notice='';
+ }catch{if(current())state.notice='Manifest review unavailable. Refresh authority or try again.';}
+ finally{if(state.busy===token)state.busy=null;dbManifestAdvisorySync();}
 }
 
 const dbControllerBaseline={policy:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null}};
@@ -6892,7 +7031,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();dbControllerBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
  dbAISettingsSync();
  dbAdminGate();
 }

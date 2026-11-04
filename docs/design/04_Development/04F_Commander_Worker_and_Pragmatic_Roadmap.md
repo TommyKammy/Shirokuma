@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-04
-version: "1.67"
+version: "1.68"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-04 JST、[DB-P6-4C2J](../../guides/database-p6-4c2j-manifest-advisory-2026-11-04.md)でPolicy PlatformのP管理者がYAML／JSONを1文書貼り付け、Podと5種のコントローラーの4宣言を確認できるようにし、限定技術受入を完了した。SREの生ログ本文／Loki検索、他namespaceの範囲判断、6F清掃、M1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-4C2I](../../guides/database-p6-4c2i-controller-baseline-2026-11-04.md)で登録済みnamespaceの5種のコントローラーについてPod templateの4宣言をPolicy Platform／Computeから手動確認できるようにし、限定技術受入を完了した。任意manifest、他namespaceの範囲判断、SREの生ログ本文／Loki検索、6F清掃、M1本人受入を継続する。
 
