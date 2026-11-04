@@ -5,7 +5,7 @@ title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
 updated: 2026-11-04
-version: "0.6"
+version: "0.7"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
@@ -16,17 +16,18 @@ tags: [database, workbench, integration, acceptance]
 
 ## 必須範囲の照合
 
-現行の機能表89 IDと0R1の台帳が一致することを確認した。0R1の区分はM1義務82行、別track 3行（ING-11／JOB-11／CMP-06）、範囲判断4行（SQL-09／ADM-09〜11）。その後の限定受入を照合し、範囲区分の変更合意は確認できていない。[機能表](database-capability-matrix-2026-10-29.md) · [0R1の監査](database-p6-0r1-capability-closure-audit-2026-11-03.md)
+2026-11-04 JST、所有者は固定LOCALでの通常運用、専用環境での基盤管理、独立環境での技術検証、本人評価をM1の条件とする推奨案を採用した。0R1の必須82行にSQL-09とADM-09／10の合意済み範囲を加える。ADM-11の物理削除は既存の別track 3行（ING-11／JOB-11／CMP-06）に加えて別計画へ置き、データ保持退役はADM-08で受け入れる。機能表89 IDの実装・通常導線・証拠を照合し、範囲合意と検証結果を別々に記録する。[機能表](database-capability-matrix-2026-10-29.md) · [合意前の0R1監査](database-p6-0r1-capability-closure-audit-2026-11-03.md)
 
 | 行 | 今回の照合 |
 | --- | --- |
 | ING-03／TRF-06、AUD-02、SQL-12／13 | 6Fの元操作への再接続と6F-R1の非purge清掃、1Aの保存履歴対応、B3のWAP／Managed Martsへの案内を既存の限定証拠に対応付けた。 |
-| SQL-09 | Worksheetから、現在の接続先を確認するSQLを読取り専用の新規下書きに開ける。Data Explorerには選択した表の読取りSQLを開く導線がある。両導線を旧3種のサンプルメニューの代替として受け入れるかは、所有者の範囲判断に残る。 |
-| AI-04／CMP-05 | 固定のreadiness、診断集計、保存済み失敗metadata、固定Docker 2コンテナの生ログとLoki重大度検索に限定対応した。登録済み基盤のOPA重大度検索と旧名前空間全体の範囲はC2Mで区別する。 |
-| AI-02／AI-03／AI-05 | 既存の限定操作を受入済み。任意Snapshotへの旧rollback、横断raw metadata／説明保存、登録外namespaceと広いpolicy scopeについて、旧操作との対応範囲を確定する。 |
-| ADM-09 | 準備済みの公開材料を使う登録・plan・apply依頼に、操作と対象DBのREADY照合を接続した。対象環境でのoperator受入範囲は所有者判断に残る。 |
-| ADM-10 | 段階作成のbootstrap／full承認、再計画、承認の取下げ、回復照合を同じ作成IDで扱う。現在の計画と状態を確認してから操作する。staged経路をM1で受け入れる範囲は所有者判断に残る。 |
-| ADM-11 | 通常Workbenchで非purge退役の影響、停止対象の予定、閉鎖確認と保持範囲を示す。物理purge・資格情報／PVC削除をM1必須に含めるかは所有者判断に残る。 |
+| SQL-09 | 現在の接続先を確認するWorksheetの読取りSQLと、Explorerの選択表を開く読取りSQLを、旧3種の固定サンプルの代替として採用する。 |
+| AI-04／CMP-05 | 現行登録済みLOCALを基準に、基盤コントローラー記録、失敗Pawprintsの保存メタデータ、AgentHouse／Lokiのreadinessとログ診断・生ログ、管理対象Docker 2件と登録済み `trino-opa` のLoki重大度検索を確認する。対象と観測時刻、取得不可と0件を画面で区別する。旧 `shirokuma-dev` の履歴と追加の発行元は対象を指定して扱う。 |
+| AI-05 | 現行DB内の認可確認と、登録済みLOCALのPod・コントローラー、貼り付けmanifestの4宣言チェックを確認する。実行時の強制やクラスタ横断のPolicy監査は別範囲とする。 |
+| AI-02／AI-03 | SQL案からManual WAP／Managed Marts、対象表の探索・メタデータ説明・lineageを通常導線で確認する。WAP公開のrollbackは公開記録を対象にする。任意Snapshotへの旧rollback、横断raw metadata／説明保存との差は閉鎖監査に基づいて照合する。 |
+| ADM-09 | 専用環境の基盤管理者向け経路として、登録・plan・apply引継ぎを実operatorが処理し、fullの検証済み `APPLIED` と対象DBの `READY` をWorkbenchで照合する。 |
+| ADM-10 | 専用環境でbootstrap／fullの個別承認、同じ作成IDでの再計画・取下げ・回復照合を検証する。通常DB作成は `logical_v1` を使う。 |
+| ADM-11 | M1の退役はADM-08のデータ保持退役とする。物理purge・資格情報／PVC削除は別計画で対象資源を確定する。 |
 | TRF-11 | 承認済みprojectの保存plan、build／test、明示TABLE公開を対象にする。正式VIEW公開・VIEW連鎖・incremental・並列実行は別拡張。 |
 
 [C2Mの収集範囲とSQL-09／ADM-09〜11の照合](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
@@ -61,7 +62,7 @@ Workbench回帰1,303件、段階作成・準備・認可・回復・HTTPの重�
 
 ADM-08の非purge退役は対象DBの新規受付と予定を止め、保存済みの実行グラフを照合して閉鎖を確定する。DB ID、SQL名、カタログ、テーブル、ストレージ、PVC、資格情報を保持する。P4-8では専用DBで予定3件の停止、UNKNOWNを含むblocker、明示照合による `RETIRED`、選定した物理データと資格情報の保持を確認した。[P4-8実機受入](database-p4-8-acceptance-2026-10-23.md)
 
-Phase 4の計画は、物理purge・ストレージ／PVC削除・資格情報撤去を別計画に置く。現行の論理DB基盤には共有PVCがあり、退役の依存一覧は台帳上の参照を示す。DB専有の削除対象は別途確定する。ADM-11をM1で閉じるには、物理削除の要否と対象範囲について所有者判断が残る。[Phase 4の対象範囲](database-phase4-implementation-plan-2026-10-20.md#固定する対象範囲) · [論理DBの基盤構成](database-logical-create-implementation-2026-10-28.md) · [M1閉鎖監査](database-p6-0r1-capability-closure-audit-2026-11-03.md)
+所有者合意により、物理purge・ストレージ／PVC削除・資格情報撤去はPhase 4の方針どおり別計画で扱う。現行の論理DB基盤には共有PVCがあるため、物理削除の計画ではDB専有の資源と共有資源を確定する。[Phase 4の対象範囲](database-phase4-implementation-plan-2026-10-20.md#固定する対象範囲) · [論理DBの基盤構成](database-logical-create-implementation-2026-10-28.md)
 
 隔離Workbenchの通常画面で、対象DBの有効な予定1件を事前確認した。退役要求で同じ1件の停止が記録され、`READY` → `RETIRING` → 明示照合で `RETIRED` に進んだ。日英の保持・完了表示と、閲覧者ロールでの管理画面の非表示を確認した。実HTTPと台帳の照合で、対象のDB参照・オブジェクト・合成資格情報が保持され、別DBの状態・予定・UNKNOWN実行が変化しないことを確認した。その別DBに対する独立の試験ではUNKNOWNが明示照合後も残り、`RETIRING` に留まった。非Pおよび閲覧者ロールはHTTP 403、`purge` を含む要求はHTTP 400だった。共有環境での退役や物理削除は実行していない。
 
@@ -95,4 +96,6 @@ READYの作成リンクからSQLを開き、Ingestへ移動して再読み込み
 ## 判定を分ける残件
 
 - 独立clean環境と故障環境での縦断、必須範囲の閉鎖、本人の操作性評価を継続する。元の失敗・未確定履歴を証拠として保持する。[環境と受入層](database-full-capability-and-compute-plan-2026-10-28.md#8-共通の受入と性能評価)
-- 作成性能はREADYと同じRAWでの初回SQL成功を含む標本で別に判定する。今回の単一作成は機能確認。既存20標本ではp95 2.759秒、p50 2秒目標は未達。[作成性能記録](database-logical-create-performance-2026-10-28.md)
+- 作成性能は、READYと同じRAWでの初回SQL成功を含む独立した改善目標として追う。既存20標本ではp50 2.700秒、標本p95 2.759秒で、中央値2秒は未達。本人評価で待ち時間や進捗表示が作業を妨げると判定された場合は、M1の前に解消する。[作成性能記録](database-logical-create-performance-2026-10-28.md)
+
+本人評価には合成データと専用DBを使う。通常Workbenchを開き、新規DBの作成から投入・変換・公開、AI説明、Jobの手動実行と一回限りの予定、監査、休止・復帰まで進める。操作の助言を要した箇所、待ち時間、画面が示した次の操作、作業を止めた指摘を記録する。本人の実施と判定は、開発側の予備縦断と技術検証とは別欄に記録する。[評価項目](database-full-capability-and-compute-plan-2026-10-28.md#8-共通の受入と性能評価)

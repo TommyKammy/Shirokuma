@@ -235,9 +235,16 @@ Job・Stage・Mart・schedule・alertは既存のDB対応を再利用する。�
 
 ### DB-P6-7 統合受入
 
-全対象unitの技術受入後、既存環境と独立したclean環境で縦断する。未確認の外部効果やUNKNOWNを別環境の成功で消さず、保存済み履歴の状態を保つ。DB作成性能の継続条件は独立した合否欄で確認する。
+全対象unitの技術受入後、既存環境と独立したclean環境で縦断する。未確認の外部効果やUNKNOWNを別環境の成功で消さず、保存済み履歴の状態を保つ。DB作成から初回SQLまでの中央値2秒は独立した性能目標とする。本人評価で待ち時間や進捗表示が作業を妨げる場合はM1の前に解消する。
 
 **完了条件**：DB-P6-0の全必須行が対応し、実API／CLI、実engine／dbt／LLM、実ブラウザー、故障回復の結果が揃う。未対応の必須行はM1を止める。対象範囲の縮小は所有者と合意した変更だけを反映し、変更前の全機能が完成したとは記録しない。通常UIからの所有者本人の操作性評価を別に記録し、blocking指摘が残る間はM1を完了にしない。
+
+**M1の合意範囲**（[89行の機能マトリクス](database-capability-matrix-2026-10-29.md)）
+
+- SQL-09は現在の接続先を確認するWorksheet下書きと、Data Explorerで選択した表のSELECT下書きを開く既存導線で旧3種のサンプルを代替する。[DB-P6-7の照合記録](database-p6-7-integrated-acceptance-2026-11-04.md)
+- ADM-09／10は専用の隔離環境で検証するM1必須のoperator経路とする。実operatorによるfull適用後のREADY照合と、段階作成のbootstrap／full承認・再計画・取下げ・回復照合を確認する。日常のDB作成は通常の `logical_v1` を維持する。[登録・引継ぎ・READY照合](database-p6-7-integrated-acceptance-2026-11-04.md#adm-09の登録引継ぎready照合) · [段階作成](database-p6-7-integrated-acceptance-2026-11-04.md#adm-10の段階作成)
+- 退役はADM-08のデータ保持経路をM1で確認する。共有リソースがあるため、ADM-11の物理purge・資格情報撤去・PVC削除は別計画とする。[退役と物理削除の範囲](database-p6-7-integrated-acceptance-2026-11-04.md#adm-11の退役と物理削除の範囲)
+- Bears／SRE／Policyは、登録済みLOCALの発行元と日常運用に必要な観測項目を対象とする。発行元・項目・通常画面の対応を統合受入に記録する。[発行元と観測項目](database-p6-7-integrated-acceptance-2026-11-04.md#必須範囲の照合)
 
 ## 5 DB-P7 実サイズ変更とWorker増減
 
