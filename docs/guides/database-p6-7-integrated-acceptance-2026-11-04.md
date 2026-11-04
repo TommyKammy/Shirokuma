@@ -5,7 +5,7 @@ title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
 updated: 2026-11-04
-version: "0.2"
+version: "0.3"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
@@ -21,13 +21,15 @@ tags: [database, workbench, integration, acceptance]
 | 行 | 今回の照合 |
 | --- | --- |
 | ING-03／TRF-06、AUD-02、SQL-12／13 | 6Fの元操作への再接続と6F-R1の非purge清掃、1Aの保存履歴対応、B3のWAP／Managed Martsへの案内を既存の限定証拠に対応付けた。 |
-| SQL-09 | 固定サンプルメニューは未接続。Data Explorerは現在のDB／スキーマ／ロールを照合して、未実行の読取りSQLを新規Worksheetに開く。これを代替とするかは範囲判断に残る。 |
+| SQL-09 | Worksheetから、現在の接続先を確認するSQLを読取り専用の新規下書きに開ける。Data Explorerには選択した表の読取りSQLを開く導線がある。両導線を旧3種のサンプルメニューの代替として受け入れるかは、所有者の範囲判断に残る。 |
 | AI-04／CMP-05 | 固定のreadiness、診断集計、保存済み失敗metadata、固定Docker 2コンテナの生ログとLoki重大度検索に限定対応した。登録済み基盤のOPA重大度検索と旧名前空間全体の範囲はC2Mで区別する。 |
 | AI-02／AI-03／AI-05 | 既存の限定操作を受入済み。任意Snapshotへの旧rollback、横断raw metadata／説明保存、登録外namespaceと広いpolicy scopeについて、旧操作との対応範囲を確定する。 |
 | ADM-09〜11 | 高度な登録・staged operator操作には条件付きの導線がある。既存退役はデータ・資格情報を保持する。operator受入と物理purgeの要否は範囲判断に残る。 |
 | TRF-11 | 承認済みprojectの保存plan、build／test、明示TABLE公開を対象にする。正式VIEW公開・VIEW連鎖・incremental・並列実行は別拡張。 |
 
 [C2Mの収集範囲とSQL-09／ADM-09〜11の照合](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
+
+SQL-09の接続先確認SQLは、現在のDB・スキーマ・実行ロールを引き継いだ読取り専用の新規下書きとして開く。通常Chromeでは、操作後のクエリ台帳1,054件が一致し、明示実行1回で実Trinoが `p67_integrated_20261104 / raw` を返した。実行記録 `e35eab66-d7ce-47b1-b9e3-6fedb685d00a` は `LOCAL / admin / read-only`。元の下書きと書込みモードの保持、日英ラベル、ロール上限による操作無効、Workbenchの70テスト成功を確認した。
 
 ## 現行環境での予備縦断
 

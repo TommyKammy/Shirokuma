@@ -6230,6 +6230,15 @@ function dbReason(w=dbCurrent()){
  if(!Number.isInteger(Number(w.max_rows))||Number(w.max_rows)<1||Number(w.max_rows)>10000)return t('Max rows');
  return '';
 }
+const dbContextExampleLabel='Open context example';
+const dbContextExampleHelp='Open a new read-only draft to check the connection context.';
+Object.assign(i18n.ja,{
+ [dbContextExampleLabel]:'接続先の確認SQLを開く',
+ [dbContextExampleHelp]:'接続先を確認するための読み取り専用の下書きを新しく開きます。'
+});
+function dbContextExampleReason(w=dbCurrent()){
+ return dbReason({...w,mode:'read-only'});
+}
 const dbWorkflowHelp='SQL proposal → successful own proposal (data_engineer/admin): Edit in Manual WAP → explicitly select the same database and E/A role, choose a writable SANDBOX panel schema and matching target schema → Refresh panel context → New model with default SQL and one default source, an otherwise empty draft → explicitly Load proposal draft → review and Save model → Build → Audit → admin Publish. Rollback uses a linked publication, not an arbitrary snapshot. Refresh registered targets through Managed Marts as an authorized admin. Navigation does not import a proposal or change context.';
 Object.assign(i18n.ja,{
  [dbWorkflowHelp]:'SQL 案 → 本人の成功済み案（data_engineer/admin）で Edit in Manual WAP → 同じ DB・E/A ロールと書込可能な SANDBOX のパネルスキーマ・同じ対象スキーマを明示選択 → Refresh panel context → New model で既定 SQL・既定ソース1件以外が空の下書き → 明示的に Load proposal draft → 確認してモデルを保存 → Build → Audit → admin が Publish。Rollback は公開に紐づく操作です。任意のスナップショット復元とは異なります。登録済み対象の更新には権限のある admin が Managed Marts を使用してください。案内ボタンは案の取込やコンテキスト変更を行いません。',
@@ -6289,7 +6298,12 @@ function dbControls(){
  dbSelectOptions('query-warehouse',[{value:'LOCAL',label:'LOCAL'}],w.warehouse,'Warehouse');
  $('max-rows').value=w.max_rows;
  const run=dbRuns.get(w.id),reason=dbReason(w);
- message('database-context-state',reason);
+ const exampleReason=dbContextExampleReason(w),example=$('open-context-example');
+ if(example){
+  example.disabled=!!exampleReason;
+  example.title=exampleReason||t(dbContextExampleHelp);
+ }
+ message('database-context-state',reason||(exampleReason?t(dbContextExampleLabel)+' — '+exampleReason:''));
  $('run-query').disabled=!!reason||dbRunBlocked(run);
  $('cancel-query').disabled=!dbCanCancel(run)||!!run?.canceling;
  for(const id of ['export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
@@ -7193,7 +7207,16 @@ async function initializeDatabaseUI(session){
  const legacyRenderWorksheets=renderWorksheets,legacyRenderResults=renderResults,legacyAPI=api;
  saveWorksheet=dbSave;
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
- addWorksheet=(sql='')=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
+ addWorksheet=(sql='',mode=dbCurrent().mode)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql,mode};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
+ const example=document.createElement('button');example.id='open-context-example';example.type='button';example.disabled=true;
+ ui(example,dbContextExampleLabel);
+ example.setAttribute('aria-describedby','database-context-state');
+ example.onclick=()=>{
+  if(dbContextExampleReason())return;
+  addWorksheet('SELECT current_catalog AS catalog_name, current_schema AS schema_name','read-only');
+  $('sql').focus();
+ };
+ $('add-worksheet-tab').after(example);
  renderResults=()=>{legacyRenderResults();dbExportControls();};
  download=dbExportResults;
  $('copy-tsv').hidden=true;$('copy-tsv').disabled=true;$('copy-tsv').onclick=()=>{};$('export-tsv').hidden=false;

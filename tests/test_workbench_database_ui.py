@@ -632,10 +632,51 @@ assert.equal(JSON.parse(storage.get(dbWorksheetKey)).tabs[3].sql,'SELECT explici
 assert.ok(calls.every(c=>c.options?.method!=='POST'));
 ''')
 
+    def test_sql09_context_example_opens_editable_read_only_draft_without_query(self):
+        self.javascript(r'''
+inventoryRoute=async(path,options)=>({items:inventory.map(d=>({...d,grant_revision:options.headers['X-Shirokuma-Role']==='data_engineer'?7:null}))});
+await boot([{...input(),schema_id:'raw',selected_role:'data_engineer',mode:'sandbox-write',max_rows:37}]);
+const example=$('open-context-example'),original=dbCurrent();
+$('sql').value='SELECT source_draft';$('sql').dispatchEvent({type:'input'});
+const source=dbInput(original),context=dbContext(original);
+assert.equal(currentRole,'admin');assert.equal(context.grant_revision,7);
+assert.equal(example.textContent,'Open context example');assert.match(example.title,/new read-only draft/);
+setLanguage('ja');assert.equal(example.textContent,'接続先の確認SQLを開く');assert.match(example.title,/読み取り専用/);
+setLanguage('en');
+
+const schema=dbSchemasFor(original).find(s=>s.id===original.schema_id);
+schema.allowed_modes=['sandbox-write'];dbControls();
+assert.equal($('run-query').disabled,false);assert.equal(example.disabled,true);
+assert.match($('database-context-state').textContent,/Choose a permitted mode/);
+const deniedRequests=calls.length;
+example.onclick();
+assert.equal(calls.length,deniedRequests);assert.equal(worksheets.length,1);assert.equal(dbCurrent(),original);
+schema.allowed_modes=['sandbox-write','read-only'];dbControls();
+original._grantChanged=true;
+example.onclick(); // Recheck authority even if the enabled button is stale.
+assert.equal(calls.length,deniedRequests);assert.equal(worksheets.length,1);
+delete original._grantChanged;
+dbControls();assert.equal(example.disabled,false);
+example.click();
+const draft=dbCurrent(),sql='SELECT current_catalog AS catalog_name, current_schema AS schema_name';
+assert.notEqual(draft.id,original.id);assert.equal(worksheets.length,2);
+assert.deepEqual(dbInput(draft),{...source,id:draft.id,name:draft.name,mode:'read-only',sql});
+assert.equal($('query-mode').value,'read-only');assert.equal($('sql').value,sql);
+assert.equal(document.activeElement,$('sql'));assert.ok(!$('sql').disabled&&!$('sql').readOnly);
+await tick();
+assert.deepEqual(dbContext(draft),context);
+assert.equal(dbRuns.has(draft.id),false);assert.equal(queryResult,null);
+$('sql').value=sql+' LIMIT 1';$('sql').dispatchEvent({type:'input'});
+assert.equal(draft.sql,sql+' LIMIT 1');assert.deepEqual(dbInput(original),source);
+assert.deepEqual(JSON.parse(storage.get(dbWorksheetKey)).tabs,[source,dbInput(draft)]);
+assert.ok(calls.every(c=>c.options?.method!=='POST'));
+''')
+
     def test_sql01_legacy_plus_retains_sample_default_and_explicit_sql(self):
         add_button = SCRIPT[SCRIPT.index("$('add-worksheet-tab').onclick="):].split(';', 1)[0] + ';'
         self.javascript("globalThis.worksheetKey='shirokuma.worksheets.v1';\n" + add_button + r'''
 databaseMode=false;worksheets=[{id:'legacy',name:'Worksheet 4',sql:'SELECT original'}];worksheetId='legacy';
+assert.equal(nodes['open-context-example'],undefined);
 $('sql').value='SELECT legacy_draft';
 $('add-worksheet-tab').click();
 assert.equal(worksheets.length,2);assert.equal(worksheets[0].sql,'SELECT legacy_draft');
