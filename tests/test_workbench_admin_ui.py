@@ -283,6 +283,11 @@ assert.equal($('db-admin-use-registration').hidden,false);await click('use-regis
 assert.notEqual($('db-admin-select').value,'new');
 adminItems.at(-1).sql_catalog='new_db';await click('use-registration');
 assert.equal($('db-admin-select').value,'new');assert.equal(writeCalls().length,1);
+assert.match($('db-admin-current-target').textContent,/new_db.*REGISTERED/);
+assert.equal(document.activeElement,$('db-admin-generation'));
+assert.match($('db-admin-target-guidance').textContent,/request apply.*verify/);
+$('db-admin-creation-entry').onclick();assert.equal(document.activeElement,$('db-creation-title'));
+assert.equal(writeCalls().length,1);
 $('db-admin-generation').value='gen';await click('plan-save');
 assert.equal($('db-admin-use-plan').hidden,false);await click('use-plan');
 assert.deepEqual(['operation-id','apply-revision','delivery'].map(id=>$('db-admin-'+id).value),['plan','1','digest']);

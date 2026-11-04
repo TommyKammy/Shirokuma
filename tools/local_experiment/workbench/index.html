@@ -82,7 +82,8 @@ form small,.help{display:block;margin:4px 0 0;font-size:12px;color:var(--muted)}
 fieldset{border:0;padding:0;margin:0;min-width:0}
 legend{font-size:12px;font-weight:600;color:var(--ink-2);padding:0}
 .form-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
-#db-admin-content{max-width:1100px}
+#db-admin-content{max-width:1100px;min-width:0;overflow-wrap:anywhere}
+#db-admin-select{width:100%;max-width:100%}
 #db-admin-content>details{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
 #db-admin-schemas{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
 #db-admin-retirement,#db-jobs-run-detail,#db-jobs-history{min-width:0;overflow-wrap:anywhere}
@@ -759,7 +760,6 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <main>
 <section id="db-admin" role="tabpanel" aria-labelledby="tab-db-admin" hidden>
 <div class="page-head"><div class="page-title"><h1 id="db-admin-title">DB management</h1></div><button id="db-admin-refresh" type="button">Refresh current revisions</button></div>
-<p id="db-admin-notice" class="callout info"></p>
 <div id="db-admin-error" class="error" role="alert" hidden></div>
 <div id="db-admin-content"></div>
 </section>
@@ -7561,7 +7561,7 @@ Object.assign(i18n.ja,{
  'RETIRING · New work is blocked. UNKNOWN keeps retirement open until closure is verified.':'RETIRING · 新規処理は受け付けません。UNKNOWN の処理は、終了が確認されるまで利用終了の完了を妨げます。',
  'RETIRED · Retirement is complete. New work remains blocked.':'RETIRED · 利用終了が完了しました。引き続き新規処理は受け付けません。',
  'Invalid retirement response.':'利用終了操作の応答が不正です。',
- 'DB management':'DB 管理','Refresh current revisions':'現在の revision を再読込',
+ 'DB management':'DB 管理','Refresh current revisions':'管理対象と状態を更新',
  'Management selection':'管理対象の選択','Display name':'表示名','Description':'説明',
  'Expected revision':'期待する revision','Current revision: {revision}':'現在の revision: {revision}','Use current revision':'現在の revision を入力',
  'Save display metadata':'表示メタデータを保存','Retry frozen request':'保存した同一要求を再送',
@@ -7570,9 +7570,9 @@ Object.assign(i18n.ja,{
  'Database registration':'DB 登録','SQL catalog name':'SQL カタログ名','Register database':'DB を登録',
  'Registration creates registry intent and four fixed schemas. Backend verification is pending.':'登録はレジストリの意図と固定の4 Schemaを作成します。バックエンド検証は未完了です。',
  'Public generation plan':'公開 generation plan','Generation ID':'Generation ID','Phase':'フェーズ',
- 'Predecessor operation ID':'先行操作 ID','Create plan':'plan を作成','bootstrap':'bootstrap','full':'full',
+ 'Predecessor operation ID':'先行操作 ID','Create plan':'適用計画を作成','bootstrap':'bootstrap','full':'full',
  'Operation ID':'操作 ID','Inspect operation':'操作を照会','Delivery digest':'Delivery digest',
- 'Request operator apply':'operator への apply を要求',
+ 'Request operator apply':'運用担当者に適用を依頼',
  'Apply records a public handoff (requires_operator). A private operator must execute and verify it; this does not make the DB READY.':'apply は公開引継ぎ（requires_operator）を記録します。private operator の実行と検証が必要であり、DB を READY にする操作ではありません。',
  'Plans use a public generation ID prepared by the operator. Replan and apply are separate explicit actions.':'operator が準備した公開 generation ID を使用します。再 plan と apply はそれぞれ明示的な別操作です。',
  'Use registered database ID':'登録した DB ID を選択','Use plan for operator apply':'plan を apply 欄に入力',
@@ -7600,6 +7600,18 @@ Object.assign(i18n.ja,{
  'A saved uncertain request must be reconciled before creating another request.':'新しい要求の作成前に、保存済みの結果不明要求を照合してください。',
  'Choose an exact integer revision.':'revision は正確な整数で入力してください。',
  'Invalid display metadata.':'表示メタデータが無効です。','Invalid SQL catalog name':'SQL カタログ名が無効です',
+ 'Use the operator plan to request apply, then verify database readiness.':'適用計画から適用を依頼し、その後に DB が READY か確認してください。',
+ 'Choose a database to manage.':'管理対象の DB を選択してください。',
+ 'Target: {catalog} · {state}':'対象 DB: {catalog} · {state}',
+ 'Register a database manually':'DB を手動登録',
+ 'Open creation and progress':'DB 作成・進捗を開く',
+ 'Prepare an operator plan':'適用計画を準備',
+ 'Request apply or verify readiness':'適用を依頼・READY を確認',
+ 'Operation details':'操作の詳細',
+ 'Database and schema details':'DB とスキーマの詳細',
+ 'Registered. Select the registered database, then prepare an operator plan.':'登録済みです。登録した DB を選択し、適用計画を準備してください。',
+ 'Review the operation status, then check readiness after the full apply is verified.':'操作の状態を確認し、完全適用の検証後に READY を確認してください。',
+ 'Review the operation revision and delivery digest, then request operator apply.':'操作のリビジョンと配信ダイジェストを確認し、オペレーターに適用を依頼してください。',
  'Safe binding metadata':'安全な binding メタデータ','Schema display metadata':'Schema 表示メタデータ',
  'Resolve pending or uncertain requests before changing the management database.':'管理対象を切り替える前に、処理中または結果不明の要求を確認してください。'
 });
@@ -7715,6 +7727,12 @@ async function dbAdminCheckReadiness(){
    h.requires_operator===true&&h.state==='REQUESTED'&&dbAdminText(h.id)&&dbAdminText(data.delivery_digest)&&
    h.payload?.delivery_digest===data.delivery_digest&&dbAdminRevision(h.payload.expected_revision)&&h.payload.expected_revision<=data.revision);
   if(handoff)show('Operator apply handoff recorded as REQUESTED ({id}).',{id:handoff.id});
+  if(handoff&&data.state!=='APPLIED'&&data.state!=='PREPARED'){
+   show('Review the operation status, then check readiness after the full apply is verified.');return;
+  }
+  if(data.state==='AWAITING_APPLY'){
+   show('Review the operation revision and delivery digest, then request operator apply.');return;
+  }
   if(data.phase==='bootstrap'&&data.state==='PREPARED'){
    show('Use this bootstrap operation ID as the predecessor when creating the full plan.');return;
   }
@@ -7774,7 +7792,7 @@ async function dbAdminMutate(id,build,replay=false){
    op.uncertain=false;op.result=data;
    $(id+'-result').textContent=JSON.stringify(data,null,2);
    if(op.kind==='retire'){dbAdminRetireInvalidate();dbAdminRetireRender(data);}
-   ui($(id+'-state'),op.kind==='apply'?'Operator handoff recorded. Check database readiness for current status.':op.kind==='display'?'Display metadata saved.':op.kind==='grant'&&data.state==='AWAITING_APPLY'?'Pending backend verification':data.state);
+   ui($(id+'-state'),op.kind==='apply'?'Operator handoff recorded. Check database readiness for current status.':op.kind==='register'?'Registered. Select the registered database, then prepare an operator plan.':op.kind==='display'?'Display metadata saved.':op.kind==='grant'&&data.state==='AWAITING_APPLY'?'Pending backend verification':data.state);
   }catch(error){
    if(!sent){
     if(dbAdmin.requests.get(id)===op&&dbAdminAllowed())ui($(id+'-state'),id==='db-admin-retire'?'Load a matching READY preview before starting retirement.':'Inspect the current retirement for the selected database before reconciling.');
@@ -7800,14 +7818,14 @@ function dbAdminActions(parent,id,label,build){
 function dbAdminInstall(){
  if(dbAdmin.installed)return;dbAdmin.installed=true;
  ui($('tab-db-admin'),'DB management');ui($('db-admin-title'),'DB management');ui($('db-admin-refresh'),'Refresh current revisions');
- ui($('db-admin-notice'),'Management requires current platform admin, maximum admin and selected admin.');
- const root=$('db-admin-content');dbCreationInstall(root);
+ const root=$('db-admin-content');
  const select=dbAdminField(root,'db-admin-select','Management selection','select');
  select.onchange=()=>{if(dbAdminSelect(select.value))return dbAdminLoadGrants();};
  select.setAttribute('aria-describedby','db-admin-selection-help');
  const selectionHelp=dbAdminNode('p','db-admin-selection-help',root);selectionHelp.className='help';selectionHelp.hidden=true;ui(selectionHelp,'Resolve pending or uncertain requests before changing the management database.');
- dbAdminNode('div','db-admin-detail',root);
- const registration=dbAdminNode('details','',root);dbAdminNode('summary','',registration,'Database registration');
+ dbAdminNode('p','db-admin-current-target',root,'Choose a database to manage.').setAttribute('role','status');
+ dbAdminNode('p','db-admin-target-guidance',root);
+ const registration=dbAdminNode('details','',root);dbAdminNode('summary','',registration,'Register a database manually');
  dbAdminNode('p','',registration,'Registration creates registry intent and four fixed schemas. Backend verification is pending.');
  const catalog=dbAdminField(registration,'db-admin-register-name','SQL catalog name');
  dbAdminActions(registration,'db-admin-register','Register database',()=>{
@@ -7823,28 +7841,32 @@ function dbAdminInstall(){
   if(!refreshed||!dbAdmin.databases.some(row=>row.id===id&&row.sql_catalog===sqlCatalog)){
    ui($('db-admin-register-state'),'Could not select the registered database. Refresh current revisions and select its ID.');return;
   }
-  select.value=id;return select.onchange();
+  select.value=id;const grants=select.onchange();
+  if(dbAdminAllowed()&&activeTab==='db-admin'&&dbAdmin.database===id){plan.open=true;generation.focus();}
+  return grants;
  });
  useRegistration.hidden=true;
- const plan=dbAdminNode('details','',root);dbAdminNode('summary','',plan,'Public generation plan');
+ dbAdminButton(root,'db-admin-creation-entry','Open creation and progress',()=>$('db-creation-title').focus());
+ const plan=dbAdminNode('details','',root);dbAdminNode('summary','',plan,'Prepare an operator plan');
  dbAdminNode('p','',plan,'Use operator-prepared material to create a bootstrap or full plan. The operator supplies the public generation ID.');
  const generation=dbAdminField(plan,'db-admin-generation','Generation ID'),phase=dbAdminField(plan,'db-admin-phase','Phase','select'),predecessor=dbAdminField(plan,'db-admin-predecessor','Predecessor operation ID');
  for(const value of ['bootstrap','full']){const o=new Option(value,value);ui(o,value);phase.add(o);}phase.value='bootstrap';
  dbAdminActions(plan,'db-admin-plan','Create plan',()=>({kind:'plan',path:'/api/v1/warehouses/LOCAL/plans',payload:{generation_id:generation.value,phase:phase.value,predecessor_id:predecessor.value||null}}));
- const operation=dbAdminNode('details','',root);dbAdminNode('summary','',operation,'Inspect operation');
+ const operation=dbAdminNode('details','',root);dbAdminNode('summary','',operation,'Request apply or verify readiness');
  const operationID=dbAdminField(operation,'db-admin-operation-id','Operation ID');
  operationID.oninput=dbAdminClearReadiness;
- dbAdminButton(operation,'db-admin-inspect','Inspect operation',async()=>{
+ const inspection=dbAdminNode('details','',operation);dbAdminNode('summary','',inspection,'Operation details');
+ dbAdminButton(inspection,'db-admin-inspect','Inspect operation',async()=>{
   const scope=dbAdminScope(),request=++dbAdmin.request,id=operationID.value;
   try{const data=await dbAdminRequest('/api/v1/operations/'+encodeURIComponent(id),{scope});if(scope===dbAdminScope()&&request===dbAdmin.request&&id===operationID.value)$('db-admin-inspection').textContent=JSON.stringify(data,null,2);}catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request&&id===operationID.value)message('db-admin-error',error.message);}
  });
- dbAdminNode('pre','db-admin-inspection',operation);
- dbAdminNode('p','',operation,'Select the target database and enter the operation ID.').className='help';
- dbAdminButton(operation,'db-admin-check-readiness','Check database readiness',dbAdminCheckReadiness);
- dbAdminNode('div','db-admin-readiness',operation).setAttribute('role','status');
+ dbAdminNode('pre','db-admin-inspection',inspection);
  dbAdminNode('p','',operation,'Apply records a public handoff (requires_operator). A private operator must execute and verify it; this does not make the DB READY.');
  const expected=dbAdminField(operation,'db-admin-apply-revision','Expected revision'),digest=dbAdminField(operation,'db-admin-delivery','Delivery digest');
  dbAdminActions(operation,'db-admin-apply','Request operator apply',()=>({kind:'apply',path:'/api/v1/operations/'+encodeURIComponent(operationID.value)+'/apply',payload:{expected_revision:dbAdminInteger(expected),delivery_digest:digest.value}}));
+ dbAdminNode('p','',operation,'Select the target database and enter the operation ID.').className='help';
+ dbAdminButton(operation,'db-admin-check-readiness','Check database readiness',dbAdminCheckReadiness);
+ dbAdminNode('div','db-admin-readiness',operation).setAttribute('role','status');
  const usePlan=dbAdminButton(plan,'db-admin-use-plan','Use plan for operator apply',()=>{
   const op=dbAdmin.requests.get('db-admin-plan');
   if(!dbAdminAllowed()||dbAdminUnresolved()||!dbAdminReusablePlan(op))return;
@@ -7852,6 +7874,8 @@ function dbAdminInstall(){
   dbAdminClearReadiness();operation.open=true;operationID.focus();
  });
  usePlan.hidden=true;
+ dbCreationInstall(root);
+ dbAdminNode('div','db-admin-detail',root);
  $('db-admin-refresh').onclick=dbAdminRefresh;
 }
 function dbAdminMetadata(parent,resource,type){
@@ -7871,11 +7895,15 @@ function dbAdminMetadata(parent,resource,type){
  draft.revision=resource.revision;ui($(id+'-current'),'Current revision: {revision}',{revision:resource.revision});
 }
 function dbAdminRenderDetail(){
- const d=dbAdmin.databases.find(d=>d.id===dbAdmin.database);if(!d)return;
+ const d=dbAdmin.databases.find(d=>d.id===dbAdmin.database);
+ ui($('db-admin-current-target'),d?'Target: {catalog} · {state}':'Choose a database to manage.',()=>d?{catalog:d.display_name&&d.display_name!==d.sql_catalog?d.display_name+' · '+d.sql_catalog:d.sql_catalog,state:t(d.state)}:{});
+ ui($('db-admin-target-guidance'),d&&['REGISTERED','PREPARING'].includes(d.state.toUpperCase())?'Use the operator plan to request apply, then verify database readiness.':'');
+ if(!d)return;
  const parent=$('db-admin-detail');
  if(!dbAdmin.rendered){dbAdmin.rendered=true;
-  dbAdminNode('p','db-admin-summary',parent);dbAdminNode('h2','',parent,'Safe binding metadata');dbAdminNode('pre','db-admin-binding',parent);
-  dbAdminNode('div','db-admin-metadata',parent);dbAdminNode('h2','',parent,'Schema display metadata');dbAdminNode('div','db-admin-schemas',parent);
+  const metadata=dbAdminNode('details','',parent);dbAdminNode('summary','',metadata,'Database and schema details');
+  dbAdminNode('p','db-admin-summary',metadata);dbAdminNode('h2','',metadata,'Safe binding metadata');dbAdminNode('pre','db-admin-binding',metadata);
+  dbAdminNode('div','db-admin-metadata',metadata);dbAdminNode('h2','',metadata,'Schema display metadata');dbAdminNode('div','db-admin-schemas',metadata);
   const grants=dbAdminNode('details','',parent);dbAdminNode('summary','',grants,'Desired grants');dbAdminNode('p','',grants,'Higher privileges take effect after backend verification. Restrictions and revocation can take effect immediately.');
   dbAdminNode('div','db-admin-grants',grants);
   const principal=dbAdminField(grants,'db-admin-grant-principal','Principal ID'),role=dbAdminField(grants,'db-admin-grant-role','Desired role','select'),revision=dbAdminField(grants,'db-admin-grant-revision','Expected revision');revision.value='0';
@@ -11297,7 +11325,7 @@ const dbCreationRoute='/api/v1/admin/database-creations';
 Object.assign(i18n.ja,{
  'Create database':'データベースを作成','Creation name':'作成する名前','Initial access':'初期アクセス','Review creation':'作成内容を確認',
  'Continue to access':'アクセス設定へ','Review intent':'作成要求を確認','Back to name':'名前に戻る','Back to access':'アクセス設定に戻る',
- 'Submit creation intent':'作成要求を送信','Refresh creation status':'作成状況を再読込','Rediscover creations':'作成一覧を再取得',
+ 'Submit creation intent':'作成要求を送信','Refresh creation status':'作成状況を更新','Rediscover creations':'作成履歴を更新',
  'Choose principal':'利用者を選択','Add access':'アクセスを追加','Remove access':'アクセスを削除','No initial grants.':'初期権限は付与しません。',
  'Fixed schemas: raw, marts, sandbox, staging.':'固定スキーマ: raw、marts、sandbox、staging。',
  'New creation':'新しい作成','Creation changed. Review current status before acting.':'作成状態が変わりました。現在の状態を確認してから操作してください。',
@@ -11457,7 +11485,9 @@ function dbCreationNextAction(parent,p,bootstrap,full,owner,stopped,terminal,rea
  if(terminal)next='This database is retiring or retired. Creation history is available below.';
  else if(!owner)next='Only the original requester can change this creation.';
  else if(ready)next=p.access_source==='none'?'READY; SQL use unavailable for the selected role.':'The database is ready. Open a new SQL worksheet to use it.';
+ else if(dbCreation.pending)next=dbCreation.pending.busy?'Request in progress.':'Request outcome uncertain. Retry only the saved request.';
  else if(!dbCreationStagedDetailCurrent())next='Refresh creation status before taking a staged action.';
+ else if((stopped||p.blocker||progress==='BLOCKED')&&actions.includes('reconcile'))next='Reconcile the saved creation to check its outcome. No creation work is resent.';
  else if(['STOPPED','BLOCKED'].includes(progress))next='Creation is stopped or blocked. Review the status and available actions below.';
  else if(['APPLYING','VERIFYING'].includes(progress))next='Setup or verification is running. Status is checked automatically while this screen is visible.';
  else if(progress==='REPLAN_REQUIRED')next=actions.includes('replan')?'Prepare a revised plan, then review it again before approval.':'A revised plan is required, but preparing it is currently unavailable. Review the status and available actions.';
@@ -11467,6 +11497,7 @@ function dbCreationNextAction(parent,p,bootstrap,full,owner,stopped,terminal,rea
   if(full?.state==='AWAITING_APPLY'&&actions.includes('approve'))next='Review the SQL connection plan, then explicitly approve step 2/2.';
   else if(bootstrap?.state==='PREPARED'&&!full&&actions.includes('plans'))next='Foundation setup is complete. Prepare the SQL connection plan for approval 2/2; the database is not ready yet.';
   else if(bootstrap?.state==='AWAITING_APPLY'&&actions.includes('approve'))next='Review the foundation plan, then explicitly approve step 1/2.';
+  else if(actions.includes('replan'))next='Prepare a revised plan, then review it again before approval.';
  }
  if(!next&&['PREPARATION_PENDING','PLAN_REVIEW_REQUIRED'].includes(progress)&&!bootstrap&&actions.includes('plans'))next='Prepare the foundation plan, then review it for approval 1/2.';
  else if(!next&&progress==='PREPARATION_PENDING')next='Creation preparation is pending. Status is checked automatically while this screen is visible.';
@@ -11695,10 +11726,12 @@ async function dbCreationMutate(suffix,payload,retry=false){
 }
 function dbCreationInstall(root){
  const box=dbAdminNode('section','db-creation',root);box.className='panel-body';box.style&&(box.style.overflowWrap='anywhere');
- box.setAttribute('aria-label',t('Create database'));dbAdminNode('h2','',box,'Create database');
- dbAdminNode('div','db-creation-journey',box);dbAdminNode('p','db-creation-observation',box);
- dbAdminNode('div','db-creation-form',box);const status=dbAdminNode('p','db-creation-status',box);status.setAttribute('role','status');
- dbAdminNode('div','db-creation-process',box);dbCreationRender();
+ box.setAttribute('aria-labelledby','db-creation-title');dbAdminNode('h2','db-creation-title',box,'Create database').tabIndex=-1;
+ const status=dbAdminNode('p','db-creation-status',box);status.setAttribute('role','status');
+ dbAdminNode('div','db-creation-process',box);
+ dbAdminNode('div','db-creation-journey',box);
+ dbAdminNode('div','db-creation-form',box);
+ dbAdminNode('p','db-creation-observation',box);dbCreationRender();
 }
 function dbCreationStage(stage){dbCreation.stage=stage;dbCreationRender();$('db-creation-heading')?.focus();}
 function dbCreationButton(parent,id,label,task,disabled=false){const scope=dbCreationScope(),b=dbAdminButton(parent,id,label,()=>{if(dbAdminAllowed()&&scope===dbCreationScope())return task();});b.disabled=disabled||!!dbCreation.pending;return b;}
@@ -11715,20 +11748,22 @@ function dbCreationRender(){
   dbAdminNode('p','',parent,dbCreation.pending.busy?'Request in progress.':'Request outcome uncertain. Retry only the saved request.');
   const request=dbCreation.pending,retry=dbAdminButton(parent,'db-creation-retry','Retry frozen request',()=>{if(request===dbCreation.pending)return dbCreationMutate('',null,true);});retry.disabled=request.busy;
  }
- dbAdminButton(parent,'db-creation-refresh','Refresh creation status',()=>{dbCreationInvalidateStagedDetail();dbCreation.capability=null;return dbCreationLoad();});
- dbAdminButton(parent,'db-creation-discover','Rediscover creations',()=>dbCreationLoad(true));
- const list=dbAdminNode('div','',parent);
- const scope=dbCreationScope();for(const p of dbCreation.list||[])dbAdminButton(list,'',''+p.sql_catalog+' · '+(p.creation_mode==='logical_v1'?dbCreationLogicalLabel(p.progress_code):(p.lifecycle||'').toUpperCase()),()=>{if(scope!==dbCreationScope()||!dbAdminAllowed())return;dbCreation.process=p;dbCreation.checkedID=null;dbCreation.review=null;dbCreationRememberURL(p.creation_id);dbCreationRender();return dbCreationLoad();});
- if(dbCreation.process?.creation_id){
-  dbCreationButton(parent,'db-creation-new','New creation',()=>{
+ const actions=dbAdminNode('div','',parent);actions.className='toolbar';
+ const selected=!!dbCreation.process?.creation_id;
+ if(selected){
+  dbCreationButton(actions,'db-creation-new','New creation',()=>{
    if(dbCreation.pending)return;
    dbCreationStop();++dbCreation.read;dbCreation.process=null;dbCreation.review=null;dbCreation.stage=0;
    dbCreation.capability=null;dbCreation.error='';
    dbCreationURL(null);
    dbCreationSave();$('db-creation-process').replaceChildren();dbCreationStage(0);return dbCreationLoad();
   });
-  dbCreationRenderProcess();return;
  }
+ dbAdminButton(actions,'db-creation-refresh','Refresh creation status',()=>{dbCreationInvalidateStagedDetail();dbCreation.capability=null;return dbCreationLoad();});
+ dbAdminButton(actions,'db-creation-discover','Rediscover creations',()=>dbCreationLoad(true));
+ const list=dbAdminNode('div','',parent);list.className='toolbar';
+ const scope=dbCreationScope();for(const p of dbCreation.list||[])dbAdminButton(list,'',''+p.sql_catalog+' · '+(p.creation_mode==='logical_v1'?dbCreationLogicalLabel(p.progress_code):(p.lifecycle||'').toUpperCase()),()=>{if(scope!==dbCreationScope()||!dbAdminAllowed())return;dbCreation.process=p;dbCreation.checkedID=null;dbCreation.review=null;dbCreationRememberURL(p.creation_id);dbCreationRender();return dbCreationLoad();});
+ if(selected){dbCreationRenderProcess();return;}
  if(!dbCreationFormMode()){
   const loading=dbAdminNode('p','db-creation-loading',parent,dbCreation.capability||dbCreation.error?'The database creation service is unavailable. Try refreshing its status.':'Loading…');loading.setAttribute('role','status');
   return;
@@ -11821,10 +11856,12 @@ function dbCreationRenderProcess(){
  const title=dbAdminNode('h3','db-creation-heading',box);title.textContent=p.sql_catalog||t('Creation preparation pending');title.tabIndex=-1;
  if(!p.progress_code){dbAdminNode('p','',box,'Request in progress.');return;}
  if(dbCreationLogical()){dbCreationRenderLogical(box,p);return;}
- const actionArea=dbAdminNode('section','db-creation-actions',box);
  const labels={PREPARATION_PENDING:'Creation preparation pending',PLAN_REVIEW_REQUIRED:'Plan review required',FULL_REVIEW_REQUIRED:'Full plan review required',APPLYING:'Applying creation',VERIFYING:'Verifying creation',READY:'READY',REPLAN_REQUIRED:'Revised plan required',RECONCILE_REQUIRED:'Reconciliation required',STOPPED:'Creation stopped',BLOCKED:'Creation blocked'};
  const currentState=(p.lifecycle||'').toUpperCase(),ready=currentState==='READY',terminalState=['RETIRING','RETIRED'].includes(currentState);
- dbAdminNode('p','db-creation-progress',box).textContent=t(terminalState||p.progress_code==='READY'&&!ready?currentState:labels[p.progress_code]||(ready?'READY':'Creation preparation pending'));
+ const progress=dbAdminNode('p','db-creation-progress',box,terminalState||p.progress_code==='READY'&&!ready?currentState||'Creation blocked':labels[p.progress_code]||(ready?'READY':'Creation preparation pending'));
+ progress.setAttribute('role','status');
+ progress.className='status-line '+(ready?'tone-ok':['APPLYING','VERIFYING'].includes(p.progress_code)?'tone-run':'tone-warn');
+ const actionArea=dbAdminNode('section','db-creation-actions',box);
  if(p.blocker)dbAdminNode('p','',box).textContent=p.blocker;
  const plans=p.plans||[],bootstrap=plans.filter(v=>v.phase==='bootstrap'&&v.purpose==='APPLY').at(-1),full=plans.filter(v=>v.phase==='full'&&v.purpose==='APPLY').at(-1);
  if(!ready&&!terminalState&&p.progress_code!=='READY'&&(bootstrap&&['PREPARING','DRAINING','APPLYING','PREPARED'].includes(bootstrap.state)||full||['APPLYING','VERIFYING','FULL_REVIEW_REQUIRED'].includes(p.progress_code)))dbAdminNode('p','',box,'Warehouse maintenance; waiting for full approval or verification.');
@@ -11934,7 +11971,7 @@ Object.assign(i18n.ja,{
  'bear.data_engineer → Saved AI metadata (ai), then explicit Manual WAP → model versions / builds / audits / publications and DataOps. Refresh history: Managed Marts → runs. This is not arbitrary snapshot rollback. Other paths: Jobs → run / step history; Database dbt → runs; Jobs / Stages / Managed Marts → schedules and ticks.':'bear.data_engineer → 保存済み AI メタデータ（ai）、続いて明示的な Manual WAP → モデルの版／ビルド／監査／公開と DataOps。更新履歴は Managed Marts → 実行へ。任意 snapshot へのロールバックとは異なります。その他は Jobs → 実行／処理履歴、Database dbt → 実行、Jobs／Stages／Managed Marts → スケジュールと予定消費。',
  'Saved QUEUED/RUNNING is not current health. Committed and cleanup are separate. Old raw engine last 50 and Pawprints historical samples (at most 100) are not imported into DB audit.':'保存済み QUEUED/RUNNING は現在の稼働状態を保証しません。コミットと清掃は別です。旧 engine の直近50件と Pawprints の過去サンプル（最大100件）は DB 監査に取り込みません。',
  'Saved metadata audit':'保存済みメタデータの監査','Scope':'参照範囲','My DB records':'自分の DB 記録','DB administration':'DB 管理情報','Platform management':'基盤管理記録',
- 'Reference role':'参照ロール','Start UTC':'開始 UTC','End UTC':'終了 UTC','Source':'記録元','State':'保存状態','Search':'検索','Page size':'取得件数','Search / Refresh':'検索／更新',
+ 'Reference role':'参照ロール','Start UTC':'開始 UTC','End UTC':'終了 UTC','Source':'記録元','State':'保存状態','Search':'検索','Page size':'取得件数','Search audit logs':'監査ログを検索',
  'All sources':'すべての記録元','Filters pending. Search to apply.':'条件は未適用です。検索で適用します。',
  'Search to load saved metadata.':'検索して保存済みメタデータを取得してください。','No saved metadata matches these filters.':'この条件に一致する保存済みメタデータはありません。',
  'Audit unavailable. Check the reference role and database, then search again.':'監査を利用できません。参照ロールと DB を確認して再検索してください。',
@@ -11944,7 +11981,15 @@ Object.assign(i18n.ja,{
  'Platform management requires current platform authority and the selected admin role.':'基盤管理記録には現在の基盤管理権限と admin 参照ロールが必要です。',
  'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.':'作成時刻と最新の保存状態です。全状態遷移の履歴ではありません。時刻未記録の行は末尾に表示し、期間指定時は除外します。AI 記録は最新の保存済みメタデータの要約のみです。AI の成功は SQL によるデータのコミットを証明しません。',
  'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.':'メタデータのみです。SQL・プロンプト・結果・定義・生の payload は含みません。既存の保持方針は変更しません。関連 ID は内容へのアクセス権限を与えません。',
- 'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}':'適用範囲: {scope} · ロール: {role} · DB: {database} · 条件: {filters}',
+ 'Applied result filters':'結果に適用済みの条件',
+ 'Scope: {scope} · Role: {role} · DB: {database}':'範囲: {scope} · ロール: {role} · DB: {database}',
+ 'No database scope':'DB の指定なし',
+ 'Audit target not yet verified':'確認できていません',
+ 'Period (UTC, inclusive): {from} to {to}':'期間 (UTC、境界を含む): {from} ～ {to}',
+ 'No start bound':'開始の指定なし','No end bound':'終了の指定なし',
+ 'Source: {source} · State: {state} · Search: {search}':'記録元: {source} · 状態: {state} · 検索語: {search}',
+ 'Any state':'すべての状態','No search term':'検索語なし',
+ '{count} on this page · Page size: {limit}':'このページに {count} 件 · ページ上限: {limit} 件',
  'Time UTC':'時刻 UTC','Source / action':'記録元／操作','Target IDs':'対象 ID','Actor':'実行者','Not recorded':'未記録',
  'Previous page':'前のページ','Next page':'次のページ','Download metadata JSON':'メタデータ JSON を保存',
  'View linked audit metadata':'関連監査メタデータを表示','Committed':'コミット済み','Cleanup failure':'清掃エラーあり','Related IDs':'関連 ID','Saved role':'保存ロール',
@@ -12127,7 +12172,7 @@ function dbAuditPurge(){
  dbAudit.preview=null;dbAudit.previewStamp=null;
  dbAudit.items=[];dbAudit.selected='';dbAudit.detail=null;dbAudit.applied=null;dbAudit.cursors=[];dbAudit.cursor='';dbAudit.next=null;dbAudit.proof=null;dbAudit.choiceItems=null;dbAudit.capabilities=null;
  if(dbAudit.url){URL.revokeObjectURL(dbAudit.url);dbAudit.url=null;}
- if(dbAudit.installed){$('db-audit-preview-search').value='';dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');$('db-audit-rows').replaceChildren();$('db-audit-detail').replaceChildren();$('db-audit-preview').replaceChildren();ui($('db-audit-context'),'Search to load saved metadata.');ui($('db-audit-status'),'Search to load saved metadata.');dbAuditChoices([]);}
+ if(dbAudit.installed){$('db-audit-preview-search').value='';dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');$('db-audit-rows').replaceChildren();$('db-audit-detail').replaceChildren();$('db-audit-preview').replaceChildren();$('db-audit-context').replaceChildren();ui($('db-audit-status'),'Search to load saved metadata.');dbAuditChoices([]);}
 }
 function dbAuditReason(){
  if(!dbRoleWithinHeader(dbAudit.role))return 'Choose a currently available database and permitted reference role.';
@@ -12186,7 +12231,7 @@ function dbAuditChoices(items=[]){
  dbAuditSelectOptions('db-audit-scope',choices.map(([value,label])=>({value,label,labelKey:label,disabled:value==='database'&&!(dbAudit.role==='admin'&&dbRoleWithinHeader('admin')&&scopes?.includes('database'))||value==='platform'&&!(dbAudit.role==='admin'&&currentRole==='admin'&&dbMaximumRole==='admin'&&dbAdmin.platform&&dbAudit.capabilities?.scopes?.includes('platform'))})),dbAudit.scope,'Scope');
  dbAuditSelectOptions('db-audit-role',['bi_viewer','data_engineer','admin'].map(value=>({value,label:value,disabled:!dbRoleWithinHeader(value)})),dbAudit.role,'Reference role');
  dbAuditSelectOptions('db-audit-database',items.filter(d=>d.state==='READY'&&d.allowed_roles?.includes(dbAudit.role)).map(d=>({value:d.id,label:d.display_name+' · '+d.id})),dbAudit.database,'Choose database');
- $('db-audit-database').disabled=dbAudit.scope==='platform';dbAuditPaging();
+ $('db-audit-database').disabled=dbAudit.scope==='platform';dbAuditRenderTarget();dbAuditPaging();
 }
 async function dbAuditAuthorize(stamp,current=()=>stamp===dbAuditStamp(),updateChoices=false){
  if(!current())return null;
@@ -12233,9 +12278,9 @@ function dbAuditFailure(error,current){
  }
  ui($('db-audit-status'),error.code==='STALE_CURSOR'?'Cursor expired. Search again.':'Audit unavailable. Check the reference role and database, then search again.');
 }
-function dbAuditFilters(){
+function dbAuditFilters(recordDraft=false){
  const values={};for(const key of ['source','state','search','from','to','limit'])values[key]=$('db-audit-'+key).value;
- dbAudit.draft={...values};
+ if(recordDraft)dbAudit.draft={...values};
  if(!/^\d+$/.test(values.limit)||Number(values.limit)<1||Number(values.limit)>100)throw Error('AUDIT_INPUT');
  values.limit=Number(values.limit);
  for(const key of ['from','to'])if(values[key]){
@@ -12251,8 +12296,41 @@ function dbAuditParams(filters={},cursor=''){
  for(const [key,value] of Object.entries(filters))if(value!==''&&value!=null)p.set(key,String(value));
  if(cursor)p.set('cursor',cursor);return p.toString();
 }
+function dbAuditDraftPending(){
+ if(!dbAudit.applied)return true;
+ try{return JSON.stringify(dbAuditFilters())!==JSON.stringify(dbAudit.applied);}
+ catch{return true;}
+}
+function dbAuditResultStatus(){
+ ui($('db-audit-status'),dbAuditDraftPending()?'Filters pending. Search to apply.':dbAudit.items.length?'':'No saved metadata matches these filters.');
+}
+function dbAuditTargetLabel(proof){
+ const {scope,role,database}=dbAudit;
+ const d=proof?.scope===scope&&proof.role===role&&proof.database===database?proof.d:null;
+ const name=d?.display_name,sql=d?.sql_catalog;
+ return {scope:t({self:'My DB records',database:'DB administration',platform:'Platform management'}[scope]),role,
+  database:scope==='platform'?t('No database scope'):d?(name&&sql&&name!==sql?name+' · '+sql:name||sql||database):t(database?'Audit target not yet verified':'No selection')};
+}
+function dbAuditRenderTarget(){
+ ui($('db-audit-target'),'Scope: {scope} · Role: {role} · DB: {database}',()=>dbAuditTargetLabel(dbAudit.proof));
+}
+function dbAuditRenderContext(proof){
+ const filters=dbAudit.applied,host=$('db-audit-context');
+ const time=value=>value.replace('T',' ').replace(/\.000Z$/,'');
+ host.replaceChildren();
+ dbAdminNode('h3','',host,'Applied result filters');
+ ui(dbAdminNode('p','',host),'Scope: {scope} · Role: {role} · DB: {database}',()=>dbAuditTargetLabel(proof));
+ ui(dbAdminNode('p','',host),'Period (UTC, inclusive): {from} to {to}',()=>({
+  from:filters.from?time(filters.from):t('No start bound'),to:filters.to?time(filters.to):t('No end bound')
+ }));
+ ui(dbAdminNode('p','',host),'Source: {source} · State: {state} · Search: {search}',()=>({
+  source:filters.source?t(dbAuditSourceKey(filters.source)||filters.source):t('All sources'),
+  state:filters.state?t(filters.state):t('Any state'),search:filters.search?'“'+filters.search+'”':t('No search term')
+ }));
+ ui(dbAdminNode('p','',host),'{count} on this page · Page size: {limit}',{count:dbAudit.items.length,limit:filters.limit});
+}
 async function dbAuditSearch(direction='search'){
- let filters;try{filters=direction==='search'?dbAuditFilters():dbAudit.applied;if(!filters)return;}catch{ui($('db-audit-status'),'Enter valid UTC dates and a page size from 1 to 100.');return;}
+ let filters;try{filters=direction==='search'?dbAuditFilters(true):dbAudit.applied;if(!filters)return;}catch{ui($('db-audit-status'),'Enter valid UTC dates and a page size from 1 to 100.');return;}
  const cursor=direction==='next'?dbAudit.next:direction==='previous'?dbAudit.cursors.at(-1):'';
  if(direction!=='search'&&(!cursor||direction==='next'&&!dbAudit.cursor))return;
  const stack=direction==='next'?[...dbAudit.cursors,dbAudit.cursor]:direction==='previous'?dbAudit.cursors.slice(0,-1):[];
@@ -12267,10 +12345,7 @@ async function dbAuditSearch(direction='search'){
   dbAudit.items=items;dbAudit.applied={...filters};dbAudit.cursor=data.page_cursor;dbAudit.cursors=stack;dbAudit.next=data.next_cursor||null;
   const source=$('db-audit-source'),value=source.value;
   dbAuditSelectOptions('db-audit-source',(dbAudit.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:dbAuditSourceKey(value)})),value,'All sources');dbAuditPresets();
-  ui($('db-audit-context'),'Applied scope: {scope} · role: {role} · DB: {database} · filters: {filters}',{scope:t({self:'My DB records',database:'DB administration',platform:'Platform management'}[dbAudit.scope]),role:dbAudit.role,database:dbAudit.scope==='platform'?t('Platform management'):dbAudit.database,filters:JSON.stringify(filters)});
-  dbAuditRenderRows();dbAuditPaging();
-  let pending=true;try{pending=JSON.stringify(dbAuditFilters())!==JSON.stringify(filters);}catch{}
-  ui($('db-audit-status'),pending?'Filters pending. Search to apply.':items.length?'Coverage: saved source metadata only.':'No saved metadata matches these filters.');
+  dbAuditRenderTarget();dbAuditRenderContext(dbAudit.proof);dbAuditRenderRows();dbAuditPaging();dbAuditResultStatus();
  }catch(error){dbAuditFailure(error,current);}
 }
 function dbAuditValue(node,value){if(value==null||value==='')ui(node,'Not recorded');else if(typeof value==='boolean')ui(node,value?'Yes':'No');else if(typeof value==='string'&&['UNKNOWN','QUEUED','RUNNING','FINISHED','FAILED','CANCELED'].includes(value))ui(node,value);else node.textContent=String(value);}
@@ -12373,17 +12448,7 @@ function dbAuditInstall(){
  const w=dbCurrent();dbAudit.role=w?.selected_role||currentRole;dbAudit.database=w?.database_id||'';
  const host=$('pawprints');host.replaceChildren();const panel=dbAdminNode('div','db-audit-panel',host);panel.className='panel';
  dbAdminNode('h2','',panel,'Saved metadata audit');
- dbAdminNode('p','database-pawprints-notice',panel,'Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.');
- dbAdminNode('p','',panel,'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.');
- dbAdminNode('p','',panel,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.');
- const guide=dbAdminNode('details','db-audit-guide',panel);
- dbAdminNode('summary','',guide,'History guide');
- const paths=dbAdminNode('ul','',guide);
- dbAdminNode('li','',paths,'Runtime SQL queries → saved SQL queries (query). Worksheet Recent Query History restores SQL/context only; it does not execute SQL or retrieve result rows.');
- dbAdminNode('li','',paths,'lake.ingest → DataOps manual ingestion; Ingestion → Stages → ingestion/export records (stage_run) and scan history (stage_scan) for registered Stages. lake.export → DataOps table export. Worksheet result CSV/JSON/TSV downloads belong to the original query, not a new DataOps write operation.');
- dbAdminNode('li','',paths,'catalog.clone → DataOps clone operation. catalog.drop → DataOps catalog unregister with data kept; no physical deletion or automatic Undrop.');
- dbAdminNode('li','',paths,'bear.data_engineer → Saved AI metadata (ai), then explicit Manual WAP → model versions / builds / audits / publications and DataOps. Refresh history: Managed Marts → runs. This is not arbitrary snapshot rollback. Other paths: Jobs → run / step history; Database dbt → runs; Jobs / Stages / Managed Marts → schedules and ticks.');
- dbAdminNode('p','',guide,'Saved QUEUED/RUNNING is not current health. Committed and cleanup are separate. Old raw engine last 50 and Pawprints historical samples (at most 100) are not imported into DB audit.');
+ const target=dbAdminNode('p','db-audit-target',panel);target.className='wb-task-context';target.setAttribute('role','status');
  const form=dbAdminNode('form','db-audit-form',panel);form.className='toolbar';
  for(const [key,label,tag] of [['scope','Scope','select'],['role','Reference role','select'],['database','Database','select'],['from','Start UTC','input'],['to','End UTC','input'],['source','Source','select'],['state','State','input'],['search','Search','input'],['limit','Page size','input']]){
   const field=dbAdminNode('div','',form);field.className='field';const l=dbAdminNode('label','',field,label);l.htmlFor='db-audit-'+key;
@@ -12391,20 +12456,31 @@ function dbAuditInstall(){
   if(key==='limit'){node.type='number';node.min=1;node.max=100;node.value='50';}
   if(['scope','role','database'].includes(key))node.onchange=async()=>{
    const value=node.value;dbAuditPurge();dbAudit[key==='database'?'database':key]=value;dbAuditChoices();await dbAuditOpen();
-  };else node.oninput=()=>{dbAudit.draft[key]=node.value;ui($('db-audit-status'),'Filters pending. Search to apply.');};
+  };else node.oninput=()=>{dbAudit.draft[key]=node.value;dbAuditResultStatus();};
  }
- const search=dbAdminButton(form,'db-audit-submit','Search / Refresh',()=>dbAuditSearch());search.type='submit';search.onclick=undefined;
+ const search=dbAdminButton(form,'db-audit-submit','Search audit logs',()=>dbAuditSearch());search.type='submit';search.className='primary';search.onclick=undefined;
  form.onsubmit=e=>{e.preventDefault();return dbAuditSearch();};
  const presets=dbAdminNode('div','db-audit-presets',panel);presets.className='toolbar';presets.setAttribute('role','group');presets.setAttribute('aria-labelledby','db-audit-presets-label');presets.setAttribute('aria-describedby','db-audit-presets-help');
  dbAdminNode('span','db-audit-presets-label',presets,'Source presets');
  for(const source of dbAuditPresetSources){const button=dbAdminButton(presets,'db-audit-preset-'+source,dbAuditSourceKey(source),()=>dbAuditPreset(source));button.type='button';button.dataset.source=source;button.setAttribute('aria-describedby','db-audit-presets-help');}
  dbAdminNode('p','db-audit-presets-help',panel,'Choose only a source draft, then Search to apply. Availability follows this reference context; records may be absent.');
  const status=dbAdminNode('p','db-audit-status',panel,'Search to load saved metadata.');status.setAttribute('role','status');
- dbAdminNode('p','db-audit-context',panel,'Search to load saved metadata.');
+ const context=dbAdminNode('div','db-audit-context',panel);context.setAttribute('aria-live','polite');
  const rows=dbAdminNode('div','db-audit-rows',panel);rows.className='table-wrap';
  const paging=dbAdminNode('div','',panel);paging.className='toolbar';
  dbAdminButton(paging,'db-audit-previous','Previous page',()=>dbAuditSearch('previous'));dbAdminButton(paging,'db-audit-next','Next page',()=>dbAuditSearch('next'));
  dbAdminNode('div','db-audit-detail',panel);
+ const guide=dbAdminNode('details','db-audit-guide',panel);
+ dbAdminNode('summary','',guide,'History guide');
+ dbAdminNode('p','database-pawprints-notice',guide,'Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.');
+ dbAdminNode('p','',guide,'Metadata only. SQL, prompts, results, definitions and raw payloads are excluded. Existing retention is unchanged. Related IDs do not grant content access.');
+ dbAdminNode('p','',guide,'Creation time and latest persisted state; this is not a full transition history. Untimed records appear last and are excluded by time filters. AI records are latest saved metadata summaries only; AI success does not prove a SQL data commit.');
+ const paths=dbAdminNode('ul','',guide);
+ dbAdminNode('li','',paths,'Runtime SQL queries → saved SQL queries (query). Worksheet Recent Query History restores SQL/context only; it does not execute SQL or retrieve result rows.');
+ dbAdminNode('li','',paths,'lake.ingest → DataOps manual ingestion; Ingestion → Stages → ingestion/export records (stage_run) and scan history (stage_scan) for registered Stages. lake.export → DataOps table export. Worksheet result CSV/JSON/TSV downloads belong to the original query, not a new DataOps write operation.');
+ dbAdminNode('li','',paths,'catalog.clone → DataOps clone operation. catalog.drop → DataOps catalog unregister with data kept; no physical deletion or automatic Undrop.');
+ dbAdminNode('li','',paths,'bear.data_engineer → Saved AI metadata (ai), then explicit Manual WAP → model versions / builds / audits / publications and DataOps. Refresh history: Managed Marts → runs. This is not arbitrary snapshot rollback. Other paths: Jobs → run / step history; Database dbt → runs; Jobs / Stages / Managed Marts → schedules and ticks.');
+ dbAdminNode('p','',guide,'Saved QUEUED/RUNNING is not current health. Committed and cleanup are separate. Old raw engine last 50 and Pawprints historical samples (at most 100) are not imported into DB audit.');
  dbAdminButton(panel,'db-audit-telemetry','Load legacy Pawprints preview',dbAuditTelemetry);
  const previewControls=dbAdminNode('div','db-audit-preview-controls',panel);
  dbAdminNode('p','',previewControls,'Filter fetched preview metadata only. Refresh explicitly to fetch again.');

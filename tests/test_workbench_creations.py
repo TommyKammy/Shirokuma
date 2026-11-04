@@ -236,7 +236,8 @@ for(const lifecycle of ['REGISTERED','RETIRING','RETIRED','READY']){
 }
 for(const changes of [{progress_code:'STOPPED'}, {blocker:'PRINCIPAL_STOPPED'}, {requester_id:'another'}, {progress_code:'RECONCILE_REQUIRED',plans:[plan('full','UNKNOWN')],next_actions:['reconcile']}]){
  show(process(changes));const text=$('db-creation-next-action').textContent;
- assert.match(text,/stopped or blocked|original requester|outcome is unknown/);
+ const reconcile=$('db-creation-process').descendants().find(node=>node.id==='db-creation-reconcile');
+ assert.match(text,reconcile&&!reconcile.disabled?/Reconcile .* outcome|outcome is unknown/:/stopped or blocked|original requester/);
  assert.equal(creationPosts.length,0);
 }
 const literal='<script>'+ 'verylongword'.repeat(90)+'🐻';
@@ -1292,6 +1293,7 @@ assert.equal(document.activeElement,$('sql'));assert.equal(calls.some(c=>c.path=
         self.javascript(SETUP + r'''
 capability.available=false;capability.blocker='PRINCIPAL_STOPPED';
 show(process({progress_code:'STOPPED',blocker:'PRINCIPAL_STOPPED',next_actions:['reconcile','withdraw']}));
+assert.equal($('db-creation-next-action').textContent,t('Reconcile the saved creation to check its outcome. No creation work is resent.'));
 const stopped=structuredClone(creation);creationRoute=async()=>{assert.equal(calls.at(-2).path,C+'/capabilities');return {creation_id:'creation',request_id:'ack',accepted_revision:3};};
 const before=calls.length;await $('db-creation-reconcile').onclick();assert.equal(creationPosts.at(-1).path,C+'/creation/reconcile');
 assert.equal(calls.slice(before).some(c=>c.path==='/api/session'),true);assert.equal(dbAdminAllowed(),true);assert.equal(dbCreation.process.progress_code,'STOPPED');

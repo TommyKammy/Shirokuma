@@ -70,7 +70,9 @@ await auditBoot();inventory[1].display_name=inventory[0].display_name;
 assert.equal($('db-audit-search').tagName,'INPUT');assert.equal($('db-audit-submit').tagName,'BUTTON');
 const inputs=JSON.stringify(dbInput(dbCurrent())),explorer=JSON.stringify(dbExplorer);
 assert.equal(auditRequests().length,0);assert.deepEqual($('db-audit-source').options.map(o=>o.value),['','query','operation']);
-await auditChange('database','finance');await dbAuditSearch();
+await auditChange('database','finance');
+assert.match($('db-audit-target').textContent,/finance/);assert.equal($('db-audit-context').children.length,0);
+await dbAuditSearch();
 assert.equal(new URLSearchParams(auditRequests().at(-1).path.split('?')[1]).get('database_id'),'finance');
 assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal(JSON.stringify(dbExplorer),explorer);
 const event=dbAudit.items[0];await dbAuditDetail(event.id);
@@ -79,7 +81,7 @@ assert.match(auditText($('db-audit-detail')),/Committed.*Yes.*Cleanup failure.*Y
 assert.match(auditText($('db-audit-rows')),/UNKNOWN/);assert.match(auditText($('db-audit-rows')),/Not recorded/);
 assert.doesNotMatch(auditText($('db-audit-panel')),/SECRET|https:\/\/never/);
 assert.ok(auditText($('db-audit-detail')).includes('query · '+t('Saved SQL queries')+' · related'));
-assert.match(auditText($('db-audit-context')),/finance/);auditNoLegacy();
+assert.match(auditText($('db-audit-context')),/finance.*No start bound.*No end bound.*All sources.*Any state.*No search term/);auditNoLegacy();
 assert.equal(dbAuditTime('2026-10-29T09:00:00+09:00'),'2026-10-29T00:00:00.000Z');
 ''')
 
@@ -93,13 +95,18 @@ $('db-audit-search').oninput();assert.equal(auditRequests().length,0);assert.mat
 await dbAuditSearch();const first=new URLSearchParams(auditRequests()[0].path.split('?')[1]);
 assert.equal(first.get('from'),'2026-10-28T14:30:00.000Z');assert.equal(first.get('to'),'2026-10-29T14:30:00.000Z');
 assert.equal(first.get('source'),'query');assert.equal(first.get('limit'),'2');
+const appliedSummary=()=>auditText($('db-audit-context'));
+assert.match(appliedSummary(),/Applied result filters.*Role: .*DB: .*2026-10-28 14:30:00.*2026-10-29 14:30:00.*Saved SQL queries.*UNKNOWN.*first.*1 on this page.*Page size: 2/);
 $('db-audit-search').value='second';$('db-audit-search').oninput();await dbAuditSearch('next');
 const next=new URLSearchParams(auditRequests().at(-1).path.split('?')[1]);assert.equal(next.get('search'),'first');assert.equal(next.get('cursor'),'opaque cursor');
 assert.deepEqual(dbAudit.cursors,[auditCursor()]);assert.match($('db-audit-status').textContent,/pending/);
+assert.match(appliedSummary(),/first/);assert.doesNotMatch(appliedSummary(),/second/);
+setLanguage('ja');assert.match(appliedSummary(),/適用済み.*保存済み SQL クエリ.*first/);setLanguage('en');
 await dbAuditSearch('previous');assert.equal(new URLSearchParams(auditRequests().at(-1).path.split('?')[1]).get('cursor'),auditCursor());assert.deepEqual(dbAudit.cursors,[]);
 await dbAuditSearch();assert.equal(dbAudit.applied.search,'second');assert.deepEqual(dbAudit.cursors,[]);
 const count=auditRequests().length;$('db-audit-limit').value='101';await dbAuditSearch();assert.equal(auditRequests().length,count);
 $('db-audit-limit').value='50';$('db-audit-from').value='2026-02-30T12:00';await dbAuditSearch();assert.equal(auditRequests().length,count);
+dbAuditPurge();assert.equal($('db-audit-context').children.length,0);
 auditNoLegacy();
 ''')
 
