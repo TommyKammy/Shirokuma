@@ -1,5 +1,6 @@
 """Exercise the telemetry log boundary without running Docker or an HTTP server."""
 from contextlib import nullcontext
+from copy import deepcopy
 from dataclasses import replace
 from http.client import HTTPResponse
 import io
@@ -15,6 +16,7 @@ from unittest.mock import Mock, patch
 
 import test_database_platform_telemetry_readiness as readiness
 import db_platform_loki_errors as errors
+import db_platform_loki_foundation_errors as foundation_severity
 import db_platform_telemetry_logs as logs
 import yaml
 from warehouse_operations import OperationError
@@ -161,7 +163,7 @@ class TelemetryLogsTests(unittest.TestCase):
                 logs.observe(principal, role)
         self.read.assert_not_called()
 
-    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None, raw_logs=False, loki_errors=False):
+    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None, raw_logs=False, loki_errors=False, foundation_errors=False):
         class Connection:
             def __init__(self,raw):self.incoming,self.outgoing=io.BytesIO(raw),io.BytesIO()
             def makefile(self,*args):return self.incoming
@@ -169,6 +171,8 @@ class TelemetryLogsTests(unittest.TestCase):
         path = logs.RAW_LOGS_PATH if raw_logs else '/api/v1/bears/platform-telemetry-logs'
         if loki_errors:
             path = errors.PATH
+        if foundation_errors:
+            path = foundation_severity.PATH
         raw=(method+' '+path+suffix+' HTTP/1.1\r\n'
             'Host: 127.0.0.1\r\nConnection: close\r\nX-Shirokuma-Role: '+role+'\r\n'+headers+'\r\n'+body).encode()
         conn=Connection(raw)
@@ -176,7 +180,7 @@ class TelemetryLogsTests(unittest.TestCase):
             handler(conn,('127.0.0.1',1),SimpleNamespace())
         response=HTTPResponse(Connection(conn.outgoing.getvalue()));response.begin()
         result = response.status, json.loads(response.read())
-        return (*result, response.getheader('Cache-Control')) if raw_logs or loki_errors else result
+        return (*result, response.getheader('Cache-Control')) if raw_logs or loki_errors or foundation_errors else result
 
     def test_both_strict_inputless_routes(self):
         cases = [({}, 200), ({'headers': 'Content-Length: 0\r\n'}, 200),
@@ -308,7 +312,8 @@ class TelemetryLogsTests(unittest.TestCase):
         self.assertEqual(loaded['limits_config']['deletion_mode'], 'disabled')
         self.assertEqual(loaded['limits_config']['retention_stream'], [
             dict(selector='{service_name="shirokuma-local",component="sre-telemetry-severity"}',
-                 priority=1, period='24h')])
+                 priority=1, period='24h'),
+            dict(selector=errors.FOUNDATION_SELECTOR, priority=1, period='24h')])
         agent = (
             '2026-11-04T00:00:00.000000001Z 2026.11.04 00:00:00.000000 [ 1 ] {} <Error> 雪\n'
             '2026-11-04T00:00:00.000000002Z 2026.11.04 00:00:00.000000 [ 1 ] <Warning> <Fatal> decoy\n'
@@ -554,6 +559,215 @@ class TelemetryLogsTests(unittest.TestCase):
                             request.assert_not_called()
             code, _, cache = self.request(handler, method='POST', loki_errors=True)
             self.assertEqual((code, cache), (403 if handler.__name__ == 'WorkbenchHandler' else 200, 'no-store'))
+
+
+    def test_foundation_provenance_and_container_replacement(self):
+        f = foundation_severity
+        foundation = dict(kube=dict(namespace='registered-ns'), foundation_id='local-foundation',
+                          environment_id='local-env',
+                          revision=3, images=dict(opa=f._IMAGE))
+        base_labels = {f.lf.LABEL: 'local-foundation', f.lf.REVISION: '3'}
+        app_labels = {**base_labels, f._APP: 'trino-opa'}
+        rs_labels = {**app_labels, f._HASH: '6d5abc'}
+        start = '2026-11-04T00:00:00Z'
+        spec = dict(containers=[dict(name='opa', image=f._IMAGE)])
+
+        def meta(name, labels):
+            return dict(name=name, uid=name+'-uid', namespace='registered-ns', labels=labels,
+                        creationTimestamp=start)
+
+        def owner(kind, name):
+            return [dict(kind=kind, name=name, uid=name+'-uid', controller=True)]
+
+        def template(labels):
+            return dict(metadata=dict(labels=labels), spec=spec)
+
+        deployment = dict(kind='Deployment', apiVersion='apps/v1',
+                          metadata=dict(meta('trino-opa', base_labels), generation=1,
+                                        annotations={f._ROLLOUT: '2'}),
+                          status=dict(observedGeneration=1),
+                          spec=dict(replicas=1, selector=dict(matchLabels={f._APP: 'trino-opa'}),
+                                    template=template(app_labels)))
+        rs = dict(kind='ReplicaSet', apiVersion='apps/v1',
+                  metadata=dict(meta('trino-opa-6d5abc', rs_labels),
+                                ownerReferences=owner('Deployment', 'trino-opa'), annotations={f._ROLLOUT: '2'}),
+                  spec=dict(replicas=1, selector=dict(matchLabels={f._APP: 'trino-opa', f._HASH: '6d5abc'}),
+                            template=template(rs_labels)))
+        pod = dict(kind='Pod', apiVersion='v1',
+                   metadata=dict(meta('trino-opa-6d5abc-abcd', rs_labels),
+                                 ownerReferences=owner('ReplicaSet', 'trino-opa-6d5abc')),
+                   spec=spec, status=dict(phase='Running', containerStatuses=[
+                       dict(name='opa', image=f._IMAGE.removeprefix('docker.io/'), ready=False,
+                            imageID='docker-pullable://' + f._IMAGE.removeprefix('docker.io/'),
+                            containerID='docker://'+'a'*64,
+                            restartCount=0, state=dict(running=dict(startedAt=start)))]))
+        objects = [deployment, dict(kind='List', items=[pod]), rs]
+        argv = ['kubectl', '--context', 'enrolled-context', '--namespace', 'registered-ns']
+        stamp = f._timestamp(start) + 1
+        with patch.object(f.lf, 'kube_argv', return_value=argv), \
+                patch.object(f.kube, '_read') as read, \
+                patch.object(f.kube, '_read_bytes', return_value=b'2026-11-04T00:00:00.000000001Z {"level":"error"}\n') as read_logs, \
+                patch.object(errors, '_window', return_value=(stamp-10, stamp+10)):
+            read.side_effect = objects * 2
+            _, sample = f._collect(foundation, lambda: None)
+            self.assertEqual(sample['events'], {(stamp, 'trino-opa', 'error')})
+            self.assertEqual(read_logs.call_args.args[0], argv + [
+                'logs', 'pod/trino-opa-6d5abc-abcd', '-c', 'opa', '--timestamps=true',
+                '--since=10m', '--tail=100', '--limit-bytes=65537'])
+            self.assertEqual(read_logs.call_args.args[2], 65536)
+            self.assertEqual([c.args[0] for c in read.call_args_list], [argv + ['get', *args, '-o', 'json']
+                for args in (['deployment/trino-opa'], ['pods', '-l', f._APP+'=trino-opa'],
+                             ['replicaset/trino-opa-6d5abc'])] * 2)
+            for mutate in (
+                    lambda d, p, r: p['metadata'].update(namespace='other'),
+                    lambda d, p, r: p['metadata']['ownerReferences'][0].update(uid='replacement'),
+                    lambda d, p, r: r['metadata']['ownerReferences'][0].update(uid='replacement'),
+                    lambda d, p, r: r['metadata']['annotations'].update({f._ROLLOUT: '1'}),
+                    lambda d, p, r: p['metadata'].update(uid='replacement'),
+                    lambda d, p, r: p['status']['containerStatuses'][0].update(restartCount=1),
+                    lambda d, p, r: p['status']['containerStatuses'][0].update(containerID='docker://'+'b'*64),
+                    lambda d, p, r: p['status']['containerStatuses'][0]['state']['running'].update(
+                        startedAt='2026-11-04T00:00:01Z')):
+                after = deepcopy(objects)
+                mutate(after[0], after[1]['items'][0], after[2])
+                read.side_effect = objects + after
+                with self.assertRaises(ValueError):
+                    f._collect(foundation, lambda: None)
+            alternate = deepcopy(objects)
+            alternate[1]['items'][0]['status']['containerStatuses'][0].update(
+                image=f._IMAGE, imageID=f._IMAGE, containerID='containerd://'+'a'*64)
+            read.side_effect = alternate * 2
+            self.assertEqual(f._collect(foundation, lambda: None)[1]['events'], sample['events'])
+            read_logs.reset_mock()
+            for mismatch in (
+                    dict(image='registry.example/' + f._IMAGE.removeprefix('docker.io/')),
+                    dict(imageID='docker-pullable://openpolicyagent/opa@sha256:' + '0'*64),
+                    dict(containerID='docker://'+'A'*64)):
+                invalid = deepcopy(objects)
+                invalid[1]['items'][0]['status']['containerStatuses'][0].update(mismatch)
+                read.side_effect = invalid
+                with self.assertRaises(ValueError):
+                    f._collect(foundation, lambda: None)
+            read.side_effect = [deployment, dict(kind='List', items=[pod, pod])]
+            with self.assertRaises(ValueError):
+                f._collect(foundation, lambda: None)
+            read_logs.assert_not_called()
+
+    def test_foundation_explicit_json_and_complete_bounded_logs(self):
+        f = foundation_severity
+        prefix = b'2026-11-04T00:00:00.123456789Z '
+        stamp = f._timestamp(prefix.strip().decode())
+        lines = [b'{"level":"error","msg":"private"}', b'{"level":"fatal"}',
+                 b'{"level":"info","msg":"fatal error"}', b'level=error', b'{"level":"ERROR"}',
+                 b'{"level":"fatal","level":"info"}', b'{"fields":{"level":"error"}}']
+        raw = b''.join(prefix + line + b'\n' for line in lines)
+        self.assertEqual(f._events(raw, (stamp, stamp), stamp),
+                         {(stamp, 'trino-opa', 'error'), (stamp, 'trino-opa', 'fatal')})
+        self.assertEqual(f._events(raw, (stamp+1, stamp+1), stamp), set())
+        self.assertEqual(f._events(raw, (stamp, stamp), stamp+1), set())
+        for bad in (raw[:-1], b'not-a-time {"level":"error"}\n',
+                    (prefix + b'{}\n')*101, b'a'*65536+b'\n'):
+            with self.assertRaises(ValueError):
+                f._events(bad, (stamp, stamp), stamp)
+
+    def test_foundation_retention_pair_and_scoped_search(self):
+        config, request = self.prepare_loki()
+        foundation = dict(kube=dict(namespace='registered-ns'), foundation_id='local-foundation',
+                          environment_id='local-env',
+                          revision=3, images=dict(opa=foundation_severity._IMAGE))
+        self.patch(patch.object(foundation_severity, '_foundation', return_value=foundation))
+        old = yaml.safe_load(config)
+        old['limits_config']['retention_stream'].pop()
+        request.return_value = yaml.safe_dump(old)
+        self.assertTrue(errors._retention(lambda: None))
+        self.assertFalse(errors._retention(lambda: None, foundation=True))
+        self.assertEqual(foundation_severity.search(self.principal, 'admin')['status'], 'unavailable')
+        request.reset_mock()
+        labels = foundation_severity._labels(foundation)
+        self.assertEqual(labels['environment_id'], 'local-env')
+        row = dict(stream=dict(labels, severity='fatal', detected_level='fatal'),
+                   values=[[str(errors._window()[1]), errors._LINE]])
+        request.side_effect = [config, self.streams(row)]
+        result = foundation_severity.search(self.principal, 'admin')
+        self.assertEqual(result['status'], 'available')
+        self.assertEqual(result['hits'][0]['source'], 'trino-opa')
+        params = parse_qs(urlsplit(request.call_args.args[0]).query)
+        self.assertEqual(params['query'], ['{' + ','.join(f'{k}="{v}"' for k, v in labels.items()) + '}'])
+        for extra in (dict(namespace='shirokuma-dev'), dict(foundation_revision='2'),
+                      dict(environment_id='other-env'), dict(job='other')):
+            request.side_effect = [config, self.streams(dict(row, stream=dict(row['stream'], **extra)))]
+            self.assertEqual(foundation_severity.search(self.principal, 'admin')['status'], 'unavailable')
+
+    def test_foundation_capture_metadata_only_and_recheck(self):
+        config, request = self.prepare_loki()
+        foundation = dict(kube=dict(namespace='registered-ns'), foundation_id='local-foundation',
+                          environment_id='local-env',
+                          revision=3, images=dict(opa=foundation_severity._IMAGE))
+        enrollment = self.patch(patch.object(foundation_severity, '_foundation', return_value=foundation))
+        collect = self.patch(patch.object(foundation_severity, '_collect'))
+        window = errors._window()
+        collect.return_value = window, dict(status='available', events={(window[1], 'trino-opa', 'error')})
+        request.side_effect = [config, self.streams(), '']
+        self.assertEqual(foundation_severity.capture(self.principal, 'admin')['status'], 'accepted')
+        self.assertEqual(request.call_args.args, ('/loki/api/v1/push', dict(streams=[
+            dict(stream=dict(foundation_severity._labels(foundation), severity='error'),
+                 values=[[str(window[1]), errors._LINE]])])))
+        request.reset_mock()
+
+        def changed_after_push(path, *args, **kwargs):
+            if path == '/config':
+                return config
+            if path == '/loki/api/v1/push':
+                enrollment.side_effect = OperationError('FOUNDATION_NOT_READY', 503)
+                return ''
+            return self.streams()
+
+        request.side_effect = changed_after_push
+        result = foundation_severity.capture(self.principal, 'admin')
+        self.assertEqual((result['status'], result['accepted']), ('unconfirmed', None))
+        self.assertEqual(sum(c.args[0] == '/loki/api/v1/push' for c in request.call_args_list), 1)
+
+    def test_foundation_rejects_insufficient_authority_and_legacy_enrollment_before_io(self):
+        f = foundation_severity
+        _, request = self.prepare_loki()
+        enrollment = self.patch(patch.object(f, '_foundation', return_value=dict(
+            kube=dict(namespace='shirokuma-dev'), foundation_id='legacy', revision=1, environment_id='local-env',
+            images=dict(opa=f._IMAGE))))
+        collect = self.patch(patch.object(f, '_collect'))
+        for principal, role in ((replace(self.principal, platform_admin=False), 'admin'),
+                                (replace(self.principal, maximum_role='data_engineer'), 'admin'),
+                                (self.principal, 'bi_viewer')):
+            for operation in (f.capture, f.search):
+                with self.assertRaises(OperationError):
+                    operation(principal, role)
+        enrollment.assert_not_called()
+        self.assertEqual(f.capture(self.principal, 'admin')['status'], 'unavailable')
+        self.assertEqual(f.search(self.principal, 'admin')['status'], 'unavailable')
+        enrollment.return_value = dict(enrollment.return_value, kube=dict(namespace='registered-ns'),
+                                       environment_id='bad"env')
+        self.assertEqual(f.search(self.principal, 'admin')['status'], 'unavailable')
+        request.assert_not_called()
+        collect.assert_not_called()
+
+    def test_foundation_http_adapters_use_strict_inputless_route(self):
+        same = 'Origin: http://127.0.0.1\r\n'
+        with patch.object(foundation_severity, 'capture', return_value={}) as capture, \
+                patch.object(foundation_severity, 'search', return_value={}) as search:
+            for handler in self.handlers():
+                for method in ('GET', 'POST'):
+                    for options, status in (
+                            (dict(headers=same), 200),
+                            (dict(headers=same, suffix='?namespace=other'), 400),
+                            (dict(headers=same + 'Content-Length: 2\r\n', body='{}'), 400),
+                            (dict(headers=same + 'Transfer-Encoding: chunked\r\n'), 400),
+                            (dict(headers='Origin: http://other\r\n'), 403)):
+                        with self.subTest(handler=handler, method=method, options=options):
+                            capture.reset_mock()
+                            search.reset_mock()
+                            code, _, cache = self.request(handler, method=method, foundation_errors=True, **options)
+                            self.assertEqual((code, cache), (status, 'no-store'))
+                            self.assertEqual(capture.call_count, int(status == 200 and method == 'POST'))
+                            self.assertEqual(search.call_count, int(status == 200 and method == 'GET'))
 
 class DockerCaptureTests(unittest.TestCase):
     def test_fixed_host_sanitized_environment_and_bounded_cleanup(self):

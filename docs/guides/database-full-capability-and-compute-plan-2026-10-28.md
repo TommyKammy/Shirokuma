@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-04 JST、[DB-P6-4C2M](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)でSRE PlatformのLoki重大度検索に登録済み基盤のOPAを加えた。固定の発行元を照合し、時刻・発行元・重大度だけを扱う。旧名前空間全体とSQL-09／ADM-09〜11の範囲を照合し、DB-P6-7の独立環境とM1本人受入を継続する。
+
 2026-11-04 JST、[DB-P6-4C2L](database-p6-4c2l-sre-loki-severity-2026-11-04.md)で管理対象AgentHouse／Lokiのerror／fatalを、時刻・発行元・重大度に絞って手動でLokiへ取り込み、SRE Platformで検索できるようにした。対象は固定2コンテナ。旧名前空間別ログの投入範囲と、M1の統合・本人受入は継続する。
 
 2026-11-04 JST、[DB-P6-4C2K](database-p6-4c2k-sre-raw-logs-2026-11-04.md)でSRE Platformに、現在のP管理者がAgentHouse／Lokiの管理対象コンテナの生ログを明示取得する導線を追加した。旧Loki error／fatal検索の対象ストリームと閲覧・保持範囲の確定、DB-P6-7の独立環境とM1本人受入を継続する。

@@ -25,6 +25,7 @@ import db_platform_manifest_advisory
 import db_platform_controller_baseline
 import db_platform_recent_failures
 import db_platform_loki_errors
+import db_platform_loki_foundation_errors
 import db_platform_telemetry_logs
 import db_platform_telemetry_readiness
 import db_ai_settings
@@ -198,8 +199,8 @@ def dispatch(handler, method, path, params, principal, role):
         return True
     if path in ('/api/v1/bears/platform-recent-failures', '/api/v1/bears/platform-telemetry-readiness',
                 '/api/v1/bears/platform-telemetry-logs', db_platform_telemetry_logs.RAW_LOGS_PATH,
-                db_platform_loki_errors.PATH):
-        severity_route = path == db_platform_loki_errors.PATH
+                db_platform_loki_errors.PATH, db_platform_loki_foundation_errors.PATH):
+        severity_route = path in (db_platform_loki_errors.PATH, db_platform_loki_foundation_errors.PATH)
         if severity_route:
             handler.close_connection = True
         if method != 'GET' and not (severity_route and method == 'POST'):
@@ -225,6 +226,8 @@ def dispatch(handler, method, path, params, principal, role):
             source = {
                 'platform-loki-errors': (db_platform_loki_errors.capture if method == 'POST'
                                          else db_platform_loki_errors.search),
+                'platform-loki-foundation-errors': (db_platform_loki_foundation_errors.capture if method == 'POST'
+                                                    else db_platform_loki_foundation_errors.search),
                 'platform-telemetry-raw-logs': db_platform_telemetry_logs.observe_raw,
                 'platform-telemetry-logs': db_platform_telemetry_logs.observe,
                 'platform-telemetry-readiness': db_platform_telemetry_readiness.observe,

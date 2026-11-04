@@ -5,7 +5,7 @@ title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
 updated: 2026-11-04
-version: "0.1"
+version: "0.2"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
@@ -21,11 +21,13 @@ tags: [database, workbench, integration, acceptance]
 | 行 | 今回の照合 |
 | --- | --- |
 | ING-03／TRF-06、AUD-02、SQL-12／13 | 6Fの元操作への再接続と6F-R1の非purge清掃、1Aの保存履歴対応、B3のWAP／Managed Martsへの案内を既存の限定証拠に対応付けた。 |
-| SQL-09 | 固定サンプルSQLのshortcutが未接続。現在のDB／スキーマ／ロールに固定する通常導線か、必須範囲の合意が残る。 |
-| AI-04／CMP-05 | 固定のreadiness、診断集計、保存済み失敗metadataは対応済み。生ログ本文と従来のLoki error／fatal検索は残る。 |
+| SQL-09 | 固定サンプルメニューは未接続。Data Explorerは現在のDB／スキーマ／ロールを照合して、未実行の読取りSQLを新規Worksheetに開く。これを代替とするかは範囲判断に残る。 |
+| AI-04／CMP-05 | 固定のreadiness、診断集計、保存済み失敗metadata、固定Docker 2コンテナの生ログとLoki重大度検索に限定対応した。登録済み基盤のOPA重大度検索と旧名前空間全体の範囲はC2Mで区別する。 |
 | AI-02／AI-03／AI-05 | 既存の限定操作を受入済み。任意Snapshotへの旧rollback、横断raw metadata／説明保存、登録外namespaceと広いpolicy scopeについて、旧操作との対応範囲を確定する。 |
-| ADM-09〜11 | 高度な登録・staged operator操作は条件付き。物理purgeは別の破棄scope。M1で要求する範囲の判断が残る。 |
+| ADM-09〜11 | 高度な登録・staged operator操作には条件付きの導線がある。既存退役はデータ・資格情報を保持する。operator受入と物理purgeの要否は範囲判断に残る。 |
 | TRF-11 | 承認済みprojectの保存plan、build／test、明示TABLE公開を対象にする。正式VIEW公開・VIEW連鎖・incremental・並列実行は別拡張。 |
+
+[C2Mの収集範囲とSQL-09／ADM-09〜11の照合](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
 
 ## 現行環境での予備縦断
 
@@ -38,7 +40,7 @@ tags: [database, workbench, integration, acceptance]
 | Jobと監査 | `p67_orders_check` v1を同じMARTS・admin・read-onlyで保存し、手動runのSQL stepが成功した。通常の保存メタデータ監査で元のJob、AI説明、dbt公開を同じIDで照合した。 |
 | 一回限りの予定 | Job v1の予定を無効で保存し、明示有効化した。1件のtickからSQL stepが成功し、予定は無効・次回実行なしになった。監査では手動・予定の両run IDを照合した。 |
 | LOCAL休止と復帰 | 一回限りの予定を消費した後、休止阻害の全件数0を確認して共有LOCALを1回休止した。0/0の休止状態から同じMARTS SELECTを1回実行し、自動起動の待機を経て2/2の稼働と同じ2行を確認した。 |
-| 認可 | 非Pの既存閲覧者で、許可されたAのMARTS読取りは200、grantのない検証DBとAにBのスキーマIDを組み合わせた要求は404。DB grantの変更を伴わない実API確認。Workbenchのrole上限を閲覧者へ下げると保存済みadmin Worksheetが実行不可になり、元の上限とコンテキストを明示的に再選択した。 |
+| 認可 | 非Pの既存閲覧者で、許可されたAのMARTSスキーマ一覧は200、grantのない検証DBとAにBのスキーマIDを組み合わせた要求は404。DB grantの変更や閲覧者のSQL実行を伴わない実API確認。Workbenchのrole上限を閲覧者へ下げると保存済みadmin Worksheetが実行不可になり、元の上限とコンテキストを明示的に再選択した。 |
 
 照合に使った主な元IDは、作成 `d8451129a98a45c2a500a5e8169f5321`、Ingest `9a1ed730-05e5-467a-8920-81cbadd9d114`、dbt run `6d06336d-71c0-45c0-bdfc-24c1a5025805`、公開 `80321d30-1836-47b3-be83-555d2e46ca63`、手動Job `8d1b78ec-fbf0-448a-ac1b-dee400442778`、予定Job `130dbe3d-0557-4551-8719-339a8b150dd5`、休止 `3965ef31-6904-44ea-8973-006fce88af0d`、復帰後SQL `27086f9c-3366-4ab0-bf77-b21d46affd20`。
 

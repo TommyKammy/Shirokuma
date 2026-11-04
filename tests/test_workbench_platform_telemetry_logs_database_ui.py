@@ -277,6 +277,51 @@ assert.match(node('status').textContent,/request failed/);assert.equal(node('hit
 assert.equal(searches().length,5);
 """)
 
+    def test_foundation_scope_switch_fences_requests_and_keeps_empty_distinct(self):
+        self.javascript(r"""
+await rawBoot();
+const node=key=>$('observation-sre-loki-errors-'+key);
+const select=node('scopeSelect');
+const docker='/api/v1/bears/platform-loki-errors';
+const foundation='/api/v1/bears/platform-loki-foundation-errors';
+const reply=(status,hits=[])=>({operation:'search',status,since_minutes:10,window_end:newest,limit:20,hits});
+let release;
+route=(path,options)=>path===docker?new Promise(resolve=>{release=resolve;}):runtimeFixtureRoute(path,options);
+await node('auth').onclick();
+const stale=node('search').onclick();
+assert.ok(release);
+select.value='foundation';select.onchange();
+assert.ok(node('capture').disabled&&node('search').disabled);
+release(reply('available',[{timestamp:newest,source:'agenthouse',severity:'error'}]));
+await stale;
+assert.equal(node('hits').children.length,0);
+assert.match(node('captureBounds').textContent,/enrolled Foundation trino-opa/);
+await node('auth').onclick();
+let query=reply('available');
+route=(path,options)=>{
+ if(path!==foundation)return runtimeFixtureRoute(path,options);
+ const capture=options.method==='POST';
+ assert.deepEqual(options,{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'},...(capture?{method:'POST'}:{})});
+ return capture?{operation:'capture',status:'no_new_events',since_minutes:10,window_end:newest,
+   tail_lines:100,max_bytes:65536,accepted:0,sources:{'trino-opa':'available'}}:query;
+};
+await node('capture').onclick();
+assert.match(node('captureResult').textContent,/trino-opa: sample available/);
+await node('search').onclick();
+assert.match(node('searchResult').textContent,/No stored events/);
+query=reply('unavailable');await node('search').onclick();
+assert.match(node('searchResult').textContent,/could not be searched/);
+query=reply('available',[{timestamp:newest,source:'trino-opa',severity:'fatal'}]);
+await node('search').onclick();
+assert.match(visibleText(node('hits')),/trino-opa · fatal/);
+language='ja';dbLokiErrorsSync();
+assert.match(node('foundation').textContent,/登録済み Foundation/);
+select.value='docker';select.onchange();
+assert.equal(node('hits').children.length,0);
+assert.equal(node('captureResult').textContent,'');
+assert.ok(node('search').disabled);
+""")
+
     def test_loki_discards_late_body_on_visibility_and_stale_auth_on_leave(self):
         self.javascript(r"""
 await rawBoot();

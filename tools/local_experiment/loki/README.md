@@ -34,6 +34,12 @@ severity in the `sre-telemetry-severity` stream and searches the latest 20 event
 in a 10-minute window. Loki's Compactor applies a 24-hour retention policy to
 that stream, and the manual deletion API is disabled. [SRE capture and search](../../../docs/guides/database-p6-4c2l-sre-loki-severity-2026-11-04.md)
 
+The Foundation source option captures the registered Kubernetes `trino-opa`
+Deployment's current `opa` container. It uses the separate
+`sre-foundation-severity` stream, scoped to the registered environment, namespace,
+Foundation ID, and revision. That stream has its own 24-hour policy and the same 10-minute
+search window. Capture requires the two-rule Loki configuration. [Foundation source scope and acceptance](../../../docs/guides/database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
+
 The 2026-09-16 runtime test pushed and queried a normalized record, stopped and
 restarted Loki, then queried the identical record again. Private receipts are
 under ignored `tmp/local-experiment/loki/`. Pawprint records have no configured age expiration. Durable audit export is the matching AgentHouse JSONEachRow export plus

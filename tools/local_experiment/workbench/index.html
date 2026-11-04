@@ -4797,10 +4797,14 @@ async function dbRawLogsFetch(){
  finally{read.finish();}
 }
 
-const dbLokiErrors={boundary:'',epoch:0,busy:false,verified:false,notice:'',capture:null,search:null};
+const dbLokiErrors={scope:'docker',boundary:'',epoch:0,busy:false,verified:false,notice:'',capture:null,search:null};
 const dbLokiErrorsLabels={
  title:['Loki error and fatal events','Loki の error／fatal イベント'],
  captureBounds:['Capture samples the last 10 minutes of LOCAL AgentHouse and Loki stdout and stderr. Each service has a combined limit of 100 lines and 64 KiB. Capture writes only event time, source and severity with a fixed marker.','取り込みは LOCAL の AgentHouse と Loki の直近10分の標準出力・標準エラー出力が対象です。サービスごとに合計100行、64 KiBまでです。時刻・発生元・重大度と固定マーカーだけを保存します。'],
+ scope:['Log source','ログの対象'],
+ docker:['LOCAL Docker · AgentHouse and Loki','LOCAL Docker · AgentHouse と Loki'],
+ foundation:['Enrolled Foundation · trino-opa','登録済み Foundation · trino-opa'],
+ foundationBounds:['Capture samples the current opa container in the enrolled Foundation trino-opa Deployment. It reads up to 100 lines and 64 KiB from the last 10 minutes and stores only the timestamp, source, severity and scope of JSON error and fatal events.','登録済み Foundation の trino-opa Deployment に属する現在の opa コンテナが対象です。直近10分の最大100行・64 KiBを取得し、JSON の error／fatal の時刻・発生元・重大度・対象範囲だけを保存します。'],
  searchBounds:['Search reads up to 20 stored events from the last 10 minutes. Capture checks the loaded 24-hour retention rule before writing.','検索は直近10分の取り込み済みイベントを最大20件表示します。書き込み前に稼働中の24時間保持ルールを確認します。'],
  capture:['Capture and submit','取り込んで保存'],
  search:['Search stored events','保存済みイベントを検索'],
@@ -4828,7 +4832,8 @@ function dbLokiErrorsSync(){
  const p=dbLokiErrors,boundary=dbRawLogsBoundary();
  if(boundary!==p.boundary){dbLokiErrorsClear();p.boundary=boundary;}
  panel.hidden=!dbRawLogsVisible();
- for(const key of ['title','captureBounds','searchBounds','auth','capture','search'])dbLokiErrorsNode(key).textContent=dbLokiErrorsText(key);
+ for(const key of ['title','scope','docker','foundation','searchBounds','auth','capture','search'])dbLokiErrorsNode(key).textContent=dbLokiErrorsText(key);
+ dbLokiErrorsNode('captureBounds').textContent=dbLokiErrorsText(p.scope==='foundation'?'foundationBounds':'captureBounds');
  dbLokiErrorsNode('auth').disabled=panel.hidden||p.busy||!dbPlatformCanRefresh();
  for(const key of ['capture','search'])dbLokiErrorsNode(key).disabled=panel.hidden||p.busy||!p.verified||!dbTelemetryLogsAllowed();
  dbLokiErrorsNode('status').textContent=dbLokiErrorsText(p.notice||(p.verified?'verified':'denied'));
@@ -4836,14 +4841,15 @@ function dbLokiErrorsSync(){
  const captureText=capture?(capture.status==='unavailable'?dbLokiErrorsText('captureUnavailable'):
   capture.accepted===null?dbLokiErrorsText('unconfirmed'):dbLokiErrorsText(capture.status)+' · '+capture.accepted):'';
  dbLokiErrorsNode('captureResult').textContent=captureText+(capture?.sources?
-  ' · AgentHouse: '+dbLokiErrorsText(capture.sources.agenthouse)+' · Loki: '+dbLokiErrorsText(capture.sources.loki)+
+  Object.entries(capture.sources).map(([source,status])=>' · '+dbLokiErrorsSource(source)+': '+dbLokiErrorsText(status)).join('')+
   ' · '+dbLokiErrorsText('windowEnd')+' '+capture.window_end:'');
  dbLokiErrorsNode('searchResult').textContent=search?[(search.status==='unavailable'?dbLokiErrorsText('searchUnavailable'):
   search.hits.length?'':dbLokiErrorsText('empty')),dbLokiErrorsText('windowEnd')+' '+search.window_end].filter(Boolean).join(' · '):'';
  const list=dbLokiErrorsNode('hits');list.replaceChildren();
  for(const item of search?.hits??[])dbAdminNode('li','',list).textContent=
-  item.timestamp+' · '+(item.source==='agenthouse'?'AgentHouse':'Loki')+' · '+item.severity;
+  item.timestamp+' · '+dbLokiErrorsSource(item.source)+' · '+item.severity;
 }
+const dbLokiErrorsSource=source=>({agenthouse:'AgentHouse',loki:'Loki','trino-opa':'trino-opa'})[source];
 function dbLokiErrorsInstall(){
  if(dbLokiErrorsNode('panel')?.dataset.installed)return;
  const prefix='observation-sre-loki-errors-';
@@ -4854,11 +4860,20 @@ function dbLokiErrorsInstall(){
  const body=node('div','',panel);body.className='panel-body';
  node('p','captureBounds',body);node('p','searchBounds',body);
  const bar=node('div','',body);bar.className='toolbar';
+ const label=node('label','scope',bar);label.htmlFor=prefix+'scopeSelect';
+ const select=node('select','scopeSelect',bar);
+ for(const key of ['docker','foundation'])node('option',key,select).value=key;
+ select.value=dbLokiErrors.scope;
+ select.onchange=()=>{
+  if(!['docker','foundation'].includes(select.value)||select.value===dbLokiErrors.scope)return;
+  dbLokiErrors.scope=select.value;dbLokiErrorsClear();dbLokiErrorsSync();
+ };
  for(const key of ['auth','capture','search'])dbAdminButton(bar,prefix+key,dbLokiErrorsText(key),()=>dbLokiErrorsRequest(key));
  for(const key of ['status','captureResult','searchResult'])node('p',key,body).setAttribute('role','status');
  node('ul','hits',body);dbLokiErrorsSync();
 }
-function dbLokiErrorsRecord(data,key){
+function dbLokiErrorsRecord(data,key,scope){
+ const sources=scope==='foundation'?['trino-opa']:['agenthouse','loki'];
  const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
  const utc=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z$/.test(value);
  if(data?.operation!==key||data.since_minutes!==10||!utc(data.window_end))fail();
@@ -4868,14 +4883,14 @@ function dbLokiErrorsRecord(data,key){
      (data.status==='unavailable'&&data.hits.length))fail();
   for(const hit of data.hits){
    if(!exact(hit,['timestamp','source','severity'])||!utc(hit.timestamp)||hit.timestamp>data.window_end||
-      !['agenthouse','loki'].includes(hit.source)||!['error','fatal'].includes(hit.severity))fail();
+      !sources.includes(hit.source)||!['error','fatal'].includes(hit.severity))fail();
   }
  }else{
   if(!exact(data,['operation','status','since_minutes','window_end','tail_lines','max_bytes','accepted','sources'])||
-     data.tail_lines!==100||data.max_bytes!==65536||!exact(data.sources,['agenthouse','loki'])||
+     data.tail_lines!==100||data.max_bytes!==65536||!exact(data.sources,sources)||
      !Object.values(data.sources).every(value=>['available','unavailable'].includes(value)))fail();
   if(data.status==='accepted'){
-   if(!Number.isInteger(data.accepted)||data.accepted<1||data.accepted>200)fail();
+   if(!Number.isInteger(data.accepted)||data.accepted<1||data.accepted>100*sources.length)fail();
   }else if(data.status==='no_new_events'){
    if(data.accepted!==0)fail();
   }else if(!['unavailable','unconfirmed'].includes(data.status)||data.accepted!==null)fail();
@@ -4884,14 +4899,15 @@ function dbLokiErrorsRecord(data,key){
 }
 async function dbLokiErrorsRequest(key){
  dbLokiErrorsSync();if(dbLokiErrorsNode(key).disabled)return;
- const p=dbLokiErrors,epoch=++p.epoch,boundary=p.boundary;
+ const p=dbLokiErrors,epoch=++p.epoch,boundary=p.boundary,scope=p.scope;
  if(key==='auth'){p.verified=false;p.capture=null;p.search=null;}else p[key]=null;
  p.busy=true;p.notice='working';dbLokiErrorsSync();
- const current=()=>p.epoch===epoch&&dbRawLogsVisible()&&boundary===dbRawLogsBoundary();
+ const current=()=>p.epoch===epoch&&p.scope===scope&&dbRawLogsVisible()&&boundary===dbRawLogsBoundary();
  try{
   const options={cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}};
   if(key==='capture')options.method='POST';
-  const response=await fetch(key==='auth'?'/api/session':'/api/v1/bears/platform-loki-errors',options);
+  const endpoint=scope==='foundation'?'/api/v1/bears/platform-loki-foundation-errors':'/api/v1/bears/platform-loki-errors';
+  const response=await fetch(key==='auth'?'/api/session':endpoint,options);
   if(!current())return;
   if([401,403].includes(response.status)){dbLokiErrorsClear();dbAdminSession({});return;}
   if(!response.ok)throw Error('UNAVAILABLE');
@@ -4902,7 +4918,7 @@ async function dbLokiErrorsRequest(key){
    p.verified=data.role==='admin'&&dbTelemetryLogsAllowed()&&dbRawLogsVisible();
   }else{
    if(!dbTelemetryLogsAllowed())return;
-   p[key]=dbLokiErrorsRecord(data,key);
+   p[key]=dbLokiErrorsRecord(data,key,scope);
   }
   p.notice='';
  }catch{

@@ -86,7 +86,7 @@ def _window(value):
     return _normal(seconds)
 
 
-def _read(argv, deadline):
+def _read_bytes(argv, deadline, max_output):
     process = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=False)
     raw = b''
     try:
@@ -96,12 +96,12 @@ def _read(argv, deadline):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0 or not selector.select(remaining):
                     raise subprocess.TimeoutExpired(argv, 15)
-                chunk = process.stdout.read1(MAX_OUTPUT + 1 - len(raw))
+                chunk = process.stdout.read1(max_output + 1 - len(raw))
                 if not chunk:
                     break
-                raw += chunk
-                if len(raw) > MAX_OUTPUT:
+                if len(chunk) > max_output - len(raw):
                     raise ValueError()
+                raw += chunk
         remaining = deadline - time.monotonic()
         if remaining <= 0 or process.wait(timeout=remaining) != 0:
             raise ValueError()
@@ -110,6 +110,10 @@ def _read(argv, deadline):
             process.kill()
             process.wait()
         process.stdout.close()
+    return raw
+
+
+def _decode_json(raw):
     def pairs(items):
         result = {}
         for key, value in items:
@@ -119,6 +123,10 @@ def _read(argv, deadline):
         return result
     return json.loads(raw, object_pairs_hook=pairs,
                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+
+
+def _read(argv, deadline):
+    return _decode_json(_read_bytes(argv, deadline, MAX_OUTPUT))
 
 
 def _text(value):
