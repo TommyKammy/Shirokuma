@@ -544,8 +544,20 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
  :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0;max-width:100%}
  :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) select{min-width:0;max-width:100%}
 }
+.wb-task-context{min-width:0;max-width:100%;overflow-wrap:anywhere;line-height:1.5;margin-block:8px 12px}
+.wb-task-context p{margin:0}
+.wb-task-context p+p{margin-top:4px;color:var(--muted)}
+#explorer-task-context{flex-basis:100%;margin-block:0}
+@media(max-width:760px){
+ #database-results .history-field{flex-wrap:wrap;justify-content:flex-start}
+ #database-results .history-field select{min-width:0;max-width:100%}
+ #p35-ingest .job-fields>*{min-width:0}
+ #p35-ingest :is(input,select,textarea,button){max-width:100%}
+}
 #database-compute-status{min-height:32px;min-width:0;max-width:100%;white-space:normal;text-align:start}
 #database-compute-state{min-width:0;overflow-wrap:anywhere}
+#db-stages-panel :is(.toolbar button,.toolbar input,.toolbar select){min-width:0;max-width:100%}
+#db-stages-panel :is(.toolbar button,[id$="-detail"],[id$="-list"],#db-stages-owner){overflow-wrap:anywhere}
 @media(max-width:760px){
  #database-worksheet-pane{padding:8px}
  #database-details{margin:8px}
@@ -1759,6 +1771,7 @@ function selectSubView(button){
  const opensWap=button.id==='transformation-view-wap';
  const wapWasOpen=!$('transformation-wap').hidden;
  const crossesWap=databaseMode&&button.dataset.view==='transformation'&&opensWap!==wapWasOpen;
+ if(databaseMode&&button.dataset.view==='ingestion'&&button.getAttribute('aria-selected')!=='true')dataopsRecoveryBoundary();
  if(crossesWap){
   dataopsRecoveryBoundary();
   const wap=dataopsPanels.get('p35-wap');
@@ -1767,6 +1780,7 @@ function selectSubView(button){
  selectView(button);
  if(opensWap)dataopsOpen('transformation');
  if(button.id==='transformation-view-marts'&&databaseMode)return dbMartsOpen();
+ if(button.id==='ingestion-view-stages'&&databaseMode)return dbStagesOpen();
 }
 function selectInspector(button){
  if(typeof databaseMode!=='undefined'&&databaseMode)return dbSelectInspector(button);
@@ -6356,6 +6370,56 @@ Object.assign(i18n.ja,{
  'Open context example':'接続先の確認SQLを開く',
  'Open a new read-only draft to check the connection context.':'接続先を確認するための読み取り専用の下書きを新しく開きます。'
 });
+Object.assign(i18n.ja,{
+ 'No selection':'未選択',
+ 'Browsing selection: {database} / {schema} / {object} · Role: {role}':'参照先の選択：{database} / {schema} / {object} · 参照ロール：{role}',
+ 'Open Explorer selection':'エクスプローラーの選択欄を開く',
+ 'Choose a database in Explorer.':'エクスプローラーでデータベースを選んでください。',
+ 'Choose a schema in Explorer.':'エクスプローラーでスキーマを選んでください。',
+ 'Choose a table or view to inspect.':'確認するテーブルまたはビューを選んでください。',
+ 'Choose a table or view, or open new SQL for this schema.':'テーブルかビューを選ぶか、このスキーマで新しい SQL を開いてください。',
+ 'Open Preview or open new SQL for this object.':'このオブジェクトのプレビューか新しい SQL を開いてください。',
+ 'Open Preview for this object.':'このオブジェクトのプレビューを開いてください。',
+ 'Open new SQL for this object.':'このオブジェクトで新しい SQL を開いてください。',
+ 'Choose an available detail or select another object.':'利用できる詳細を開くか、別のオブジェクトを選んでください。',
+ 'Refresh Explorer selection':'参照先とオブジェクト一覧を更新',
+ 'Reload selected detail':'表示中の詳細を読み込み直す',
+ 'Refresh execution context':'実行先を更新',
+ 'Execution context: {context}':'実行先：{context}',
+ 'Execution selection: {context}':'実行先の選択：{context}',
+ 'Choose a database for this worksheet.':'このワークシートのデータベースを選んでください。',
+ 'Choose a schema for this worksheet.':'このワークシートのスキーマを選んでください。',
+ 'Refresh or reselect the worksheet execution context.':'実行先を更新するか、データベース・スキーマ・実行ロールを選び直してください。',
+ 'Review Recent Query History for the original query. Its outcome is unknown.':'元のクエリの結果は不明です。最近のクエリ履歴を確認してください。',
+ 'Wait for the current query to finish.':'現在のクエリが終わるまでお待ちください。',
+ 'Enter SQL, then run it in this context.':'SQL を入力し、この実行先で実行してください。',
+ 'Refresh ingestion destination':'取り込み先を更新',
+ 'Selected destination: {context}':'取り込み先の選択：{context}',
+ 'Authorized destination: {context}':'利用できる取り込み先：{context}',
+ 'Draft table: {table}':'下書きの対象テーブル：{table}',
+ 'Choose a destination, then choose a file and target table, preview, and confirm.':'取り込み先を選び、ファイルと対象テーブルを指定して、プレビューを確認してから取り込んでください。',
+ 'Destination unavailable. Refresh the ingestion destination or choose a different database, schema or role.':'取り込み先を利用できません。取り込み先を更新するか、データベース・スキーマ・実行ロールを選び直してください。',
+ 'Draft. Choose a file and table, then preview.':'下書きです。ファイルとテーブルを指定し、プレビューを開いてください。',
+ 'Draft. Preview the input before confirming ingestion.':'下書きです。取り込みを確定する前にプレビューを開いてください。',
+ 'Ready to confirm. Review the input preview, then confirm ingestion.':'確定できます。入力プレビューを確認して取り込んでください。',
+ 'Preview already submitted. Check the original operation.':'このプレビューは送信済みです。元の処理を確認してください。',
+ 'New ingestion is held. Resolve the original operation before submitting.':'新規取り込みを保留しています。送信する前に元の処理を確認してください。',
+ 'Preview held. Check the recovery storage notice before submitting.':'プレビューを保持しています。送信する前に復旧用ストレージの通知を確認してください。',
+ 'Wait for the current ingestion request.':'現在の取り込み要求が終わるまでお待ちください。',
+ 'Checking the ingestion destination…':'取り込み先を確認しています…',
+ 'Look up ingestion operation':'取り込み処理を照会',
+ 'Reconnect to original ingestion':'元の処理に再接続',
+ 'Look up export operation':'書き出し処理を照会',
+ 'Look up clone operation':'複製処理を照会',
+ 'Look up removal operation':'カタログからの登録解除を照会',
+ 'Look up removal by original key':'元のキーでカタログからの登録解除を照会',
+ 'Resend original request':'元の要求を再送',
+ 'Resending uses the original body and key. If the request was never accepted, it may start the operation.':'元の本文とキーで再送します。元の要求が未受付の場合は処理が始まることがあります。'
+});
+function wbTaskText(node,key,values){
+ const value=t(key,values);
+ if(node&&node.textContent!==value)node.textContent=value;
+}
 function dbContextExampleReason(w=dbCurrent()){
  return dbReason({...w,mode:'read-only'});
 }
@@ -6463,7 +6527,18 @@ function dbControls(){
   example.disabled=!!exampleReason;
   example.title=exampleReason||t('Open a new read-only draft to check the connection context.');
  }
- message('database-context-state',reason||(exampleReason?t('Open context example')+' — '+exampleReason:''));
+ message('database-context-state',reason);
+ const context=$('worksheet-task-context'),database=dbTabItems().find(d=>d.id===w.database_id);
+ const selection=[(!reason?database?.sql_catalog:database?.display_name)||t(w.database_id?'Unavailable':'No selection'),
+  (!reason?schema?.sql_name:schema?.display_name)||t(w.schema_id?'Unavailable':'No selection'),w.selected_role,t(w.mode)].join(' / ');
+ wbTaskText(context?.children[0],reason?'Execution selection: {context}':'Execution context: {context}',{context:selection});
+ const next=run?.state==='UNKNOWN'?'Review Recent Query History for the original query. Its outcome is unknown.':
+  dbRunBlocked(run)?'Wait for the current query to finish.':
+  !w.database_id?'Choose a database for this worksheet.':!w.schema_id?'Choose a schema for this worksheet.':
+  reason===t('Checking context…')?'Checking context…':
+  reason?'Refresh or reselect the worksheet execution context.':'Enter SQL, then run it in this context.';
+ wbTaskText(context?.children[1],next);
+ if(context?.children[1])context.children[1].hidden=!next;
  $('run-query').disabled=!!reason||dbRunBlocked(run);
  $('cancel-query').disabled=!dbCanCancel(run)||!!run?.canceling;
  for(const id of ['export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
@@ -6925,7 +7000,23 @@ function dbExplorerControls(){
  dbSelectOptions('catalog-database',dbDatabases.map(d=>({value:d.id,label:d.display_name+' · '+d.sql_catalog,disabled:!d.capabilities?.browse})),e.database_id,'Choose database');
  const available=e.schemaScope===dbSchemaKey(currentRole,e.database_id);
  dbSelectOptions('catalog-schema',(available?e.schemas:[]).map(s=>({value:s.id,label:s.display_name+' · '+s.sql_name,disabled:!s.capabilities?.browse})),e.schema_id,'Choose schema');
- message('catalog-context-state',dbExplorerReason()||t('Explorer context is independent of worksheets.'));
+ const reason=dbExplorerReason();
+ message('catalog-context-state',reason||t('Explorer context is independent of worksheets.'));
+ const context=$('explorer-task-context');
+ const database=dbDatabases.find(d=>d.id===e.database_id),schema=available?e.schemas.find(s=>s.id===e.schema_id):null;
+ const object=reason?null:dbObject;
+ wbTaskText(context?.children[0],'Browsing selection: {database} / {schema} / {object} · Role: {role}',{
+  database:database?.display_name||t(e.database_id?'Unavailable':'No selection'),
+  schema:schema?.display_name||t(e.schema_id?'Unavailable':'No selection'),
+  object:object?.display_name||object?.physical_name||t('No selection'),role:currentRole
+ });
+ const preview=object?.id&&object.ref&&object.capabilities?.preview,open=dbExplorerCanCreate();
+ const next=!e.database_id?'Choose a database in Explorer.':!e.schema_id?'Choose a schema in Explorer.':reason||
+  (!object?(open?'Choose a table or view, or open new SQL for this schema.':'Choose a table or view to inspect.'):
+   preview?(open?'Open Preview or open new SQL for this object.':'Open Preview for this object.'):
+   open?'Open new SQL for this object.':!object.id||!object.ref?'Object identity is not verified. Refresh Explorer and select the object again.':
+   'Choose an available detail or select another object.');
+ wbTaskText(context?.children[1],next);
  $('open-table-sql').disabled=!dbExplorerCanCreate();
  $('open-table-sql').title=$('open-table-sql').disabled?t('Select a resolved object in a query-enabled Explorer context with read-only mode.'):'';
  $('insert-table-sql').disabled=!dbExplorerCanOpen();
@@ -7107,6 +7198,8 @@ function dbShowWorkspace(pane){
  $('database-details').hidden=pane!=='details';
  $('database-worksheet-pane').hidden=pane!=='worksheet';
  $('database-editor').hidden=pane!=='worksheet';$('database-results').hidden=pane!=='worksheet';
+ for(const id of ['explorer-task-context','explorer-open-selection'])if($(id))$(id).hidden=pane!=='details';
+ if($('worksheet-task-context'))$('worksheet-task-context').hidden=pane!=='worksheet';
  $('worksheet-tabs').querySelectorAll('[role=tab]').forEach(button=>{const selected=button.id==='workspace-details'?pane==='details':pane==='worksheet'&&button.dataset.worksheet===worksheetId;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});
  $('database-worksheet-pane').setAttribute('aria-labelledby','worksheet-'+worksheetId);
 }
@@ -7159,6 +7252,15 @@ function dbInstallWorkspace(explorerTools){
  const pane=document.createElement('div');pane.id='database-worksheet-pane';pane.setAttribute('role','tabpanel');pane.append(editor,results);main.prepend(strip);main.append(pane,inspector);
  inspector.setAttribute('role','tabpanel');inspector.setAttribute('aria-labelledby','workspace-details');inspector.tabIndex=0;
  const summary=explorer.querySelector('summary');
+ const context=dataopsNode('div','explorer-task-context');context.className='wb-task-context';context.setAttribute('role','status');
+ dataopsNode('p','',context);dataopsNode('p','',context);
+ layout.before(context);
+ const openSelection=dataopsButton(null,'explorer-open-selection','Open Explorer selection',()=>{
+  explorer.open=true;summary.focus();
+ });
+ openSelection.className='small';openSelection.setAttribute('aria-controls',explorer.id);context.after(openSelection);
+ ui($('refresh-catalog'),'Refresh Explorer selection');
+ ui($('refresh-table-details'),'Reload selected detail');
  // Mock order: search and refresh, then the tree with the remaining height, then context.
  filter.className='explorer-search';if(filter.style)filter.style.cssText='';filter.append($('refresh-catalog'));
  const searchHint='Search loaded objects; the selected schema is refreshed.';$('catalog-filter').title=t(searchHint);uiAttributes.push({node:$('catalog-filter'),attribute:'title',key:searchHint});
@@ -7328,9 +7430,12 @@ async function initializeDatabaseUI(session){
  wireTabs(inspectorTabs,dbSelectInspector);
  const bar=document.createElement('div'),contextActions=document.createElement('div');bar.id='database-context-bar';bar.setAttribute('role','group');bar.setAttribute('aria-label',t('Execution context'));uiAttributes.push({node:bar,attribute:'aria-label',key:'Execution context'});contextActions.className='context-actions';
  for(const id of ['query-database','query-schema','query-execution-role','query-mode','query-warehouse','max-rows']){const field=$(id)?.parentElement;if(field)bar.append(field);}
- const buttons={};for(const [id,key,task] of [['database-context-refresh','Refresh context',dbRefreshContext],['database-context-reselect','Reselect context',dbReselect],['cancel-query','Cancel query',dbCancelQuery]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;buttons[id]=button;}
+ const buttons={};for(const [id,key,task] of [['database-context-refresh','Refresh execution context',dbRefreshContext],['database-context-reselect','Reselect context',dbReselect],['cancel-query','Cancel query',dbCancelQuery]]){const button=document.createElement('button');button.id=id;button.type='button';ui(button,key);button.onclick=task;buttons[id]=button;}
  contextActions.append(buttons['database-context-refresh'],buttons['database-context-reselect']);
  const status=document.createElement('span');status.id='database-context-state';status.className='callout warn';status.setAttribute('role','status');bar.append(contextActions,status);
+ const taskContext=dataopsNode('div','worksheet-task-context');taskContext.className='wb-task-context';taskContext.setAttribute('role','status');
+ dataopsNode('p','',taskContext);dataopsNode('p','',taskContext);
+ $('database-workspace').before(taskContext);
  $('sql').before(bar);$('run-query').before(buttons['cancel-query']);
  const details=document.createElement('details'),summary=document.createElement('summary');ui(summary,'Request details');const content=document.createElement('div');content.id='request-provenance';details.append(summary,content);$('query-results').after(details);
  // Keep the navigation and forms visible, with explicit unavailable actions.
@@ -7369,7 +7474,6 @@ async function initializeDatabaseUI(session){
  addWorksheet=(sql='',mode=dbCurrent().mode)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql,mode};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
  const example=document.createElement('button');example.id='open-context-example';example.type='button';example.disabled=true;
  ui(example,'Open context example');
- example.setAttribute('aria-describedby','database-context-state');
  example.onclick=()=>{
   if(dbContextExampleReason())return;
   addWorksheet('SELECT current_catalog AS catalog_name, current_schema AS schema_name','read-only');
@@ -8236,8 +8340,9 @@ function dataopsValidate(){
   dataopsPurgeForeignDraft(p);
   if(p.context&&!p.invalid&&!dataopsAllowed(p,p.id==='p35-ingest'?'manual_ingest':'wap_models'))dataopsInvalidate(p);
   else dataopsRenderAvailability(p);
+  if(p.id==='p35-ingest')dataopsIngestContext(p);
   dataopsRecoveryRender(p);
-  $(p.id+'-accepted-context').hidden=p.principal!==dbPrincipal;
+  $(p.id+'-accepted-context').hidden=p.id==='p35-ingest'||p.principal!==dbPrincipal;
   if(p.op?.principal!==undefined&&p.op.principal!==dbPrincipal){dataopsRenderOperation(p);$(p.id+'-observe').hidden=true;$(p.id+'-cancel').hidden=true;$(p.id+'-observe-help').hidden=true;}
   if(p.id==='p35-wap')dataopsAiRender(p);
  }
@@ -8385,6 +8490,7 @@ function dataopsRecoveryRender(p){
  p.recoveryOwner=dbPrincipal;
  dataopsOptions($(p.id+'-recovery-select'),items.map(op=>[op.key,[dataopsRecoveryActionLabel(op.action),op.id||t('UNCONFIRMED'),t(dataopsState(op)),new Date(op.time).toLocaleString()].join(' · ')]),p.recoverySelection,'Saved original request');
  const op=dataopsRecoverySelected(p),held=items.some(item=>dataopsUnresolved(item));
+ if(p.id==='p35-ingest')p.recovery.hidden=!items.length&&!store.error&&store.ops.length<25;
  p.recoveryHeldHelp.hidden=!held;ui(p.recoveryHeldHelp,held?'Select the saved operation and reconnect or cancel it before creating a fresh request.':'');
  p.recoveryContext.hidden=!op;
  if(op)ui(p.recoveryContext,'Saved request context: {context}. {guidance}',()=>({context:[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role,op.context.warehouse_id].join(' / '),guidance:t(dataopsRecoveryAuthorized(p,op)?'Refresh panel context if access changed, then reconnect explicitly.':'Match the original database, schema and execution role manually, then refresh panel context.')}));
@@ -8536,6 +8642,10 @@ function dataopsRender(p,inventory=false){
   $(id+'-preview').disabled=waiting||!allowed||dataopsOwnedUnresolved(p);
   $(id+'-confirm').disabled=waiting||!allowed||!p.preview||!!p.preview.submitted||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p));
   if(inventory)dataopsOptions($(id+'-target'),p.objects.map((o,i)=>[String(i),o.label]),'');
+  ui($(id+'-observe'),p.op&&!p.op.id?'Resend original request':'Look up ingestion operation');
+  $(id+'-observe').hidden=!owner||!!p.op.restored;
+  $(id+'-cancel').hidden=!owner;
+  dataopsIngestContext(p);
  }else{
   if(inventory){
    dataopsOptions($(id+'-models'),p.models.map((m,i)=>[String(i),m.model_id+' · v'+m.version]),'','New model');
@@ -8627,10 +8737,36 @@ function dataopsIngestPayload(p){
  else{const o=p.objects[Number($(id+'-target').value)];if($(id+'-target').value===''||!dataopsRef(o))throw Error(t('Choose a file, context, explicit mode and target.'));payload.target=dataopsRef(o);}
  if(mode==='upsert'&&!payload.key_columns.length)throw Error(t('Upsert key columns (required for upsert)'));return dataopsFreeze(payload);
 }
+function dataopsIngestContext(p){
+ const id=p.id,allowed=dataopsAllowed(p,'manual_ingest'),context=$(id+'-task-context');
+ const d=p.databases.find(d=>d.id===p.database),s=p.schemas.find(s=>s.id===p.schema);
+ const selection=allowed?[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / '):
+  [d?.display_name||t(p.database?'Unavailable':'No selection'),
+   s?.display_name||t(p.schema?'Unavailable':'No selection'),p.role||t('No selection')].join(' / ');
+ wbTaskText(context?.children[0],allowed?'Authorized destination: {context}':'Selected destination: {context}',{context:selection});
+ const mode=$(id+'-mode').value,target=$(id+'-target').value;
+ const table=mode==='create'?$(id+'-name').value.trim():mode&&target!==''?p.objects[Number(target)]?.label:'';
+ wbTaskText(context?.children[1],'Draft table: {table}',{table:table||t('No selection')});
+ const next=!p.database||!p.schema?'Choose a destination, then choose a file and target table, preview, and confirm.':
+  p.pending||p.trackingPending?'Wait for the current ingestion request.':
+  p.inventoryLoading?'Checking the ingestion destination…':
+  !allowed?'Destination unavailable. Refresh the ingestion destination or choose a different database, schema or role.':
+  dataopsOwnedUnresolved(p)||dataopsRecoveryOwner().ops.some(op=>op.panel===id&&dataopsUnresolved(op))?'New ingestion is held. Resolve the original operation before submitting.':
+  p.preview?.submitted?'Preview already submitted. Check the original operation.':
+  p.preview?(dataopsRecoveryHeld(p)?'Preview held. Check the recovery storage notice before submitting.':'Ready to confirm. Review the input preview, then confirm ingestion.'):
+  p.file&&table?'Draft. Preview the input before confirming ingestion.':'Draft. Choose a file and table, then preview.';
+ wbTaskText(context?.children[2],next);
+}
 function dataopsInstallIngest(){
  $('ingest-form').hidden=true;if($('ingest-form').parentElement?.parentElement)$('ingest-form').parentElement.parentElement.hidden=true;
  $('ingest-file').disabled=true;$('ingest-preview').hidden=true;$('ingest-result').hidden=true;
  const p=dataopsPanel('p35-ingest','Manual file ingestion',$('ingestion-file')),id=p.id;
+ const context=dataopsNode('div',id+'-task-context');context.className='wb-task-context';context.setAttribute('role','status');
+ for(let i=0;i<3;i++)dataopsNode('p','',context);
+ p.form.before(context);
+ $(id+'-accepted-context').hidden=true;
+ ui($(id+'-refresh'),'Refresh ingestion destination');
+ ui($(id+'-reconnect'),'Reconnect to original ingestion');
  const file=dataopsField(p.fields,id+'-file','Choose a browser file or drop it here');file.type='file';file.accept='.csv,.json,.jsonl,.ndjson';file.onchange=()=>dataopsReadFile(p,file.files[0]);
  p.form.addEventListener('dragover',e=>e.preventDefault());p.form.addEventListener('drop',e=>{e.preventDefault();if(!file.disabled&&e.dataTransfer.files.length)dataopsReadFile(p,e.dataTransfer.files[0]);});
  dataopsField(p.fields,id+'-mode','Mode','select',[['','Choose mode'],['create','create'],['replace','replace'],['append','append'],['upsert','upsert']]);
@@ -8732,6 +8868,8 @@ function dataopsExportRender(){
  if(area.parentElement)area.parentElement.hidden=!op;
  $('p35-export-observe').disabled=!dataopsCanObserve(op)||!!op?.trackingPending;$('p35-export-cancel').disabled=!dataopsCanCancel(op)||!!op?.trackingPending;
  $('p35-export-new').disabled=!op||op.pending||!!op.trackingPending||!dataopsTerminal(op);if(!op)return;
+ ui($('p35-export-observe'),op.id?'Look up export operation':'Resend original request');
+ if(!op.id&&dataopsCanObserve(op))dataopsNode('p','',area,'Resending uses the original body and key. If the request was never accepted, it may start the operation.');
  const line=(label,value)=>{const n=dataopsNode('p','',area);dataopsNode('strong','',n,label);n.append(': '+String(value??''));};
  line('Operation ID',op.id||'UNKNOWN');line('Idempotency key',op.key);line('Accepted context',[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role,op.table].join(' / '));
  if(dataopsState(op))line('Status',t(dataopsState(op)));
@@ -9210,11 +9348,13 @@ function dbCloneControls(){
  $('db-clone-submit').disabled=busy||!!op||!ready||!p.snapshots.length||!validName;
  $('db-clone-refresh').disabled=busy||held||!dbCloneEligible();
  $('db-clone-observe').disabled=busy||!dbCloneCanObserve(op);
+ ui($('db-clone-observe'),op&&!op.id?'Resend original request':'Look up clone operation');
  $('db-clone-cancel').disabled=busy||!dbCloneCanCancel(op);
  $('db-clone-new').disabled=busy||!op||held;
  for(const id of ['db-clone-name','db-clone-snapshot','db-clone-role'])$(id).disabled=busy||held;
  message('db-clone-notice',t((p.noticeScope===dbCloneScope()?p.notice:'')||(!ready?'Refresh clone context after source or role changes.':'')));
  const out=$('db-clone-receipt');out.replaceChildren();
+ if(op&&!op.id&&dbCloneCanObserve(op))dataopsNode('p','',out,'Resending uses the original body and key. If the request was never accepted, it may start the operation.');
  if(op){
   const line=(key,value)=>{const n=dataopsNode('p','',out);dataopsNode('strong','',n,key);n.append(': '+String(value??''));};
   if(protectedDisplay){
@@ -9402,6 +9542,7 @@ function dbDropControls(){
  $('db-drop-submit').disabled=busy||!!op||!ready||$('db-drop-name').value!==p.preview?.confirmation_name||!$('db-drop-ack').checked;
  $('db-drop-name').disabled=busy||!!op||!ready;$('db-drop-ack').disabled=busy||!!op||!ready;
  $('db-drop-observe').disabled=busy||!dbDropCanObserve(op);
+ ui($('db-drop-observe'),op&&!op.id?'Look up removal by original key':'Look up removal operation');
  $('db-drop-cancel').disabled=busy||!op?.id||!dbDropCanObserve(op)||op.phase==='SENT'||dbDropHeld(op)&&op.state==='UNKNOWN'||op?.ambiguous||['FINISHED','FAILED','CANCELED'].includes(op?.state);
  $('db-drop-new').disabled=busy||!op||dbDropHeld(op);
  const out=$('db-drop-preview');out.replaceChildren();
@@ -9857,6 +9998,37 @@ const dbStages={installed:false,started:false,epoch:0,request:0,authorizationReq
 Object.assign(i18n.ja,{
  'Database Stages':'データベース Stage','Stage context is independent of worksheets and Explorer.':'Stage のコンテキストはワークシートと探索から独立しています。',
  'Mode':'モード','create':'新規作成','replace':'置換','append':'追記','upsert':'更新・追加','auto':'自動判定',
+ 'Refresh Stage context':'ステージの接続先を更新',
+ 'Load latest Stage definition':'最新のステージ定義を読み込む',
+ 'Refresh Stage files':'ステージのファイル一覧を更新',
+ 'Refresh Stage history':'ステージの実行履歴を更新',
+ 'Refresh export receipts':'エクスポート受領記録一覧を更新',
+ 'Look up export receipt':'エクスポート受領記録を照会',
+ 'Look up Stage run':'ステージの実行を照会',
+ 'Look up scan':'スキャンを照会',
+ 'Scan outcome UNKNOWN. Check the original scan before starting another.':'スキャン結果は UNKNOWN です。次のスキャンを始める前に元の処理を確認してください。',
+ 'Stage run outcome UNKNOWN. Check the original run before submitting again.':'実行結果は UNKNOWN です。次の送信前に元の処理を確認してください。',
+ 'Stage context ({state}) · Database {database} · Schema {schema} · Role {role}':'ステージの接続先（{state}） · データベース {database} · スキーマ {schema} · ロール {role}',
+ 'Stage access verified':'利用可能','Stage context pending':'選択中','Stage access unavailable':'利用不可',
+ 'Stage selection · {stage}':'選択中のステージ · {stage}',
+ 'Loaded Stage · {stage}':'読み込み済みステージ · {stage}',
+ 'Selected Stage {selected} · Loaded Stage {loaded}':'選択中のステージ {selected} · 読み込み済みステージ {loaded}',
+ 'No Stage loaded':'読み込み済みステージなし',
+ 'Choose a database and schema for Stages.':'ステージのデータベースとスキーマを選択してください。',
+ 'Refreshing Stage context…':'ステージの接続先を更新しています…',
+ 'Wait for the current Stage request to finish.':'現在のステージ要求が完了するまでお待ちください。',
+ 'Choose an authorized database and schema or refresh the Stage context.':'利用可能なデータベースとスキーマを選び直すか、ステージの接続先を更新してください。',
+ 'Load the selected Stage or create a new Stage.':'選択したステージを読み込むか、新しいステージを作成してください。',
+ 'Load a saved Stage or fill in and save a new Stage.':'保存済みステージを読み込むか、新しいステージの項目を入力して保存してください。',
+ 'Select and load a Stage before continuing.':'続けるにはステージを選んで読み込んでください。',
+ 'Fill in and save a new Stage.':'新しいステージの項目を入力して保存してください。',
+ 'Save the Stage changes before previewing files or scanning.':'ファイルのプレビューやスキャンの前にステージの変更を保存してください。',
+ 'Refresh the Stage file list to choose a file, or start a manual scan.':'ステージのファイル一覧を更新してファイルを選ぶか、手動スキャンを開始してください。',
+ 'Refresh the Stage file list to choose and preview a file.':'ステージのファイル一覧を更新し、ファイルを選んでプレビューしてください。',
+ 'Choose a Stage file to preview.':'プレビューするステージファイルを選択してください。',
+ 'Preview the selected Stage file.':'選択したステージファイルをプレビューしてください。',
+ 'Review the preview and confirm the import.':'プレビューを確認して取り込みを確定してください。',
+ 'Check the original Stage operation before starting another.':'新しい処理を始める前に元のステージ処理を確認してください。',
  'Saved Stages':'保存済み Stage','New Stage':'新しい Stage','Load Stage':'Stage を読み込む','Save Stage':'Stage を保存','Refresh Stages':'Stage を更新',
  'Stage name':'Stage 名','Existing directory':'既存のディレクトリ','Approved roots':'許可されたルート','Typed options JSON':'型付きオプション JSON',
  'Destination table name':'作成するテーブル名','Stage files':'Stage のファイル','Refresh files':'ファイルを更新','Preview file':'ファイルをプレビュー','Confirm import':'取込を確定',
@@ -9893,7 +10065,7 @@ function dbStagesRefValue(value){try{const ref=dataopsRef({ref:typeof value==='s
 function dbStagesCapture(){const p=dbStages;if(!p.installed||p.invalid||!p.context)return;p.drafts.set(dbStagesKey(),{context:p.context,schemas:dataopsClone(p.schemas),stage:p.stage?dataopsClone(p.stage):null,save:p.save,values:Object.fromEntries(dbStagesFields.map(k=>[k,$('db-stages-'+k).value]))});}
 function dbStagesClearPreview(){const p=dbStages;++p.inputSerial;p.preview=null;$('db-stages-preview-detail')?.replaceChildren();}
 function dbStagesEditor(stage=null){
- const p=dbStages;if(p.stage?.id!==stage?.id)dbStagesClearScans();p.stage=stage;p.selection=stage?.id||'';p.save=null;p.receipt=null;const draft=p.drafts.get(dbStagesKey());if(draft){p.stage=draft.stage;p.save=draft.save;}
+ const p=dbStages;if(p.stage?.id!==stage?.id)dbStagesClearScans();p.stage=stage;p.save=null;p.receipt=null;const draft=p.drafts.get(dbStagesKey());if(draft){p.stage=draft.stage;p.save=draft.save;}p.selection=p.stage?.id||'';
  const d=p.stage?.definition,options=d?Object.fromEntries(Object.entries(d).filter(([k])=>!['name','directory','mode','format','destination','target'].includes(k))):{};
  const values=draft?.values?{...draft.values}:{name:d?.name||'',directory:d?.directory||'',mode:d?.mode||'create',format:d?.format||'auto',destination:d?.destination?.physical_name||'',target:d?.target?JSON.stringify(dataopsRef({ref:d.target})):'',options:JSON.stringify(options,null,2),'export-source':'','export-file':'','export-format':'csv'};
  // Context invalidation can leave cleared selects in a captured New Stage draft.
@@ -9929,8 +10101,9 @@ async function dbStagesRefreshAuthorization(){
   if(p.context)p.schemas=cache.get(p.context.database_id)||[];dbStagesValidate();
  }catch(error){if(current()&&error.code!=='AUTH_READ_STALE')dbStagesPurge();}
 }
+function dbStagesOpen(){if(dbStages.installed&&!dbStages.started)return dbStagesRefresh();}
 async function dbStagesRefresh(){
- const p=dbStages;dbStagesCapture();const epoch=++p.epoch,request=++p.request,principal=dbPrincipal,database=p.database;
+ const p=dbStages;p.started=true;dbStagesCapture();const epoch=++p.epoch,request=++p.request,principal=dbPrincipal,database=p.database;
  const current=()=>epoch===p.epoch&&request===p.request&&principal===dbPrincipal;
  p.scheduleRefreshing=true;p.invalid=true;dbStagesClearPreview();dbStagesRender();
  try{
@@ -9960,9 +10133,10 @@ function dbStagesDefinition(){
  if(mode==='create'){const name=$('db-stages-destination').value;if(!name||name.includes('.'))throw Error('destination');d.destination={database_id:p.context.database_id,schema_id:p.stage?.definition.destination?.schema_id||p.context.schema_id,physical_name:name};}
  else{d.target=JSON.parse($('db-stages-target').value);if(!p.objects.some(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(d.target)))throw Error('target');}return d;
 }
-function dbStagesMatches(){try{const canonical=v=>JSON.stringify(v,(_,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);return !!dbStages.stage&&canonical(dbStagesDefinition())===canonical(dbStages.stage.definition);}catch{return false;}}
+const dbStagesSelectionMatches=()=>dbStages.selection===(dbStages.stage?.id||'');
+function dbStagesMatches(){try{const canonical=v=>JSON.stringify(v,(_,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);return !!dbStages.stage&&dbStagesSelectionMatches()&&canonical(dbStagesDefinition())===canonical(dbStages.stage.definition);}catch{return false;}}
 async function dbStagesSave(){
- const p=dbStages;if(p.pending||p.invalid||!dbStagesAllowed()||!dbStagesOwn())return;
+ const p=dbStages;if(p.pending||p.invalid||!dbStagesAllowed()||!dbStagesOwn()||!dbStagesSelectionMatches())return;
  let payload;try{payload={expected_revision:p.stage?.revision||0,definition:dbStagesDefinition()};if(p.stage)payload.stage_id=p.stage.id;}catch{ui(p.status,'Stage inputs are invalid.');return;}
  const signature=JSON.stringify([p.context,payload]);if(p.save?.signature!==signature)p.save={signature,key:crypto.randomUUID(),context:p.context,payload:dataopsFreeze(payload)};
  const saved=p.save,epoch=p.epoch;p.pending=true;dbStagesCapture();dbStagesRender();
@@ -10031,10 +10205,10 @@ async function dbStagesRunRequest(r,suffix='',body,key,fresh=false){
   const minimalCancel=suffix==='/cancel'&&!!r.id&&Object.keys(run).length===5&&['id','stage_id','owner','status','operation_id'].every(k=>Object.hasOwn(run,k));
   if(!minimalCancel&&(run.stage_revision!==r.stage_revision||!dataopsSameContext(run.context,r.context)))throw Error('receipt');
   r.id=run.id;r.accepted=true;r.payload=null;r.path=null;r.status=run.status;r.operation_id=run.operation_id;r.details=!minimalCancel&&!r.purged&&epoch===p.epoch&&dbStagesAllowed(r.context,r.schemas)?run:null;
-  if(epoch===p.epoch)ui(p.status,run.status==='unknown'?'Run outcome UNKNOWN. Inspect the original run before another submission.':run.status);
+  if(epoch===p.epoch)ui(p.status,run.status==='unknown'?'Stage run outcome UNKNOWN. Check the original run before submitting again.':run.status);
  }catch(error){if(p.run!==r||serial!==r.sequence)return;
   if(freshSubmission&&!r.id&&!r.accepted&&!r.details&&!r.ambiguous&&!r.purged&&epoch===p.epoch&&r.principal===dbPrincipal&&dbStagesAllowed(r.context,r.schemas)&&[400,409].includes(error.status)&&error.code==='STAGE_INPUT_REJECTED'&&error.stageRejectionOnly&&!error.observation){p.run=null;dbStagesClearPreview();ui(p.status,'Stage input rejected before admission. Preview again before submitting.');return;}
-  r.ambiguous=true;if(dataopsAuthError(error))dbStagesPurge();else if(epoch===p.epoch)ui(p.status,'Run outcome UNKNOWN. Inspect the original run before another submission.');}
+  r.ambiguous=true;if(dataopsAuthError(error))dbStagesPurge();else if(epoch===p.epoch)ui(p.status,'Stage run outcome UNKNOWN. Check the original run before submitting again.');}
 }
 async function dbStagesObserve(cancel=false){
  const p=dbStages,r=p.run;if(!r||(!r.id&&!r.payload)||p.pending||r.principal!==dbPrincipal||(cancel?!r.id||dbStagesTerminal(r):r.purged||!dbStagesAllowed(r.context,r.schemas)))return;
@@ -10068,7 +10242,7 @@ async function dbStagesScanRequest(r){
   // Keep only a safe accepted handle if authorization or the selected Stage changed.
   r.id=scan.id;r.payload=null;r.path=null;r.status=scan.status;r.details=current()?dataopsFreeze(dataopsClone(scan)):null;
   if(current())ui(p.status,scan.status);
- }catch(error){if(p.scan!==r||serial!==r.sequence||r.principal!==dbPrincipal)return;r.status='unknown';if(dataopsAuthError(error))dbStagesPurge();else if(current())ui(p.status,'Scan outcome UNKNOWN. Observe the original request.');}
+ }catch(error){if(p.scan!==r||serial!==r.sequence||r.principal!==dbPrincipal)return;r.status='unknown';if(dataopsAuthError(error))dbStagesPurge();else if(current())ui(p.status,'Scan outcome UNKNOWN. Check the original scan before starting another.');}
 }
 async function dbStagesScanObserve(){
  const p=dbStages,r=p.scan;
@@ -10095,6 +10269,10 @@ function dbStagesRenderScans(ready,waiting){
  $('db-stages-scan').disabled=waiting||!ready||dbStagesBusy()||!(d?.mode==='upsert'||d?.mode==='append'&&d.atomic_append===true);
  $('db-stages-scans').disabled=waiting||!allowed||!p.stage||p.selection!==p.stage.id;
  $('db-stages-scan-observe').disabled=waiting||!allowed||!associated||r.purged&&!r.id||(!r.id&&!r.payload);
+ const observe=$('db-stages-scan-observe'),resend=associated&&allowed&&!r.id&&!!r.payload&&!r.purged;
+ if(resend)observe.setAttribute('aria-describedby','db-stages-scan-resend');else observe.removeAttribute('aria-describedby');
+ ui(observe,resend?'Resend original request':'Look up scan');
+ $('db-stages-scan-resend').hidden=waiting||!resend;
  const area=$('db-stages-scan-detail');area.replaceChildren();
  const field=(row,label,value,translated=false)=>{const part=dataopsNode('span','',row);dataopsNode('strong','',part,label);dataopsNode('span','',part).textContent=': ';const text=dataopsNode('span','',part);if(translated)ui(text,value);else text.textContent=String(value);dataopsNode('span','',part).textContent=' · ';};
  if(r){const header=dataopsNode('p','',area);field(header,'Scan ID',r.id||'UNKNOWN');field(header,'Status',r.status,true);if(r.key)field(header,'Idempotency key',r.key);
@@ -10103,7 +10281,7 @@ function dbStagesRenderScans(ready,waiting){
    if(dbStagesCanRetry(r,item)){const b=dataopsButton(row,'','Retry failed item',()=>dbStagesScanStart(item));b.disabled=waiting||!ready||dbStagesBusy()||r.stage_id!==p.stage?.id||!dataopsSameContext(r.context,p.context);}
   }}
  }
- const history=$('db-stages-scan-list');history.replaceChildren();if(allowed)for(const scan of p.scans||[]){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[scan.id,t(scan.status)].join(' · ');dataopsButton(row,'','Inspect scan',()=>dbStagesScanInspect(scan)).disabled=waiting||dbStagesBusy();}
+ const history=$('db-stages-scan-list');history.replaceChildren();if(allowed)for(const scan of p.scans||[]){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[scan.id,t(scan.status)].join(' · ');dataopsButton(row,'','Look up scan',()=>dbStagesScanInspect(scan)).disabled=waiting||dbStagesBusy();}
 }
 function dbStagesReceiptMatches(r,stage=dbStages.stage,context=dbStages.context,id=$('db-stages-receipt').value){return !!r&&!!stage&&r.export_id===id&&r.stage_id===stage.id&&Number.isInteger(r.stage_revision)&&r.stage_revision>0&&r.stage_revision<=stage.revision&&typeof r.run_id==='string'&&!!r.run_id&&typeof r.file==='string'&&!!r.file&&!r.file.startsWith('.')&&!/[\/\\\x00-\x1f]/.test(r.file)&&r.owner===JSON.parse(dbPrincipal)[0]&&dataopsSameContext(r.context,context)&&r.source?.ref?.database_id===context.database_id;}
 function dbStagesDownloadable(r){return dbStagesReceiptMatches(r)&&r.publication_state==='published'&&['csv','jsonl'].includes(r.format)&&Number.isInteger(r.expected_count)&&r.expected_count>=0&&r.written_count===r.expected_count&&Number.isInteger(r.byte_count)&&r.byte_count>=0&&/^[a-f0-9]{64}$/.test(r.sha256||'')&&r.complete!==false;}
@@ -10135,7 +10313,7 @@ function dbStagesRender(){
  for(const k of dbStagesFields)$('db-stages-'+k).disabled=waiting||!allowed||!own;
  $('db-stages-directory').disabled=waiting||!allowed||!own||!!p.stage;
  for(const key of ['role','database','schema','refresh','list','load','reload','new'])$('db-stages-'+key).disabled=waiting;
- $('db-stages-save').disabled=waiting||!allowed||!own;
+ $('db-stages-save').disabled=waiting||!allowed||!own||!dbStagesSelectionMatches();
  for(const key of ['files','history','receipts','receipt','inspect-receipt'])$('db-stages-'+key).disabled=waiting||!allowed||!own||!p.stage;
  $('db-stages-file').disabled=waiting||!ready;
  $('db-stages-preview').disabled=waiting||!ready||!$('db-stages-file').value;
@@ -10143,6 +10321,41 @@ function dbStagesRender(){
  $('db-stages-export').disabled=waiting||!ready||!!unresolved||!$('db-stages-export-source').value;
  $('db-stages-download').disabled=waiting||!allowed||!p.receipt||!dbStagesDownloadable(p.receipt)||p.receipt.export_id!==$('db-stages-receipt').value;
  const r=p.run;$('db-stages-observe').disabled=waiting||!r||(!r.id&&!r.payload)||r.purged||!dbStagesAllowed(r.context,r.schemas);$('db-stages-cancel').disabled=waiting||!r?.id||r.principal!==dbPrincipal||dbStagesTerminal(r);
+ const observe=$('db-stages-observe'),resend=!!r?.payload&&!r.id&&!r.purged&&dbStagesAllowed(r.context,r.schemas);
+ if(resend)observe.setAttribute('aria-describedby','db-stages-run-resend');else observe.removeAttribute('aria-describedby');
+ ui(observe,resend?'Resend original request':'Look up Stage run');
+ $('db-stages-run-resend').hidden=waiting||!resend;
+ const usable=allowed&&own;
+ const db=p.databases.find(d=>d.id===p.database),schema=p.schemas.find(s=>s.id===p.schema);
+ const context=usable?p.context:null,chosen=p.database&&p.schema;
+ wbTaskText($('db-stages-context'),'Stage context ({state}) · Database {database} · Schema {schema} · Role {role}',{
+  state:t(usable?'Stage access verified':chosen&&p.started&&!p.scheduleRefreshing?'Stage access unavailable':'Stage context pending'),
+  database:context?.sql_catalog||db?.display_name||db?.sql_catalog||t(p.database?'Unavailable':'No selection'),
+  schema:context?.sql_schema||schema?.display_name||schema?.sql_name||t(p.schema?'Unavailable':'No selection'),
+  role:p.role||'—',
+ });
+ const selected=usable&&p.stages.find(stage=>stage.id===p.selection),loaded=usable&&p.stage;
+ const stageLabel=stage=>stage.definition.name+' · v'+stage.revision;
+ const selection=$('db-stages-current');
+ if(selected&&loaded&&selected.id!==loaded.id)wbTaskText(selection,'Selected Stage {selected} · Loaded Stage {loaded}',{selected:stageLabel(selected),loaded:stageLabel(loaded)});
+ else if(selected&&!loaded)wbTaskText(selection,'Stage selection · {stage}',{stage:stageLabel(selected)});
+ else if(loaded)wbTaskText(selection,'Loaded Stage · {stage}',{stage:stageLabel(loaded)});
+ else wbTaskText(selection,'No Stage loaded');
+ let next='Refresh the Stage file list to choose and preview a file.';
+ if(p.scheduleRefreshing)next='Refreshing Stage context…';
+ else if(waiting)next='Wait for the current Stage request to finish.';
+ else if(!chosen)next='Choose a database and schema for Stages.';
+ else if(!usable)next='Choose an authorized database and schema or refresh the Stage context.';
+ else if(selected&&selected.id!==loaded?.id)next='Load the selected Stage or create a new Stage.';
+ else if(!dbStagesSelectionMatches())next='Select and load a Stage before continuing.';
+ else if(!loaded)next=p.stages.length?'Load a saved Stage or fill in and save a new Stage.':'Fill in and save a new Stage.';
+ else if(unresolved)next='Check the original Stage operation before starting another.';
+ else if(!ready)next='Save the Stage changes before previewing files or scanning.';
+ else if(p.preview)next='Review the preview and confirm the import.';
+ else if($('db-stages-file').value)next='Preview the selected Stage file.';
+ else if(p.files.length)next='Choose a Stage file to preview.';
+ else if(loaded.definition.mode==='upsert'||loaded.definition.mode==='append'&&loaded.definition.atomic_append===true)next='Refresh the Stage file list to choose a file, or start a manual scan.';
+ wbTaskText($('db-stages-next'),next);
  $('db-stages-roots').textContent=allowed?p.roots.map(r=>typeof r==='string'?r:JSON.stringify(r)).join('\n'):'';
  $('db-stages-owner').textContent=allowed&&p.stage?[t('Owner')+': '+p.stage.owner,t('Saved role')+': '+p.stage.selected_role,t('Revision')+': '+p.stage.revision,p.stage.id].join(' · '):'';
  const area=$('db-stages-run-detail');area.replaceChildren();if(r){for(const [label,value] of [...(r.status==='skipped'?[]:[['Run ID',r.id||'UNKNOWN']]),['Idempotency key',r.key],['Status',t(r.status)],['Execution context',[r.context.sql_catalog,r.context.sql_schema,r.context.selected_role,'v'+r.stage_revision].join(' / ')]]){const row=dataopsNode('p','',area);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');}
@@ -10150,30 +10363,31 @@ function dbStagesRender(){
   else if(r.details)for(const [label,value] of [['Operation ID',r.details.operation_id],['Committed',r.details.committed],['Publication',r.details.publication_state],['Summary',JSON.stringify(r.details.summary??{})]]){const row=dataopsNode('p','',area);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');}
   if(!r.id&&r.status!=='skipped')dataopsNode('p','',area,'Run ID unavailable. Retain the original context and key for reconciliation.');
  }
- const history=$('db-stages-history-list');history.replaceChildren();if(allowed)for(const run of p.history){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[run.id,t(run.status),run.kind,run.file].join(' · ');dataopsButton(row,'','Observe run',()=>{if(p.pending||(p.run&&!dbStagesTerminal(p.run)&&p.run.id!==run.id)||!dataopsSameContext(run.context,p.context))return;p.run={id:run.id,stage_id:run.stage_id,stage_revision:run.stage_revision,context:dataopsFreeze(dataopsClone(run.context)),principal:dbPrincipal,schemas:dataopsClone(p.schemas),status:run.status,sequence:0,purged:false};return dbStagesObserve();});}
+ const history=$('db-stages-history-list');history.replaceChildren();if(allowed)for(const run of p.history){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[run.id,t(run.status),run.kind,run.file].join(' · ');dataopsButton(row,'','Look up Stage run',()=>{if(p.pending||(p.run&&!dbStagesTerminal(p.run)&&p.run.id!==run.id)||!dataopsSameContext(run.context,p.context))return;p.run={id:run.id,stage_id:run.stage_id,stage_revision:run.stage_revision,context:dataopsFreeze(dataopsClone(run.context)),principal:dbPrincipal,schemas:dataopsClone(p.schemas),status:run.status,sequence:0,purged:false};return dbStagesObserve();});}
  if(!allowed||!p.receipt){p.receipt=null;$('db-stages-receipt-detail').replaceChildren();}
  dbStagesRenderScans(ready,waiting);
 }
 function dbStagesInstall(){
  const p=dbStages;if(p.installed)return;p.installed=true;p.inputSerial=0;p.principal=dbPrincipal;p.role='admin';p.database=dbCurrent()?.database_id||'';p.schema=dbCurrent()?.schema_id||'';p.databases=dbRoleItems('admin');p.schemas=[];
  for(const child of $('ingestion-stages').children)child.hidden=true;
- const root=dataopsNode('section','db-stages-panel',$('ingestion-stages'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Database Stages');dataopsNode('p','',body,'Stage context is independent of worksheets and Explorer.').className='help';
+ const root=dataopsNode('section','db-stages-panel',$('ingestion-stages'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Database Stages');const context=dataopsNode('div','',body);context.className='wb-task-context';context.setAttribute('aria-live','polite');
+ for(const id of ['context','current','next'])dataopsNode('p','db-stages-'+id,context);
  const selectors=dataopsNode('div','',body);selectors.className='toolbar';for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const node=dataopsField(selectors,'db-stages-'+key,label,'select');node.onchange=()=>{dbStagesCapture();++p.request;dbStagesClearPreview();p[key]=node.value;if(key==='database')p.schema='';p.stage=null;p.selection='';p.editorKey=null;p.save=null;p.context=null;p.invalid=true;p.receipt=null;p.history=[];p.receipts=[];p.files=[];for(const k of dbStagesFields)$('db-stages-'+k).value='';return dbStagesRefresh();};}
- dataopsButton(selectors,'db-stages-refresh','Refresh Stages',dbStagesRefresh);const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-stages-list','Saved Stages','select').onchange=()=>{p.selection=$('db-stages-list').value;++p.request;dbStagesClearScans();dbStagesRender();};dataopsButton(saved,'db-stages-load','Load Stage',()=>dbStagesLoad());dataopsButton(saved,'db-stages-reload','Load current revision',()=>dbStagesLoad(true));dataopsButton(saved,'db-stages-new','New Stage',()=>{if(p.pending||p.invalid)return;dbStagesCapture();++p.request;dbStagesEditor();p.editorKey=dbStagesKey();});
+ dataopsButton(selectors,'db-stages-refresh','Refresh Stage context',dbStagesRefresh);const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-stages-list','Saved Stages','select').onchange=()=>{p.selection=$('db-stages-list').value;++p.request;dbStagesClearScans();dbStagesRender();};dataopsButton(saved,'db-stages-load','Load Stage',()=>dbStagesLoad());dataopsButton(saved,'db-stages-reload','Load latest Stage definition',()=>dbStagesLoad(true));dataopsButton(saved,'db-stages-new','New Stage',()=>{if(p.pending||p.invalid)return;dbStagesCapture();++p.request;dbStagesEditor();p.editorKey=dbStagesKey();});
  p.form=dataopsNode('form','db-stages-form',body);p.form.onsubmit=e=>e.preventDefault();dataopsNode('p','db-stages-owner',p.form).className='help';const fields=dataopsNode('div','',p.form);fields.className='job-fields';
  for(const [key,label,tag,options] of [['name','Stage name','input'],['directory','Existing directory','input'],['mode','Mode','select',['create','replace','append','upsert']],['format','File format','select',['auto','csv','json','jsonl']],['destination','Destination table name','input'],['target','Target table','select'],['options','Typed options JSON','textarea']]){
   const node=dataopsField(fields,'db-stages-'+key,label,tag,(options||[]).map(v=>[v,v]));if(tag==='textarea'){node.rows=6;node.spellcheck=false;node.parentElement.className='job-json';}node.oninput=node.onchange=()=>{dbStagesClearPreview();dbStagesCapture();dbStagesRender();};
  }
  dataopsNode('p','',p.form,'Directory is immutable after saving.').className='help';dataopsNode('strong','',p.form,'Approved roots');dataopsNode('pre','db-stages-roots',p.form);dataopsButton(p.form,'db-stages-save','Save Stage',dbStagesSave).className='primary';
- const files=dataopsNode('div','',body);files.className='toolbar';dataopsButton(files,'db-stages-files','Refresh files',dbStagesFiles);dataopsField(files,'db-stages-file','Stage files','select').onchange=()=>{dbStagesClearPreview();dbStagesRender();};dataopsButton(files,'db-stages-preview','Preview file',dbStagesPreview);dataopsButton(files,'db-stages-confirm','Confirm import',()=>dbStagesSubmit('ingest'));dataopsNode('div','db-stages-preview-detail',body);
- const scans=dataopsNode('div','',body);scans.className='toolbar';dataopsButton(scans,'db-stages-scan','Manual scan',()=>dbStagesScanStart());dataopsButton(scans,'db-stages-scans','Refresh scans',dbStagesScans);dataopsButton(scans,'db-stages-scan-observe','Observe scan',dbStagesScanObserve);dataopsNode('div','db-stages-scan-detail',body).setAttribute('aria-live','polite');dataopsNode('div','db-stages-scan-list',body);
+ const files=dataopsNode('div','',body);files.className='toolbar';dataopsButton(files,'db-stages-files','Refresh Stage files',dbStagesFiles);dataopsField(files,'db-stages-file','Stage files','select').onchange=()=>{dbStagesClearPreview();dbStagesRender();};dataopsButton(files,'db-stages-preview','Preview file',dbStagesPreview);dataopsButton(files,'db-stages-confirm','Confirm import',()=>dbStagesSubmit('ingest'));dataopsNode('div','db-stages-preview-detail',body);
+ const scans=dataopsNode('div','',body);scans.className='toolbar';dataopsButton(scans,'db-stages-scan','Manual scan',()=>dbStagesScanStart());dataopsButton(scans,'db-stages-scans','Refresh scans',dbStagesScans);dataopsButton(scans,'db-stages-scan-observe','Look up scan',dbStagesScanObserve);dataopsNode('p','db-stages-scan-resend',body,'Resending uses the original body and key. If the request was never accepted, it may start the operation.').className='help';dataopsNode('div','db-stages-scan-detail',body).setAttribute('aria-live','polite');dataopsNode('div','db-stages-scan-list',body);
  const exp=dataopsNode('div','',body);exp.className='toolbar';dataopsField(exp,'db-stages-export-source','Snapshot source table','select');dataopsField(exp,'db-stages-export-file','Export filename');dataopsField(exp,'db-stages-export-format','File format','select',[['csv','CSV'],['jsonl','JSONL (one object per line)']]);dataopsButton(exp,'db-stages-export','Export snapshot',()=>dbStagesSubmit('export'));
  for(const key of ['export-source','export-file','export-format'])$('db-stages-'+key).oninput=()=>{dbStagesCapture();dbStagesRender();};
  p.status=dataopsNode('p','db-stages-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
- const controls=dataopsNode('div','',body);controls.className='toolbar';dataopsButton(controls,'db-stages-observe','Observe run',()=>dbStagesObserve());dataopsButton(controls,'db-stages-cancel','Cancel run',()=>dbStagesObserve(true));dataopsNode('div','db-stages-run-detail',body).setAttribute('aria-live','polite');
- dataopsNode('h3','',body,'Stage history');dataopsButton(body,'db-stages-history','Refresh history',()=>dbStagesRead('runs'));dataopsNode('div','db-stages-history-list',body);
- const receipts=dataopsNode('div','',body);receipts.className='toolbar';dataopsButton(receipts,'db-stages-receipts','Refresh receipts',()=>dbStagesRead('exports'));dataopsField(receipts,'db-stages-receipt','Export receipt','select').onchange=()=>{++p.request;p.receipt=null;dbStagesRender();};dataopsButton(receipts,'db-stages-inspect-receipt','Export receipt',()=>dbStagesReceipt());dataopsButton(receipts,'db-stages-download','Download authorized file',()=>dbStagesReceipt(true));dataopsNode('div','db-stages-receipt-detail',body);
- $('ingestion-view-stages').disabled=!dbStagesNavAllowed();$('ingestion-view-stages').addEventListener('click',()=>{if(!p.started){p.started=true;dbStagesRefresh();}});dbStagesRender();
+ const controls=dataopsNode('div','',body);controls.className='toolbar';dataopsButton(controls,'db-stages-observe','Look up Stage run',()=>dbStagesObserve());dataopsButton(controls,'db-stages-cancel','Cancel run',()=>dbStagesObserve(true));dataopsNode('p','db-stages-run-resend',body,'Resending uses the original body and key. If the request was never accepted, it may start the operation.').className='help';dataopsNode('div','db-stages-run-detail',body).setAttribute('aria-live','polite');
+ dataopsNode('h3','',body,'Stage history');dataopsButton(body,'db-stages-history','Refresh Stage history',()=>dbStagesRead('runs'));dataopsNode('div','db-stages-history-list',body);
+ const receipts=dataopsNode('div','',body);receipts.className='toolbar';dataopsButton(receipts,'db-stages-receipts','Refresh export receipts',()=>dbStagesRead('exports'));dataopsField(receipts,'db-stages-receipt','Export receipt','select').onchange=()=>{++p.request;p.receipt=null;dbStagesRender();};dataopsButton(receipts,'db-stages-inspect-receipt','Look up export receipt',()=>dbStagesReceipt());dataopsButton(receipts,'db-stages-download','Download authorized file',()=>dbStagesReceipt(true));dataopsNode('div','db-stages-receipt-detail',body);
+ $('ingestion-view-stages').disabled=!dbStagesNavAllowed();dbStagesRender();
 }
 
 // Managed Marts owns an independent admin/MARTS context and explicit model version.

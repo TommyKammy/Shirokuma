@@ -127,12 +127,21 @@ assert.equal(p.op,op);assert.equal(record.operation,op);assert.equal(op.id,'late
     def test_same_owner_refresh_and_navigation_keep_private_manual_drafts(self):
         self.javascript(r'''
 const p=await ready(),record=await preview(p),wap=dataopsPanels.get('p35-wap');await dataopsRefresh(wap);
-const file=p.file,owner=dbPrincipal;
+const file=p.file,owner=dbPrincipal,context=$('p35-ingest-task-context');
+assert.match(context.children[0].textContent,/Authorized destination: .*raw \/ admin/i);
+assert.match(context.children[1].textContent,/Draft table: chosen_table/);
+assert.match(context.children[2].textContent,/Ready to confirm/);assert.equal($('p35-ingest-confirm').disabled,false);
+assert.equal($('p35-ingest-recovery').hidden,true);
+dbCurrent().schema_id='sandbox';dbControls();
+assert.match(context.children[0].textContent,/Authorized destination: .*raw \/ admin/i);
 $('p35-wap-model-id').value='manual_model';$('p35-wap-sql').value='SELECT unsaved_private_sql';$('p35-wap-name').value='manual_target';wap.sources[0].alias.value='manual_alias';
 assert.equal(wap.model,null);
 await dataopsRefresh(p);await dataopsRefresh(wap);activate($('tab-warehouse'));activate($('tab-ingestion'));activate($('tab-transformation'));
 assert.equal(dbPrincipal,owner);assert.equal(p.file,file);assert.ok([...p.requests.values()].includes(record));
-assert.equal($('p35-wap-model-id').value,'manual_model');assert.equal($('p35-wap-sql').value,'SELECT unsaved_private_sql');assert.equal($('p35-wap-name').value,'manual_target');assert.equal(wap.sources[0].alias.value,'manual_alias');assert.equal(submissions.length,0);
+assert.equal($('p35-wap-model-id').value,'manual_model');assert.equal($('p35-wap-sql').value,'SELECT unsaved_private_sql');assert.equal($('p35-wap-name').value,'manual_target');assert.equal(wap.sources[0].alias.value,'manual_alias');
+$('p35-ingest-schema').value='schema';await $('p35-ingest-schema').onchange();
+assert.match(context.children[0].textContent,/Selected destination:/);assert.match(context.children[2].textContent,/Destination unavailable/);
+assert.equal($('p35-ingest-confirm').disabled,true);assert.equal(p.file,file);assert.equal(submissions.length,0);
 ''')
 
     def test_recovery_context_help_controls_and_scoped_long_label_constraints(self):

@@ -57,6 +57,10 @@ assert.ok(dbExplorerReason());assert.equal($('db-manage-copy-reason').textConten
 await explorerReady();assert.equal($('p35-table-export').hidden,true);
 dataopsExport={id:'op',key:'key',context:{sql_catalog:'db',sql_schema:'raw',selected_role:'admin'},table:'raw.orders',state:'QUEUED',pending:false};dataopsExportRender();
 assert.equal($('p35-table-export').hidden,false);
+assert.equal($('p35-export-observe').textContent,'Look up export operation');
+dataopsExport.id=null;dataopsExport.path='/api/v1/table-exports';dataopsExportRender();
+assert.equal($('p35-export-observe').textContent,'Resend original request');
+assert.match($('p35-export-receipt').children[0].textContent,/it may start the operation/);
 dataopsExport=null;dataopsExportRender();assert.equal($('p35-table-export').hidden,true);
 ''')
 

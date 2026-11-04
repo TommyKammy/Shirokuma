@@ -166,7 +166,9 @@ const other={...structuredClone(sales),id:'stage-other'};savedStages.push(other)
 // Refresh retains editor drafts/focus; selection alone removes protected scan state.
 await dbStagesScanObserve();await dbStagesScans();$('db-stages-list').value=other.id;$('db-stages-list').onchange();
 assert.equal(r.details,null);assert.deepEqual(p.scans,[]);assert.equal($('db-stages-scan-observe').disabled,true);
-let count=calls.length;await dbStagesScanObserve();await dbStagesScanStart(item);assert.equal(calls.length,count);
+assert.equal($('db-stages-preview').disabled,true);assert.equal($('db-stages-scan').disabled,true);assert.equal($('db-stages-save').disabled,true);
+let count=calls.length;await dbStagesScanObserve();await dbStagesScanStart(item);await dbStagesScanStart();await dbStagesPreview();await dbStagesSave();
+assert.equal(calls.length,count);assert.equal(p.scan,r);assert.equal(p.stage.id,sales.id);
 await dbStagesLoad();assert.equal(p.stage.id,other.id);assert.equal(r.details,null);assert.equal($('db-stages-scan-observe').disabled,true);
 count=calls.length;await dbStagesScanObserve();assert.equal(calls.length,count);
 $('db-stages-list').value=sales.id;$('db-stages-list').onchange();await dbStagesLoad();await dbStagesScanObserve();
@@ -182,8 +184,9 @@ for(const key of Object.keys(context)){
     def test_scan_unknown_and_ambiguous_retry_observe_exact_original_key_body(self):
         self.javascript(r'''
 await scanStage();scanLost=true;await dbStagesScanStart();const r=p.scan,first=scanPosts()[0];assert.equal(r.status,'unknown');assert.ok(Object.isFrozen(r.payload));assert.ok(Object.isFrozen(r.context));
+assert.equal($('db-stages-scan-observe').textContent,'Resend original request');assert.equal($('db-stages-scan-resend').hidden,false);
 await dbStagesScanStart();assert.equal(scanPosts().length,1);await dbStagesScanObserve();assert.equal(scanPosts().length,2);assert.equal(scanPosts()[1].options.body,first.options.body);assert.equal(scanPosts()[1].options.headers['Idempotency-Key'],r.key);
-scanLost=false;await dbStagesScanObserve();assert.equal(p.scan.id,'scan-1');const count=scanPosts().length;await dbStagesScanObserve();assert.equal(scanPosts().length,count);assert.ok(calls.at(-1).path.includes('/scans/scan-1?'));
+scanLost=false;await dbStagesScanObserve();assert.equal(p.scan.id,'scan-1');const count=scanPosts().length;assert.equal($('db-stages-scan-observe').textContent,'Look up scan');assert.equal($('db-stages-scan-resend').hidden,true);await dbStagesScanObserve();assert.equal(scanPosts().length,count);assert.ok(calls.at(-1).path.includes('/scans/scan-1?'));
 scanLost=true;await dbStagesScanStart(p.scan.details.items[1]);const retry=p.scan,retryPost=scanPosts().at(-1);assert.equal(retry.id,null);assert.equal(retry.status,'unknown');
 scanLost=false;await dbStagesScanObserve();assert.equal(p.scan,retry);assert.equal(p.scan.id,'scan-2');assert.equal(scanPosts().at(-1).path,retryPost.path);assert.equal(scanPosts().at(-1).options.body,retryPost.options.body);assert.equal(scanPosts().at(-1).options.headers['Idempotency-Key'],retry.key);
 scanRows[1].status='unknown';scanRows[1].items[0].status='unknown';scanRows[1].items[0].retryable=true;await dbStagesScanObserve();assert.equal(p.scan.status,'unknown');assert.equal(dbStagesCanRetry(p.scan,p.scan.details.items[0]),false);assert.equal($('db-stages-scan').disabled,true);
@@ -191,7 +194,8 @@ scanRows[1].status='unknown';scanRows[1].items[0].status='unknown';scanRows[1].i
 
     def test_scan_refresh_inspect_preserves_editor_focus_draft_revision_and_tabs(self):
         self.javascript(r'''
-await scanStage();await dbStagesScanStart();const field=$('db-stages-options'),stage=p.stage;field.value='{"atomic_append":true,"encoding":"utf-8"}';field.oninput();field.focus();field.setSelectionRange(3,9);const draft=field.value,rev=p.stage.revision;
+await scanStage();await dbStagesScanStart();assert.match($('db-stages-context').textContent,/Stage context \(Stage access verified\).*Role admin/);assert.match($('db-stages-current').textContent,/Loaded Stage/);
+const field=$('db-stages-options'),stage=p.stage;field.value='{"atomic_append":true,"encoding":"utf-8"}';field.oninput();field.focus();field.setSelectionRange(3,9);const draft=field.value,rev=p.stage.revision;
 await dbStagesScans();await dbStagesScanInspect(p.scans[0]);await dbStagesScanObserve();await dbStagesRefresh();
 assert.equal(p.stage,stage);assert.equal(p.stage.revision,rev);assert.equal(field.value,draft);assert.equal(document.activeElement,field);assert.equal(field.selectionStart,3);assert.equal(field.selectionEnd,9);assert.equal(worksheets.length,2);assert.equal(dbCurrent().sql,'SELECT 1');assert.equal(dbExplorer.database_id,'db');
 ''')
@@ -202,7 +206,7 @@ assert.equal(p.stage,stage);assert.equal(p.stage.revision,rev);assert.equal(fiel
 await scanStage();scanGate=deferred();const pending=dbStagesScanStart();await tick();
 if(LOSS==='grant'){inventory=[];await dbRefreshAccess();}else if(LOSS==='principal'){dbPrincipal=JSON.stringify(['other',true,'admin']);dbStagesValidate();}else{$('db-stages-schema').value='raw';await $('db-stages-schema').onchange();}
 scanGate.resolve();await pending;assert.ok(!p.scan||p.scan.details===null);assert.equal($('db-stages-scan-detail').children.length<=1,true);assert.deepEqual(p.scans,[]);
-if(LOSS!=='context'){assert.ok(!p.scan||p.scan.payload===null);const count=scanPosts().length;await dbStagesScanObserve();assert.equal(scanPosts().length,count);}
+if(LOSS!=='context'){assert.ok(!p.scan||p.scan.payload===null);const count=scanPosts().length;assert.equal($('db-stages-scan-observe').textContent,'Look up scan');assert.equal($('db-stages-scan-resend').hidden,true);await dbStagesScanObserve();assert.equal(scanPosts().length,count);}
 '''.replace('LOSS', json.dumps(loss)))
             self.javascript(r'''
 await scanStage();await dbStagesScanStart();scanListGate=deferred();const listing=dbStagesScans();await tick();
@@ -234,6 +238,7 @@ assert.equal($('db-stages-scan-observe').disabled,false);await dbStagesScanObser
         self.javascript(r'''
 await scanStage();await dbStagesScanStart();const binding=key=>[...uiBindings].find(([node,entry])=>entry.key===key&&node.isConnected)[0];
 setLanguage('ja');assert.equal($('db-stages-scan').textContent,'手動スキャン');assert.equal($('db-stages-scan-observe').textContent,'スキャンを照会');assert.equal(binding('Scan ID').textContent,'スキャン ID');assert.equal(binding('Attempt').textContent,'試行');assert.equal(binding('Retry failed item').textContent,'失敗した項目を再試行');
+assert.match($('db-stages-context').textContent,/ステージの接続先（利用可能）/);assert.equal($('db-stages-refresh').textContent,'ステージの接続先を更新');assert.equal($('db-stages-reload').textContent,'最新のステージ定義を読み込む');
 setLanguage('en');assert.equal($('db-stages-scan').textContent,'Manual scan');assert.equal(binding('Attempt').textContent,'Attempt');assert.equal(binding('Retry failed item').textContent,'Retry failed item');
 ''')
 
@@ -278,8 +283,8 @@ await dbStagesLoad(true);assert.equal(p.stage.revision,2);assert.equal($('db-sta
 
     def test_unknown_explicit_observe_keeps_payload_key_and_original_context(self):
         self.javascript(r'''
-await createStage();await previewStage();submitFailure=true;await dbStagesSubmit('ingest');const attempt=p.run,key=attempt.key,context=structuredClone(attempt.context),first=stagePosts().at(-1);assert.equal(attempt.status,'unknown');await dbStagesSubmit('export');assert.equal(stagePosts().filter(c=>c.path.endsWith('/imports')).length,1);$('db-stages-export-file').value='changed.csv';await dbStagesObserve();assert.equal(p.run,attempt);assert.equal(stagePosts().filter(c=>c.path.endsWith('/imports')).length,2);assert.equal(stagePosts().at(-1).options.body,first.options.body);assert.equal(stagePosts().at(-1).options.headers['Idempotency-Key'],key);assert.equal(attempt.key,key);
-attempt.id='run-1';runs=[{id:'run-1',stage_id:'stage-1',stage_revision:1,owner:'owner',context,status:'unknown',committed:true}];$('db-stages-schema').value='raw';await $('db-stages-schema').onchange();await dbStagesObserve();await dbStagesObserve(true);const cancel=stagePosts().at(-1);assert.equal(cancel.path,'/api/v1/stages/stage-1/runs/run-1/cancel');assert.deepEqual(JSON.parse(cancel.options.body),{context});assert.equal(cancel.options.headers['X-Shirokuma-Role'],'admin');assert.equal(p.run.status,'canceled');
+await createStage();await previewStage();submitFailure=true;await dbStagesSubmit('ingest');const attempt=p.run,key=attempt.key,context=structuredClone(attempt.context),first=stagePosts().at(-1);assert.equal(attempt.status,'unknown');assert.equal($('db-stages-observe').textContent,'Resend original request');assert.equal($('db-stages-run-resend').hidden,false);await dbStagesSubmit('export');assert.equal(stagePosts().filter(c=>c.path.endsWith('/imports')).length,1);$('db-stages-export-file').value='changed.csv';await dbStagesObserve();assert.equal(p.run,attempt);assert.equal(stagePosts().filter(c=>c.path.endsWith('/imports')).length,2);assert.equal(stagePosts().at(-1).options.body,first.options.body);assert.equal(stagePosts().at(-1).options.headers['Idempotency-Key'],key);assert.equal(attempt.key,key);
+attempt.id='run-1';runs=[{id:'run-1',stage_id:'stage-1',stage_revision:1,owner:'owner',context,status:'unknown',committed:true}];$('db-stages-schema').value='raw';await $('db-stages-schema').onchange();assert.equal($('db-stages-observe').textContent,'Look up Stage run');assert.equal($('db-stages-run-resend').hidden,true);await dbStagesObserve();await dbStagesObserve(true);const cancel=stagePosts().at(-1);assert.equal(cancel.path,'/api/v1/stages/stage-1/runs/run-1/cancel');assert.deepEqual(JSON.parse(cancel.options.body),{context});assert.equal(cancel.options.headers['X-Shirokuma-Role'],'admin');assert.equal(p.run.status,'canceled');
 ''')
 
     def test_revocation_and_late_acceptance_purge_protected_data(self):
@@ -300,6 +305,9 @@ schemas[0].capabilities.stage_admin=true;await dbStagesRefresh();$('db-stages-li
 await createStage();p.stage.owner='other';dbStagesRender();const before=stagePosts().length;await dbStagesSave();await dbStagesPreview();assert.equal(stagePosts().length,before);assert.equal($('db-stages-save').disabled,true);p.stage.owner='owner';
 inventory[0].capabilities.stage_admin=false;await dbStagesRefreshAuthorization();assert.equal(p.invalid,true);assert.equal(p.stage,null);
 inventory[0].capabilities.stage_admin=true;schemas[0].capabilities.stage_admin=false;await dbStagesRefresh();assert.equal(p.invalid,true);assert.equal($('db-stages-save').disabled,true);assert.equal(schemas[0].capabilities.write,true);
+assert.match($('db-stages-context').textContent,/Stage access unavailable/);
+assert.equal($('db-stages-current').textContent,'No Stage loaded');
+assert.equal($('db-stages-next').textContent,'Choose an authorized database and schema or refresh the Stage context.');
 ''')
 
     def test_independent_scoped_drafts_and_cross_schema_table_export(self):
