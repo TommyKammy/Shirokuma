@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+2026-11-04 JST、[DB-P6-6F-R1](database-p6-6f-ingest-cleanup-2026-11-04.md)で6Fのコミット後の清掃失敗を照合し、新規Manual Ingestの所有SANDBOXステージを非purge登録解除へ変更した。通常Workbench APIで3行のコミットと登録解除を確認した。コミットと清掃を別々に記録し、元の6Fステージは失敗時の証拠として保持する。M1本人受入を継続する。
+
 2026-11-04 JST、[DB-P6-4C2J](database-p6-4c2j-manifest-advisory-2026-11-04.md)でPolicy PlatformのP管理者がYAML／JSONを1文書貼り付け、Podと5種のコントローラーの4宣言を確認できるようにし、限定技術受入を完了した。SREの生ログ本文／Loki検索、他namespaceの範囲判断、6F清掃、M1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-4C2I](database-p6-4c2i-controller-baseline-2026-11-04.md)で登録済みnamespaceの5種のコントローラーについてPod templateの4宣言をPolicy Platform／Computeから手動確認できるようにし、限定技術受入を完了した。任意manifest、他namespaceの範囲判断、SREの生ログ本文／Loki検索、6F清掃、M1本人受入を継続する。
@@ -141,7 +143,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | EXP-14 | dbtモデルlineage | 変換画面の保存planに加え、Explorer選択対象から関連する保存定義と確認済み証跡へ接続。計画中モデルと確定物理Refを区別 | Eは本人・保存role、Aは同DBの認可済みmetadata。定義は版を固定しない依存で、実行時固定版は確認済み証跡へ表示 | [DB-P6-3B](database-p6-3b-implementation-2026-10-29.md)、[C2A](database-p6-3c2-sandbox-views-2026-10-30.md)、[DB-P6-6D](database-p6-6d-table-lineage-2026-11-02.md) |
 | ING-01 | browser file／drop、型・delimiter等、preview | 対応、E／AかつRAW／SANDBOXのwrite | I、入力と設定のfingerprint | ファイル取り込み |
 | ING-02 | create／replace／append／upsertの明示確認 | 対応、previewと現在入力が一致 | I、固定payload／key | `/api/v1/ingests` |
-| ING-03 | 取込照会・取消・回復情報 | 通常Manual Ingestから元本人／contextの保存済み元処理へ再接続・照会・取消。実commitと清掃失敗を分離表示 | I、reload後の再接続はGETのみ（明示取消は既存API）。404／UNKNOWNから元要求を再POSTしない。owned-stage清掃失敗は残件 | Manual Ingest／`/api/v1/dataops/by-key`／元ID |
+| ING-03 | 取込照会・取消・回復情報 | 通常Manual Ingestから元本人／contextの保存済み元処理へ再接続・照会・取消。実commitと清掃失敗を分離表示。6F-R1で新規コミット済みManual Ingestの所有ステージを非purge登録解除 | I、reload後の再接続はGETのみ（明示取消は既存API）。404／UNKNOWNから元要求を再POSTしない。元の6F清掃失敗は証拠を保持。6F-R1の登録解除は物理ファイルを保持し、確定失敗・未確定をコミットと分離 | Manual Ingest／`/api/v1/dataops/by-key`／元ID／[6F-R1 ステージ清掃](database-p6-6f-ingest-cleanup-2026-11-04.md) |
 | ING-04 | 旧server path／固定catalogフォーム | 非表示・未接続 | 新しいbrowser file入口を使用 | 旧ingest routeは拒否 |
 | ING-05 | Stage一覧・新規・Load・再Load・保存 | 対応、A、本人の同DB Stage | S、宣言済local rootとCAS | `/api/v1/stages` |
 | ING-06 | Stage file一覧・preview・単件取込確認 | 対応、上記条件と入力確認 | S＋I、設定／bytesを固定 | Stage files／ingest |

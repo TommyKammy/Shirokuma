@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-04 JST、[DB-P6-6F-R1](database-p6-6f-ingest-cleanup-2026-11-04.md)で6Fのコミット後の清掃失敗を照合し、新規Manual Ingestの所有SANDBOXステージを非purge登録解除へ変更した。通常Workbench APIで3行のコミットと登録解除を確認した。コミットと清掃を別々に記録し、元の6Fステージは失敗時の証拠として保持する。M1本人受入を継続する。
+
 2026-11-04 JST、[DB-P6-4C2J](database-p6-4c2j-manifest-advisory-2026-11-04.md)でPolicy PlatformのP管理者がYAML／JSONを1文書貼り付け、Podと5種のコントローラーの4宣言を確認できるようにし、限定技術受入を完了した。SREの生ログ本文／Loki検索、他namespaceの範囲判断、6F清掃、M1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-4C2I](database-p6-4c2i-controller-baseline-2026-11-04.md)で登録済みnamespaceの5種のコントローラーについてPod templateの4宣言をPolicy Platform／Computeから手動確認できるようにし、限定技術受入を完了した。任意manifest、他namespaceの範囲判断、SREの生ログ本文／Loki検索、6F清掃、M1本人受入を継続する。

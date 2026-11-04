@@ -373,6 +373,15 @@ def _ingest(principal, context, *, idempotency_key, mode, destination=None, targ
             receipt['observed_columns'] = [dict(name=n, type=t) for n, t in
                 execution.ingest_columns(observed_target, step='observed-schema')]
             _persist(execution, receipt)
+            if stage is not None and execution._row()['route'] == 'manual-ingest':
+                # The cleanup transaction owns the receipt from this point on.
+                cleanup_stage, stage = stage, None
+                try:
+                    execution.cleanup_committed_ingest_stage(cleanup_stage)
+                except Exception:
+                    # Keep the durable commit and any cleanup marker on a ledger failure.
+                    pass
+                return execution._inspect() if _defer_finalization else execution.complete()
             if stage is not None:
                 try:
                     execution.cleanup(stage, step='cleanup')
@@ -390,7 +399,8 @@ def _ingest(principal, context, *, idempotency_key, mode, destination=None, targ
                 receipt = observed['result']
             receipt['error'] = getattr(error, 'code', type(error).__name__)
             if observed['state'] == 'ACTIVE':
-                if stage is not None:
+                if stage is not None and not (
+                        observed['committed'] and execution._row()['route'] == 'manual-ingest'):
                     try:
                         execution.cleanup(stage, step='failure-cleanup')
                         receipt['cleanup'] = 'finished'

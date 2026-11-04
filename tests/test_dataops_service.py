@@ -645,6 +645,116 @@ os._exit(24)
             execution.cleanup(ref, step='recreated')
         self.assertFalse(any(call[1].startswith('DROP') for call in self.calls))
 
+    def test_committed_ingest_cleanup_refuses_out_of_scope_stages(self):
+        database = self.databases[0]
+        sandbox = self.schemas[database]['sandbox']
+        for case in ('nonowned', 'backup', 'stale-ref', 'cross-db', 'raw'):
+            with self.subTest(case=case):
+                execution = self.begin(case)
+                ref = execution.create_stage(self.schemas[database]['raw'] if case == 'raw' else sandbox,
+                    [('id', 'BIGINT')], step='stage', purpose='backup' if case == 'backup' else 'stage')
+                candidate = ref
+                if case == 'nonowned':
+                    candidate = self.existing('not_owned', schema='sandbox')
+                elif case == 'stale-ref':
+                    candidate = replace(ref, incarnation=ref.incarnation + 1)
+                elif case == 'cross-db':
+                    candidate = replace(ref, database_id=self.databases[1])
+                execution.record_commit(dict(operation_id=execution.id, atomic=True, cleanup='pending'))
+                with patch.object(inv, 'table_drop_api') as drop:
+                    execution.cleanup_committed_ingest_stage(candidate)
+                    drop.assert_not_called()
+                self.assertEqual(execution.complete()['result']['cleanup'], 'failed')
+                with control_store.connect() as db:
+                    self.assertIsNotNone(dm.get_object(db, ref.object_id))
+
+    def test_committed_ingest_cleanup_checks_fresh_uuid_and_post_read_ownership(self):
+        sandbox = self.schemas[self.databases[0]]['sandbox']
+        for case in ('uuid', 'ownership'):
+            with self.subTest(case=case):
+                execution = self.begin(case)
+                ref = execution.create_stage(sandbox, [('id', 'BIGINT')], step='stage')
+                execution.record_commit(dict(operation_id=execution.id, atomic=True, cleanup='pending'))
+                calls = []
+
+                @contextmanager
+                def drop_api(database, binding):
+                    with self.catalog(database, binding) as reader:
+                        def read(path):
+                            calls.append('read')
+                            metadata = reader(path)
+                            if case == 'uuid':
+                                return {'metadata': {'table-uuid': str(uuid.uuid4())}}
+                            with control_store.connect() as db:
+                                db.execute("UPDATE dataops_owned_objects SET purpose='backup' WHERE object_id=?",
+                                           (ref.object_id,))
+                            return metadata
+                        yield read, lambda *_: calls.append('unregister')
+
+                with patch.object(inv, 'table_drop_api', drop_api):
+                    execution.cleanup_committed_ingest_stage(ref)
+                self.assertEqual(calls, ['read'])
+                self.assertEqual(execution.complete()['result']['cleanup'], 'failed')
+                with control_store.connect() as db:
+                    self.assertIsNotNone(dm.get_object(db, ref.object_id))
+
+    def test_committed_ingest_cleanup_rechecks_grant_after_catalog_read(self):
+        database = self.databases[0]
+        execution = self.begin()
+        ref = execution.create_stage(self.schemas[database]['sandbox'], [('id', 'BIGINT')], step='stage')
+        committed = dict(operation_id=execution.id, atomic=True, cleanup='pending',
+                         committed_rows=3, committed_batches=1)
+        execution.record_commit(committed)
+        calls = []
+
+        @contextmanager
+        def drop_api(database_record, binding):
+            with self.catalog(database_record, binding) as reader:
+                def read(path):
+                    metadata = reader(path)
+                    calls.append('read')
+                    with control_store.connect() as db:
+                        dm.update_grant(db, 'alice', database, 1, 'revoked')
+                    return metadata
+                yield read, lambda *_: calls.append('unregister')
+
+        with patch.object(inv, 'table_drop_api', drop_api):
+            execution.cleanup_committed_ingest_stage(ref)
+        self.assertEqual(calls, ['read'])
+        observed = execution._inspect()
+        self.assertTrue(observed['committed'])
+        self.assertEqual(observed['result']['committed_rows'], committed['committed_rows'])
+        self.assertEqual(observed['result']['committed_batches'], committed['committed_batches'])
+        self.assertEqual(observed['result']['cleanup'], 'failed')
+        self.assertEqual(observed['result']['cleanup_phase'], 'REJECTED')
+        self.assertNotIn('cleanup_ack', observed['result'])
+        with control_store.connect() as db:
+            self.assertIsNotNone(dm.get_object(db, ref.object_id))
+
+    def test_committed_ingest_cleanup_requires_route_commit_and_unmarked_live_receipt(self):
+        sandbox = self.schemas[self.databases[0]]['sandbox']
+        execution = self.begin()
+        ref = execution.create_stage(sandbox, [('id', 'BIGINT')], step='stage')
+        other = ds.begin(self.principal, self.context(), route='other', idempotency_key='other', payload={})
+        other_ref = other.create_stage(sandbox, [('id', 'BIGINT')], step='stage')
+        other.record_commit(dict(operation_id=other.id, atomic=True, cleanup='pending'))
+        with patch.object(inv, 'table_drop_api') as drop:
+            for candidate, source in ((execution, ref), (other, other_ref)):
+                with self.assertRaises(QueryError):
+                    candidate.cleanup_committed_ingest_stage(source)
+            for phase, status in (('SENT', 'unknown'), ('REJECTED', 'failed'), ('ACKNOWLEDGED', 'finished')):
+                receipt = dict(operation_id=execution.id, atomic=True, cleanup=status, cleanup_phase=phase)
+                execution.record_commit(receipt)
+                with self.assertRaises(QueryError):
+                    execution.cleanup_committed_ingest_stage(ref)
+                self.assertEqual(execution._inspect()['result'], receipt)
+            execution.record_commit(dict(operation_id=execution.id, atomic=True, cleanup='pending'))
+            with self.assertRaises(QueryError):
+                self.begin().cleanup_committed_ingest_stage(ref)
+            drop.assert_not_called()
+        execution.complete()
+        other.complete()
+
     def test_successful_commit_retained_after_cleanup_failure(self):
         execution = self.begin()
         ref = execution.create_stage(self.schemas[self.databases[0]]['raw'], [('id', 'INTEGER')], step='stage')
@@ -730,6 +840,7 @@ os._exit(24)
             execution.insert_rows(ref, ['value'], [('changed',)], step='insert')
         self.assertEqual(len(self.calls), count)
         execution.cleanup(ref, step='cleanup')
+        self.assertEqual(sum(sql.startswith('DROP TABLE ') for method, sql, _ in self.calls if method == 'POST'), 1)
         with control_store.connect() as db:
             self.assertIsNone(dm.get_object(db, ref.object_id))
         execution.complete()

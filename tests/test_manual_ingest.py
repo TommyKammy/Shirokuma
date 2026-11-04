@@ -1,4 +1,5 @@
 """Manual adapter contracts; engine verification belongs to the Commander."""
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -71,9 +72,31 @@ class ManualIngestTests(unittest.TestCase):
         self.fault = None
         self.schema_change = False
         self.describes = 0
+        self.unregister_calls = []
+        self.unregister_error = None
+        self.unregister_ack = 204
+        self.fixture.start_patch('database_inventory.table_drop_api', self.drop_api)
         self.patch = patch.object(qs, '_transport', side_effect=self.transport)
         self.patch.start()
         self.addCleanup(self.patch.stop)
+
+    @contextmanager
+    def drop_api(self, database, binding):
+        def unregister(schema, name):
+            self.unregister_calls.append((database.sql_catalog, schema.sql_name, name))
+            with control_store.connect() as db:
+                op = db.execute("SELECT state,committed,result FROM dataops_operations WHERE state='ACTIVE'").fetchone()
+                self.assertEqual(op['committed'], 1)
+                receipt = json.loads(op['result'])
+                self.assertEqual((receipt['cleanup'], receipt['cleanup_phase']), ('unknown', 'SENT'))
+                self.assertEqual(receipt['cleanup_mode'], 'CATALOG_UNREGISTER_KEEP_DATA')
+            if self.unregister_error is not None:
+                raise self.unregister_error
+            if type(self.unregister_ack) is int and self.unregister_ack == 204:
+                self.fixture.objects.pop((database.sql_catalog, schema.sql_name, name, 'tables'))
+            return self.unregister_ack
+        with self.fixture.catalog(database, binding) as reader:
+            yield reader, unregister
 
     def transport(self, url, method, pin, body=None):
         sql = body.decode() if body else ''
@@ -479,31 +502,85 @@ class ManualIngestTests(unittest.TestCase):
             result = self.run_ingest()
         self.assertTrue(result['committed'])
         self.assertEqual(result['result']['committed_rows'], 3)
+        self.assertEqual(result['result']['committed_batches'], 1)
+        self.assertEqual(result['result']['cleanup'], 'pending')
+        self.assertFalse(any(s.startswith('DROP TABLE') for s in self.sql()))
+        self.assertEqual(self.unregister_calls, [])
         count = len(self.sql())
-        self.assertEqual(self.run_ingest()['id'], result['id'])
+        replay = self.run_ingest()
+        self.assertEqual(replay['id'], result['id'])
+        self.assertEqual(replay['result'], result['result'])
         self.assertEqual(len(self.sql()), count)
+        self.assertEqual(self.unregister_calls, [])
+
+    def assert_cleanup(self, result, status, phase, *, current):
+        self.assertEqual(result['state'], 'FINISHED')
+        self.assertTrue(result['committed'])
+        self.assertEqual(result['result']['committed_rows'], 3)
+        self.assertEqual(result['result']['committed_batches'], 1)
+        self.assertEqual(result['result']['cleanup'], status)
+        self.assertEqual(result['result']['cleanup_phase'], phase)
+        self.assertEqual(result['result']['cleanup_mode'], 'CATALOG_UNREGISTER_KEEP_DATA')
+        self.assertFalse(any(s.startswith('DROP TABLE') for s in self.sql()))
+        self.assertFalse(any(q['action'] == 'cleanup' for q in result['queries']))
+        with control_store.connect() as db:
+            stage = db.execute("""SELECT b.current,b.physical_name,o.purpose FROM object_bindings b
+                JOIN dataops_owned_objects o ON o.object_id=b.id WHERE o.operation_id=?""",
+                (result['id'],)).fetchone()
+            self.assertEqual((stage['current'], stage['purpose']), (current, 'stage'))
+            self.assertEqual(self.unregister_calls[0][1:], ('sandbox', stage['physical_name']))
+            target = dm.ResourceRef(**result['result']['target'])
+            self.assertIsNotNone(dm.get_object(db, target.object_id))
+        count = len(self.sql())
+        again = self.run_ingest()
+        self.assertEqual(again['result'], result['result'])
+        self.assertTrue(again['replayed'])
+        self.assertEqual(len(self.sql()), count)
+        self.assertEqual(len(self.unregister_calls), 1)
+
+    def test_after_commit_cleanup_ack_retires_only_stage_and_retains_provenance(self):
+        result = self.run_ingest()
+        self.assert_cleanup(result, 'finished', 'ACKNOWLEDGED', current=0)
+        self.assertEqual(result['result']['cleanup_ack'], 204)
+        self.assertFalse(result['cleanup_error'])
 
     def test_after_commit_cleanup_failure_is_separate(self):
-        self.fault = lambda s: {'id': 'cleanup_failed', 'error': {'message': 'failed'}} if s.startswith('DROP') else None
+        self.unregister_error = ds.inventory.TableDropTransportError(False)
         result = self.run_ingest()
-        self.assertTrue(result['committed'])
-        self.assertEqual(result['result']['committed_rows'], 3)
-        self.assertEqual(result['result']['cleanup'], 'failed')
-        self.assertIsNotNone(result['cleanup_error'])
+        self.assert_cleanup(result, 'failed', 'REJECTED', current=1)
+        self.assertEqual(result['cleanup_error'], 'CATALOG_DELETE_REJECTED')
+        self.assertNotIn('cleanup_ack', result['result'])
 
     def test_after_commit_cleanup_response_loss_remains_unknown_no_resend(self):
-        def lose(sql):
-            if sql.startswith('DROP'):
-                raise QueryError('QUERY_BACKEND_FAILED', 502)
-        self.fault = lose
+        self.unregister_error = ds.inventory.TableDropTransportError(True)
         result = self.run_ingest()
-        self.assertEqual(result['state'], 'UNKNOWN')
-        self.assertTrue(result['committed'])
-        self.assertEqual(result['result']['committed_rows'], 3)
-        self.assertEqual(result['result']['cleanup'], 'unknown')
-        count = len(self.sql())
-        self.assertEqual(self.run_ingest()['id'], result['id'])
-        self.assertEqual(len(self.sql()), count)
+        self.assert_cleanup(result, 'unknown', 'SENT', current=1)
+        self.assertEqual(result['cleanup_error'], 'CATALOG_DELETE_UNCERTAIN')
+        self.assertNotIn('cleanup_ack', result['result'])
+
+    def test_after_commit_cleanup_requires_integer_204(self):
+        self.unregister_ack = 204.0
+        self.assert_cleanup(self.run_ingest(), 'unknown', 'SENT', current=1)
+
+    def test_after_commit_cleanup_ack_receipt_failure_rolls_back_binding_retirement(self):
+        with control_store.connect() as db:
+            db.execute("""CREATE TRIGGER reject_cleanup_ack BEFORE UPDATE OF result ON dataops_operations
+                WHEN json_extract(NEW.result, '$.cleanup_phase') = 'ACKNOWLEDGED'
+                BEGIN SELECT RAISE(ABORT, 'receipt write failed'); END""")
+        self.assert_cleanup(self.run_ingest(), 'unknown', 'SENT', current=1)
+
+    def test_cleanup_owner_loss_preserves_sent_marker_and_committed_receipt(self):
+        self.unregister_error = SystemExit(23)
+        with self.assertRaises(SystemExit):
+            self.run_ingest()
+        self.fixture.clear_pins()
+        replay = self.run_ingest()
+        self.assertEqual(replay['state'], 'UNKNOWN')
+        self.assertTrue(replay['committed'])
+        self.assertEqual(replay['result']['committed_rows'], 3)
+        self.assertEqual((replay['result']['cleanup'], replay['result']['cleanup_phase']), ('unknown', 'SENT'))
+        self.assertEqual(len(self.unregister_calls), 1)
+        self.assertFalse(any(s.startswith('DROP TABLE') for s in self.sql()))
 
     def test_after_commit_bookkeeping_failure_keeps_durable_commit(self):
         original = manual._persist

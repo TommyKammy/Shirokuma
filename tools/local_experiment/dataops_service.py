@@ -1132,6 +1132,93 @@ class Execution:
                            (getattr(error, 'code', 'CLEANUP_FAILED'), self.id))
             raise
 
+    def _registered_ingest_stage(self, db, ref, schema):
+        owned = db.execute('''SELECT 1 FROM dataops_owned_objects
+            WHERE operation_id=? AND object_id=? AND incarnation=? AND purpose='stage' ''',
+            (self.id, ref.object_id, ref.incarnation)).fetchone()
+        if not owned:
+            raise QueryError('OBJECT_NOT_OWNED', 403)
+        obj = registry.get_object(db, ref.object_id)
+        if (obj is None or obj.schema_id != schema.id or obj.incarnation != ref.incarnation
+                or obj.kind != 'TABLE'):
+            raise QueryError('STALE_RESOURCE', 409)
+        try:
+            uuid.UUID(obj.backend_identity)
+        except (ValueError, TypeError, AttributeError):
+            raise QueryError('STALE_RESOURCE', 409) from None
+        return obj
+
+    @_serialized
+    def cleanup_committed_ingest_stage(self, ref):
+        row = self._row()
+        receipt = json.loads(row['result']) if row['result'] else {}
+        if (row['route'] != 'manual-ingest' or not row['committed']
+                or receipt.get('operation_id') != self.id or receipt.get('atomic') is not True
+                or receipt.get('cleanup') != 'pending' or 'cleanup_phase' in receipt
+                or 'cleanup_mode' in receipt):
+            raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+
+        def save(db, previous, *, status, phase, error=None):
+            result = dict(receipt, cleanup=status, cleanup_phase=phase,
+                          cleanup_mode='CATALOG_UNREGISTER_KEEP_DATA')
+            if phase == 'ACKNOWLEDGED':
+                result['cleanup_ack'] = 204
+            encoded = _json(result)
+            changed = db.execute("""UPDATE dataops_operations SET result=?,cleanup_error=?
+                WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=1 AND result=?""",
+                (encoded, error, self.id, previous)).rowcount
+            if changed != 1:
+                raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+            return encoded
+
+        sent = None
+        try:
+            context = self._context()
+            if type(ref) is not registry.ResourceRef or ref.database_id != context.database_id:
+                raise QueryError('CROSS_DATABASE_TARGET', 409)
+            schema = self._ingest_schema(ref.schema_id)
+            if schema.sql_name != 'sandbox' or schema.purpose != 'sandbox':
+                raise QueryError('SQL_PERMISSION_DENIED', 403)
+            database, binding = self._catalog()
+            with control_store.connect() as db:
+                obj = self._registered_ingest_stage(db, ref, schema)
+            with inventory.table_drop_api(database, binding) as (reader, unregister):
+                metadata = inventory._metadata(reader, schema, 'TABLE', obj.physical_name)
+                if metadata.get('table-uuid') != obj.backend_identity:
+                    raise QueryError('STALE_RESOURCE', 409)
+                self._active()
+                if (self._schema(ref.schema_id, write=True) != schema
+                        or self._catalog() != (database, binding)):
+                    raise QueryError('STALE_RESOURCE', 409)
+                with control_store.connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    if self._registered_ingest_stage(db, ref, schema) != obj:
+                        raise QueryError('STALE_RESOURCE', 409)
+                    marker = save(db, row['result'], status='unknown', phase='SENT',
+                                  error='CATALOG_DELETE_UNCERTAIN')
+                sent = marker
+                ack = unregister(schema, obj.physical_name)
+                if type(ack) is not int or ack != 204:
+                    raise inventory.TableDropTransportError(True)
+                with control_store.connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    if self._registered_ingest_stage(db, ref, schema) != obj:
+                        raise QueryError('STALE_RESOURCE', 409)
+                    changed = db.execute("""UPDATE object_bindings SET current=0 WHERE id=?
+                        AND schema_id=? AND incarnation=? AND backend_identity=? AND current=1""",
+                        (ref.object_id, ref.schema_id, ref.incarnation, obj.backend_identity)).rowcount
+                    if changed != 1:
+                        raise QueryError('STALE_RESOURCE', 409)
+                    save(db, sent, status='finished', phase='ACKNOWLEDGED')
+        except Exception as error:
+            if sent is not None and not (isinstance(error, inventory.TableDropTransportError)
+                                         and not error.possible_send):
+                # A possible send or failed ACK transaction leaves the durable SENT receipt.
+                return
+            with control_store.connect() as db:
+                save(db, sent if sent is not None else row['result'], status='failed',
+                     phase='REJECTED', error=getattr(error, 'code', 'CLEANUP_FAILED'))
+
     def _successful_work(self):
         with control_store.connect() as db:
             states = [r[0] for r in db.execute('''SELECT q.state FROM dataops_queries d
