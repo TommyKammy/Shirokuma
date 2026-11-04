@@ -240,3 +240,64 @@ await rawNode('auth').onclick();await rawFetch();
 document.hidden=true;dbRawLogsSync();document.hidden=false;dbRawLogsSync();
 assert.equal(rawOutput().length,0);assert.equal(rawNode('fetch').disabled,true);
 """)
+
+    def test_loki_manual_capture_and_search_are_independent_and_inputless(self):
+        self.javascript(r"""
+await rawBoot();
+const node=key=>$('observation-sre-loki-errors-'+key);
+const path='/api/v1/bears/platform-loki-errors';
+const searches=()=>calls.filter(call=>call.path===path);
+const hit={timestamp:newest,source:'agenthouse',severity:'error'};
+const reply=(status,hits=[])=>({operation:'search',status,since_minutes:10,window_end:newest,limit:20,hits});
+let query=reply('available',[hit]);
+route=(url,options)=>{
+ if(url!==path)return runtimeFixtureRoute(url,options);
+ const capture=options.method==='POST';
+ assert.deepEqual(options,{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'},...(capture?{method:'POST'}:{})});
+ return capture?{operation:'capture',status:'accepted',since_minutes:10,window_end:newest,tail_lines:100,max_bytes:65536,
+  accepted:1,sources:{agenthouse:'available',loki:'unavailable'}}:query;
+};
+assert.equal(node('panel').parentElement,$('bear-panel-sre'));
+assert.match(node('captureBounds').textContent,/100 lines and 64 KiB/);
+assert.match(node('searchBounds').textContent,/20 stored events.*24-hour/);
+assert.ok(node('search').disabled&&node('capture').disabled);
+await node('auth').onclick();assert.equal(searches().length,0);
+await node('search').onclick();
+assert.match(visibleText(node('hits')),/AgentHouse · error/);
+await node('capture').onclick();
+assert.match(node('captureResult').textContent,/accepted by Loki · 1.*Loki: sample unavailable/);
+assert.match(visibleText(node('hits')),/AgentHouse · error/);
+assert.equal(rawCalls().length,0);assert.equal(logCalls().length,0);
+query=reply('available');await node('search').onclick();
+assert.match(node('searchResult').textContent,/No stored events/);
+query=reply('unavailable');await node('search').onclick();
+assert.match(node('searchResult').textContent,/could not be searched/);
+query=reply('available',[{...hit,line:'private'}]);await node('search').onclick();
+assert.match(node('status').textContent,/request failed/);assert.equal(node('hits').children.length,0);
+assert.equal(searches().length,5);
+""")
+
+    def test_loki_discards_late_body_on_visibility_and_stale_auth_on_leave(self):
+        self.javascript(r"""
+await rawBoot();
+const node=key=>$('observation-sre-loki-errors-'+key);
+const result={operation:'search',status:'available',since_minutes:10,window_end:newest,limit:20,
+ hits:[{timestamp:newest,source:'loki',severity:'fatal'}]};
+await node('auth').onclick();
+const body=deferred(),entered=deferred();
+route=()=>({telemetryResponse:{ok:true,status:200,json:()=>{entered.resolve();return body.promise;}}});
+const pending=node('search').onclick();await entered.promise;
+document.hidden=true;dbLokiErrorsSync();document.hidden=false;dbLokiErrorsSync();
+body.resolve(result);await pending;
+assert.equal(node('hits').children.length,0);assert.equal(node('search').disabled,true);
+await node('auth').onclick();
+const denied=deferred();route=()=>denied.promise;
+const old=node('capture').onclick();await tick();
+dbObservationNavigate('policy');dbObservationNavigate('sre');
+assert.equal(node('capture').disabled,true);
+await node('auth').onclick();route=()=>result;await node('search').onclick();
+denied.resolve({http:403});await old;
+assert.equal(dbAdmin.platform,true);assert.match(visibleText(node('hits')),/Loki · fatal/);
+dbAdminSession({...session,platform_admin:false});
+assert.equal(node('hits').children.length,0);assert.equal(node('capture').disabled,true);
+""")

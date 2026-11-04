@@ -1,5 +1,7 @@
 # Databaseコア機能統合とコンピュート拡張の実装計画
 
+2026-11-04 JST、[DB-P6-4C2L](database-p6-4c2l-sre-loki-severity-2026-11-04.md)で管理対象AgentHouse／Lokiのerror／fatalを、時刻・発行元・重大度に絞って手動でLokiへ取り込み、SRE Platformで検索できるようにした。対象は固定2コンテナ。旧名前空間別ログの投入範囲と、M1の統合・本人受入は継続する。
+
 2026-11-04 JST、[DB-P6-4C2K](database-p6-4c2k-sre-raw-logs-2026-11-04.md)でSRE Platformに、現在のP管理者がAgentHouse／Lokiの管理対象コンテナの生ログを明示取得する導線を追加した。旧Loki error／fatal検索の対象ストリームと閲覧・保持範囲の確定、DB-P6-7の独立環境とM1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-7](database-p6-7-integrated-acceptance-2026-11-04.md)で89行と限定技術受入を照合し、既存環境の通常Workbenchで予備縦断を進めた。作成画面を離れた後の再読み込みが古い作成リンクへ戻る不具合を修正した。必須範囲の閉鎖、独立clean・故障環境、作成性能と本人受入は継続する。

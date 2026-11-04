@@ -108,7 +108,7 @@ def _owned_id(source, stdout, stderr):
     return identity
 
 
-def _sample(name, streams):
+def _classified(name, streams):
     if sum(map(len, streams)) > _MAX_BYTES or any(
         stream and not stream.endswith(b'\n') for stream in streams
     ):
@@ -133,9 +133,14 @@ def _sample(name, streams):
         counts[severity] += 1
         events.append(((seconds, (fraction or b'').ljust(9, b'0')),
                        dict(timestamp=stamp.decode('ascii'), severity=severity)))
+    return len(lines), counts, events
+
+
+def _sample(name, streams):
+    line_count, counts, events = _classified(name, streams)
     # Keep equal timestamps in source order, with stdout before stderr.
     events.sort(key=lambda event: event[0], reverse=True)
-    return dict(status='available', line_count=len(lines), other_count=len(lines) - sum(counts.values()),
+    return dict(status='available', line_count=line_count, other_count=line_count - sum(counts.values()),
                 level_counts=counts, events=[event for _, event in events[:_SCOPE['event_limit']]])
 
 
@@ -176,13 +181,22 @@ def observe_raw(principal, role):
 
 
 def _observe(principal, role, project, unavailable, scope):
+    check = _authority_check(principal, role)
+    return dict(scope=scope, **_collect(check, project, unavailable))
+
+
+def _authority_check(principal, role):
     fingerprint = _authority(principal, role)
 
     def check():
         if _authority(principal, role) != fingerprint:
             raise OperationError('PLATFORM_ACCESS_DENIED', 403)
 
-    result = dict(scope=scope)
+    return check
+
+
+def _collect(check, project, unavailable):
+    result = {}
     for source in _SOURCES:
         name, manager, *_ = source
         deadline = time.monotonic() + _TIMEOUT

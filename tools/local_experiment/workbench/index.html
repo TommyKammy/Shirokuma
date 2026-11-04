@@ -604,10 +604,10 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) .toolbar{flex-wrap:wrap}
 :is(#observation-sre-telemetry-readiness,#observation-telemetry-readiness-panel) .panel-body p{max-inline-size:min(75ch,100%)}
 :is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) :is(.panel-body,p,h2,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
-:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs){min-width:0;max-width:100%}
-:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs) .toolbar{flex-wrap:wrap}
-:is(#observation-sre-telemetry-logs,#observation-telemetry-logs-panel) .panel-body p{max-inline-size:min(75ch,100%)}
-:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs) :is(.panel-body,p,h2,h3,button,li){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel){min-width:0;max-width:100%}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel) .toolbar{flex-wrap:wrap}
+:is(#observation-sre-telemetry-logs,#observation-telemetry-logs-panel,#observation-sre-loki-errors-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel) :is(.panel-body,p,h2,h3,button,li){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures){min-width:0;max-width:100%}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) :is(.panel-body,p,h2,button,table,th,td,details,summary,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-recent-failures-panel,#observation-sre-recent-failures) .toolbar{flex-wrap:wrap}
@@ -2537,8 +2537,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMartsPo
 window.addEventListener('pagehide',stopMartsPolling);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
 window.addEventListener('pagehide',stopJobsPolling);
-document.addEventListener('visibilitychange',()=>dbRawLogsSync());
-window.addEventListener('pagehide',()=>{dbRawLogsClear(true);dbRawLogsSync();});
+document.addEventListener('visibilitychange',()=>{dbRawLogsSync();dbLokiErrorsSync();});
+window.addEventListener('pagehide',()=>{dbRawLogsClear(true);dbRawLogsSync();dbLokiErrorsClear();dbLokiErrorsSync();});
 editJob(null);clearSelectedJob();
 
 // Database mode is deliberately installed only after /api/session selects it.
@@ -3915,7 +3915,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbRawLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbManifestAdvisoryInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbRawLogsInstall();dbLokiErrorsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbManifestAdvisoryInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3960,7 +3960,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbRawLogsSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbRawLogsSync();dbLokiErrorsSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4795,6 +4795,122 @@ async function dbRawLogsFetch(){
   dbRawLogsRender(dbRawLogsRecord(data));p.notice='ready';
  }catch{if(read.current()){dbRawLogsNode('output').replaceChildren();p.notice='failed';}}
  finally{read.finish();}
+}
+
+const dbLokiErrors={boundary:'',epoch:0,busy:false,verified:false,notice:'',capture:null,search:null};
+const dbLokiErrorsLabels={
+ title:['Loki error and fatal events','Loki の error／fatal イベント'],
+ captureBounds:['Capture samples the last 10 minutes of LOCAL AgentHouse and Loki stdout and stderr. Each service has a combined limit of 100 lines and 64 KiB. Capture writes only event time, source and severity with a fixed marker.','取り込みは LOCAL の AgentHouse と Loki の直近10分の標準出力・標準エラー出力が対象です。サービスごとに合計100行、64 KiBまでです。時刻・発生元・重大度と固定マーカーだけを保存します。'],
+ searchBounds:['Search reads up to 20 stored events from the last 10 minutes. Capture checks the loaded 24-hour retention rule before writing.','検索は直近10分の取り込み済みイベントを最大20件表示します。書き込み前に稼働中の24時間保持ルールを確認します。'],
+ capture:['Capture and submit','取り込んで保存'],
+ search:['Search stored events','保存済みイベントを検索'],
+ working:['Request in progress.','処理中です。'],
+ windowEnd:['Window ends at','検索・取り込み範囲の終了時刻'],
+ verified:['Platform authority verified.','Platform の権限を確認しました。'],
+ failed:['The request failed.','処理に失敗しました。'],
+ captureUnavailable:['Capture unavailable. No events were submitted.','取り込みを利用できません。イベントは送信されませんでした。'],
+ searchUnavailable:['Stored events could not be searched.','保存済みイベントを検索できませんでした。'],
+ unconfirmed:['Submission could not be confirmed. Search stored events to check the result.','保存の受付を確認できませんでした。保存済みイベントを検索して確認してください。'],
+ no_new_events:['No new events submitted','新規送信なし'],
+ accepted:['Events accepted by Loki','Loki が受け付けたイベント数'],
+ empty:['No stored events in this search window.','検索範囲に保存済みイベントはありません。'],
+ available:['sample available','取得可能'],
+ unavailable:['sample unavailable','取得不能']
+};
+const dbLokiErrorsNode=key=>$('observation-sre-loki-errors-'+key);
+function dbLokiErrorsText(key){return dbLokiErrorsLabels[key]?.[language==='ja'?1:0]??dbTelemetryLogsText(key);}
+function dbLokiErrorsClear(){
+ const p=dbLokiErrors;++p.epoch;
+ Object.assign(p,{busy:false,verified:false,notice:'',capture:null,search:null});
+}
+function dbLokiErrorsSync(){
+ const panel=dbLokiErrorsNode('panel');if(!panel?.dataset.installed)return;
+ const p=dbLokiErrors,boundary=dbRawLogsBoundary();
+ if(boundary!==p.boundary){dbLokiErrorsClear();p.boundary=boundary;}
+ panel.hidden=!dbRawLogsVisible();
+ for(const key of ['title','captureBounds','searchBounds','auth','capture','search'])dbLokiErrorsNode(key).textContent=dbLokiErrorsText(key);
+ dbLokiErrorsNode('auth').disabled=panel.hidden||p.busy||!dbPlatformCanRefresh();
+ for(const key of ['capture','search'])dbLokiErrorsNode(key).disabled=panel.hidden||p.busy||!p.verified||!dbTelemetryLogsAllowed();
+ dbLokiErrorsNode('status').textContent=dbLokiErrorsText(p.notice||(p.verified?'verified':'denied'));
+ const capture=p.capture,search=p.search;
+ const captureText=capture?(capture.status==='unavailable'?dbLokiErrorsText('captureUnavailable'):
+  capture.accepted===null?dbLokiErrorsText('unconfirmed'):dbLokiErrorsText(capture.status)+' · '+capture.accepted):'';
+ dbLokiErrorsNode('captureResult').textContent=captureText+(capture?.sources?
+  ' · AgentHouse: '+dbLokiErrorsText(capture.sources.agenthouse)+' · Loki: '+dbLokiErrorsText(capture.sources.loki)+
+  ' · '+dbLokiErrorsText('windowEnd')+' '+capture.window_end:'');
+ dbLokiErrorsNode('searchResult').textContent=search?[(search.status==='unavailable'?dbLokiErrorsText('searchUnavailable'):
+  search.hits.length?'':dbLokiErrorsText('empty')),dbLokiErrorsText('windowEnd')+' '+search.window_end].filter(Boolean).join(' · '):'';
+ const list=dbLokiErrorsNode('hits');list.replaceChildren();
+ for(const item of search?.hits??[])dbAdminNode('li','',list).textContent=
+  item.timestamp+' · '+(item.source==='agenthouse'?'AgentHouse':'Loki')+' · '+item.severity;
+}
+function dbLokiErrorsInstall(){
+ if(dbLokiErrorsNode('panel')?.dataset.installed)return;
+ const prefix='observation-sre-loki-errors-';
+ const node=(tag,key,parent)=>dbAdminNode(tag,key?prefix+key:'',parent);
+ const panel=node('section','panel',$('bear-panel-sre'));
+ panel.dataset.installed='true';panel.className='panel';panel.setAttribute('aria-labelledby',prefix+'title');
+ const head=node('div','',panel);head.className='panel-head';node('h2','title',head);
+ const body=node('div','',panel);body.className='panel-body';
+ node('p','captureBounds',body);node('p','searchBounds',body);
+ const bar=node('div','',body);bar.className='toolbar';
+ for(const key of ['auth','capture','search'])dbAdminButton(bar,prefix+key,dbLokiErrorsText(key),()=>dbLokiErrorsRequest(key));
+ for(const key of ['status','captureResult','searchResult'])node('p',key,body).setAttribute('role','status');
+ node('ul','hits',body);dbLokiErrorsSync();
+}
+function dbLokiErrorsRecord(data,key){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ const utc=value=>typeof value==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{9}Z$/.test(value);
+ if(data?.operation!==key||data.since_minutes!==10||!utc(data.window_end))fail();
+ if(key==='search'){
+  if(!exact(data,['operation','status','since_minutes','window_end','limit','hits'])||data.limit!==20||
+     !['available','unavailable'].includes(data.status)||!Array.isArray(data.hits)||data.hits.length>20||
+     (data.status==='unavailable'&&data.hits.length))fail();
+  for(const hit of data.hits){
+   if(!exact(hit,['timestamp','source','severity'])||!utc(hit.timestamp)||hit.timestamp>data.window_end||
+      !['agenthouse','loki'].includes(hit.source)||!['error','fatal'].includes(hit.severity))fail();
+  }
+ }else{
+  if(!exact(data,['operation','status','since_minutes','window_end','tail_lines','max_bytes','accepted','sources'])||
+     data.tail_lines!==100||data.max_bytes!==65536||!exact(data.sources,['agenthouse','loki'])||
+     !Object.values(data.sources).every(value=>['available','unavailable'].includes(value)))fail();
+  if(data.status==='accepted'){
+   if(!Number.isInteger(data.accepted)||data.accepted<1||data.accepted>200)fail();
+  }else if(data.status==='no_new_events'){
+   if(data.accepted!==0)fail();
+  }else if(!['unavailable','unconfirmed'].includes(data.status)||data.accepted!==null)fail();
+ }
+ return data;
+}
+async function dbLokiErrorsRequest(key){
+ dbLokiErrorsSync();if(dbLokiErrorsNode(key).disabled)return;
+ const p=dbLokiErrors,epoch=++p.epoch,boundary=p.boundary;
+ if(key==='auth'){p.verified=false;p.capture=null;p.search=null;}else p[key]=null;
+ p.busy=true;p.notice='working';dbLokiErrorsSync();
+ const current=()=>p.epoch===epoch&&dbRawLogsVisible()&&boundary===dbRawLogsBoundary();
+ try{
+  const options={cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}};
+  if(key==='capture')options.method='POST';
+  const response=await fetch(key==='auth'?'/api/session':'/api/v1/bears/platform-loki-errors',options);
+  if(!current())return;
+  if([401,403].includes(response.status)){dbLokiErrorsClear();dbAdminSession({});return;}
+  if(!response.ok)throw Error('UNAVAILABLE');
+  const data=await response.json();if(!current())return;
+  if(key==='auth'){
+   dbAdminSession(data);
+   if(JSON.stringify([data.username,data.authenticated])===dbPrincipal&&data.data_mode==='database')dbUpdateMaximumRole(data.maximum_role);
+   p.verified=data.role==='admin'&&dbTelemetryLogsAllowed()&&dbRawLogsVisible();
+  }else{
+   if(!dbTelemetryLogsAllowed())return;
+   p[key]=dbLokiErrorsRecord(data,key);
+  }
+  p.notice='';
+ }catch{
+  if(current())p.notice=key==='capture'?'unconfirmed':'failed';
+ }finally{
+  if(p.epoch===epoch)p.busy=false;
+  dbLokiErrorsSync();
+ }
 }
 
 function dbTelemetryLogsRecord(data){

@@ -24,6 +24,7 @@ import db_platform_pod_baseline
 import db_platform_manifest_advisory
 import db_platform_controller_baseline
 import db_platform_recent_failures
+import db_platform_loki_errors
 import db_platform_telemetry_logs
 import db_platform_telemetry_readiness
 import db_ai_settings
@@ -196,16 +197,22 @@ def dispatch(handler, method, path, params, principal, role):
         handler.respond(result, 200)
         return True
     if path in ('/api/v1/bears/platform-recent-failures', '/api/v1/bears/platform-telemetry-readiness',
-                '/api/v1/bears/platform-telemetry-logs', db_platform_telemetry_logs.RAW_LOGS_PATH):
-        if method != 'GET':
+                '/api/v1/bears/platform-telemetry-logs', db_platform_telemetry_logs.RAW_LOGS_PATH,
+                db_platform_loki_errors.PATH):
+        severity_route = path == db_platform_loki_errors.PATH
+        if severity_route:
+            handler.close_connection = True
+        if method != 'GET' and not (severity_route and method == 'POST'):
             raise QueryError('NOT_FOUND', 404)
-        if path == db_platform_telemetry_logs.RAW_LOGS_PATH:
+        if severity_route or path == db_platform_telemetry_logs.RAW_LOGS_PATH:
             origins = handler.headers.get_all('Origin', [])
-            if origins:
+            require_origin = severity_route and method == 'POST' and not getattr(handler, '_native_bears', False)
+            if origins or require_origin:
                 from workbench_server import request_origin_allowed
                 if len(origins) != 1 or not request_origin_allowed(handler.headers):
                     raise QueryError('INVALID_ORIGIN', 403)
-        if ('?' in handler.path or '#' in handler.path or params
+        if (severity_route and handler.path != path
+                or '?' in handler.path or '#' in handler.path or params
                 or handler.headers.defects
                 or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
                        or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
@@ -216,6 +223,8 @@ def dispatch(handler, method, path, params, principal, role):
             raise QueryError('INVALID_INPUT', 400)
         try:
             source = {
+                'platform-loki-errors': (db_platform_loki_errors.capture if method == 'POST'
+                                         else db_platform_loki_errors.search),
                 'platform-telemetry-raw-logs': db_platform_telemetry_logs.observe_raw,
                 'platform-telemetry-logs': db_platform_telemetry_logs.observe,
                 'platform-telemetry-readiness': db_platform_telemetry_readiness.observe,

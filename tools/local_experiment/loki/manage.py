@@ -53,13 +53,15 @@ def check_context() -> None:
         raise LokiError("requires native ARM64 Docker runtime")
 
 
-def request(path: str, payload=None, *, timeout=10):
+def request(path: str, payload=None, *, timeout=10, expected_status=None, max_bytes=2 * 1024**2):
     opener = urllib.request.build_opener(NoRedirect, urllib.request.ProxyHandler({}))
     req = urllib.request.Request(URL + path, data=None if payload is None else json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"})
     with opener.open(req, timeout=timeout) as response:
-        raw = response.read(2 * 1024**2 + 1)
-    if len(raw) > 2 * 1024**2:
+        if expected_status is not None and response.status != expected_status:
+            raise LokiError("unexpected Loki HTTP status")
+        raw = response.read(max_bytes + 1)
+    if len(raw) > max_bytes:
         raise LokiError("Loki response exceeded budget")
     return json.loads(raw) if raw and raw[:1] in (b"{", b"[") else raw.decode()
 

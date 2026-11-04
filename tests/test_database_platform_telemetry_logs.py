@@ -7,12 +7,16 @@ import json
 import os
 from pathlib import Path
 import subprocess
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 import unittest
 from unittest.mock import Mock, patch
 
 import test_database_platform_telemetry_readiness as readiness
+import db_platform_loki_errors as errors
 import db_platform_telemetry_logs as logs
+import yaml
 from warehouse_operations import OperationError
 
 
@@ -157,12 +161,14 @@ class TelemetryLogsTests(unittest.TestCase):
                 logs.observe(principal, role)
         self.read.assert_not_called()
 
-    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None, raw_logs=False):
+    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None, raw_logs=False, loki_errors=False):
         class Connection:
             def __init__(self,raw):self.incoming,self.outgoing=io.BytesIO(raw),io.BytesIO()
             def makefile(self,*args):return self.incoming
             def sendall(self,raw):self.outgoing.write(raw)
         path = logs.RAW_LOGS_PATH if raw_logs else '/api/v1/bears/platform-telemetry-logs'
+        if loki_errors:
+            path = errors.PATH
         raw=(method+' '+path+suffix+' HTTP/1.1\r\n'
             'Host: 127.0.0.1\r\nConnection: close\r\nX-Shirokuma-Role: '+role+'\r\n'+headers+'\r\n'+body).encode()
         conn=Connection(raw)
@@ -170,7 +176,7 @@ class TelemetryLogsTests(unittest.TestCase):
             handler(conn,('127.0.0.1',1),SimpleNamespace())
         response=HTTPResponse(Connection(conn.outgoing.getvalue()));response.begin()
         result = response.status, json.loads(response.read())
-        return (*result, response.getheader('Cache-Control')) if raw_logs else result
+        return (*result, response.getheader('Cache-Control')) if raw_logs or loki_errors else result
 
     def test_both_strict_inputless_routes(self):
         cases = [({}, 200), ({'headers': 'Content-Length: 0\r\n'}, 200),
@@ -282,6 +288,272 @@ class TelemetryLogsTests(unittest.TestCase):
             self.assertEqual(denied.exception.status, 403)
             self.assertEqual(self.read.call_count, fail_at)
 
+    def prepare_loki(self):
+        directory = self.enterContext(TemporaryDirectory())
+        root = Path(directory)
+        (root / 'tmp/local-experiment/loki').mkdir(parents=True)
+        self.patch(patch.object(errors.loki, 'ROOT', root))
+        self.patch(patch.object(errors, '_window', return_value=(1793750100000000000, 1793750700000000000)))
+        config = (errors.loki.HERE / 'config.yaml').read_text()
+        return config, self.patch(patch.object(errors.loki, 'request'))
+
+    @staticmethod
+    def streams(*streams):
+        return dict(status='success', data=dict(resultType='streams', result=list(streams)))
+
+    def test_loki_exact_severity_payload_dedup_and_loaded_policy(self):
+        config, request = self.prepare_loki()
+        loaded = yaml.safe_load(config)
+        self.assertEqual(loaded['limits_config']['retention_period'], '0s')
+        self.assertEqual(loaded['limits_config']['deletion_mode'], 'disabled')
+        self.assertEqual(loaded['limits_config']['retention_stream'], [
+            dict(selector='{service_name="shirokuma-local",component="sre-telemetry-severity"}',
+                 priority=1, period='24h')])
+        agent = (
+            '2026-11-04T00:00:00.000000001Z 2026.11.04 00:00:00.000000 [ 1 ] {} <Error> 雪\n'
+            '2026-11-04T00:00:00.000000002Z 2026.11.04 00:00:00.000000 [ 1 ] <Warning> <Fatal> decoy\n'
+            '2026-11-04T00:00:00.000000003Z prefix <Fatal> decoy\n'
+        ).encode()
+        severe = b'2026-11-04T00:00:00.123456789Z level=fatal msg=secret\n'
+        self.read.side_effect = [self.read_owned(['inspect', logs.agenthouse.NAME], 0), (agent, agent),
+                                 self.read_owned(['inspect', logs.loki.NAME], 0), (b'', severe)]
+        existing = dict(stream=dict(errors._LABELS, source='agenthouse', severity='error', detected_level='error'),
+                        values=[['1793750400000000001', 'telemetry-severity']])
+        loaded_config = config.replace('period: 24h', 'period: 1d') + '# '
+        loaded_config = loaded_config.ljust(92244, 'x') + '\n'
+        self.assertEqual(len(loaded_config.encode()), 92245)
+        request.side_effect = [self.streams(existing), loaded_config, '']
+        result = errors.capture(self.principal, 'admin')
+        self.assertEqual(result, dict(operation='capture', status='accepted', since_minutes=10,
+                                     window_end='2026-11-04T00:05:00.000000000Z', tail_lines=100,
+                                     max_bytes=65536, accepted=1, sources=dict(agenthouse='available', loki='available')))
+        query, retention, push = request.call_args_list
+        self.assertEqual(urlsplit(query.args[0]).path, '/loki/api/v1/query_range')
+        self.assertEqual(parse_qs(urlsplit(query.args[0]).query),
+                         dict(query=[errors._SELECTOR], start=['1793750100000000000'],
+                              end=['1793750700000000001'], direction=['backward'], limit=['1000']))
+        self.assertEqual(retention.args, ('/config', None))
+        self.assertEqual(push.args, ('/loki/api/v1/push', dict(streams=[
+            dict(stream=dict(errors._LABELS, source='loki', severity='fatal'),
+                 values=[['1793750400123456789', 'telemetry-severity']])])))
+        self.assertEqual(query.kwargs, {'timeout': 2})
+        self.assertEqual(retention.kwargs, {'timeout': 2, 'max_bytes': 131072})
+        self.assertEqual(push.kwargs, {'timeout': 2, 'expected_status': 204})
+
+    def test_loki_request_checks_exact_status_before_read_and_preserves_default(self):
+        response = Mock()
+        opener = Mock()
+        opener.open.return_value = nullcontext(response)
+        with patch.object(errors.loki.urllib.request, 'build_opener', return_value=opener):
+            for status in (200, 202, 260):
+                with self.subTest(status=status):
+                    response.status = status
+                    response.read.reset_mock()
+                    with self.assertRaises(errors.loki.LokiError):
+                        errors.loki.request('/loki/api/v1/push', {}, timeout=2, expected_status=204)
+                    response.read.assert_not_called()
+            response.status = 204
+            response.read.return_value = b''
+            self.assertEqual(errors.loki.request('/loki/api/v1/push', {}, timeout=2, expected_status=204), '')
+            response.status = 260
+            response.read.return_value = b'blocked'
+            self.assertEqual(errors.loki.request('/loki/api/v1/push', {}), 'blocked')
+
+    def test_loki_request_caps_config_wire_bytes_and_preserves_default(self):
+        response = Mock(status=200)
+        opener = Mock()
+        opener.open.return_value = nullcontext(response)
+        with patch.object(errors.loki.urllib.request, 'build_opener', return_value=opener):
+            response.read.return_value = b'x' * 131073
+            with self.assertRaises(errors.loki.LokiError):
+                errors.loki.request('/config', max_bytes=131072)
+            response.read.assert_called_once_with(131073)
+            response.read.reset_mock()
+            response.read.return_value = b'x' * 131072
+            self.assertEqual(len(errors.loki.request('/config', max_bytes=131072)), 131072)
+            response.read.assert_called_once_with(131073)
+            response.read.reset_mock()
+            self.assertEqual(len(errors.loki.request('/config')), 131072)
+            response.read.assert_called_once_with(2 * 1024**2 + 1)
+
+    def test_loki_loaded_policy_requires_manual_deletion_disabled(self):
+        config, request = self.prepare_loki()
+        request.return_value = config.replace('  retention_period: 0s\n', '')
+        self.assertTrue(errors._retention(lambda: None))
+        request.return_value = config.replace('period: 24h', 'period: 24h0m0s')
+        self.assertTrue(errors._retention(lambda: None))
+        for policy in (
+            config.replace('  deletion_mode: disabled\n', ''),
+            config.replace('deletion_mode: disabled', 'deletion_mode: filter-and-delete'),
+            config.replace('retention_period: 0s', 'retention_period: 48h'),
+            config.replace('delete_request_store: filesystem', 'delete_request_store: s3'),
+            config.replace('period: 24h', 'period: 48h'),
+            config + '# ' + '雪' * 44000,
+            'limits_config: [',
+            'limits_config: 42',
+            {'limits_config': {}},
+        ):
+            request.return_value = policy
+            if policy == 'limits_config: [':
+                with self.assertRaises(yaml.YAMLError):
+                    errors._retention(lambda: None)
+            else:
+                self.assertFalse(errors._retention(lambda: None))
+
+    def test_loki_fail_closed_and_uncertain_push_reconciles_only_on_explicit_capture(self):
+        config, request = self.prepare_loki()
+        sample = b'2026-11-04T00:00:00.000000001Z level=error msg=private\n'
+        owned = self.read.side_effect
+
+        def read(args, deadline):
+            if args[0] == 'logs':
+                return sample, b''
+            return owned(args, deadline)
+
+        self.read.side_effect = read
+        row = dict(stream=dict(errors._LABELS, source='loki', severity='error'),
+                   values=[['1793750400000000001', 'telemetry-severity']])
+        for replies, count in (
+            ([self.streams(row | {'values': row['values'] * 1000})], 1),
+            ([self.streams(row | {'values': [['1793750400000000001', 'private']]})], 1),
+            ([self.streams(), config.replace('retention_enabled: true', 'retention_enabled: false')], 2),
+            ([self.streams(), config.replace('component=', 'namespace=')], 2),
+            ([self.streams(), 'limits_config: ['], 2),
+            ([self.streams(), config.replace('deletion_mode: disabled', 'deletion_mode: filter-only')], 2),
+        ):
+            request.reset_mock()
+            request.side_effect = replies
+            self.assertEqual(errors.capture(self.principal, 'admin')['status'], 'unavailable')
+            self.assertEqual(request.call_count, count)
+        request.reset_mock()
+        request.side_effect = [self.streams(), config, OSError('private')]
+        result = errors.capture(self.principal, 'admin')
+        self.assertEqual((result['status'], result['accepted'], request.call_count), ('unconfirmed', None, 3))
+        request.side_effect = [self.streams(row)]
+        self.assertEqual(errors.capture(self.principal, 'admin')['accepted'], 0)
+        self.assertEqual(request.call_count, 4)
+
+        request.reset_mock()
+        with patch.object(logs, '_authority', return_value='initial') as authority:
+            def revoke(*args, **kwargs):
+                authority.return_value = 'changed'
+                return self.streams()
+            request.side_effect = revoke
+            with self.assertRaises(OperationError):
+                errors.capture(self.principal, 'admin')
+            self.assertEqual(request.call_count, 1)
+
+    def test_loki_uses_all_classified_severe_rows_and_distinguishes_missing_sources(self):
+        config, request = self.prepare_loki()
+        owned = self.read.side_effect
+        sample = b''.join(
+            f'2026-11-04T00:00:00.{ns:09d}Z level=error msg=private\n'.encode()
+            for ns in range(100)
+        )
+
+        def read(args, deadline):
+            if args[0] == 'logs':
+                return sample, b''
+            if args[-1] == logs.agenthouse.NAME:
+                raise OSError('unavailable')
+            return owned(args, deadline)
+
+        self.read.side_effect = read
+        request.side_effect = [self.streams(), config, '']
+        result = errors.capture(self.principal, 'admin')
+        self.assertEqual(result['sources'], dict(agenthouse='unavailable', loki='available'))
+        self.assertEqual(result['accepted'], 100)
+        self.assertEqual(len(request.call_args.args[1]['streams'][0]['values']), 100)
+
+        request.reset_mock()
+        self.read.side_effect = OSError('unavailable')
+        result = errors.capture(self.principal, 'admin')
+        self.assertEqual((result['status'], result['accepted']), ('unavailable', None))
+        request.assert_not_called()
+
+    def test_loki_authority_loss_wins_even_when_push_was_attempted(self):
+        config, request = self.prepare_loki()
+        owned = self.read.side_effect
+
+        def read(args, deadline):
+            if args[0] == 'logs':
+                return b'2026-11-04T00:00:00.000000001Z level=fatal msg=private\n', b''
+            return owned(args, deadline)
+
+        self.read.side_effect = read
+        with patch.object(logs, '_authority', return_value='initial') as authority:
+            def reply(path, payload, *, timeout, expected_status=None, max_bytes=None):
+                if path == '/config':
+                    return config
+                if path == '/loki/api/v1/push':
+                    authority.return_value = 'changed'
+                    raise OSError('private')
+                return self.streams()
+
+            request.side_effect = reply
+            with self.assertRaises(OperationError) as denied:
+                errors.capture(self.principal, 'admin')
+            self.assertEqual(denied.exception.status, 403)
+            self.assertEqual(request.call_count, 3)
+
+    def test_loki_search_strict_streams_and_nanosecond_window(self):
+        _, request = self.prepare_loki()
+        row = dict(stream=dict(errors._LABELS, source='agenthouse', severity='fatal', detected_level='fatal'),
+                   values=[['1793750100000000000', 'telemetry-severity'],
+                           ['1793750700000000000', 'telemetry-severity']])
+        request.return_value = self.streams(row)
+        result = errors.search(self.principal, 'admin')
+        self.assertEqual(result, dict(operation='search', status='available', since_minutes=10,
+                                      window_end='2026-11-04T00:05:00.000000000Z', limit=20, hits=[
+            dict(timestamp='2026-11-04T00:05:00.000000000Z', source='agenthouse', severity='fatal'),
+            dict(timestamp='2026-11-03T23:55:00.000000000Z', source='agenthouse', severity='fatal'),
+        ]))
+        self.read.assert_not_called()
+        self.assertIn('limit=20', request.call_args.args[0])
+        for invalid in (row | {'values': [['1793750700000000001', 'telemetry-severity']]},
+                        row | {'values': [[1793750400000000000, 'telemetry-severity']]},
+                        row | {'values': row['values'] * 11},
+                        row | {'stream': row['stream'] | {'detected_level': 'error'}},
+                        row | {'stream': row['stream'] | {'namespace': 'legacy'}},
+                        row | {'stream': row['stream'] | {'severity': 'warning'}}):
+            request.return_value = self.streams(invalid)
+            result = errors.search(self.principal, 'admin')
+            self.assertEqual((result['status'], result['hits']), ('unavailable', []))
+        request.return_value = self.streams()
+        self.assertEqual(errors.search(self.principal, 'admin')['status'], 'available')
+
+    def test_loki_both_http_adapters_and_no_store(self):
+        _, request = self.prepare_loki()
+        request.return_value = self.streams()
+        same = 'Origin: http://127.0.0.1\r\n'
+        for handler in self.handlers():
+            for method in ('GET', 'POST'):
+                for options, status in (
+                    ({'headers': same}, 200),
+                    ({'headers': same + 'Content-Length: 0\r\n'}, 200),
+                    ({'headers': 'Origin: http://other\r\n'}, 403),
+                    ({'headers': same * 2}, 403),
+                    ({'headers': same, 'suffix': '?'}, 400),
+                    ({'headers': same, 'suffix': '?expected_status=204'}, 400),
+                    ({'headers': same, 'suffix': '#'}, 400),
+                    ({'headers': same + 'Content-Length: 2\r\n', 'body': '{}'}, 400),
+                    ({'headers': same + 'Transfer-Encoding: chunked\r\n'}, 400),
+                    ({'headers': same + 'X-Test: a\r\nX-Test: b\r\n'}, 400),
+                    ({'headers': same, 'role': 'bi_viewer'}, 403),
+                    ({'headers': same, 'principal': replace(self.principal, platform_admin=False)}, 403),
+                ):
+                    with self.subTest(handler=handler, method=method, options=options):
+                        self.read.reset_mock()
+                        request.reset_mock()
+                        code, dto, cache = self.request(handler, method=method, loki_errors=True, **options)
+                        self.assertEqual((code, cache), (status, 'no-store'))
+                        if status == 200:
+                            self.assertEqual(dto['status'], 'available' if method == 'GET' else 'no_new_events')
+                        else:
+                            self.read.assert_not_called()
+                            request.assert_not_called()
+            code, _, cache = self.request(handler, method='POST', loki_errors=True)
+            self.assertEqual((code, cache), (403 if handler.__name__ == 'WorkbenchHandler' else 200, 'no-store'))
 
 class DockerCaptureTests(unittest.TestCase):
     def test_fixed_host_sanitized_environment_and_bounded_cleanup(self):

@@ -1,4 +1,4 @@
-# Local Pawprint logs
+# Local Loki logs
 
 Loki 3.7.0 runs as one native ARM64 container, pinned to the manifest digest in
 `manage.py`, in the dedicated Colima Docker context. This implements the log
@@ -28,11 +28,15 @@ trace identifiers are JSON fields rather than high-cardinality stream labels.
 the last hour. The Gateway uses the same task/trace identifiers in OpenTelemetry,
 Loki and ClickHouse. Unknown token/cost values remain null in ClickHouse.
 
+Workbench SRE Platform can manually capture error and fatal events from the
+managed AgentHouse and Loki containers. It stores event time, source, and
+severity in the `sre-telemetry-severity` stream and searches the latest 20 events
+in a 10-minute window. Loki's Compactor applies a 24-hour retention policy to
+that stream, and the manual deletion API is disabled. [SRE capture and search](../../../docs/guides/database-p6-4c2l-sre-loki-severity-2026-11-04.md)
+
 The 2026-09-16 runtime test pushed and queried a normalized record, stopped and
 restarted Loki, then queried the identical record again. Private receipts are
-under ignored `tmp/local-experiment/loki/`. Generated normalized logs have no
-automatic expiration in this small experiment; periodically inspect the volume
-size. Durable audit export is the matching AgentHouse JSONEachRow export plus
+under ignored `tmp/local-experiment/loki/`. Pawprint records have no configured age expiration. Durable audit export is the matching AgentHouse JSONEachRow export plus
 Gateway JSONL span/log records. A full Loki volume restore is not yet claimed.
 Removing retained log volumes requires a separate decision. Stop the named
 container for a non-destructive rollback. Grafana, Tempo and an OTel collector

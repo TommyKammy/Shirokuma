@@ -1493,7 +1493,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             logging.getLogger(__name__).debug(fmt, *args)
 
         def end_headers(self):
-            if getattr(self, '_raw_telemetry_logs', False):
+            if getattr(self, '_sensitive_telemetry', False):
                 self.send_header('Cache-Control', 'no-store')
             super().end_headers()
 
@@ -1518,6 +1518,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
 
         def stage_request(self):
             import ai_routes
+            from db_platform_loki_errors import PATH as LOKI_ERRORS_PATH
             from db_platform_telemetry_logs import RAW_LOGS_PATH
             import db_stage_routes
             import db_mart_routes
@@ -1530,7 +1531,8 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             from workbench_server import request_origin_allowed
             url = urllib.parse.urlsplit(self.path)
             stage = url.path == '/api/v1/stages' or url.path.startswith('/api/v1/stages/')
-            self._raw_telemetry_logs = url.path == RAW_LOGS_PATH
+            self._sensitive_telemetry = url.path in (RAW_LOGS_PATH, LOKI_ERRORS_PATH)
+            self._native_bears = True
             ai = url.path == '/api/v1/bears' or url.path.startswith('/api/v1/bears/')
             dbt = url.path == '/api/v1/dbt' or url.path.startswith('/api/v1/dbt/')
             mart = url.path == '/api/v1/marts' or url.path.startswith('/api/v1/marts/')

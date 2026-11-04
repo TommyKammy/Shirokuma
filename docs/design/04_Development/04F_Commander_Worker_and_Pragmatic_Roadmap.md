@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-04
-version: "1.71"
+version: "1.72"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-04 JST、[DB-P6-4C2L](../../guides/database-p6-4c2l-sre-loki-severity-2026-11-04.md)で管理対象AgentHouse／Lokiのerror／fatalを、時刻・発行元・重大度に絞って手動でLokiへ取り込み、SRE Platformで検索できるようにした。対象は固定2コンテナ。旧名前空間別ログの投入範囲と、M1の統合・本人受入は継続する。
 
 2026-11-04 JST、[DB-P6-4C2K](../../guides/database-p6-4c2k-sre-raw-logs-2026-11-04.md)でSRE Platformに、現在のP管理者がAgentHouse／Lokiの管理対象コンテナの生ログを明示取得する導線を追加した。旧Loki error／fatal検索の対象ストリームと閲覧・保持範囲の確定、DB-P6-7の独立環境とM1本人受入を継続する。
 
