@@ -2575,6 +2575,7 @@ function dbInvalidateReceipt(role,account=false){
  // Inventory revisions invalidate DB reads, not the separate platform-management capability.
  // Session/admin-route checks still clear management state on actual account or admin loss.
  if(account){dbAdmin.platform=false;dbAdminClear();}
+ else if(role==='admin')dbAdminClearReadiness();
  if(dbAudit.installed)dbAuditValidate();
  if(dbCurator.installed)dbCuratorSync();
  dbObservationsSync();
@@ -6230,11 +6231,9 @@ function dbReason(w=dbCurrent()){
  if(!Number.isInteger(Number(w.max_rows))||Number(w.max_rows)<1||Number(w.max_rows)>10000)return t('Max rows');
  return '';
 }
-const dbContextExampleLabel='Open context example';
-const dbContextExampleHelp='Open a new read-only draft to check the connection context.';
 Object.assign(i18n.ja,{
- [dbContextExampleLabel]:'接続先の確認SQLを開く',
- [dbContextExampleHelp]:'接続先を確認するための読み取り専用の下書きを新しく開きます。'
+ 'Open context example':'接続先の確認SQLを開く',
+ 'Open a new read-only draft to check the connection context.':'接続先を確認するための読み取り専用の下書きを新しく開きます。'
 });
 function dbContextExampleReason(w=dbCurrent()){
  return dbReason({...w,mode:'read-only'});
@@ -6301,9 +6300,9 @@ function dbControls(){
  const exampleReason=dbContextExampleReason(w),example=$('open-context-example');
  if(example){
   example.disabled=!!exampleReason;
-  example.title=exampleReason||t(dbContextExampleHelp);
+  example.title=exampleReason||t('Open a new read-only draft to check the connection context.');
  }
- message('database-context-state',reason||(exampleReason?t(dbContextExampleLabel)+' — '+exampleReason:''));
+ message('database-context-state',reason||(exampleReason?t('Open context example')+' — '+exampleReason:''));
  $('run-query').disabled=!!reason||dbRunBlocked(run);
  $('cancel-query').disabled=!dbCanCancel(run)||!!run?.canceling;
  for(const id of ['export-table-btn','export-table-format','clone-table-btn','drop-table-btn'])$(id).disabled=true;
@@ -7209,7 +7208,7 @@ async function initializeDatabaseUI(session){
  renderWorksheets=()=>{legacyRenderWorksheets();dbWorkspacePane='worksheet';dbWireWorkspaceTabs();dbControls();dbRenderRun();return dbRefreshContext();};
  addWorksheet=(sql='',mode=dbCurrent().mode)=>{dbSave();const inherited=dbInput(dbCurrent()),number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={...inherited,id:crypto.randomUUID(),name:'Worksheet '+number,sql,mode};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;dbPersist();renderWorksheets();};
  const example=document.createElement('button');example.id='open-context-example';example.type='button';example.disabled=true;
- ui(example,dbContextExampleLabel);
+ ui(example,'Open context example');
  example.setAttribute('aria-describedby','database-context-state');
  example.onclick=()=>{
   if(dbContextExampleReason())return;
@@ -7235,6 +7234,7 @@ async function initializeDatabaseUI(session){
   if(button.hidden||button.disabled)return;
   const next=button.dataset.tab;
   if(activeTab==='db-admin'&&next!=='db-admin'&&dbAdminAllowed())dbCreationURL(null);
+  if(activeTab==='db-admin'&&next!=='db-admin')dbAdminClearReadiness();
   if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
@@ -7272,7 +7272,7 @@ async function initializeDatabaseUI(session){
 }
 
 // Administration owns neither Explorer selection nor worksheet execution context.
-const dbAdmin={platform:false,epoch:0,selection:0,request:0,retireRead:0,retirement:null,database:'',databases:[],drafts:new Map(),requests:new Map(),installed:false,rendered:false};
+const dbAdmin={platform:false,epoch:0,selection:0,request:0,readinessRead:0,retireRead:0,retirement:null,database:'',databases:[],drafts:new Map(),requests:new Map(),installed:false,rendered:false};
 Object.assign(i18n.ja,{
  'Database retirement':'DB の利用終了','Preview dependencies':'依存関係を確認','Retire database':'DB の利用終了を要求',
  'Inspect retirement':'利用終了操作を照会','Reconcile retirement':'利用終了操作を照合','Dependencies':'依存関係','Blockers':'完了を妨げる状態',
@@ -7294,6 +7294,19 @@ Object.assign(i18n.ja,{
  'Request operator apply':'operator への apply を要求',
  'Apply records a public handoff (requires_operator). A private operator must execute and verify it; this does not make the DB READY.':'apply は公開引継ぎ（requires_operator）を記録します。private operator の実行と検証が必要であり、DB を READY にする操作ではありません。',
  'Plans use a public generation ID prepared by the operator. Replan and apply are separate explicit actions.':'operator が準備した公開 generation ID を使用します。再 plan と apply はそれぞれ明示的な別操作です。',
+ 'Use registered database ID':'登録した DB ID を選択','Use plan for operator apply':'plan を apply 欄に入力',
+ 'Check database readiness':'DB の READY 状態を確認','Checking database readiness…':'DB の READY 状態を確認中…',
+ 'Select the target database and enter the operation ID.':'対象 DB を選択し、操作 ID を入力してください。',
+ 'Could not select the registered database. Refresh current revisions and select its ID.':'登録した DB を選択できませんでした。現在の revision を更新し、DB ID を選択してください。',
+ 'Use operator-prepared material to create a bootstrap or full plan. The operator supplies the public generation ID.':'operator が準備した資料と公開 generation ID を使って bootstrap または full plan を作成します。',
+ 'Phase {phase} · Operation {state} · Generation {generation}':'フェーズ {phase} · 操作 {state} · Generation {generation}',
+ 'Operator apply handoff recorded as REQUESTED ({id}).':'operator への apply 引継ぎの記録は REQUESTED です（{id}）。',
+ 'Use this bootstrap operation ID as the predecessor when creating the full plan.':'full plan を作成するときは、この bootstrap 操作 ID を先行操作に指定してください。',
+ 'Operation does not match the selected database and LOCAL plan.':'操作が選択した DB と LOCAL plan に一致しません。',
+ 'Full apply verification is required to confirm readiness.':'READY の確認には、検証済みの full apply が必要です。',
+ 'Current database readiness could not be confirmed for this generation.':'この generation で現在の DB の READY を確認できませんでした。',
+ 'Database {id} is READY.':'DB {id} は READY です。',
+ 'Could not check database readiness. Try again.':'DB の READY 状態を確認できませんでした。再試行してください。',
  'Desired grants':'希望する grant','Principal ID':'Principal ID','Desired role':'希望ロール','Effective role':'有効ロール',
  'Admin':'管理者','Admin targets must already have a global admin ceiling.':'admin の付与先には、既存の全体ロール上限 admin が必要です。',
  'Desired revision':'希望 revision','Applied revision':'適用 revision','Effective epoch':'有効 epoch',
@@ -7301,7 +7314,7 @@ Object.assign(i18n.ja,{
  'Grant changes await verified full apply; restrictions and revocation can take effect immediately.':'grant 変更の昇格には検証済み full apply が必要です。制限や取消は即時に反映される場合があります。',
  'Pending backend verification':'バックエンド検証待ち','Effective':'有効','Revoked':'取消済み',
  'Read model mismatch: expected databases with fixed schemas and safe binding metadata.':'読取モデル不一致: 固定 Schema と安全な binding メタデータを含む databases が必要です。',
- 'Display metadata saved.':'表示メタデータを保存しました。','Operator handoff requested; execution and verification pending.':'operator への引継ぎを要求しました。実行と検証は未完了です。',
+ 'Display metadata saved.':'表示メタデータを保存しました。','Operator handoff recorded. Check database readiness for current status.':'operator への引継ぎを記録しました。現在の状態は「DB の READY 状態を確認」で確認できます。',
  'Management requires current platform admin, maximum admin and selected admin.':'管理には現在の platform admin、上限 admin、選択 admin が必要です。',
  'A saved uncertain request must be reconciled before creating another request.':'新しい要求の作成前に、保存済みの結果不明要求を照合してください。',
  'Choose an exact integer revision.':'revision は正確な整数で入力してください。',
@@ -7320,6 +7333,7 @@ function dbAdminGate(){
 function dbAdminClear(){
  dbPlatformSync();
  dbCreationClear();
+ dbAdminClearReadiness();
  dbAdmin.retirement=null;++dbAdmin.retireRead;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;
  $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
@@ -7375,9 +7389,76 @@ function dbAdminResponse(kind,data,op){
  if(kind==='grant')return typeof data.id==='string'&&['AWAITING_APPLY','APPLIED','SUPERSEDED'].includes(data.state);
  return typeof (data.id||data.operation_id)==='string'&&typeof data.state==='string';
 }
+function dbAdminText(value){return typeof value==='string'&&value.trim()!=='';}
+function dbAdminRevision(value){return Number.isSafeInteger(value)&&value>0;}
+function dbAdminWarehousePlan(data){
+ return data?.action==='WAREHOUSE_CONFIG_APPLY'&&data.warehouse_id==='LOCAL'&&
+  ['bootstrap','full'].includes(data.phase)&&dbAdminText(data.id)&&dbAdminText(data.generation_id);
+}
+function dbAdminReusablePlan(op){
+ const data=op?.result;
+ if(!dbAdminWarehousePlan(data)||data.state!=='AWAITING_APPLY'||!dbAdminRevision(data.revision)||!dbAdminText(data.delivery_digest))return false;
+ const payload=JSON.parse(op.payload);
+ return data.generation_id===payload.generation_id&&data.phase===payload.phase&&data.predecessor_id===payload.predecessor_id;
+}
+function dbAdminClearReadiness(){
+ ++dbAdmin.readinessRead;
+ $('db-admin-readiness')?.replaceChildren();
+}
+async function dbAdminCheckReadiness(){
+ if(!dbAdminGate()||activeTab!=='db-admin')return;
+ dbAdminClearReadiness();
+ const result=$('db-admin-readiness'),id=$('db-admin-operation-id').value,target=dbAdmin.database;
+ const selected=dbAdmin.databases.find(row=>row.id===target);
+ const scope=dbAdminScope(),read=dbAdmin.readinessRead;
+ const current=()=>read===dbAdmin.readinessRead&&scope===dbAdminScope()&&dbAdminAllowed()&&activeTab==='db-admin'&&
+  target===dbAdmin.database&&target===$('db-admin-select').value&&id===$('db-admin-operation-id').value;
+ const show=(label,values)=>ui(dbAdminNode('p','',result),label,values);
+ if(!selected||!dbAdminText(id)){show('Select the target database and enter the operation ID.');return;}
+ show('Checking database readiness…');
+ try{
+  const path='/api/v1/operations/'+encodeURIComponent(id),data=await dbAdminRequest(path,{scope});
+  if(!current())return;
+  result.replaceChildren();
+  const databases=data?.manifest?.spec?.databases;
+  const planned=databases&&Object.hasOwn(databases,target)?databases[target]:null;
+  const revision=planned?.binding?.desired_revision;
+  if(!dbAdminWarehousePlan(data)||data.id!==id||!dbAdminText(data.state)||
+     planned?.sql_catalog!==selected.sql_catalog||!dbAdminRevision(revision)){
+   show('Operation does not match the selected database and LOCAL plan.');return;
+  }
+  show('Phase {phase} · Operation {state} · Generation {generation}',{phase:data.phase,state:data.state,generation:data.generation_id});
+  const handoff=Array.isArray(data.handoffs)&&data.handoffs.find(h=>h?.operation_id===id&&h.route==='/api/v1/operations/'+id+'/apply'&&
+   h.requires_operator===true&&h.state==='REQUESTED'&&dbAdminText(h.id)&&dbAdminText(data.delivery_digest)&&
+   h.payload?.delivery_digest===data.delivery_digest&&dbAdminRevision(h.payload.expected_revision)&&h.payload.expected_revision<=data.revision);
+  if(handoff)show('Operator apply handoff recorded as REQUESTED ({id}).',{id:handoff.id});
+  if(data.phase==='bootstrap'&&data.state==='PREPARED'){
+   show('Use this bootstrap operation ID as the predecessor when creating the full plan.');return;
+  }
+  const verify=Array.isArray(data.steps)?data.steps.filter(step=>step?.step==='verify'):[];
+  const needsPredecessor=['REGISTERED','PREPARING'].includes(selected.state.toUpperCase());
+  if(data.phase!=='full'||data.state!=='APPLIED'||needsPredecessor&&(!dbAdminText(data.predecessor_id)||data.predecessor_id===id)||
+     verify.length!==1||verify[0].state!=='SUCCEEDED'||!dbAdminText(verify[0].evidence_ref)){
+   show('Full apply verification is required to confirm readiness.');return;
+  }
+  const inventory=await dbAdminRequest('/api/v1/admin/databases',{scope});
+  if(!current())return;
+  const rows=Array.isArray(inventory?.databases)?inventory.databases.filter(row=>row?.id===target):[];
+  const row=rows[0],binding=row?.binding;
+  if(rows.length!==1||row.sql_catalog!==planned.sql_catalog||typeof row.state!=='string'||row.state.toUpperCase()!=='READY'||
+     binding?.database_id!==target||binding.desired_revision!==revision||binding.applied_revision!==revision||
+     binding.applied_generation_id!==data.generation_id){
+   show('Current database readiness could not be confirmed for this generation.');return;
+  }
+  show('Database {id} is READY.',{id:target});
+ }catch(error){if(!error.stale&&current()){result.replaceChildren();show('Could not check database readiness. Try again.');}}
+}
 function dbAdminUnresolved(){return [...dbAdmin.requests.values()].some(op=>op.pending||op.uncertain);}
 function dbAdminMutationControls(id){
- const op=dbAdmin.requests.get(id);$(id+'-save').disabled=!!op&&(op.pending||op.uncertain);$(id+'-save').setAttribute('aria-busy',String(!!op?.pending));$(id+'-retry').disabled=!op?.uncertain||!!op?.pending;
+ const op=dbAdmin.requests.get(id);
+ if(id==='db-admin-register')$('db-admin-use-registration').hidden=!dbAdminText(op?.result?.database_id)||op.pending;
+ if(id==='db-admin-plan')$('db-admin-use-plan').hidden=!dbAdminReusablePlan(op)||op.pending;
+ $(id+'-save').disabled=!!op&&(op.pending||op.uncertain);$(id+'-save').setAttribute('aria-busy',String(!!op?.pending));$(id+'-retry').disabled=!op?.uncertain||!!op?.pending;
  if(id==='db-admin-grant'&&$('db-admin-grant-revoke'))$('db-admin-grant-revoke').disabled=!!op&&(op.pending||op.uncertain);
  if($('db-admin-select'))$('db-admin-select').disabled=dbAdminUnresolved();
  if($('db-admin-selection-help'))$('db-admin-selection-help').hidden=!dbAdminUnresolved();
@@ -7392,7 +7473,7 @@ async function dbAdminMutate(id,build,replay=false){
    if(op?.uncertain)throw Error(t('A saved uncertain request must be reconciled before creating another request.'));
    const request=build();op={...request,payload:JSON.stringify(request.payload),key:crypto.randomUUID(),owner:dbAdminOwner(),uncertain:false,pending:false};dbAdmin.requests.set(id,op);
   }
-  const scope=dbAdminScope();if(op.kind==='retire')++dbAdmin.retireRead;op.pending=true;dbAdminMutationControls(id);ui($(id+'-state'),'Request in progress.');
+  const scope=dbAdminScope();if(['register','plan','apply','retire'].includes(op.kind))dbAdminClearReadiness();if(op.kind==='retire')++dbAdmin.retireRead;op.pending=true;dbAdminMutationControls(id);ui($(id+'-state'),'Request in progress.');
   try{
    const data=await dbAdminRequest(op.path,{method:op.method||'POST',payload:op.payload,key:op.key,scope,retirement:op.kind==='retire'});
    if(scope!==dbAdminScope()||dbAdmin.requests.get(id)!==op)return;
@@ -7400,7 +7481,7 @@ async function dbAdminMutate(id,build,replay=false){
    op.uncertain=false;op.result=data;
    $(id+'-result').textContent=JSON.stringify(data,null,2);
    if(op.kind==='retire'){++dbAdmin.retireRead;dbAdminRetireRender(data);}
-   ui($(id+'-state'),op.kind==='apply'?'Operator handoff requested; execution and verification pending.':op.kind==='display'?'Display metadata saved.':op.kind==='grant'&&data.state==='AWAITING_APPLY'?'Pending backend verification':data.state);
+   ui($(id+'-state'),op.kind==='apply'?'Operator handoff recorded. Check database readiness for current status.':op.kind==='display'?'Display metadata saved.':op.kind==='grant'&&data.state==='AWAITING_APPLY'?'Pending backend verification':data.state);
   }catch(error){
    if(error.stale||scope!==dbAdminScope()||dbAdmin.requests.get(id)!==op){op.uncertain=true;return;}
    // A rejection after an ambiguous attempt cannot disprove earlier acceptance.
@@ -7436,21 +7517,44 @@ function dbAdminInstall(){
   if(!/^[a-z][a-z0-9_]{0,30}$/.test(catalog.value)||['system','information_schema','tpch','tpcds','iceberg'].includes(catalog.value))throw Error(t('Invalid SQL catalog name'));
   return {kind:'register',path:'/api/v1/databases',payload:{sql_catalog:catalog.value,profile_id:'local-polaris-1.8.0'}};
  });
+ const useRegistration=dbAdminButton(registration,'db-admin-use-registration','Use registered database ID',async()=>{
+  const registration=dbAdmin.requests.get('db-admin-register'),id=registration?.result?.database_id,scope=dbAdminScope();
+  if(!dbAdminAllowed()||activeTab!=='db-admin'||!dbAdminText(id)||dbAdminUnresolved())return;
+  const refreshed=await dbAdminRefresh();
+  if(scope!==dbAdminScope()||!dbAdminAllowed()||activeTab!=='db-admin'||dbAdmin.requests.get('db-admin-register')!==registration)return;
+  const sqlCatalog=JSON.parse(registration.payload).sql_catalog;
+  if(!refreshed||!dbAdmin.databases.some(row=>row.id===id&&row.sql_catalog===sqlCatalog)){
+   ui($('db-admin-register-state'),'Could not select the registered database. Refresh current revisions and select its ID.');return;
+  }
+  select.value=id;return select.onchange();
+ });
+ useRegistration.hidden=true;
  const plan=dbAdminNode('details','',root);dbAdminNode('summary','',plan,'Public generation plan');
- dbAdminNode('p','',plan,'Plans use a public generation ID prepared by the operator. Replan and apply are separate explicit actions.');
+ dbAdminNode('p','',plan,'Use operator-prepared material to create a bootstrap or full plan. The operator supplies the public generation ID.');
  const generation=dbAdminField(plan,'db-admin-generation','Generation ID'),phase=dbAdminField(plan,'db-admin-phase','Phase','select'),predecessor=dbAdminField(plan,'db-admin-predecessor','Predecessor operation ID');
  for(const value of ['bootstrap','full']){const o=new Option(value,value);ui(o,value);phase.add(o);}phase.value='bootstrap';
  dbAdminActions(plan,'db-admin-plan','Create plan',()=>({kind:'plan',path:'/api/v1/warehouses/LOCAL/plans',payload:{generation_id:generation.value,phase:phase.value,predecessor_id:predecessor.value||null}}));
  const operation=dbAdminNode('details','',root);dbAdminNode('summary','',operation,'Inspect operation');
  const operationID=dbAdminField(operation,'db-admin-operation-id','Operation ID');
+ operationID.oninput=dbAdminClearReadiness;
  dbAdminButton(operation,'db-admin-inspect','Inspect operation',async()=>{
   const scope=dbAdminScope(),request=++dbAdmin.request,id=operationID.value;
   try{const data=await dbAdminRequest('/api/v1/operations/'+encodeURIComponent(id),{scope});if(scope===dbAdminScope()&&request===dbAdmin.request&&id===operationID.value)$('db-admin-inspection').textContent=JSON.stringify(data,null,2);}catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request&&id===operationID.value)message('db-admin-error',error.message);}
  });
  dbAdminNode('pre','db-admin-inspection',operation);
+ dbAdminNode('p','',operation,'Select the target database and enter the operation ID.').className='help';
+ dbAdminButton(operation,'db-admin-check-readiness','Check database readiness',dbAdminCheckReadiness);
+ dbAdminNode('div','db-admin-readiness',operation).setAttribute('role','status');
  dbAdminNode('p','',operation,'Apply records a public handoff (requires_operator). A private operator must execute and verify it; this does not make the DB READY.');
  const expected=dbAdminField(operation,'db-admin-apply-revision','Expected revision'),digest=dbAdminField(operation,'db-admin-delivery','Delivery digest');
  dbAdminActions(operation,'db-admin-apply','Request operator apply',()=>({kind:'apply',path:'/api/v1/operations/'+encodeURIComponent(operationID.value)+'/apply',payload:{expected_revision:dbAdminInteger(expected),delivery_digest:digest.value}}));
+ const usePlan=dbAdminButton(plan,'db-admin-use-plan','Use plan for operator apply',()=>{
+  const op=dbAdmin.requests.get('db-admin-plan');
+  if(!dbAdminAllowed()||dbAdminUnresolved()||!dbAdminReusablePlan(op))return;
+  operationID.value=op.result.id;expected.value=String(op.result.revision);digest.value=op.result.delivery_digest;
+  dbAdminClearReadiness();operation.open=true;operationID.focus();
+ });
+ usePlan.hidden=true;
  $('db-admin-refresh').onclick=dbAdminRefresh;
 }
 function dbAdminMetadata(parent,resource,type){
@@ -7497,13 +7601,13 @@ async function dbAdminLoadGrants(){
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request)message('db-admin-error',error.message);}
 }
 async function dbAdminRefresh(){
- if(!dbAdminGate())return;dbAdminInstall();const scope=dbAdminScope(),request=++dbAdmin.request;
+ if(!dbAdminGate())return;dbAdminInstall();dbAdminClearReadiness();const scope=dbAdminScope(),request=++dbAdmin.request;
  try{const data=await dbAdminRequest('/api/v1/admin/databases',{scope});if(scope!==dbAdminScope()||request!==dbAdmin.request)return;
   if(!Array.isArray(data?.databases)||data.databases.some(d=>!d||typeof d.id!=='string'||typeof d.sql_catalog!=='string'||typeof d.display_name!=='string'||typeof d.description!=='string'||typeof d.state!=='string'||!Number.isSafeInteger(d.revision)||d.revision<1||!Array.isArray(d.schemas)||d.schemas.length!==4||new Set(d.schemas.map(s=>s?.sql_name)).size!==4||!d.binding||typeof d.binding!=='object'||d.schemas.some(s=>!s||typeof s.id!=='string'||!['raw','staging','marts','sandbox'].includes(s.sql_name)||typeof s.display_name!=='string'||typeof s.purpose!=='string'||!Number.isSafeInteger(s.revision)||s.revision<1)))throw Error(t('Read model mismatch: expected databases with fixed schemas and safe binding metadata.'));
   dbAdmin.databases=data.databases;
   if(dbAdmin.database&&!data.databases.some(d=>d.id===dbAdmin.database))dbAdminSelect('');
   const select=$('db-admin-select'),placeholder=new Option(t('Choose database'),'');ui(placeholder,'Choose database');select.replaceChildren(placeholder);for(const d of data.databases)select.add(new Option(d.display_name+' · '+d.sql_catalog+' · '+d.id+' · '+d.state,d.id));select.value=dbAdmin.database;
-  message('db-admin-error','');dbAdminRenderDetail();await dbAdminLoadGrants();
+  message('db-admin-error','');dbAdminRenderDetail();await dbAdminLoadGrants();return true;
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request)message('db-admin-error',error.message);}
 }
 function dbAdminOpen(){if(dbAdminGate()){dbAdminInstall();return Promise.all([dbAdminRefresh(),dbCreationLoad()]);}}
@@ -7514,6 +7618,7 @@ function dbAdminSelect(id){
   message('db-admin-error',t('Resolve pending or uncertain requests before changing the management database.'));
   return false;
  }
+ dbAdminClearReadiness();
  ++dbAdmin.selection;++dbAdmin.request;++dbAdmin.retireRead;dbAdmin.retirement=null;dbAdmin.database=id;dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.rendered=false;
  $('db-admin-detail').replaceChildren();$('db-admin-inspection').textContent='';
  for(const action of ['register','plan','apply']){const key='db-admin-'+action;$(key+'-state').textContent='';$(key+'-result').textContent='';dbAdminMutationControls(key);}

@@ -246,8 +246,87 @@ assert.equal(writeCalls().at(-1).path,'/api/v1/warehouses/LOCAL/plans');assert.d
 $('db-admin-operation-id').value='plan';await $('db-admin-inspect').onclick();assert.match($('db-admin-inspection').textContent,/PLANNED/);
 assert.equal(writeCalls().length,3);$('db-admin-apply-revision').value='2';$('db-admin-delivery').value='digest';await $('db-admin-apply-save').onclick();
 assert.equal(writeCalls().at(-1).path,'/api/v1/operations/plan/apply');assert.deepEqual(JSON.parse(writeCalls().at(-1).options.body),{expected_revision:2,delivery_digest:'digest'});
-assert.match($('db-admin-apply-state').textContent,/execution and verification pending/);assert.equal(writeCalls().length,4);
-assert.equal(dbAdmin.databases[0].state,'REGISTERED');
+assert.match($('db-admin-apply-state').textContent,/Operator handoff recorded/);assert.equal(writeCalls().length,4);
+assert.equal(dbAdmin.databases[0].state,'REGISTERED');assert.equal($('db-admin-use-plan').hidden,true);
+''')
+
+    def test_public_plan_reuse_and_current_readiness(self):
+        self.javascript(SETUP + r'''
+await activate($('tab-db-admin'));
+const operation='/api/v1/operations/plan',inventoryPath='/api/v1/admin/databases';
+const plan={id:'plan',action:'WAREHOUSE_CONFIG_APPLY',warehouse_id:'LOCAL',phase:'bootstrap',generation_id:'gen',
+ predecessor_id:null,state:'AWAITING_APPLY',revision:1,delivery_digest:'digest',
+ manifest:{spec:{databases:{new:{sql_catalog:'new_db',binding:{desired_revision:2},secret:'hidden-value'}}}}};
+let observed=plan;
+const handoff={id:'receipt',operation_id:'plan',state:'REQUESTED',requires_operator:true,route:operation+'/apply',
+ payload:{expected_revision:1,delivery_digest:'digest'}};
+adminRoute=async(path,options)=>{
+ if(path==='/api/v1/databases')return {operation_id:'create',database_id:'new',state:'REGISTERED'};
+ if(path.endsWith('/plans'))return plan;
+ if(path===operation+'/apply')return handoff;
+ if(path===operation)return observed;
+ throw Error(path);
+};
+const click=id=>$('db-admin-'+id).onclick();
+const result=()=>$('db-admin-readiness').children.map(node=>node.textContent).join(' ');
+const ready=()=>assert.match(result(),/Database new is READY/);
+const notReady=()=>assert.doesNotMatch(result(),/is READY/);
+const check=async(expected)=>{
+ const start=calls.length;await click('check-readiness');
+ const reads=calls.slice(start).filter(c=>c.path!=='/api/session');
+ assert.deepEqual(reads.map(c=>c.path),expected);
+ assert.ok(reads.every(c=>c.options.method==='GET'&&c.options.headers['X-Shirokuma-Role']==='admin'));
+};
+$('db-admin-register-name').value='new_db';await click('register-save');notReady();
+adminItems.push(managed('new'));
+assert.equal($('db-admin-use-registration').hidden,false);await click('use-registration');
+assert.notEqual($('db-admin-select').value,'new');
+adminItems.at(-1).sql_catalog='new_db';await click('use-registration');
+assert.equal($('db-admin-select').value,'new');assert.equal(writeCalls().length,1);
+$('db-admin-generation').value='gen';await click('plan-save');
+assert.equal($('db-admin-use-plan').hidden,false);await click('use-plan');
+assert.deepEqual(['operation-id','apply-revision','delivery'].map(id=>$('db-admin-'+id).value),['plan','1','digest']);
+assert.equal(writeCalls().length,2);await click('apply-save');notReady();
+observed={...plan,handoffs:[{...handoff,id:'wrong',operation_id:'other'},handoff]};
+await check([operation]);assert.match(result(),/AWAITING_APPLY.*REQUESTED.*receipt/);assert.doesNotMatch(result(),/wrong|hidden-value/);notReady();
+for(const state of ['PREPARED','UNKNOWN','VERIFIED_STALE']){
+ observed={...observed,state};await check([operation]);assert.ok(result().includes(state));notReady();
+ assert.equal(result().includes('as the predecessor'),state==='PREPARED');
+}
+const verify={step:'verify',state:'SUCCEEDED',evidence_ref:'evidence'};
+const applied={...observed,phase:'full',state:'APPLIED',revision:3,predecessor_id:'bootstrap-op',steps:[verify]};
+for(const overrides of [{predecessor_id:null},{steps:[verify,verify]},{steps:[{...verify,evidence_ref:' '}]},
+ {id:'wrong'},{warehouse_id:'OTHER'},{manifest:{spec:{databases:{db:plan.manifest.spec.databases.new}}}}]){
+ observed={...applied,...overrides};await check([operation]);notReady();
+}
+observed=applied;
+const db=adminItems.at(-1);db.id='other';await check([operation,inventoryPath]);notReady();db.id='new';
+db.state='ready';db.binding.applied_revision=2;db.binding.applied_generation_id='old';
+await check([operation,inventoryPath]);notReady();
+db.binding.applied_generation_id='gen';db.binding.database_id='db';
+await check([operation,inventoryPath]);notReady();
+db.binding.database_id='new';adminItems.push(structuredClone(db));
+await check([operation,inventoryPath]);notReady();adminItems.pop();
+await check([operation,inventoryPath]);ready();
+await click('refresh');assert.equal(result(),'');
+await check([operation,inventoryPath]);ready();
+const field=$('db-admin-operation-id'),originalRoute=route;
+const held=deferred();route=async(path,options)=>path===inventoryPath?held.promise:originalRoute(path,options);
+const pending=click('check-readiness');await tick();notReady();
+field.value='other';field.oninput();field.value='plan';field.oninput();
+held.resolve({databases:adminItems});await pending;assert.equal(result(),'');
+route=originalRoute;await check([operation,inventoryPath]);ready();
+const old=deferred();let first=true;route=async(path,options)=>{
+ if(path===operation&&first){first=false;return old.promise;}return originalRoute(path,options);
+};
+const superseded=click('check-readiness');await tick();await check([operation,inventoryPath]);ready();
+old.resolve({...plan,state:'UNKNOWN'});await superseded;ready();
+const leaving=deferred();route=async(path,options)=>path===operation?leaving.promise:originalRoute(path,options);
+const left=click('check-readiness');await tick();activate($('tab-warehouse'));await activate($('tab-db-admin'));
+leaving.resolve(applied);await left;assert.equal(result(),'');
+route=originalRoute;await check([operation,inventoryPath]);ready();
+currentRole='data_engineer';dbApplyRole();assert.equal(result(),'');await check([]);
+assert.equal(writeCalls().length,3);
 ''')
 
     def test_navigation_loss_returns_to_preserved_worksheet(self):
@@ -272,7 +351,7 @@ assert.equal($('db-admin-apply-result').textContent.includes('requires_operator'
 const first=writeCalls().at(-1);$('db-admin-delivery').value='edited draft';
 adminRoute=async()=>({id:'handoff',state:'REQUESTED',requires_operator:true});await $('db-admin-apply-retry').onclick();
 assert.equal(writeCalls().at(-1).options.body,first.options.body);assert.equal(writeCalls().at(-1).options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
-assert.match($('db-admin-apply-state').textContent,/execution and verification pending/);
+assert.match($('db-admin-apply-state').textContent,/Operator handoff recorded/);
 ''')
 
 
