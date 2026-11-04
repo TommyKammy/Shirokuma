@@ -6938,7 +6938,11 @@ async function initializeDatabaseUI(session){
  }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
- activate=button=>{if(button.hidden||button.disabled)return;const next=button.dataset.tab;if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
+ activate=button=>{
+  if(button.hidden||button.disabled)return;
+  const next=button.dataset.tab;
+  if(activeTab==='db-admin'&&next!=='db-admin'&&dbAdminAllowed())dbCreationURL(null);
+  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
@@ -10621,7 +10625,7 @@ function dbCreationURL(id){
  const params=new URLSearchParams(split>=0?hash.slice(split+1):prefix?'':hash);
  const source=params.has('creation')||params.has('creation_environment')?params:url.searchParams;
  const selection={id:source.get('creation'),environment:source.get('creation_environment')};
- if(arguments.length&&globalThis.history?.replaceState){
+ if(arguments.length&&globalThis.history?.replaceState&&(id||selection.id!==null||selection.environment!==null)){
   url.searchParams.delete('creation');url.searchParams.delete('creation_environment');
   params.delete('creation');params.delete('creation_environment');
   if(id){params.set('creation',id);params.set('creation_environment',dbCreation.environment_id);}

@@ -598,9 +598,11 @@ dbCreationRememberURL('creation');console.log(location.href);
 
     def test_fragment_helpers_preserve_unrelated_route_and_hash_state(self):
         self.javascript(SETUP + r'''
-globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
+let replacements=0;
+globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=String(url);}};
 for(const hash of ['','#worksheet-a','#sql','#worksheet-a?filter=one%20two','#filter=one%20two&pane=sql']){
  globalThis.location={href:'http://localhost/workbench?view=sql&locale=ja'+hash,origin:'http://localhost'};
+ const before=replacements;dbCreationURL(null);assert.equal(replacements,before);
  const original=new URL(location.href);dbCreationRememberURL('creation');const saved=new URL(location.href);
  assert.equal(saved.pathname,original.pathname);assert.equal(saved.searchParams.get('view'),'sql');assert.equal(saved.searchParams.get('locale'),'ja');
  assert.equal(saved.searchParams.has('creation'),false);assert.equal(saved.searchParams.has('creation_environment'),false);
@@ -633,15 +635,20 @@ for(let reload=0;reload<2;reload++){
 assert.equal(creationPosts.length,0);dbCreationStop();
 ''')
 
-    def test_initial_creation_selection_waits_for_detail_and_does_not_follow_hash_after_sql_open(self):
+    def test_initial_creation_link_opens_ready_sql_then_does_not_redirect_after_ingest_reload(self):
         for selection in [
             '#creation=creation&creation_environment=envA',
             '?creation=creation&creation_environment=envA',
         ]:
             with self.subTest(selection=selection):
                 self.javascript(SETUP + 'const selection=' + json.dumps(selection) + r''';
-globalThis.location={href:'http://localhost/workbench'+selection,origin:'http://localhost'};
-globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
+const unrelated='http://localhost/workbench?view=sql#worksheet-a?panel=details';
+const linked=new URL(unrelated);
+if(selection.startsWith('#'))linked.hash+='&'+selection.slice(1);
+else linked.search+='&'+selection.slice(1);
+globalThis.location={href:linked.href,origin:linked.origin};
+let replacements=0;
+globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=String(url);}};
 dbCreationClear();activeTab='warehouse';const held=deferred(),old=adminRoute;let initialized=false;
 adminRoute=(path,options)=>path===C+'/creation'?held.promise:old(path,options);
 const initializing=initializeDatabaseUI(session).then(()=>{initialized=true;});await tick();
@@ -649,8 +656,44 @@ assert.equal(activeTab,'db-admin');assert.equal(initialized,false);
 held.resolve(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));await initializing;
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(initialized,true);
 await $('db-creation-sql').onclick();assert.equal(activeTab,'warehouse');
-const href=location.href;await periodicRefresh();await tick();assert.equal(activeTab,'warehouse');
-assert.equal(location.href,href);assert.equal(writeCalls().length,0);dbCreationStop();
+assert.equal(location.href,unrelated);
+const afterSql=replacements;
+$('tab-ingestion').onclick();await tick();assert.equal(activeTab,'ingestion');
+assert.equal(replacements,afterSql);
+dbCreationClear();activeTab='warehouse';const before=calls.length;
+await initializeDatabaseUI(session);await tick();
+assert.equal(activeTab,'warehouse');assert.equal(location.href,unrelated);
+assert.equal(calls.slice(before).some(c=>c.path.startsWith(C)),false);
+assert.equal(writeCalls().length,0);dbCreationStop();
+''')
+
+    def test_disabled_navigation_and_role_revocation_preserve_link_but_leaving_fences_late_detail(self):
+        self.javascript(SETUP + r'''
+const link='http://localhost/workbench#creation=creation&creation_environment=envA';
+globalThis.location={href:link,origin:'http://localhost'};
+let replacements=0;
+globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=String(url);}};
+dbCreationClear();await initializeDatabaseUI(session);
+const ingest=$('tab-ingestion');ingest.disabled=true;
+const before=replacements;ingest.onclick();
+assert.equal(activeTab,'db-admin');assert.equal(replacements,before);
+currentRole='data_engineer';dbAdminGate();
+assert.equal(activeTab,'warehouse');assert.equal(location.href,link);assert.equal(replacements,before);
+currentRole='admin';dbAdminGate();await activate($('tab-db-admin'));
+const held=deferred(),old=adminRoute;let detailStarted=false;
+adminRoute=(path,options)=>{
+ if(path!==C+'/creation')return old(path,options);
+ detailStarted=true;return held.promise;
+};
+const loading=dbCreationLoad();await tick();assert.equal(detailStarted,true);
+const saved=localStorage.getItem(dbCreation.storageKey),selected=dbCreation.process;
+ingest.disabled=false;ingest.onclick();assert.equal(activeTab,'ingestion');
+assert.equal(location.href,'http://localhost/workbench');
+const afterLeave=replacements;
+held.resolve(process({revision:4}));await loading;
+assert.equal(replacements,afterLeave);assert.equal(dbCreation.process,selected);
+assert.equal(localStorage.getItem(dbCreation.storageKey),saved);
+assert.equal(writeCalls().length,0);dbCreationStop();
 ''')
 
     def test_initial_creation_url_without_matching_environment_only_discovers_current_list(self):

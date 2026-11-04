@@ -5,12 +5,14 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-04
-version: "1.69"
+version: "1.70"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-04 JST、[DB-P6-7](../../guides/database-p6-7-integrated-acceptance-2026-11-04.md)で89行と限定技術受入を照合し、既存環境の通常Workbenchで予備縦断を進めた。作成画面を離れた後の再読み込みが古い作成リンクへ戻る不具合を修正した。必須範囲の閉鎖、独立clean・故障環境、作成性能と本人受入は継続する。
 
 2026-11-04 JST、[DB-P6-6F-R1](../../guides/database-p6-6f-ingest-cleanup-2026-11-04.md)で6Fのコミット後の清掃失敗を照合し、新規Manual Ingestの所有SANDBOXステージを非purge登録解除へ変更した。通常Workbench APIで3行のコミットと登録解除を確認した。コミットと清掃を別々に記録し、元の6Fステージは失敗時の証拠として保持する。M1本人受入を継続する。
 
