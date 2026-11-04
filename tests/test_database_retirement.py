@@ -639,11 +639,20 @@ class RetirementTests(unittest.TestCase):
         with store.connect() as db:
             context = self.schedule(db)
             self.schedule(db, 'disabled', enabled=0)
+            self.schedule(db, 'pending-disabled', enabled=0)
+            db.execute("UPDATE db_schedules SET next_run_at='future' WHERE id='pending-disabled'")
             self.schedule(db, 'schedule-b', self.b)
             db.execute("INSERT INTO db_schedule_ticks VALUES ('tick','schedule-a',4,1,'now','reserved',NULL,NULL,?,'shared')", (context,))
             before = tuple(db.execute("SELECT * FROM db_schedules WHERE id='schedule-b'").fetchone())
+        preview = retirement.preview(self.owner, 'admin', self.a)
+        schedules = {r['id']: r for r in preview['dependencies'] if r['kind'] == 'schedule'}
+        self.assertEqual({k: r['state'] for k, r in schedules.items()},
+                         {'schedule-a': 'ENABLED', 'disabled': 'STOPPED', 'pending-disabled': 'SCHEDULED'})
+        self.assertEqual((schedules['pending-disabled']['target_kind'], schedules['pending-disabled']['target_id']),
+                         ('job', 'job'))
+        self.assertEqual(preview['stopped_schedule_ids'], [])
         op = self.start()
-        self.assertEqual(op['stopped_schedule_ids'], ['schedule-a'])
+        self.assertEqual(op['stopped_schedule_ids'], ['pending-disabled', 'schedule-a'])
         self.assertIn(('schedule_tick', 'tick'), {(x['kind'], x['id']) for x in op['blockers']})
         with store.connect() as db:
             self.assertEqual(tuple(db.execute("SELECT * FROM db_schedules WHERE id='schedule-b'").fetchone()), before)
@@ -653,8 +662,8 @@ class RetirementTests(unittest.TestCase):
         pending = self.reconcile(op)
         self.assertEqual(pending['state'], 'RETIRING')
         view = retirement.preview(self.owner, 'admin', self.a)
-        self.assertEqual(view['operation']['stopped_schedule_ids'], ['schedule-a'])
-        self.assertEqual(view['stopped_schedule_ids'], ['schedule-a'])
+        self.assertEqual(view['operation']['stopped_schedule_ids'], ['pending-disabled', 'schedule-a'])
+        self.assertEqual(view['stopped_schedule_ids'], ['pending-disabled', 'schedule-a'])
 
     def test_target_unknown_fenced_and_standalone_queries_block_other_db_ignored(self):
         with store.connect() as db:

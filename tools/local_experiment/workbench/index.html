@@ -85,6 +85,13 @@ legend{font-size:12px;font-weight:600;color:var(--ink-2);padding:0}
 #db-admin-content{max-width:1100px}
 #db-admin-content>details{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
 #db-admin-schemas{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
+#db-admin-retirement,#db-jobs-run-detail,#db-jobs-history{min-width:0;overflow-wrap:anywhere}
+#db-admin-retirement button,#db-jobs-retry{white-space:normal}
+.retirement-table{max-width:100%;max-height:18rem;overflow:auto}
+.retirement-table table{min-width:26rem}
+.retirement-table th,.retirement-table td{white-space:normal;overflow-wrap:anywhere}
+.retirement-review:not([hidden]){display:flex;align-items:flex-start;gap:8px;margin:12px 0}
+#db-admin-content .retirement-review input{width:auto;flex:none;margin-top:4px}
 #db-admin-content pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 
 /* Status: text always states the condition; colour and the glyph reinforce it. */
@@ -2680,7 +2687,7 @@ function dbInvalidateReceipt(role,account=false){
  // Inventory revisions invalidate DB reads, not the separate platform-management capability.
  // Session/admin-route checks still clear management state on actual account or admin loss.
  if(account){dbAdmin.platform=false;dbAdminClear();}
- else if(role==='admin')dbAdminClearReadiness();
+ else if(role==='admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
  if(dbAudit.installed)dbAuditValidate();
  if(dbCurator.installed)dbCuratorSync();
  dbObservationsSync();
@@ -7387,7 +7394,7 @@ async function initializeDatabaseUI(session){
   if(button.hidden||button.disabled)return;
   const next=button.dataset.tab;
   if(activeTab==='db-admin'&&next!=='db-admin'&&dbAdminAllowed())dbCreationURL(null);
-  if(activeTab==='db-admin'&&next!=='db-admin')dbAdminClearReadiness();
+  if(activeTab==='db-admin'&&next!=='db-admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
   if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
  $('run-query').onclick=dbRunQuery;
@@ -7425,15 +7432,27 @@ async function initializeDatabaseUI(session){
 }
 
 // Administration owns neither Explorer selection nor worksheet execution context.
-const dbAdmin={platform:false,epoch:0,selection:0,request:0,readinessRead:0,retireRead:0,retirement:null,database:'',databases:[],drafts:new Map(),requests:new Map(),installed:false,rendered:false};
+const dbAdmin={platform:false,epoch:0,selection:0,request:0,readinessRead:0,retireRead:0,retireReview:null,retireRefresh:null,retirement:null,database:'',databases:[],drafts:new Map(),requests:new Map(),installed:false,rendered:false};
 Object.assign(i18n.ja,{
  'Database retirement (retain data)':'DB の利用終了（データ保持）','Preview dependencies':'依存関係を確認','Retire database (retain data)':'データを保持して DB の利用終了を要求',
  'Inspect retirement':'利用終了操作を照会','Reconcile retirement':'利用終了操作を照合','Dependencies':'依存関係','Blockers':'完了を妨げる状態',
+ 'Inspect the current retirement for the selected database before reconciling.':'照合する前に、選択した DB の利用終了操作を照会してください。',
  'Stopped schedule IDs':'停止したスケジュール ID','Database revision':'DB revision','Operation revision':'操作 revision',
  'Identity links':'参照先の識別情報',
  'Retirement blocks new work and stops schedules for this database. Reconciliation checks in-flight work and unresolved effects.':'利用終了を開始すると、対象 DB の新規処理を受け付けず、スケジュールを停止します。照合では、進行中の処理と影響が未確定の処理を確認します。',
  'This operation retains the DB ID, SQL name, catalog, tables, object storage, PVCs and credentials. Physical removal is separate.':'この操作では DB ID、SQL 名、カタログ、テーブル、オブジェクトストレージ、PVC、資格情報を保持します。物理削除は別の作業です。',
- 'Preview · Currently enabled target schedules {schedules} · Current blockers {blockers}':'事前確認 · 対象 DB の有効なスケジュール {schedules} 件 · 現在の阻害要因 {blockers} 件',
+ 'Schedules to stop at start':'開始時に停止する予定のスケジュール',
+ '{database} · Database revision {revision}':'{database} · DB リビジョン {revision}',
+ '{database} · Database revision {revision} · {operation} · Operation revision {opRevision}':'{database} · DB リビジョン {revision} · {operation} · 操作リビジョン {opRevision}',
+ 'Observed {time} · Scope: selected database · Role: admin':'観測日時 {time} · 範囲: 選択した DB · ロール: admin',
+ 'Dependencies and work may change after this snapshot. Starting retirement requires the reviewed DB revision.':'依存関係や処理状況は観測後に変わる場合があります。開始には確認済みの DB リビジョンが必要です。',
+ 'Existing admitted work continues. In-flight and unresolved work can block completion.':'受付済みの処理は継続します。進行中や結果未確定の処理は利用終了の完了を妨げる場合があります。',
+ 'I reviewed this preview and confirm starting retirement for this database.':'この事前確認の内容を確認し、この DB の利用終了を開始することに同意します。',
+ 'Load a matching READY preview before starting retirement.':'利用終了を開始するには、選択した READY 状態の DB と一致する事前確認を取得してください。',
+ 'The preview no longer matches the selected READY database. Refresh current revisions and preview again.':'事前確認が選択した READY 状態の DB と一致しません。現在のリビジョンを再読込してから、再度確認してください。',
+ 'Recorded stopped schedule IDs':'停止を記録したスケジュール ID',
+ 'Target kind':'対象の種類','Target ID':'対象 ID',
+ 'SCHEDULED':'実行予定あり','ENABLED':'有効','STOPPED':'停止済み',
  'Recorded stopped schedules {schedules} · Blockers in receipt {blockers}':'停止を記録したスケジュール {schedules} 件 · 応答に記載された阻害要因 {blockers} 件',
  'RETIRING · New work is blocked. UNKNOWN keeps retirement open until closure is verified.':'RETIRING · 新規処理は受け付けません。UNKNOWN の処理は、終了が確認されるまで利用終了の完了を妨げます。',
  'RETIRED · Retirement is complete. New work remains blocked.':'RETIRED · 利用終了が完了しました。引き続き新規処理は受け付けません。',
@@ -7485,6 +7504,7 @@ ui($('tab-db-admin'),'DB management');ui($('db-admin-title'),'DB management');ui
 function dbAdminAllowed(){return databaseMode&&dbAdmin.platform&&dbMaximumRole==='admin'&&currentRole==='admin';}
 function dbAdminGate(){
  const allowed=dbAdminAllowed();$('tab-db-admin').hidden=!allowed;
+ if(!allowed||dbAdmin.retireReview&&dbAdmin.retireReview.scope!==dbAdminScope())dbAdminRetireInvalidate();
  if(!allowed){$('db-admin').hidden=true;if(typeof activeTab!=='undefined'&&activeTab==='db-admin')activate($('tab-warehouse'));}
  return allowed;
 }
@@ -7492,7 +7512,7 @@ function dbAdminClear(){
  dbPlatformSync();
  dbCreationClear();
  dbAdminClearReadiness();
- dbAdmin.retirement=null;++dbAdmin.retireRead;
+ dbAdminRetireInvalidate();dbAdmin.retirement=null;dbAdmin.retireRefresh=null;
  ++dbAdmin.epoch;++dbAdmin.selection;++dbAdmin.request;dbAdmin.database='';dbAdmin.databases=[];dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.installed=false;dbAdmin.rendered=false;
  $('db-admin-content').replaceChildren();message('db-admin-error','');dbAdminGate();dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
 }
@@ -7507,7 +7527,7 @@ function dbAdminSession(session){
 function dbAdminScope(){return JSON.stringify([dbIdentity(),dbAuthorizationVersion,dbRoleVersion('admin'),dbInventoryVersion,dbMaximumRole,dbAdmin.platform,dbAdmin.epoch,dbAdmin.selection,dbAdmin.database]);}
 function dbAdminOwner(){return JSON.stringify([dbPrincipal,currentRole,dbAdmin.epoch,dbAdmin.selection,dbAdmin.database]);}
 function dbAdminStale(){return Object.assign(Error(t('Request context changed; response ignored.')),{stale:true});}
-async function dbAdminRequest(path,{method='GET',payload,key,scope=dbAdminScope(),retirement=false}={}){
+async function dbAdminRequest(path,{method='GET',payload,key,scope=dbAdminScope(),retirement=false,beforeSend}={}){
  const current=()=>scope===dbAdminScope()&&dbAdminAllowed();
  if(!current())throw dbAdminStale();
  // Every read, inspection and replay revalidates current platform authority.
@@ -7518,6 +7538,7 @@ async function dbAdminRequest(path,{method='GET',payload,key,scope=dbAdminScope(
  if(!current())throw dbAdminStale();
  const headers={'X-Shirokuma-Role':'admin'};
  if(method!=='GET'){if(!key)throw Error('Idempotency-Key required');headers['Content-Type']='application/json';headers['Idempotency-Key']=key;}
+ beforeSend?.();
  const response=await fetch(path,{method,headers,...(method==='GET'?{}:{body:payload})});
  if(!current())throw dbAdminStale();
  if([401,403].includes(response.status)){dbAdmin.platform=false;dbAdminClear();throw dbAdminStale();}
@@ -7616,7 +7637,7 @@ function dbAdminMutationControls(id){
  const op=dbAdmin.requests.get(id);
  if(id==='db-admin-register')$('db-admin-use-registration').hidden=!dbAdminText(op?.result?.database_id)||op.pending;
  if(id==='db-admin-plan')$('db-admin-use-plan').hidden=!dbAdminReusablePlan(op)||op.pending;
- $(id+'-save').disabled=!!op&&(op.pending||op.uncertain);$(id+'-save').setAttribute('aria-busy',String(!!op?.pending));$(id+'-retry').disabled=!op?.uncertain||!!op?.pending;
+ $(id+'-save').disabled=!!op&&(op.pending||op.uncertain)||id==='db-admin-retire'&&!dbAdminRetireConfirmed()||id==='db-admin-retire-reconcile'&&!dbAdminRetireCanReconcile();$(id+'-save').setAttribute('aria-busy',String(!!op?.pending));$(id+'-retry').disabled=!op?.uncertain||!!op?.pending;
  if(id==='db-admin-grant'&&$('db-admin-grant-revoke'))$('db-admin-grant-revoke').disabled=!!op&&(op.pending||op.uncertain);
  if($('db-admin-select'))$('db-admin-select').disabled=dbAdminUnresolved();
  if($('db-admin-selection-help'))$('db-admin-selection-help').hidden=!dbAdminUnresolved();
@@ -7631,23 +7652,37 @@ async function dbAdminMutate(id,build,replay=false){
    if(op?.uncertain)throw Error(t('A saved uncertain request must be reconciled before creating another request.'));
    const request=build();op={...request,payload:JSON.stringify(request.payload),key:crypto.randomUUID(),owner:dbAdminOwner(),uncertain:false,pending:false};dbAdmin.requests.set(id,op);
   }
-  const scope=dbAdminScope();if(['register','plan','apply','retire'].includes(op.kind))dbAdminClearReadiness();if(op.kind==='retire')++dbAdmin.retireRead;op.pending=true;dbAdminMutationControls(id);ui($(id+'-state'),'Request in progress.');
+  const scope=dbAdminScope();
+  if(['register','plan','apply','retire'].includes(op.kind))dbAdminClearReadiness();
+  if(op.kind==='retire')dbAdminRetireInvalidate();
+  const read=dbAdmin.retireRead;
+  const reviewedRetirement=op.kind==='retire'&&!replay;
+  let sent=!reviewedRetirement;
+  const beforeSend=reviewedRetirement?()=>{
+   if(read!==dbAdmin.retireRead||activeTab!=='db-admin')throw dbAdminStale();
+   sent=true;
+  }:undefined;
+  op.pending=true;dbAdminMutationControls(id);ui($(id+'-state'),'Request in progress.');
   try{
-   const data=await dbAdminRequest(op.path,{method:op.method||'POST',payload:op.payload,key:op.key,scope,retirement:op.kind==='retire'});
+   const data=await dbAdminRequest(op.path,{method:op.method||'POST',payload:op.payload,key:op.key,scope,retirement:op.kind==='retire',beforeSend});
    if(scope!==dbAdminScope()||dbAdmin.requests.get(id)!==op)return;
    if(!dbAdminResponse(op.kind,data,op))throw Error(t('Outcome uncertain. Inspect or retry the saved request with the same key.'));
    op.uncertain=false;op.result=data;
    $(id+'-result').textContent=JSON.stringify(data,null,2);
-   if(op.kind==='retire'){++dbAdmin.retireRead;dbAdminRetireRender(data);}
+   if(op.kind==='retire'){dbAdminRetireInvalidate();dbAdminRetireRender(data);}
    ui($(id+'-state'),op.kind==='apply'?'Operator handoff recorded. Check database readiness for current status.':op.kind==='display'?'Display metadata saved.':op.kind==='grant'&&data.state==='AWAITING_APPLY'?'Pending backend verification':data.state);
   }catch(error){
+   if(!sent){
+    if(dbAdmin.requests.get(id)===op&&dbAdminAllowed())ui($(id+'-state'),id==='db-admin-retire'?'Load a matching READY preview before starting retirement.':'Inspect the current retirement for the selected database before reconciling.');
+    return;
+   }
    if(error.stale||scope!==dbAdminScope()||dbAdmin.requests.get(id)!==op){op.uncertain=true;return;}
    // A rejection after an ambiguous attempt cannot disprove earlier acceptance.
    op.uncertain=op.uncertain||![400,404,409,422].includes(error.status);
    ui($(id+'-state'),op.uncertain?'Outcome uncertain. Inspect or retry the saved request with the same key.':'Request rejected; draft retained. Refresh and review revisions explicitly.');
    $(id+'-result').textContent=error.message;
   }finally{op.pending=false;if(dbAdmin.requests.get(id)===op&&dbAdminAllowed()){
-   if(scope!==dbAdminScope()){op.uncertain=true;ui($(id+'-state'),'Outcome uncertain. Inspect or retry the saved request with the same key.');}
+   if(sent&&scope!==dbAdminScope()){op.uncertain=true;ui($(id+'-state'),'Outcome uncertain. Inspect or retry the saved request with the same key.');}
    dbAdminMutationControls(id);
   }}
  }catch(error){message('db-admin-error',error.message);}
@@ -7745,7 +7780,7 @@ function dbAdminRenderDetail(){
   const build=revoke=>({kind:'grant',path:'/api/v1/databases/'+encodeURIComponent(dbAdmin.database)+'/grants',payload:{principal_id:principal.value,maximum_role:revoke?'revoked':role.value,expected_revision:dbAdminInteger(revision,0)}});
   dbAdminActions(grants,'db-admin-grant','Save desired grant',()=>build(false));
   const revoke=dbAdminButton(grants,'db-admin-grant-revoke','Revoke grant',()=>dbAdminMutate('db-admin-grant',()=>build(true)));revoke.className='danger';
-  dbAdminRetireInstall(parent,d);
+  dbAdminRetireInstall(parent);
  }
  $('db-admin-summary').textContent=[d.sql_catalog,d.id,d.state,'revision '+d.revision].join(' · ');
  const safe=['database_id','revision','polaris_service_ref','polaris_realm','polaris_catalog','storage_profile_ref','catalog_profile_ref','base_location','desired_revision','applied_revision','applied_generation_id','state'];
@@ -7759,7 +7794,8 @@ async function dbAdminLoadGrants(){
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request)message('db-admin-error',error.message);}
 }
 async function dbAdminRefresh(){
- if(!dbAdminGate())return;dbAdminInstall();dbAdminClearReadiness();const scope=dbAdminScope(),request=++dbAdmin.request;
+ if(!dbAdminGate())return;dbAdminInstall();dbAdminClearReadiness();dbAdminRetireInvalidate();const scope=dbAdminScope(),request=++dbAdmin.request;
+ const refresh={};dbAdmin.retireRefresh=refresh;
  try{const data=await dbAdminRequest('/api/v1/admin/databases',{scope});if(scope!==dbAdminScope()||request!==dbAdmin.request)return;
   if(!Array.isArray(data?.databases)||data.databases.some(d=>!d||typeof d.id!=='string'||typeof d.sql_catalog!=='string'||typeof d.display_name!=='string'||typeof d.description!=='string'||typeof d.state!=='string'||!Number.isSafeInteger(d.revision)||d.revision<1||!Array.isArray(d.schemas)||d.schemas.length!==4||new Set(d.schemas.map(s=>s?.sql_name)).size!==4||!d.binding||typeof d.binding!=='object'||d.schemas.some(s=>!s||typeof s.id!=='string'||!['raw','staging','marts','sandbox'].includes(s.sql_name)||typeof s.display_name!=='string'||typeof s.purpose!=='string'||!Number.isSafeInteger(s.revision)||s.revision<1)))throw Error(t('Read model mismatch: expected databases with fixed schemas and safe binding metadata.'));
   dbAdmin.databases=data.databases;
@@ -7767,6 +7803,7 @@ async function dbAdminRefresh(){
   const select=$('db-admin-select'),placeholder=new Option(t('Choose database'),'');ui(placeholder,'Choose database');select.replaceChildren(placeholder);for(const d of data.databases)select.add(new Option(d.display_name+' · '+d.sql_catalog+' · '+d.id+' · '+d.state,d.id));select.value=dbAdmin.database;
   message('db-admin-error','');dbAdminRenderDetail();await dbAdminLoadGrants();return true;
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.request)message('db-admin-error',error.message);}
+ finally{if(dbAdmin.retireRefresh===refresh)dbAdmin.retireRefresh=null;}
 }
 function dbAdminOpen(){if(dbAdminGate()){dbAdminInstall();return Promise.all([dbAdminRefresh(),dbCreationLoad()]);}}
 function dbAdminSelect(id){
@@ -7777,7 +7814,7 @@ function dbAdminSelect(id){
   return false;
  }
  dbAdminClearReadiness();
- ++dbAdmin.selection;++dbAdmin.request;++dbAdmin.retireRead;dbAdmin.retirement=null;dbAdmin.database=id;dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.rendered=false;
+ dbAdminRetireInvalidate();++dbAdmin.selection;++dbAdmin.request;dbAdmin.retirement=null;dbAdmin.database=id;dbAdmin.drafts.clear();dbAdmin.requests.clear();dbAdmin.rendered=false;
  $('db-admin-detail').replaceChildren();$('db-admin-inspection').textContent='';
  for(const action of ['register','plan','apply']){const key='db-admin-'+action;$(key+'-state').textContent='';$(key+'-result').textContent='';dbAdminMutationControls(key);}
  dbAdminRenderDetail();
@@ -7805,62 +7842,123 @@ function dbAdminRetirePreview(data){
  if(op===null)return data.stopped_schedule_ids.length===0;
  return dbAdminRetireOperation(op)&&Object.keys(data.database).every(key=>op.database[key]===data.database[key])&&data.stopped_schedule_ids.length===op.stopped_schedule_ids.length&&data.stopped_schedule_ids.every((v,i)=>v===op.stopped_schedule_ids[i]);
 }
+function dbAdminRetireInvalidate(){
+ ++dbAdmin.retireRead;dbAdmin.retireReview=null;dbAdmin.retireReceiptScope=null;
+ const confirm=$('db-admin-retire-confirm'),save=$('db-admin-retire-save');
+ if(confirm?.parentElement){confirm.checked=false;confirm.parentElement.hidden=true;}
+ if(save)save.disabled=true;
+ if($('db-admin-retire-reconcile-save'))$('db-admin-retire-reconcile-save').disabled=true;
+ if($('db-admin-retire-snapshot')&&!dbAdmin.retirement)$('db-admin-retire-snapshot').hidden=true;
+}
+function dbAdminRetireMatches(database){
+ const selected=dbAdmin.databases.find(row=>row.id===dbAdmin.database);
+ return selected?.id===database.id&&selected.sql_catalog===database.sql_catalog&&
+  selected.state.toLowerCase()==='ready'&&database.state.toLowerCase()==='ready'&&selected.revision===database.revision;
+}
+function dbAdminRetireConfirmed(){
+ const review=dbAdmin.retireReview;
+ return dbAdminAllowed()&&activeTab==='db-admin'&&!dbAdmin.retireRefresh&&!dbAdmin.retirement&&
+  !!review&&review.scope===dbAdminScope()&&dbAdminRetireMatches(review.database)&&$('db-admin-retire-confirm').checked;
+}
+function dbAdminRetireCanReconcile(){
+ const op=dbAdmin.retirement;
+ return dbAdminAllowed()&&activeTab==='db-admin'&&op?.state==='RETIRING'&&dbAdmin.retireReceiptScope===dbAdminScope()&&
+  op.database_id===dbAdmin.database&&op.id===$('db-admin-retire-operation').value&&String(op.revision)===$('db-admin-retire-op-revision').value;
+}
 function dbAdminRetireRender(data,preview=false){
  const op=preview?data.operation:data;
- dbAdmin.retirement=op;
- const d=data.database;
- $('db-admin-retire-summary').textContent=[d.id,d.sql_catalog,d.state,'revision '+d.revision,...(op?[op.id,op.state,'revision '+op.revision]:[])].join(' · ');
+ if(op)dbAdmin.retirement=op;
+ const d=data.database,selected=dbAdmin.databases.find(row=>row.id===d.id);
+ $('db-admin-retire-snapshot').hidden=false;
+ const identity=[selected?.display_name,d.sql_catalog,d.id,d.state].join(' · ');
+ ui($('db-admin-retire-summary'),op?'{database} · Database revision {revision} · {operation} · Operation revision {opRevision}':'{database} · Database revision {revision}',
+  {database:identity,revision:d.revision,operation:op&&[op.id,op.state].join(' · '),opRevision:op?.revision});
  const impact=$('db-admin-retire-impact'),closure=$('db-admin-retire-closure');
+ $('db-admin-retire-scope').hidden=!!op;
  if(op){
   ui(impact,'Recorded stopped schedules {schedules} · Blockers in receipt {blockers}',{schedules:op.stopped_schedule_ids.length,blockers:data.blockers.length});
   ui(closure,op.state==='RETIRING'
    ?'RETIRING · New work is blocked. UNKNOWN keeps retirement open until closure is verified.'
    :'RETIRED · Retirement is complete. New work remains blocked.');
  }else{
-  const schedules=data.dependencies.filter(row=>row.kind==='schedule'&&row.state==='ENABLED').length;
-  ui(impact,'Preview · Currently enabled target schedules {schedules} · Current blockers {blockers}',{schedules,blockers:data.blockers.length});
+  ui($('db-admin-retire-scope'),'Observed {time} · Scope: selected database · Role: admin',{time:new Date().toLocaleString()});
+  ui(impact,'Dependencies and work may change after this snapshot. Starting retirement requires the reviewed DB revision.');
  }
  closure.hidden=!op;
+ $('db-admin-retire-planned-section').hidden=!!op;
+ $('db-admin-retire-stopped-section').hidden=!op;
+ const schedules=data.dependencies.filter(row=>row.kind==='schedule'&&['ENABLED','SCHEDULED'].includes(row.state));
+ table($('db-admin-retire-planned'),['ID','State','Target kind','Target ID'],schedules.map(row=>[row.id,t(row.state),row.target_kind??'',row.target_id??'']));
  for(const [name,rows] of [['dependencies',data.dependencies],['blockers',data.blockers]]){
   table($('db-admin-retire-'+name),['Kind','ID','State','Database ID',...(name==='blockers'?['Code']:[]),'Identity links'],rows.map(row=>[row.kind,row.id,row.state,row.database_id,...(name==='blockers'?[row.code]:[]),JSON.stringify(Object.fromEntries(Object.entries(row).filter(([k])=>!['kind','id','state','database_id','code'].includes(k))))]));
  }
- // Preview itself never claims to have stopped schedules. Its latest operation
- // can contain actual previously stopped IDs.
- $('db-admin-retire-stopped').textContent=JSON.stringify(op?.stopped_schedule_ids||data.stopped_schedule_ids);
- if(op){if(!$('db-admin-retire-operation').value)$('db-admin-retire-operation').value=op.id;if(!$('db-admin-retire-op-revision').value)$('db-admin-retire-op-revision').value=String(op.revision);}
+ $('db-admin-retire-stopped').textContent=JSON.stringify(op?.stopped_schedule_ids||[]);
+ if(op){
+  dbAdmin.retireReceiptScope=dbAdminScope();
+  $('db-admin-retire-operation').value=op.id;
+  $('db-admin-retire-op-revision').value=String(op.revision);
+  dbAdminMutationControls('db-admin-retire-reconcile');
+ }
 }
 async function dbAdminRetireRead(preview){
- const scope=dbAdminScope(),request=++dbAdmin.retireRead,id=$('db-admin-retire-operation').value;
+ if(!dbAdminAllowed()||activeTab!=='db-admin')return;
+ dbAdminRetireInvalidate();
+ const scope=dbAdminScope(),request=dbAdmin.retireRead,id=$('db-admin-retire-operation').value;
  try{
   if(!preview&&!/^[A-Za-z0-9_-]{1,128}$/.test(id))throw Error(t('Invalid retirement response.'));
   const path=preview?'/api/v1/admin/databases/'+encodeURIComponent(dbAdmin.database)+'/retire':'/api/v1/operations/'+encodeURIComponent(id);
   const data=await dbAdminRequest(path,{scope,retirement:true});
-  if(scope!==dbAdminScope()||request!==dbAdmin.retireRead||!preview&&id!==$('db-admin-retire-operation').value)return;
+  if(scope!==dbAdminScope()||request!==dbAdmin.retireRead||activeTab!=='db-admin'||!preview&&id!==$('db-admin-retire-operation').value)return;
   if(!(preview?dbAdminRetirePreview(data):dbAdminRetireOperation(data,dbAdmin.database,id)))throw Error(t('Invalid retirement response.'));
+  if(preview&&!data.operation){
+   if(dbAdmin.retireRefresh||dbAdmin.retirement||!dbAdminRetireMatches(data.database))throw Error(t('The preview no longer matches the selected READY database. Refresh current revisions and preview again.'));
+   if([...dbAdmin.requests.values()].some(op=>op.kind==='retire'&&(op.pending||op.uncertain)))return;
+   dbAdmin.retireReview={scope,database:data.database};
+   $('db-admin-retire-confirm').parentElement.hidden=false;
+  }
   dbAdminRetireRender(data,preview);message('db-admin-error','');
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.retireRead)message('db-admin-error',error.message);}
 }
-function dbAdminRetireInstall(parent,d){
- const box=dbAdminNode('details','',parent);dbAdminNode('summary','',box,'Database retirement (retain data)');
+function dbAdminRetireInstall(parent){
+ const box=dbAdminNode('details','db-admin-retirement',parent);dbAdminNode('summary','',box,'Database retirement (retain data)');
  dbAdminNode('p','',box,'Retirement blocks new work and stops schedules for this database. Reconciliation checks in-flight work and unresolved effects.');
+ dbAdminNode('p','',box,'Existing admitted work continues. In-flight and unresolved work can block completion.');
  dbAdminNode('p','db-admin-retire-retention',box,'This operation retains the DB ID, SQL name, catalog, tables, object storage, PVCs and credentials. Physical removal is separate.');
  dbAdminButton(box,'db-admin-retire-preview','Preview dependencies',()=>dbAdminRetireRead(true));
- dbAdminNode('p','db-admin-retire-summary',box).setAttribute('role','status');
- dbAdminNode('p','db-admin-retire-impact',box).setAttribute('role','status');
- dbAdminNode('p','db-admin-retire-closure',box).hidden=true;
- dbAdminNode('h3','',box,'Dependencies');dbAdminNode('div','db-admin-retire-dependencies',box);
- dbAdminNode('h3','',box,'Blockers');dbAdminNode('div','db-admin-retire-blockers',box);
- dbAdminNode('h3','',box,'Stopped schedule IDs');dbAdminNode('pre','db-admin-retire-stopped',box);
- const revision=dbAdminField(box,'db-admin-retire-revision','Database revision');revision.value=String(d.revision);revision.inputMode='numeric';
+ dbAdminNode('p','',box,'Load a matching READY preview before starting retirement.').className='help';
+ const snapshot=dbAdminNode('div','db-admin-retire-snapshot',box);snapshot.hidden=true;
+ dbAdminNode('p','db-admin-retire-summary',snapshot).setAttribute('role','status');
+ dbAdminNode('p','db-admin-retire-scope',snapshot);
+ dbAdminNode('p','db-admin-retire-impact',snapshot);
+ dbAdminNode('p','db-admin-retire-closure',snapshot).hidden=true;
+ const addTable=(parent,id,label)=>{
+  const heading=dbAdminNode('h3',id+'-heading',parent,label);
+  const region=dbAdminNode('div',id,parent);region.className='retirement-table';region.tabIndex=0;
+  region.setAttribute('role','region');region.setAttribute('aria-labelledby',heading.id);
+ };
+ const planned=dbAdminNode('div','db-admin-retire-planned-section',snapshot);
+ addTable(planned,'db-admin-retire-planned','Schedules to stop at start');
+ addTable(snapshot,'db-admin-retire-dependencies','Dependencies');
+ addTable(snapshot,'db-admin-retire-blockers','Blockers');
+ const stopped=dbAdminNode('div','db-admin-retire-stopped-section',snapshot);
+ dbAdminNode('h3','',stopped,'Recorded stopped schedule IDs');dbAdminNode('pre','db-admin-retire-stopped',stopped);
+ const review=dbAdminNode('label','',box);review.className='retirement-review';review.hidden=true;
+ const confirm=dbAdminNode('input','db-admin-retire-confirm',review);confirm.type='checkbox';
+ dbAdminNode('span','',review,'I reviewed this preview and confirm starting retirement for this database.');
+ confirm.onchange=()=>dbAdminMutationControls('db-admin-retire');
  const operation=dbAdminField(box,'db-admin-retire-operation','Operation ID'),expected=dbAdminField(box,'db-admin-retire-op-revision','Operation revision');expected.inputMode='numeric';
+ expected.readOnly=true;
+ operation.oninput=()=>dbAdminMutationControls('db-admin-retire-reconcile');
  const build=reconcile=>{
   if([...dbAdmin.requests].some(([key,op])=>key!==(reconcile?'db-admin-retire-reconcile':'db-admin-retire')&&op.kind==='retire'&&(op.pending||op.uncertain)))throw Error(t('A saved uncertain request must be reconciled before creating another request.'));
-  if(reconcile&&!/^[A-Za-z0-9_-]{1,128}$/.test(operation.value))throw Error(t('Invalid retirement response.'));
-  return {kind:'retire',databaseID:dbAdmin.database,...(reconcile?{operationID:operation.value}:{}),path:reconcile?'/api/v1/operations/'+encodeURIComponent(operation.value)+'/reconcile':'/api/v1/admin/databases/'+encodeURIComponent(dbAdmin.database)+'/retire',payload:{expected_revision:dbAdminInteger(reconcile?expected:revision)}};
+  if(reconcile&&!dbAdminRetireCanReconcile())throw Error(t('Inspect the current retirement for the selected database before reconciling.'));
+  if(!reconcile&&!dbAdminRetireConfirmed()){dbAdminRetireInvalidate();throw Error(t('Load a matching READY preview before starting retirement.'));}
+  return {kind:'retire',databaseID:dbAdmin.database,...(reconcile?{operationID:operation.value}:{}),path:reconcile?'/api/v1/operations/'+encodeURIComponent(operation.value)+'/reconcile':'/api/v1/admin/databases/'+encodeURIComponent(dbAdmin.database)+'/retire',payload:{expected_revision:reconcile?dbAdminInteger(expected):dbAdmin.retireReview.database.revision}};
  };
- dbAdminActions(box,'db-admin-retire','Retire database (retain data)',()=>build(false));$('db-admin-retire-save').className='danger';
+ dbAdminActions(box,'db-admin-retire','Retire database (retain data)',()=>build(false));$('db-admin-retire-save').className='danger';$('db-admin-retire-save').disabled=true;
  dbAdminButton(box,'db-admin-retire-inspect','Inspect retirement',()=>dbAdminRetireRead(false));
  dbAdminActions(box,'db-admin-retire-reconcile','Reconcile retirement',()=>build(true));
+ $('db-admin-retire-reconcile-save').disabled=true;
 }
 
 // Manual DataOps owns its inputs, authorization receipts and accepted requests.
@@ -9461,7 +9559,13 @@ Object.assign(i18n.ja,{
  'SQL: sql and mode. Alert: read-only Boolean sql. Ingest: input, mode and target or destination. WAP refresh: model_id and version. Table export: source and format (csv/jsonl).':'SQL: sql と mode。Alert: 読取専用の真偽値 SQL。Ingest: input・mode と target または destination。WAP refresh: model_id と version。Table export: source と format (csv/jsonl)。',
  'Job access unavailable. Refresh an authorized context.':'Job のアクセスを利用できません。許可されたコンテキストを更新してください。',
  'Job definition belongs to another owner or saved role.':'Job 定義の所有者または保存ロールが一致しません。',
- 'Run outcome unknown. Observe with the original key; reconcile only from backend evidence.':'実行結果は不明です。元のキーで照会し、バックエンドの証拠で照合してください。',
+ 'Retry original Job request':'元の Job 要求を再送',
+ 'Job acceptance is unconfirmed.':'Job の受付を確認できません。',
+ 'Retrying sends the original inputs and key and may start the Job if it was not accepted.':'再送では元の入力とキーを使用し、未受付の場合は Job が開始される可能性があります。',
+ 'Checking status only reads the saved run. It does not run the Job.':'状態の照会では保存済みの実行情報を読み取ります。Job は実行しません。',
+ 'Run status check failed. Showing the last known status. Retry the read-only check.':'実行状態を照会できませんでした。最後に確認した状態を表示しています。読み取り専用の照会を再試行してください。',
+ 'The saved run is UNKNOWN. Reconciliation checks backend evidence.':'保存済みの実行は UNKNOWN です。照合ではバックエンドの証拠を確認します。',
+ 'Run action failed. Check the saved run status before trying again.':'実行への操作に失敗しました。再試行する前に保存済みの実行状態を照会してください。',
  'Job request failed. Draft retained.':'Job 要求が失敗しました。下書きは保持されています。',
  'Load current revision':'最新リビジョンを読み込む',
  'Discard this Job draft and load the current server revision?':'この Job の下書きを破棄してサーバーの最新リビジョンを読み込みますか？',
@@ -9630,37 +9734,51 @@ async function dbJobsRun(){
   if(epoch!==p.epoch||p.invalid||!dbJobsAllowed()||!dbJobsMatches())return;
   const context=dataopsFreeze(dataopsClone(p.context)),payload={context,expected_revision:p.job.revision,arguments:argumentsValue};if(Object.keys(inputs).length)payload.inputs=inputs;
   p.run={context,job_id:p.job.id,revision:p.job.revision,key:crypto.randomUUID(),payload:dataopsFreeze(payload),schemas:dataopsClone(p.schemas),principal:dbPrincipal,status:'unknown',details:null,id:null,sequence:0,purged:false};
-  await dbJobsSendRun(p.run);
+  await dbJobsSendRun(p.run,'submit');
  }catch{if(epoch===p.epoch)ui(p.status,'Job inputs are invalid. Check name, JSON, revision and named files.');}
  finally{p.pending=false;dbJobsRender();}
 }
-async function dbJobsSendRun(r,action='observe'){
+function dbJobsCanRetry(r){return !!r&&!r.id&&!!r.payload&&!!r.key;}
+async function dbJobsSendRun(r,action){
+ const submission=action==='submit'||action==='retry';
+ if(submission?!dbJobsCanRetry(r):!r.id||!['observe','cancel','reconcile'].includes(action))return;
  const p=dbJobs,sequence=++r.sequence,epoch=p.epoch;
- const freshSubmission=sequence===1&&!r.id&&action==='observe'&&!!r.payload;
+ const freshSubmission=action==='submit'&&sequence===1;
  try{
-  const path=r.id?'/api/v1/jobs/runs/'+encodeURIComponent(r.id)+(action==='observe'?'':'/'+action):'/api/v1/jobs/'+encodeURIComponent(r.job_id)+'/runs';
-  if(!r.id&&!r.payload)return;
-  const reply=await dataopsRequest(path,r.context,r.id?(action==='observe'?undefined:{}):r.payload,r.id?undefined:r.key);
+  const path=submission?'/api/v1/jobs/'+encodeURIComponent(r.job_id)+'/runs'
+   :'/api/v1/jobs/runs/'+encodeURIComponent(r.id)+(action==='observe'?'':'/'+action);
+  const reply=await dataopsRequest(path,r.context,submission?r.payload:action==='observe'?undefined:{},submission?r.key:undefined);
   if(sequence!==r.sequence||p.run!==r)return;
-  const run=reply.run;if(!run?.id||(r.id&&run.id!==r.id)||run.job_id!==r.job_id||run.revision!==r.revision||run.owner!==JSON.parse(r.principal)[0]||run.selected_role!==r.context.selected_role||!dataopsSameContext(run.context,r.context)||!['queued','running','succeeded','failed','canceled','unknown'].includes(run.status))throw Error('receipt');
+  const run=reply.run;
+  if(!run?.id||(r.id&&run.id!==r.id)||!['queued','running','succeeded','failed','canceled','unknown'].includes(run.status))throw Error('receipt');
+  if(action==='cancel'){
+   r.status=run.status;
+   if(epoch===p.epoch)ui(p.status,r.status);
+   return true;
+  }
+  if(run.job_id!==r.job_id||run.revision!==r.revision||run.owner!==JSON.parse(r.principal)[0]||run.selected_role!==r.context.selected_role||!dataopsSameContext(run.context,r.context))throw Error('receipt');
   r.id=run.id;r.status=run.status;
   // Late acceptance may supply only the original cancellation handle after loss.
   r.details=!r.purged&&epoch===p.epoch&&r.principal===dbPrincipal&&dbJobsAllowed(r.context,r.schemas)?run:null;
-  if(r.id)r.payload=null;
-  if(epoch===p.epoch)ui(p.status,r.status==='unknown'?'Run outcome unknown. Observe with the original key; reconcile only from backend evidence.':r.status);
+  r.payload=null;
+  if(epoch===p.epoch)ui(p.status,r.status==='unknown'?'The saved run is UNKNOWN. Reconciliation checks backend evidence.':r.status);
   return true;
  }catch(error){if(sequence!==r.sequence)return;
   if(freshSubmission&&p.run===r&&!r.id&&!r.details&&!r.purged&&epoch===p.epoch&&r.principal===dbPrincipal&&error.status===400&&error.code==='JOB_INPUT_REJECTED'&&error.details?.admission==='NOT_ATTEMPTED'&&error.jobRejectionOnly&&!error.observation){
    r.payload=null;p.run=null;ui(p.status,'Job inputs rejected before admission. Correct the inputs and explicitly run again.');return;
   }
   if(!r.id)r.status='unknown';if(dataopsAuthError(error))dbJobsPurge();
-  else if(epoch===p.epoch)ui(p.status,'Run outcome unknown. Observe with the original key; reconcile only from backend evidence.');}
+  else if(epoch===p.epoch)ui(p.status,submission?'Job acceptance is unconfirmed.'
+   :action==='observe'?'Run status check failed. Showing the last known status. Retry the read-only check.'
+   :'Run action failed. Check the saved run status before trying again.');}
 }
 async function dbJobsObserve(action='observe',automatic=false){
  const p=dbJobs,r=p.run;if(!r||p.pending||p.tracking||r.principal!==dbPrincipal)return;
- if(action==='cancel'?!r.id||dbJobsTerminal(r):r.purged||!dbJobsAllowed(r.context,r.schemas))return;
+ if(automatic&&action!=='observe'||!['observe','retry','cancel','reconcile'].includes(action))return;
+ if(action==='retry'?!dbJobsCanRetry(r):!r.id)return;
+ if(action==='cancel'?dbJobsTerminal(r):r.purged||!dbJobsAllowed(r.context,r.schemas))return;
  if(action==='reconcile'&&r.status!=='unknown')return;
- dbJobsSuspend();p.tracking=true;p.polling=automatic;dbJobsRender();try{const observed=await dbJobsSendRun(r,action);if(automatic&&!observed)p.pollFailed=r;else if(observed)p.pollFailed=null;}finally{p.tracking=false;p.polling=false;dbJobsRender();}
+ dbJobsSuspend();p.tracking=true;p.polling=automatic;dbJobsRender();try{const observed=await dbJobsSendRun(r,action);if(action==='observe'&&!observed)p.pollFailed=r;else if(observed)p.pollFailed=null;}finally{p.tracking=false;p.polling=false;dbJobsRender();}
 }
 function dbJobsRender(){
  const p=dbJobs;if(!p.installed)return;dbJobsSyncPolling();const allowed=!p.invalid&&dbJobsAllowed(),waiting=p.pending||(p.tracking&&!p.polling),own=dbJobsOwn();
@@ -9679,19 +9797,28 @@ function dbJobsRender(){
  $('db-jobs-owner').textContent=p.job?[t('Owner')+': '+p.job.owner,t('Saved role')+': '+p.job.selected_role,t('Revision')+': '+p.job.revision].join(' · '):'';
  if(allowed&&!own)ui(p.status,'Job definition belongs to another owner or saved role.');
  const r=p.run,sameActor=r?.principal===dbPrincipal;
- $('db-jobs-observe').disabled=waiting||p.tracking||!r||r.purged||!sameActor||!dbJobsAllowed(r.context,r.schemas)||(!r.id&&!r.payload);
+ $('db-jobs-observe').disabled=waiting||p.tracking||!r||r.purged||!sameActor||!dbJobsAllowed(r.context,r.schemas)||!r.id;
+ $('db-jobs-retry').hidden=p.pending||!dbJobsCanRetry(r)||r.purged||!sameActor;
+ $('db-jobs-retry').disabled=waiting||p.tracking||$('db-jobs-retry').hidden||!dbJobsAllowed(r.context,r.schemas);
  $('db-jobs-cancel').disabled=waiting||p.tracking||!r?.id||!sameActor||dbJobsTerminal(r);
  $('db-jobs-reconcile').disabled=waiting||p.tracking||!r?.id||!sameActor||r.purged||r.status!=='unknown'||!dbJobsAllowed(r.context,r.schemas);
  const area=$('db-jobs-run-detail');area.replaceChildren();
  const line=(label,value,parent=area)=>{const row=dataopsNode('p','',parent);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');};
  if(r){line('Run ID',r.id||'unknown');line('Status',t(r.status));line('Execution context',[r.context.sql_catalog,r.context.sql_schema,r.context.selected_role,'v'+r.revision].join(' / '));
   if(r.purged)dataopsNode('p','',area,'Run details cleared after access changed. Original cancellation handle retained.');
-  else if(r.details){line('Owner',r.details.owner);for(const step of r.details.steps||[]){line('Step',step.name+' · '+step.action+' · '+t(step.status));line('Operation IDs',(step.operation_ids||[]).join(', '));line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '));line('Summary',JSON.stringify(step.summary??{}));}}
+  else if(r.id)dataopsNode('p','',area,'Checking status only reads the saved run. It does not run the Job.').className='help';
+  else if(!$('db-jobs-retry').hidden&&dbJobsAllowed(r.context,r.schemas))dataopsNode('p','db-jobs-retry-help',area,'Retrying sends the original inputs and key and may start the Job if it was not accepted.').className='help';
+  if(!r.purged&&r.details){line('Owner',r.details.owner);for(const step of r.details.steps||[]){line('Step',step.name+' · '+step.action+' · '+t(step.status));line('Operation IDs',(step.operation_ids||[]).join(', '));line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '));line('Summary',JSON.stringify(step.summary??{}));}}
  }
  const history=$('db-jobs-history');history.replaceChildren();if(allowed)for(const run of p.history){
   const row=dataopsNode('div','',history);line('Job',run.job_name,row);line('Run ID',run.id,row);line('Status',t(run.status),row);line('Revision',run.revision,row);
   for(const step of run.steps||[]){line('Step',step.name+' · '+t(step.status),row);line('Operation IDs',(step.operation_ids||[]).join(', '),row);line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '),row);line('Summary',JSON.stringify(step.summary??{}),row);}
-  dataopsButton(row,'','Observe run',()=>{if(p.pending||p.tracking||p.invalid||!dbJobsAllowed()||(p.run&&!dbJobsTerminal(p.run)&&p.run.id!==run.id))return;p.run={id:run.id,job_id:run.job_id,revision:run.revision,context:dataopsFreeze(dataopsClone(run.context)),schemas:dataopsClone(p.schemas),principal:dbPrincipal,status:run.status,sequence:0,purged:false};return dbJobsObserve();});
+  dataopsButton(row,'','Observe run',()=>{
+   if(p.pending||p.tracking||p.invalid||!dbJobsAllowed()||(p.run&&!dbJobsTerminal(p.run)&&p.run.id!==run.id))return;
+   if(p.run?.id===run.id&&!p.run.purged&&dbJobsAllowed(p.run.context,p.run.schemas))return dbJobsObserve();
+   p.run={id:run.id,details:run,job_id:run.job_id,revision:run.revision,context:dataopsFreeze(dataopsClone(run.context)),schemas:dataopsClone(p.schemas),principal:dbPrincipal,status:run.status,sequence:0,purged:false};
+   return dbJobsObserve();
+  });
  }
 }
 function dbJobsInstall(){
@@ -9718,7 +9845,8 @@ function dbJobsInstall(){
  dataopsNode('div','db-jobs-files',p.form);dataopsButton(p.form,'db-jobs-add-input','Add named input',()=>{if(p.pending||p.invalid)return;const row=dataopsNode('div','',$('db-jobs-files'));row.className='toolbar';const id=crypto.randomUUID(),name=dataopsField(row,'db-job-input-name-'+id,'Input name'),file=dataopsField(row,'db-job-input-file-'+id,'Input file');file.type='file';const record={name,file,row};p.files.push(record);dataopsButton(row,'','Remove',()=>{if(p.pending)return;file.value='';name.value='';p.files=p.files.filter(r=>r!==record);$('db-jobs-files').replaceChildren(...p.files.map(r=>r.row));});});
  const actions=dataopsNode('div','',p.form);actions.className='toolbar';dataopsButton(actions,'db-jobs-save','Save Job',dbJobsSave).className='primary';dataopsButton(actions,'db-jobs-run','Run Job',dbJobsRun).className='run';
  p.status=dataopsNode('p','db-jobs-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
- const controls=dataopsNode('div','',body);controls.className='toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
+ const controls=dataopsNode('div','',body);controls.className='toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['retry','Retry original Job request','retry'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
+ $('db-jobs-retry').setAttribute('aria-describedby','db-jobs-retry-help');
  dataopsNode('div','db-jobs-run-detail',body).setAttribute('aria-live','polite');dataopsNode('h3','',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
 }
 function dbJobsOpen(){if(!dbJobs.started){dbJobs.started=true;return dbJobsRefresh();}dbJobsSyncPolling();}

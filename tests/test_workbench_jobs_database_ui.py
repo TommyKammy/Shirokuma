@@ -33,7 +33,9 @@ route=async(path,options)=>{
   const run={id:'run-1',job_id:'job-1',job_name:'daily',revision:body.expected_revision,owner:'owner',selected_role:context.selected_role,context,status:'running',steps:[{name:'q',action:'sql',status:'running',operation_ids:['child-1'],summary:{count:1}}]};jobRuns=[run];return {context,run};
  }
  if(url.pathname.startsWith('/api/v1/jobs/runs/')){
-  const run=structuredClone(jobRuns[0]);if(url.pathname.endsWith('/cancel'))run.status='canceled';if(url.pathname.endsWith('/reconcile'))run.status='failed';jobRuns=[run];return {context,run};
+  const run=structuredClone(jobRuns[0]);
+  if(url.pathname.endsWith('/cancel')){run.status='canceled';jobRuns=[run];return {context,run:{id:run.id,status:run.status}};}
+  if(url.pathname.endsWith('/reconcile'))run.status='failed';jobRuns=[run];return {context,run};
  }
  if(url.pathname.startsWith('/api/v1/jobs/')){if(loadGate)await loadGate.promise;return {context,job:structuredClone(savedJobs.find(j=>j.id===decodeURIComponent(url.pathname.split('/').at(-1))))};}
  return {};
@@ -80,8 +82,8 @@ gate=deferred();const manual=dbJobsObserve();await tick();assert.equal(timers.si
     def test_auto_never_replays_no_id_or_unknown_and_stops_on_failure(self):
         self.javascript(r'''
 await createJob();await showJobs();runFailure=true;await dbJobsRun();assert.equal(p.run.id,null);assert.equal(timers.size,0);dbJobsRender();await visibility(true);await visibility(false);assert.equal(jobPosts().length,2);assert.equal(timers.size,0);
-runFailure=false;await dbJobsObserve();assert.equal(timers.size,1);jobRuns[0].status='unknown';await firePoll();assert.equal(p.run.status,'unknown');assert.equal(timers.size,0);assert.equal(jobPosts().length,3);
-jobRuns[0].status='running';await dbJobsObserve();const accepted=p.run,details=accepted.details;const originalRoute=route;route=async()=>{throw Error('offline');};await firePoll();assert.equal(p.run,accepted);assert.equal(p.run.status,'running');assert.equal(p.run.details,details);assert.equal(timers.size,0);dbJobsRender();await visibility(true);await visibility(false);assert.equal(timers.size,0);assert.match(p.status.textContent,/outcome unknown/);
+runFailure=false;await $('db-jobs-retry').onclick();assert.equal(timers.size,1);jobRuns[0].status='unknown';await firePoll();assert.equal(p.run.status,'unknown');assert.equal(timers.size,0);assert.equal(jobPosts().length,3);
+jobRuns[0].status='running';await dbJobsObserve();const accepted=p.run,details=accepted.details;const originalRoute=route;route=async()=>{throw Error('offline');};await firePoll();assert.equal(p.run,accepted);assert.equal(p.run.status,'running');assert.equal(p.run.details,details);assert.equal(timers.size,0);dbJobsRender();await visibility(true);await visibility(false);assert.equal(timers.size,0);assert.match(p.status.textContent,/Retry the read-only check/);
 route=originalRoute;await dbJobsObserve();assert.equal(timers.size,1);
 ''')
 
@@ -148,7 +150,7 @@ await dbJobsRun();const first=jobPosts().at(-1),payload=p.run.payload;assert.equ
         self.javascript(r'''
 await createJob();runFailure=true;$('db-jobs-arguments').value='{"n":1}';await dbJobsRun();const attempt=p.run,payload=attempt.payload,first=jobPosts().at(-1);assert.equal(attempt.sequence,1);
 const originalRoute=route;route=async(path,options)=>path==='/api/v1/jobs/job-1/runs'?{http:400,body:{code:'JOB_INPUT_REJECTED',details:{admission:'NOT_ATTEMPTED'}}}:originalRoute(path,options);
-$('db-jobs-arguments').value='{"n":2}';await dbJobsObserve();const replay=jobPosts().at(-1);assert.equal(p.run,attempt);assert.equal(attempt.sequence,2);assert.equal(attempt.status,'unknown');assert.equal(attempt.payload,payload);assert.equal(replay.options.body,first.options.body);assert.equal(replay.options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);assert.equal($('db-jobs-run').disabled,true);await dbJobsRun();assert.equal(jobPosts().at(-1),replay);
+$('db-jobs-arguments').value='{"n":2}';await $('db-jobs-retry').onclick();const replay=jobPosts().at(-1);assert.equal(p.run,attempt);assert.equal(attempt.sequence,2);assert.equal(attempt.status,'unknown');assert.equal(attempt.payload,payload);assert.equal(replay.options.body,first.options.body);assert.equal(replay.options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);assert.equal($('db-jobs-run').disabled,true);await dbJobsRun();assert.equal(jobPosts().at(-1),replay);
 ''')
 
     def test_marker_cannot_clear_accepted_or_unknown_run_receipt(self):
@@ -194,9 +196,29 @@ $('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.dataset.worksheet==
     def test_response_loss_same_payload_key_double_click_and_unknown_reconcile(self):
         self.javascript(r'''
 await createJob();runFailure=true;runGate=deferred();$('db-jobs-arguments').value='{"n":1}';const first=dbJobsRun();await tick();await dbJobsRun();assert.equal(jobPosts().filter(c=>c.path.endsWith('/runs')).length,1);runGate.resolve();await first;runGate=null;
-assert.equal(p.run.status,'unknown');const original=jobPosts().at(-1);$('db-jobs-arguments').value='{"n":9}';await dbJobsRun();assert.equal(jobPosts().at(-1),original);
-runFailure=false;await dbJobsObserve();const replay=jobPosts().at(-1);assert.equal(replay.options.body,original.options.body);assert.equal(replay.options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);assert.equal(p.run.id,'run-1');assert.equal(p.run.payload,null);
+assert.equal(p.run.status,'unknown');const original=jobPosts().at(-1);assert.equal($('db-jobs-observe').disabled,true);assert.equal($('db-jobs-retry').disabled,false);
+assert.match(p.status.textContent,/acceptance is unconfirmed/);
+assert.match($('db-jobs-retry-help').textContent,/may start the Job/);
+const originalKey=p.run.key;p.run.key=null;await dbJobsObserve('retry');assert.equal(jobPosts().at(-1),original);p.run.key=originalKey;
+await dbJobsObserve();await dbJobsObserve('retry',true);assert.equal(jobPosts().at(-1),original);
+$('db-jobs-arguments').value='{"n":9}';await dbJobsRun();assert.equal(jobPosts().at(-1),original);
+runFailure=false;await $('db-jobs-retry').onclick();const replay=jobPosts().at(-1);assert.equal(replay.options.body,original.options.body);assert.equal(replay.options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);assert.equal(p.run.id,'run-1');assert.equal(p.run.payload,null);assert.equal($('db-jobs-retry').hidden,true);
+await dbJobsObserve('retry');assert.equal(jobPosts().at(-1),replay);
 jobRuns[0].status='unknown';await dbJobsObserve();assert.equal(p.run.status,'unknown');await dbJobsRun();assert.equal(jobPosts().filter(c=>c.path.endsWith('/runs')).length,2);await dbJobsObserve('reconcile');assert.equal(p.run.status,'failed');assert.equal(jobPosts().at(-1).path,'/api/v1/jobs/runs/run-1/reconcile');assert.equal(jobPosts().filter(c=>c.path.endsWith('/runs')).length,2);
+''')
+
+    def test_history_observation_is_read_only_and_reconciliation_is_explicit(self):
+        self.javascript(r'''
+await createJob();await dbJobsRun();p.run=null;jobRuns[0].status='unknown';
+await dbJobsListHistory();const row=$('db-jobs-history').children[0];
+await row.children.at(-1).onclick();assert.equal(runReads().length,1);assert.equal(p.run.status,'unknown');
+assert.equal($('db-jobs-retry').hidden,true);assert.equal($('db-jobs-reconcile').disabled,false);
+await dbJobsObserve('retry');assert.equal(jobPosts().length,2);
+const purged=p.run;purged.purged=true;purged.details=null;dbJobsRender();
+await $('db-jobs-history').children[0].children.at(-1).onclick();
+assert.notEqual(p.run,purged);assert.equal(runReads().length,2);assert.equal(jobPosts().length,2);
+await dbJobsObserve('reconcile');assert.equal(jobPosts().at(-1).path,'/api/v1/jobs/runs/run-1/reconcile');
+assert.equal(jobPosts().filter(c=>c.path.endsWith('/runs')).length,1);
 ''')
 
     def test_grant_loss_late_acceptance_purges_bytes_and_original_cancel(self):

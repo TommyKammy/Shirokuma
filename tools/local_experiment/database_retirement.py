@@ -266,8 +266,9 @@ def _inventory(db, database_id):
         WHERE s.database_id=? OR json_extract(r.record,'$.context.database_id')=?''', (database_id, database_id)):
         add('stage_publication', row['run_id'], row['state'], stage_id=row['stage_id'])
 
-    for row in db.execute('SELECT id,enabled,target_kind,target_id FROM db_schedules WHERE database_id=?', (database_id,)):
-        add('schedule', row['id'], 'ENABLED' if row['enabled'] else 'STOPPED', blocked=False,
+    for row in db.execute('SELECT id,enabled,next_run_at,target_kind,target_id FROM db_schedules WHERE database_id=?', (database_id,)):
+        state = 'ENABLED' if row['enabled'] else 'SCHEDULED' if row['next_run_at'] is not None else 'STOPPED'
+        add('schedule', row['id'], state, blocked=False,
             target_kind=row['target_kind'], target_id=row['target_id'])
     for row in db.execute('''SELECT t.id,t.schedule_id,t.status,t.run_id,s.target_kind,s.target_id,
         s.owner,t.context,t.target_revision FROM db_schedule_ticks t JOIN db_schedules s ON s.id=t.schedule_id
