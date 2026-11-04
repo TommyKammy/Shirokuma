@@ -34,7 +34,7 @@ class PlatformLifecycleHistoryDatabaseUI(unittest.TestCase):
     def test_actual_compute_mount_manual_authority_no_database_and_unique(self):
         self.javascript(r"""
 assert.equal($('observation-history-panel'),null);session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';dbRuntimeInstall();
-const panel=$('observation-history-panel');assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-history-title');assert.equal(calls.length,0);
+const panel=$('observation-history-panel');assert.equal(panel.parentElement,$('compute-diag-runtime'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-history-title');assert.equal(calls.length,0);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbLifecycleHistoryInstall();dbControls();}assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);
 assert.equal($('observation-history-fetch').disabled,true);await $('observation-history-auth').onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);
 await historyFetch();assert.ok(dbLifecycleHistory.record);assert.equal(dbCapacity.record,null);assert.equal(dbUsage.record,null);assert.equal(dbResources.record,null);assert.equal(dbPlatform.record,null);assert.equal(worksheets.length,0);

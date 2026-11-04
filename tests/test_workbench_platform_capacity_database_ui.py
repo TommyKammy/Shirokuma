@@ -31,7 +31,7 @@ class PlatformCapacityDatabaseUI(unittest.TestCase):
     def test_actual_mount_manual_only_no_database_and_independent_caches(self):
         self.javascript(r"""
 assert.equal($('observation-capacity-panel'),null);session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';dbRuntimeInstall();
-const panel=$('observation-capacity-panel');assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-capacity-title');assert.equal(calls.length,0);
+const panel=$('observation-capacity-panel');assert.equal(panel.parentElement,$('compute-usage-list'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-capacity-title');assert.equal(calls.length,0);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbCapacityInstall();dbControls();}assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);
 assert.equal($('observation-capacity-fetch').disabled,true);await $('observation-capacity-auth').onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);
 await capacityFetch();assert.ok(dbCapacity.record);assert.equal(dbUsage.record,null);assert.equal(dbResources.record,null);assert.equal(dbPlatform.record,null);assert.equal(worksheets.length,0);

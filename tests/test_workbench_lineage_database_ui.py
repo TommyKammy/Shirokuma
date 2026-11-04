@@ -98,7 +98,7 @@ await lineageReady();assert.equal(calls.filter(c=>c.path.includes('/lineage?')).
 const action=$('explorer-open-lineage');
 assert.equal(action.type,'button');assert.equal(action.className,'small');assert.equal(action.getAttribute('aria-controls'),'inspect-lineage');
 assert.equal($('catalog').hidden,true);
-const ancestors=[];for(let node=action;node;node=node.parentElement){ancestors.push(node.id);assert.equal(node.hidden,false,'hidden ancestor '+node.id);assert.notEqual(node.style?.display,'none');}
+assert.equal(action.hidden,true);const ancestors=[];for(let node=action.parentElement;node;node=node.parentElement){ancestors.push(node.id);assert.equal(node.hidden,false,'hidden ancestor '+node.id);assert.notEqual(node.style?.display,'none');}
 assert.ok(ancestors.includes('database-details'));assert.ok(ancestors.includes('warehouse'));assert.ok(!ancestors.includes('catalog'));
 const tab=inspectorTabs.find(b=>b.dataset.inspect==='lineage');
  dbObject={...stable('orders'),kind};dbExplorerControls();setLanguage(locale);

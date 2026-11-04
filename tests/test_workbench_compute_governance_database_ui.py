@@ -47,8 +47,8 @@ class ComputeGovernanceDatabaseUI(unittest.TestCase):
 assert.equal($('observation-compute-panel'),null);session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';
 dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';
 dbRuntimeInstall();const panel=$('observation-compute-panel'),output=$('observation-compute-output'),auth=$('observation-compute-auth'),fetchButton=$('observation-compute-platform-fetch');
-assert.ok(panel);assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-compute-title');
-assert.ok($('compute').children.indexOf(panel)>$('compute').children.indexOf($('runtime-panel')));
+assert.ok(panel);assert.equal(panel.parentElement,$('compute-diag-runtime'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-compute-title');
+assert.ok($('compute').children.indexOf($('compute-diagnostics'))>$('compute').children.indexOf($('runtime-panel')));
 assert.equal(calls.length,0);assert.equal(dbAdmin.platform,false);assert.equal(fetchButton.disabled,true);assert.equal(auth.disabled,false);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbPlatformComputeInstall();dbPlatformSync();}assert.equal($('observation-compute-panel'),panel);assert.equal($('observation-compute-output'),output);assert.equal($('compute').descendants().filter(n=>n.id==='observation-compute-panel').length,1);assert.equal(calls.length,0);
 await auth.onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);assert.equal(calls[0].options,undefined);assert.equal(dbAdmin.platform,true);assert.equal(fetchButton.disabled,false);

@@ -47,7 +47,7 @@ for(const id of controllerIDs)assert.equal($(id+'panel'),null);
 session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';
 dbObservationsInstall();dbRuntimeInstall();assert.equal(calls.length,0);
 for(const [i,id] of controllerIDs.entries()){
- const panel=$(id+'panel');assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],id+'title');assert.equal(panel.parentElement,i===1?$('compute'):$('bear-panel-sre'));
+ const panel=$(id+'panel');assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],id+'title');assert.equal(panel.parentElement,i===1?$('compute-diag-runtime'):$('bear-panel-sre'));
  assert.equal($(id+'fetch').disabled,true);assert.equal($(id+'auth').disabled,false);
  for(let n=0;n<3;n++){dbFoundationControllersInstall();dbRuntimeInstall();dbObservationsInstall();}assert.equal($(id+'panel'),panel);assert.equal(panel.parentElement.descendants().filter(n=>n.id===panel.id).length,1);
 }

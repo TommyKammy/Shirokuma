@@ -76,7 +76,7 @@ await logsBoot();
 assert.equal(logCalls().length,0);
 for(const kind of ['sre','compute']){
  const root=$(logRoot(kind));
- assert.equal(root.parentElement,kind==='sre'?$('bear-panel-sre'):$('compute'));
+ assert.equal(root.parentElement,kind==='sre'?$('bear-panel-sre'):$('compute-diag-logs'));
  assert.equal(root.role,'region');assert.equal(root['aria-labelledby'],logID(kind)+'title');
  assert.equal(logButton(kind,'fetch').disabled,true);
  assert.equal(logButton(kind,'auth').disabled,false);

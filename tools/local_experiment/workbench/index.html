@@ -628,6 +628,51 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #observation-policy-manifest-advisory .panel-body p{max-inline-size:min(75ch,100%)}
 #observation-policy-manifest-advisory textarea{display:block;inline-size:min(75ch,100%);box-sizing:border-box;resize:vertical}
 #observation-policy-manifest-advisory .toolbar{flex-wrap:wrap}
+/* Explorer details: primary SQL actions first, data management apart (2026-11-04). */
+#database-details #refresh-table-details{order:6;margin-left:auto}
+#database-details .panel-head>.toolbar{gap:10px;margin-top:4px}
+#database-details #explorer-open-lineage[hidden]{display:none}
+#inspector-tabs #inspect-tab-ddl,#inspector-tabs #inspect-tab-snapshots{margin-left:14px}
+.db-manage{min-width:0;margin:0;padding:16px 14px 18px;border-top:1px solid var(--line)}
+.db-manage>h3{margin-bottom:12px}
+.db-manage-group{min-width:0;padding:12px 0 0}
+.db-manage-group+.db-manage-group{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line)}
+.db-manage-group h4{margin:0 0 4px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.db-manage-group p{max-width:75ch;margin:0 0 10px;overflow-wrap:anywhere}
+.db-manage-group .toolbar{gap:10px 12px}
+.db-manage-group .toolbar select{min-height:26px;font-size:12px;padding:2px 6px}
+.db-manage-reason{margin:8px 0 0!important;color:var(--muted);font-size:12px}
+.db-manage-reason:empty{display:none}
+#p35-table-export{padding:12px 14px;border-top:1px solid var(--line)}
+#p35-table-export[hidden]{display:none}
+#p35-table-export>button{margin:6px 8px 0 0}
+/* Compute: state, usage and controls first; operator diagnostics by purpose. */
+#compute-overview{margin-bottom:14px}
+#runtime-panel .runtime-summary-row{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:14px 14px 0}
+#runtime-panel .runtime-summary-row p{flex:1 1 30ch;margin:0;color:var(--ink);font-weight:550}
+#runtime-panel #runtime-impact{margin:0 0 12px;padding:8px 12px;border-left:3px solid var(--warn);border-radius:var(--radius);background:var(--warn-soft);color:var(--ink)}
+#runtime-panel #runtime-capability{color:var(--ink);margin-bottom:10px}
+#runtime-panel details.runtime-meaning{margin-top:6px;font-size:12px;color:var(--muted)}
+#runtime-panel details.runtime-meaning>summary{font-weight:500;color:var(--ink-2)}
+#runtime-panel details.runtime-meaning p{margin:6px 0 0}
+#runtime-panel .runtime-condition[hidden]{display:none}
+.compute-group{min-width:0;margin-bottom:16px}
+.compute-group>h2{margin:4px 0 4px}
+.compute-group>p{max-width:75ch;margin:0 0 10px;color:var(--muted)}
+.compute-group>p:empty{display:none}
+#compute-usage-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px;align-items:start}
+#compute-usage-list[hidden]{display:none}
+#compute-usage-list>.panel{margin-bottom:0}
+.compute-kind{display:inline-block;margin:0 0 2px;font-size:11.5px;font-weight:600;color:var(--accent-ink)}
+#compute-diagnostics{min-width:0;margin:8px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+#compute-diagnostics[hidden]{display:none}
+#compute-diagnostics>summary{font-size:14px}
+#compute-diagnostics>p{max-width:75ch;margin:6px 0 0;color:var(--muted)}
+#compute-diagnostics .compute-diag-group{min-width:0;margin-top:16px}
+#compute-diagnostics .compute-diag-group>h3{margin:0 0 8px;color:var(--ink-2)}
+#compute-diagnostics .panel{margin-bottom:12px}
+#database-details .panel-head>.toolbar>.unavailable-actions:empty{display:none}
+.panel-head>.compute-kind{flex-basis:100%;margin-bottom:-6px}
 </style>
 </head>
 <body>
@@ -6773,7 +6818,7 @@ function dbExplorerControls(){
  ui($('use-explorer-schema'),'Use this schema in {worksheet}',{worksheet:dbCurrent()?worksheetName(dbCurrent()):t('Worksheet')});
  if($('catalog-context-reselect'))$('catalog-context-reselect').hidden=!dbExplorerReason();
  dbRenderBreadcrumb();dbRenderTree();
- if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();dbLineageControls();dbDropControls();}
+ if(typeof dataopsPanels!=='undefined'){dataopsExportControls();dbCloneControls();dbProfileControls();dbLineageControls();dbDropControls();dbManageSync();}
 }
 function dbRenderBreadcrumb(){
  const crumb=$('database-breadcrumb');if(!crumb)return;
@@ -6870,7 +6915,7 @@ function dbShowMetadataOverview(kind){
  dbObject=null;dbTreeSelection={kind,key:kind==='database'?'database:'+dbExplorer.database_id:'schema:'+dbExplorer.database_id+':'+dbExplorer.schema_id};
  dbShowWorkspace('details');dbSelectInspector(inspectorTabs.find(button=>button.dataset.inspect==='columns'));
  const d=dbDatabases.find(d=>d.id===dbExplorer.database_id),s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);
- $('table-title').textContent=(kind==='database'?d?.display_name:s?.display_name)||t(kind==='database'?'Database':'Schema');
+ $('table-title').textContent=(kind==='database'?d?.display_name:s?.display_name)||t(kind==='database'?'Database':'Schema');$('table-title').dataset.object='';
  if(kind==='database'){
   table($('table-columns'),['Schema','Purpose'],dbExplorer.schemas.map(s=>[s.display_name+' · '+s.sql_name,s.purpose||'']),true);
   const hint=document.createElement('p');ui(hint,dbExplorer.schemas.length?'Choose a schema to open SQL.':'No schemas available.');$('table-columns').append(hint);
@@ -7064,7 +7109,7 @@ async function dbLoadObjects(cursor=null){
 async function dbDescribe(object,section=activeInspector,snapshot){
  dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();
  const scope=dbCatalogScope(),epoch=++dbObjectEpoch,identity=dbIdentity(),role=currentRole;
- dbObject=object;$('table-title').textContent=object.display_name;
+ dbObject=object;$('table-title').textContent=object.display_name;$('table-title').dataset.object='true';
  for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
  const target=snapshot?'snapshot-preview':(inspectorTargets[section]||'table-columns');
  message('catalog-error','');dbControls();$('refresh-table-details').disabled=!object.id;
@@ -8472,6 +8517,8 @@ function dataopsExportControls(){
 }
 function dataopsExportRender(){
  const area=$('p35-export-receipt');if(!area)return;area.replaceChildren();const op=dataopsExport;
+ // The receipt area appears only once an export was requested.
+ if(area.parentElement)area.parentElement.hidden=!op;
  $('p35-export-observe').disabled=!dataopsCanObserve(op)||!!op?.trackingPending;$('p35-export-cancel').disabled=!dataopsCanCancel(op)||!!op?.trackingPending;
  $('p35-export-new').disabled=!op||op.pending||!!op.trackingPending||!dataopsTerminal(op);if(!op)return;
  const line=(label,value)=>{const n=dataopsNode('p','',area);dataopsNode('strong','',n,label);n.append(': '+String(value??''));};
@@ -8536,7 +8583,46 @@ function dataopsInstall(){
  const area=dataopsNode('section','p35-table-export',$('database-details'));dataopsNode('h3','',area,'Export receipt');const receipt=dataopsNode('div','p35-export-receipt',area);receipt.setAttribute('aria-live','polite');
  dataopsButton(area,'p35-export-observe','Observe operation',()=>dataopsObserveExport());dataopsButton(area,'p35-export-cancel','Cancel operation',()=>dataopsObserveExport(true));
  dataopsButton(area,'p35-export-new','New export',()=>{if(dataopsExport&&!dataopsExport.pending&&!dataopsExport.trackingPending&&dataopsTerminal(dataopsExport)){dataopsExport=null;dataopsExportRender();dataopsExportControls();$('export-table-btn').focus();}});
- dataopsExportRender();dataopsExportControls();dbCloneInstall();dbDropInstall();
+ dataopsExportRender();dataopsExportControls();dbCloneInstall();dbDropInstall();dbManageInstall();
+}
+// Explorer details: SQL actions stay with the title; copy, export and catalog removal sit apart with their conditions.
+Object.assign(i18n.ja,{
+ 'Table management':'テーブルの管理','Copy and export':'複製と書き出し',
+ 'Clone opens a form to copy a snapshot into a new sandbox table. Export starts immediately in the selected file format.':'複製はフォームを開き、スナップショットを新しいサンドボックスのテーブルへコピーします。書き出しは選択した形式ですぐに開始します。',
+ 'Remove from catalog':'カタログからの登録解除',
+ 'Removes only the catalog registration. Data files are kept. You confirm the exact table name before sending.':'カタログ登録だけを解除し、データファイルは保持します。送信前に正確なテーブル名で確認します。'
+});
+for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
+function dbManageInstall(){
+ if(dbManageInstall.done)return;dbManageInstall.done=true;
+ const section=document.createElement('section');section.id='db-table-manage';section.className='db-manage';section.setAttribute('aria-labelledby','db-table-manage-title');
+ const title=document.createElement('h3');title.id='db-table-manage-title';ui(title,'Table management');section.append(title);
+ for(const [id,heading,help,controls,extra] of [
+  ['db-manage-copy','Copy and export','Clone opens a form to copy a snapshot into a new sandbox table. Export starts immediately in the selected file format.',['clone-table-btn','export-table-format','export-table-btn'],''],
+  ['db-manage-remove','Remove from catalog','Removes only the catalog registration. Data files are kept. You confirm the exact table name before sending.',['drop-table-btn'],' db-manage-danger']]){
+  const box=document.createElement('div');box.id=id;box.className='db-manage-group'+extra;
+  const h=document.createElement('h4');ui(h,heading);const p=document.createElement('p');p.className='help';ui(p,help);
+  const bar=document.createElement('div');bar.className='toolbar';bar.append(...controls.map($));
+  const reason=document.createElement('p');reason.id=id+'-reason';reason.className='db-manage-reason';reason.setAttribute('role','status');
+  box.append(h,p,bar,reason);section.append(box);
+ }
+ // Receipts and opened forms follow the group that started them.
+ $('database-details').append(section,...['p35-table-export','db-clone-panel','db-drop-panel'].map($).filter(node=>node?.parentElement));
+ // The Lineage tab is the single entry point; the duplicate header shortcut stays wired but hidden.
+ $('explorer-open-lineage').hidden=true;
+ dbManageSync();
+}
+function dbManageSync(){
+ if(!dbManageInstall.done)return;
+ const object=dbObject,section=$('db-table-manage');section.hidden=!object;
+ // A cleared object (role, grant or context change) must not leave its name as the current target.
+ const title=$('table-title');if(!object&&['true','cleared'].includes(title.dataset.object)){const d=dbDatabases.find(d=>d.id===dbExplorer.database_id),s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);title.textContent=s?.display_name||d?.display_name||t('Data Explorer');title.dataset.object='cleared';}
+ const copy=$('db-manage-copy-reason'),remove=$('db-manage-remove-reason');
+ if(!object||dbExplorerReason()){ui(copy,'');ui(remove,'');return;}
+ const exportable=dbExplorerCanOpen()&&object.kind==='TABLE'&&!!dataopsRef(object)&&object.capabilities?.export!==false;
+ const reasons=[...new Set([dbCloneEligible()?'':'Clone requires an engineer or administrator and a readable TABLE.',exportable?'':object.kind==='VIEW'?'View export is unsupported. Select a stable readable table.':'Select a stable readable table.'].filter(Boolean))];
+ ui(copy,'{text}',()=>({text:reasons.map(key=>t(key)).join(' ')}));
+ const drop=dbDropReason();ui(remove,'{text}',()=>({text:drop?t(drop):''}));
 }
 
 // Profiling owns only opaque recovery handles; statistics stay in memory.
@@ -11941,7 +12027,7 @@ Object.assign(i18n.en,{'Runtime transitioning':'Transitioning'});
 for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
 function dbRuntimeStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAdmin.platform,dbAuthorizationVersion]);}
 function dbRuntimePurge(){
- const p=dbRuntime;++p.serial;p.scope='';p.status=null;p.operation=null;p.intent=null;p.pending=false;p.reading=false;p.observing=false;p.dirty=false;p.base=null;p.conflict=false;
+ const p=dbRuntime;++p.serial;p.scope='';p.status=null;p.operation=null;p.intent=null;p.pending=false;p.reading=false;p.observing=false;p.dirty=false;p.base=null;p.conflict=false;p.failed=false;
  if(p.installed){$('runtime-minutes').value='';dbRuntimeRender();}
 }
 function dbRuntimeSync(){
@@ -12037,7 +12123,7 @@ function dbRuntimeRender(){
   ui($('runtime-condition-'+action),'{action}: {condition}',()=>({action:t(label),condition:t(dbRuntimeCondition(action),{counts:(dbRuntimeBlockers()||[]).filter(([,value])=>value>0).map(([key,value])=>t(key)+': '+value).join(' · ')})}));
  }
  $('runtime-condition-receipt').hidden=!p.intent;
-
+ dbRuntimeSummaryRender();dbComputeLayout();
 }
 async function dbRuntimeRequest(path,{body,key,stamp=dbRuntimeStamp()}={}){
  const current=()=>stamp===dbRuntimeStamp();
@@ -12068,7 +12154,7 @@ async function dbRuntimeRefresh(){
   if(!Array.isArray(data.available_actions)||!data.available_actions.includes('wake')){
    dbRuntimePurge();p.scope=dbRuntimeStamp();
   }
-  p.status=data;p.support='logical';p.supportPrincipal=dbPrincipal;
+  p.status=data;p.failed=false;p.support='logical';p.supportPrincipal=dbPrincipal;
   const policy=data.policy;if(Number.isSafeInteger(policy?.minutes)&&policy.minutes>=0&&policy.minutes<=1440&&Number.isSafeInteger(policy?.revision)&&policy.revision>=0){
    if(p.dirty){if(p.base!==policy.revision)p.conflict=true;}
    else{p.base=policy.revision;$('runtime-minutes').value=String(policy.minutes);}
@@ -12076,7 +12162,7 @@ async function dbRuntimeRefresh(){
   ui($('runtime-message'),'');dbRuntimeRender();
   if(p.operation?.id&&['ACCEPTED','RUNNING'].includes(p.operation.phase)&&dbAdminAllowed())await dbRuntimeObserve();
   return true;
- }catch(error){if(!current())return true;p.status=null;ui($('runtime-message'),'Runtime unavailable. Refresh to check again.');dbRuntimeRender();if(supported)for(const id of ['warehouse-state','quick-warehouse-state'])ui($(id),'Unknown');return supported;}
+ }catch(error){if(!current())return true;p.status=null;p.failed=true;ui($('runtime-message'),'Runtime unavailable. Refresh to check again.');dbRuntimeRender();if(supported)for(const id of ['warehouse-state','quick-warehouse-state'])ui($(id),'Unknown');return supported;}
  finally{if(current())p.reading=false;}
 }
 async function dbRuntimeAct(action){
@@ -12124,6 +12210,10 @@ function dbRuntimeInstall(){
  const head=dbAdminNode('div','runtime-heading',panel);head.className='panel-head';
  dbAdminNode('h2','runtime-title',head,'Shared LOCAL compute');
  dbAdminButton(head,'runtime-refresh','Refresh status',async()=>{await dbRuntimeRefresh();if(p.operation)await dbRuntimeObserve();});
+ // One-line answer first: usable now, as of which observation.
+ const summaryRow=dbAdminNode('div','runtime-summary-row',panel);summaryRow.className='runtime-summary-row';
+ dbAdminNode('span','runtime-state-badge',summaryRow).className='badge';
+ const summary=dbAdminNode('p','runtime-summary',summaryRow);summary.setAttribute('role','status');summary.setAttribute('aria-atomic','true');
  const status=dbAdminNode('div','runtime-status-section',panel);status.className='panel-body runtime-status-grid';
  const physical=dbAdminNode('div','runtime-physical-group',status),operation=dbAdminNode('div','runtime-operation-group',status);
  dbAdminNode('h3','runtime-physical-title',physical,'Physical observation');dbAdminNode('h3','runtime-operation-title',operation,'Shared operation');
@@ -12136,7 +12226,8 @@ function dbRuntimeInstall(){
  dbAdminNode('h3','runtime-policy-title',policy,'Auto-Chill');
  for(const [host,ids] of [[physical,['physical','proof']],[operation,['operation','receipt-info','observation']],[controls,['guidance','authority','message']],[safety,['blockers']],[policy,['policy','draft']]])for(const id of ids){const node=dbAdminNode('p','runtime-'+id,host);node.setAttribute('role','status');node.setAttribute('aria-atomic','true');}
  dbAdminNode('p','runtime-safety-help',safety,'Chill requires all observed categories to be clear. The backend rechecks before stopping.').className='help';
- for(const [host,ids] of [[physical,['physical-meaning','evidence-meaning']],[controls,['conditions-scope','condition-wake','condition-reconcile','condition-receipt']],[safety,['condition-chill']],[policy,['condition-save','condition-reload']]])for(const id of ids)dbAdminNode('p','runtime-'+id,host).className='runtime-condition help';
+ const meaning=dbAdminNode('details','runtime-meaning',physical);meaning.className='runtime-meaning';dbAdminNode('summary','runtime-meaning-title',meaning,'What this observation means');
+ for(const [host,ids] of [[meaning,['physical-meaning','evidence-meaning']],[controls,['conditions-scope','condition-wake','condition-reconcile','condition-receipt']],[safety,['condition-chill']],[policy,['condition-save','condition-reload']]])for(const id of ids)dbAdminNode('p','runtime-'+id,host).className='runtime-condition help';
  const actions=dbAdminNode('div','runtime-actions',controls);actions.className='toolbar runtime-actions';
  for(const [action,label] of [['wake','Wake'],['chill','Chill'],['reconcile','Revalidate state']])dbAdminButton(actions,'runtime-'+action,label,()=>dbRuntimeAct(action));
  const reconcileKey='Recheck shared LOCAL state. SQL is never resent.';$('runtime-reconcile').title=t(reconcileKey);uiAttributes.push({node:$('runtime-reconcile'),attribute:'title',key:reconcileKey});
@@ -12163,7 +12254,112 @@ function dbRuntimeInstall(){
  $('compute-legacy-status').hidden=true;
  $('compute-legacy-auto-chill').hidden=true;
  ui($('database-compute-notice'),'P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');
- dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbPodBaselineInstall();dbActivityInstall();dbRuntimeSync();
+ // What the user may do, the shared impact and the controls stay together; per-action reasons follow the buttons.
+ const capability=dbAdminNode('p','runtime-capability',controls);capability.setAttribute('role','status');capability.setAttribute('aria-atomic','true');
+ controls.append(...['runtime-capability','runtime-impact','runtime-actions','runtime-condition-wake','runtime-condition-reconcile','runtime-condition-receipt','runtime-authority','runtime-message'].map($));
+ // Operation guidance belongs to the observed shared operation; the observation-time caveat closes the condition sections.
+ operation.append($('runtime-guidance'));
+ safety.append(...['runtime-blockers','runtime-condition-chill','runtime-safety-help','runtime-conditions-scope'].map($));
+ dbPlatformComputeInstall();dbResourcesInstall();dbUsageInstall();dbCapacityInstall();dbLifecycleHistoryInstall();dbBaselineInstall();dbFoundationBaselineInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbPodBaselineInstall();dbActivityInstall();dbComputeLayout();dbRuntimeSync();
+}
+// Compute answers, in order: is shared LOCAL usable, what it uses, what this user may do, why Chill is blocked.
+// Operator diagnostics stay reachable for platform operators, grouped by purpose.
+Object.assign(i18n.ja,{
+ 'Check whether shared LOCAL is usable, how much it uses and what you can operate.':'共有 LOCAL が使えるか、どれだけ使っているか、自分が何を操作できるかを確認します。',
+ 'Usage and headroom':'使用量と空き容量',
+ 'Configured allocation, measured usage and node headroom are separate observations. Do not add or compare them directly.':'設定上の割当、実使用量、Node の空き容量は別々の観測です。そのまま合算・比較しないでください。',
+ 'Usage, capacity and operator diagnostics are fetched by platform operators. The state above is available to every role.':'使用量・容量・運用診断はプラットフォーム運用者が取得します。上の稼働状態はすべてのロールで確認できます。',
+ 'Select the admin role to fetch usage, capacity and operator diagnostics.':'使用量・容量・運用診断を取得するには管理者ロールを選択してください。',
+ 'Not supported':'非対応','Shared runtime controls are not supported for this profile. Use the existing operator workflow.':'このプロファイルは共有ランタイムの操作に対応していません。既存の運用手順を使ってください。',
+ 'Configured allocation':'設定上の割当','Measured usage':'実使用量','Node headroom':'Node の空き容量',
+ 'Operator diagnostics':'運用診断の詳細',
+ 'Pods, Deployments, policy declarations and logs, grouped by purpose. Each fetch is manual and shows its own observation time.':'Pod・Deployment・ポリシー宣言・ログを目的別にまとめています。取得は手動で、結果ごとに観測時刻を表示します。',
+ 'Runtime records':'稼働の記録','Declarations and policy':'宣言とポリシー','Logs and telemetry':'ログとテレメトリ',
+ 'What this observation means':'この観測の意味',
+ 'State unavailable':'取得不可',
+ 'Reading the runtime state…':'稼働状態を取得しています…',
+ 'Could not read the runtime state. The current state is unknown; this is not the same as stopped or zero usage. Refresh to try again.':'稼働状態を取得できませんでした。現在の状態は不明で、休止中や使用量0とは異なります。更新して再度お試しください。',
+ 'Running at the last observation. The engine verification below is a separate record and may be older.':'最後の観測では稼働中です。下のエンジン検証は別の記録で、この観測より古い場合があります。',
+ 'Running at the last observation. Engine readiness was not verified.':'最後の観測では稼働中です。エンジンの準備完了は未検証です。',
+ 'Chilled at the last observation. Authorized SQL starts shared LOCAL automatically; the first query waits for startup.':'最後の観測では休止中です。許可済み SQL を実行すると共有 LOCAL が自動で起動し、最初のクエリは起動を待ちます。',
+ 'Starting or stopping at the last observation.':'最後の観測では起動または休止の途中です。',
+ 'The state was not confirmed at the last observation. Do not assume it is stopped.':'最後の観測では状態を確認できませんでした。休止中とはみなさないでください。',
+ 'Observed less than a minute ago.':'観測は1分以内です。','Observed {minutes} min ago.':'観測は {minutes} 分前です。',
+ 'This observation may be outdated. Refresh status.':'古い観測の可能性があります。状態を更新してください。',
+ 'You can Wake, Chill and change Auto-Chill as a platform operator. The server rechecks each request.':'プラットフォーム運用者として、起動・休止・自動休止の変更ができます。各操作はサーバーが再確認します。',
+ 'Read-only with the current role. Select the admin role to operate shared LOCAL.':'現在のロールでは閲覧のみです。共有 LOCAL を操作するには管理者ロールを選択してください。',
+ 'Read-only: you can check the state. Authorized SQL starts shared LOCAL automatically; platform operators Wake, Chill and change Auto-Chill.':'閲覧のみ：状態を確認できます。許可済み SQL は共有 LOCAL を自動起動します。起動・休止・自動休止の変更はプラットフォーム運用者が行います。'
+});
+for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
+function dbRuntimeCapability(){
+ if(dbRuntimeSupport()==='unsupported')return 'This profile does not support shared runtime controls.';
+ if(dbAdminAllowed())return 'You can Wake, Chill and change Auto-Chill as a platform operator. The server rechecks each request.';
+ if(dbAdmin.platform)return 'Read-only with the current role. Select the admin role to operate shared LOCAL.';
+ return 'Read-only: you can check the state. Authorized SQL starts shared LOCAL automatically; platform operators Wake, Chill and change Auto-Chill.';
+}
+// Missing, failed and observed states stay distinct; an observation never asserts the current state.
+function dbRuntimeSummary(){
+ const p=dbRuntime,data=p.status;
+ if(dbRuntimeSupport()==='unsupported'&&!data)return ['','Not supported','Shared runtime controls are not supported for this profile. Use the existing operator workflow.',null];
+ if(!data)return p.failed?['tone-bad','State unavailable','Could not read the runtime state. The current state is unknown; this is not the same as stopped or zero usage. Refresh to try again.',null]:['','Loading…','Reading the runtime state…',null];
+ const state=['active','chilled','starting','unknown'].includes(data.physical_state)?data.physical_state:'unknown',at=Date.parse(data.observed_at);
+ const minutes=Number.isFinite(at)?Math.max(0,Math.floor((Date.now()-at)/60000)):null;
+ const verified=data.engine_verified===true&&typeof data.engine_verified_at==='string'&&Number.isFinite(Date.parse(data.engine_verified_at));
+ const text={active:verified?'Running at the last observation. The engine verification below is a separate record and may be older.':'Running at the last observation. Engine readiness was not verified.',chilled:'Chilled at the last observation. Authorized SQL starts shared LOCAL automatically; the first query waits for startup.',starting:'Starting or stopping at the last observation.',unknown:'The state was not confirmed at the last observation. Do not assume it is stopped.'}[state];
+ return [{active:'tone-ok',chilled:'',starting:'tone-run',unknown:'tone-warn'}[state],{active:'Active',chilled:'Chilled',starting:'Runtime transitioning',unknown:'Unknown'}[state],text,minutes];
+}
+function dbRuntimeSummaryRender(){
+ if(!$('runtime-summary'))return;
+ const [tone,label,text,minutes]=dbRuntimeSummary(),badge=$('runtime-state-badge');
+ badge.className='badge'+(tone?' '+tone:'');ui(badge,label);
+ ui($('runtime-summary'),'{text} {age}',()=>({text:t(text),age:minutes===null?'':(minutes<1?t('Observed less than a minute ago.'):t('Observed {minutes} min ago.',{minutes}))+(minutes>=10?' '+t('This observation may be outdated. Refresh status.'):'')}));
+ ui($('runtime-capability'),dbRuntimeCapability());
+ // Per-action conditions explain disabled controls to operators; others read the capability line once.
+ const allowed=dbAdminAllowed();
+ for(const [action,id] of [['wake','runtime-wake'],['chill','runtime-chill'],['reconcile','runtime-reconcile'],['reload','runtime-reload']])$('runtime-condition-'+action).hidden=!allowed||!$(id).disabled;
+ $('runtime-condition-save').hidden=!allowed||!dbRuntime.dirty||!$('runtime-save').disabled;
+ $('runtime-conditions-scope').hidden=!allowed;$('runtime-authority').hidden=true;
+}
+function dbComputeOrder(parent,nodes){
+ nodes=nodes.filter(Boolean);const current=[...parent.children].filter(node=>nodes.includes(node));
+ // Moving a node drops focus, so only reorder when the order really differs.
+ if(current.length!==nodes.length||current.some((node,index)=>node!==nodes[index]))parent.append(...nodes);
+}
+function dbComputeLayout(){
+ const root=$('compute'),runtime=$('runtime-panel');if(!dbRuntime.installed||runtime?.parentElement!==root)return;
+ let v=dbComputeLayout.view;
+ if(!v){
+  v=dbComputeLayout.view={};
+  const head=v.head=dbAdminNode('div','compute-overview');head.className='page-head';const title=dbAdminNode('div','',head);title.className='page-title';
+  dbAdminNode('h1','compute-overview-title',title,'Compute & Governance');dbAdminNode('p','compute-overview-lead',title,'Check whether shared LOCAL is usable, how much it uses and what you can operate.');
+  root.prepend(head);
+  const usage=v.usage=dbAdminNode('section','compute-usage');usage.className='compute-group';usage.setAttribute('aria-labelledby','compute-usage-title');
+  dbAdminNode('h2','compute-usage-title',usage,'Usage and headroom');
+  v.usageLead=dbAdminNode('p','compute-usage-lead',usage,'Configured allocation, measured usage and node headroom are separate observations. Do not add or compare them directly.');
+  v.usageNote=dbAdminNode('p','compute-usage-note',usage,'Usage, capacity and operator diagnostics are fetched by platform operators. The state above is available to every role.');
+  v.usageList=dbAdminNode('div','compute-usage-list',usage);
+  const diag=v.diag=dbAdminNode('details','compute-diagnostics');
+  dbAdminNode('summary','compute-diagnostics-title',diag,'Operator diagnostics');
+  dbAdminNode('p','compute-diagnostics-lead',diag,'Pods, Deployments, policy declarations and logs, grouped by purpose. Each fetch is manual and shows its own observation time.');
+  const notice=$('database-compute-notice');if(notice?.parentElement)diag.append(notice);
+  v.groups=[
+   ['compute-diag-runtime','Runtime records',['observation-compute-panel','observation-history-panel','observation-foundation-controllers-panel']],
+   ['compute-diag-policy','Declarations and policy',['observation-baseline-panel','observation-foundation-baseline-panel','observation-pod-baseline-panel','observation-controller-baseline-panel']],
+   ['compute-diag-logs','Logs and telemetry',['observation-recent-failures-panel','observation-telemetry-readiness-panel','observation-telemetry-logs-panel']]
+  ].map(([id,label,ids])=>{const box=dbAdminNode('section',id,diag);box.className='compute-diag-group';box.setAttribute('aria-labelledby',id+'-title');dbAdminNode('h3',id+'-title',box,label);return [box,ids];});
+ }
+ // Only attached (installed) panels move; install functions keep their own idempotence.
+ const attached=id=>{const node=$(id);return node?.parentElement?node:null;};
+ dbComputeOrder(v.usageList,['observation-resources-panel','observation-usage-panel','observation-capacity-panel'].map(attached));
+ for(const [box,ids] of v.groups)dbComputeOrder(box,ids.map(attached));
+ dbComputeOrder(root,[runtime,v.usage,attached('observation-activity-panel'),v.diag]);
+ for(const [id,key] of [['observation-resources-panel','Configured allocation'],['observation-usage-panel','Measured usage'],['observation-capacity-panel','Node headroom']]){
+  const panel=attached(id),head=panel?.children[0];if(!head||panel.dataset.computeKind)continue;
+  panel.dataset.computeKind='true';const label=dbAdminNode('span','',null,key);label.className='compute-kind';head.prepend(label);
+ }
+ // Same gate as operator actions: platform authority with current and maximum admin roles.
+ const allowed=dbAdminAllowed();v.usageList.hidden=!allowed;v.usageLead.hidden=!allowed;v.usageNote.hidden=allowed;v.diag.hidden=!allowed;
+ ui(v.usageNote,dbAdmin.platform?'Select the admin role to fetch usage, capacity and operator diagnostics.':'Usage, capacity and operator diagnostics are fetched by platform operators. The state above is available to every role.');
 }
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }

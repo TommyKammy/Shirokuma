@@ -52,7 +52,7 @@ for(const id of baselineIDs)assert.equal($(id+'panel'),null);
 session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';
 dbObservationsInstall();dbRuntimeInstall();assert.equal(calls.length,0);
 for(const [i,id] of baselineIDs.entries()){
- const panel=$(id+'panel');assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],id+'title');assert.equal(panel.parentElement,i===2?$('compute'):$('bear-panel-'+['sre','policy'][i]));
+ const panel=$(id+'panel');assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],id+'title');assert.equal(panel.parentElement,i===2?$('compute-diag-policy'):$('bear-panel-'+['sre','policy'][i]));
  assert.equal($(id+'fetch').disabled,true);assert.equal($(id+'auth').disabled,false);
  for(let n=0;n<3;n++){dbFoundationBaselineInstall();dbRuntimeInstall();dbObservationsInstall();}assert.equal($(id+'panel'),panel);assert.equal(panel.parentElement.descendants().filter(n=>n.id===panel.id).length,1);
 }

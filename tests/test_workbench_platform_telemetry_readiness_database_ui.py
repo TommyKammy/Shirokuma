@@ -44,7 +44,7 @@ class PlatformTelemetryReadinessDatabaseUI(unittest.TestCase):
 for(const kind of telemetryKinds)assert.equal($(telemetryRoot(kind)),null);
 session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';
 dbObservationsInstall();dbRuntimeInstall();assert.equal(calls.length,0);
-for(const kind of telemetryKinds){const root=$(telemetryRoot(kind)),id=telemetryID(kind);assert.equal(root.parentElement,kind==='compute'?$('compute'):$('bear-panel-sre'));assert.equal(root.role,'region');assert.equal(root['aria-labelledby'],id+'title');assert.equal($(id+'fetch').disabled,true);assert.equal($(id+'auth').disabled,false);
+for(const kind of telemetryKinds){const root=$(telemetryRoot(kind)),id=telemetryID(kind);assert.equal(root.parentElement,kind==='compute'?$('compute-diag-logs'):$('bear-panel-sre'));assert.equal(root.role,'region');assert.equal(root['aria-labelledby'],id+'title');assert.equal($(id+'fetch').disabled,true);assert.equal($(id+'auth').disabled,false);
  for(let i=0;i<3;i++){dbTelemetryReadinessInstall();dbObservationsInstall();dbRuntimeInstall();}assert.equal($(telemetryRoot(kind)),root);assert.equal(root.parentElement.descendants().filter(n=>n.id===root.id).length,1);
 }
 assert.equal($('observation-policy-telemetry-readiness'),null);assert.equal($('observation-policy-telemetry-readiness-panel'),null);

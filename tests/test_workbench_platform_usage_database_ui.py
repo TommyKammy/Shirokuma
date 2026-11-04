@@ -65,8 +65,8 @@ assert.ok(calls.slice(usageCallStart).every(c=>c.path==='/api/session'));assert.
     def test_actual_compute_mount_manual_only_without_database_schema_grants(self):
         self.navigation_javascript(r"""
 assert.equal($('observation-usage-panel'),null);inventory=[];schemas=[];worksheets=[];worksheetId='';session.platform_admin=true;dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';dbRuntimeInstall();
-const panel=$('observation-usage-panel');assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-usage-title');assert.equal(panel.className,'panel');
-assert.equal($('compute').children.indexOf(panel),$('compute').children.indexOf($('observation-resources-panel'))+1);
+const panel=$('observation-usage-panel');assert.equal(panel.parentElement,$('compute-usage-list'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-usage-title');assert.equal(panel.className,'panel');
+assert.equal($('compute-usage-list').children.indexOf(panel),$('compute-usage-list').children.indexOf($('observation-resources-panel'))+1);
 assert.equal(calls.length,0);assert.equal($('observation-usage-fetch').disabled,true);await $('observation-usage-auth').onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);await usageFetch();assert.ok(dbUsage.record);assert.equal(dbResources.record,null);assert.equal(dbPlatform.record,null);
 const saved=dbUsage.record,count=calls.length;for(const locale of ['ja','en']){setLanguage(locale);$('tab-warehouse').click();$('tab-compute').click();dbRuntimeInstall();dbUsageInstall();assert.equal(dbUsage.record,saved);assert.equal(calls.length,count);}
 assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);assert.match($('observation-usage-output').getAttribute('style'),/overflow-wrap:anywhere;min-width:0/);

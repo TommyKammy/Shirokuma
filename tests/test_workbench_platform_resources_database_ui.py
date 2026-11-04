@@ -48,8 +48,8 @@ class PlatformResourcesDatabaseUI(unittest.TestCase):
         self.javascript(r"""
 assert.equal($('observation-resources-panel'),null);session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';
 dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';dbRuntimeInstall();
-const panel=$('observation-resources-panel');assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-resources-title');
-assert.equal($('compute').children.indexOf(panel),$('compute').children.indexOf($('observation-compute-panel'))+1);
+const panel=$('observation-resources-panel');assert.equal(panel.parentElement,$('compute-usage-list'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-resources-title');
+assert.equal($('compute-usage-list').children.indexOf(panel),0);assert.ok($('compute').children.indexOf($('compute-usage'))>$('compute').children.indexOf($('runtime-panel')));
 assert.equal(calls.length,0);assert.equal($('observation-resources-fetch').disabled,true);assert.equal($('observation-resources-auth').disabled,false);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbResourcesInstall();dbPlatformSync();}assert.equal($('observation-resources-panel'),panel);assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);
 await $('observation-resources-auth').onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);assert.equal(calls[0].options,undefined);
