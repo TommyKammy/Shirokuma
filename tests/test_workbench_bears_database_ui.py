@@ -273,15 +273,11 @@ setLanguage('en');await boot();const notice=$('database-bears-notice');
 for(const locale of ['en','ja']){
  setLanguage(locale);
  assert.equal(lead.textContent,t(dbExplanationLead));
- assert.equal($('bears').querySelector('p'),notice);
- assert.equal(notice.textContent,t(dbExplanationFence));
- assert.notEqual(notice.textContent,lead.textContent);
- assert.equal(intro.textContent,locale==='en'?'Enter SQL or copy it from the active worksheet.':'SQL を入力するか、ワークシートからコピーしてください。');
- assert.doesNotMatch(lead.textContent,/five resident specialists|5 体の常駐スペシャリスト/);
+ assert.equal($('bears').querySelector('p'),lead);
+ assert.equal(notice.parentElement.tagName,'DETAILS');
+ assert.equal(intro.textContent,t(dbExplanationInstruction));
  assert.match(lead.textContent,/Query Doctor/);
- assert.match(lead.textContent,/SRE/);assert.match(lead.textContent,/Policy/);
  for(const kind of ['sre','policy']){assert.equal($('bear-tab-'+kind).disabled,false);assert.equal($('bear-'+kind+'-run').disabled,true);assert.equal($('bear-'+kind+'-run').hidden,true);}
- assert.ok(lead.textContent.includes(locale==='en'?'Catalog Curator explains metadata with its own authorized context.':'Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。'));
  const helpers=$('bear-panel-query').descendants().filter(n=>n.textContent===t(dbExplanationHelp));assert.equal(helpers.length,1);
  assert.ok(helpers[0].textContent.includes(locale==='en'?'SQL is not executed.':'SQL は実行しません。'));
  assert.equal($('bear-query-sql').disabled,false);assert.equal(explanationCalls().length,0);
@@ -352,7 +348,7 @@ for(const [state,en,ja] of [['SUCCEEDED','Completed','完了'],['RUNNING','Runni
     def test_database_defaults_to_doctor_and_hides_legacy_target(self):
         tab_handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
         self.javascript(r'''
-const bearList=new Node();
+const bearList=new Node();bearList.setAttribute('aria-orientation','vertical');
 for(const bear of ['sre','query','data','catalog','policy']){
  const tab=$('bear-tab-'+bear);tab.tagName='BUTTON';tab.dataset.bear=bear;bearList.append(tab);
  $('bears').append($('bear-panel-'+bear));
@@ -363,7 +359,14 @@ eval(''' + json.dumps(tab_handlers) + r''');
 assert.equal($('bear-panel-sre').hidden,false);await boot();
 assert.equal($('bear-panel-query').hidden,false);assert.equal($('bear-tab-query')['aria-selected'],'true');
 assert.equal($('bear-panel-sre').hidden,true);assert.equal(targetField.hidden,true);
-assert.equal($('bear-tab-data').disabled,true);
+assert.equal($('bear-tab-data').disabled,false);assert.equal($('bear-data-legacy').hidden,true);
+let handled=false;const key=name=>({key:name,preventDefault:()=>{handled=true;}});
+$('bear-tab-query').onkeydown(key('ArrowRight'));assert.equal(handled,false);
+$('bear-tab-query').onkeydown(key('ArrowDown'));assert.equal(handled,true);assert.equal(document.activeElement,$('bear-tab-data'));
+narrow=true;for(const listener of mediaListeners)listener({matches:narrow});assert.equal(bearList.getAttribute('aria-orientation'),'horizontal');
+handled=false;$('bear-tab-data').onkeydown(key('ArrowUp'));assert.equal(handled,false);
+$('bear-tab-data').onkeydown(key('ArrowLeft'));assert.equal(handled,true);assert.equal(document.activeElement,$('bear-tab-query'));
+
 for(const bear of ['sre','policy']){assert.equal($('bear-tab-'+bear).disabled,false);assert.equal($('bear-'+bear+'-run').disabled,true);assert.equal($('bear-'+bear+'-run').hidden,true);}
 assert.equal($('bear-tab-catalog').disabled,false);
 ''')
@@ -836,8 +839,8 @@ await boot();const before=calls.length;
 for(const body of [{bear:'query',target:'latest'},{bear:'query',target:'query-id'},{bear:'sre'},{bear:'data',action:'generate'},{bear:'data',action:'publish'},{bear:'catalog'},{bear:'policy'}])await assert.rejects(api('/api/bears/run',body));
 assert.equal(calls.length,before);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','wake','chill'])assert.equal($(id).disabled,true,id);
-assert.match($('database-bears-notice').textContent,/SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs/);
-setLanguage('ja');assert.match($('database-bears-notice').textContent,/SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明/);
+assert.match($('database-bears-notice').textContent,/Legacy direct Bear and Copilot execution is unavailable/);
+setLanguage('ja');assert.match($('database-bears-notice').textContent,/旧 Bear と Copilot の直接実行は利用できません/);
 ''')
 
     def test_no_global_history_or_explanation_calls_at_boot(self):

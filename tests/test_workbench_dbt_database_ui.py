@@ -306,7 +306,10 @@ for(const hash of ['#catalog?keep=yes','#transformation?dbt_db=db','#transformat
 route=async(path,options)=>{if(/\/runs\//.test(path))throw Error('source run unavailable');return baseRoute(path,options);};
 location.href='http://local/#transformation?keep=yes&dbt_db=db&dbt_publication=published-1';
 assert.equal(dbDbtURL().plan,null);assert.equal(dbDbtURL().run,null);
+selectView($('transformation-view-wap'));
+assert.equal($('transformation-wap').hidden,false);
 const start=calls.length;await startup();assert.deepEqual(activated,['tab-transformation']);
+assert.equal($('transformation-models').hidden,false);assert.equal($('transformation-wap').hidden,true);
 assert.equal(p.standalone.id,publication.id);assert.equal(p.standalone.state,'PUBLISHED');assert.equal(p.plan.id,publication.plan_id);assert.equal(p.run,null);
 const reads=calls.slice(start);assert.ok(reads.some(c=>c.path.includes('/publications/published-1?')));assert.ok(reads.some(c=>c.path.includes('/plans/plan-1?')));assert.equal(reads.some(c=>/\/runs\//.test(c.path)),false);assert.equal(posts().length,before);
 assert.match(text(dbDbtNode('publications')),/Published.*published-snapshot/);assert.doesNotMatch(text(dbDbtNode('publications')),/Review publication|Audit and publish/);

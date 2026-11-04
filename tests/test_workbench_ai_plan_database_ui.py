@@ -832,8 +832,8 @@ await boot();editSQL('SELECT value FROM sandbox.unsupported_view');
 route=async()=>({http:400,body:{code:'AI_PLAN_VIEW_UNSUPPORTED'}});await startPlan();
 const original=structuredClone(planPosts()[0]),intent=dbExplanationIntent('sql_plan_explanation');
 for(const locale of ['en','ja']){
- setLanguage(locale);const help=t(dbPlanHelp),fence=t(dbExplanationFence),notice=visibleText($('copilot-result'));
- assert.match(help,/INVOKER VIEW/);assert.match(fence,/INVOKER VIEW/);
+ setLanguage(locale);const help=t(dbPlanHelp),notice=visibleText($('copilot-result'));
+ assert.match(help,/INVOKER VIEW/);assert.ok(visibleText($('bear-panel-query')).includes(help));
  assert.match(help,locale==='en'?/current query permissions for all dependencies/:/すべての依存先への現在のクエリ権限/);
  assert.match(help,locale==='en'?/View definitions are checked at acquisition\. Detected changes prevent the explanation from being saved\./:/取得時点の定義を確認します。変更を検出した場合は説明を確定しません。/);
  assert.match(help,locale==='en'?/non-ANALYZE/:/非 ANALYZE/);assert.match(help,locale==='en'?/may wake LOCAL/:/LOCAL が起動/);

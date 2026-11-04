@@ -366,6 +366,17 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .bear-list button{display:grid;justify-items:start;justify-content:stretch;gap:2px;width:100%;min-height:0;padding:8px 10px;border:0;background:transparent;text-align:left;white-space:normal;font-weight:600}
 .bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
 .bear-list .badge{font-size:11px}
+.workflow-details{margin-top:12px}
+.workflow-details summary{padding-block:8px}
+.bear-workflows{display:grid;gap:8px;justify-items:start}
+.bear-workflows button{white-space:normal;text-align:start}
+@media(max-width:1024px){
+ #bears .bear-list{display:flex;flex-wrap:wrap;gap:2px}
+ #bears .bear-list button{width:auto;min-height:44px;padding:6px 8px}
+ #transformation .subnav{flex-wrap:wrap}
+ #transformation .subnav button{min-height:44px}
+ html[data-data-mode=database] #bears .bear-list .badge{display:none}
+}
 .bear-panel p{color:var(--muted)}
 .bear-panel textarea{min-height:84px}
 .bear-footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
@@ -823,14 +834,15 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 </div>
 </section>
 <section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden>
-<div class="page-head"><div class="page-title"><h1>Transformation</h1><p>Inspect model definitions and dependencies, then build or refresh.</p></div></div>
-<div class="subnav" role="tablist" aria-label="Transformation views"><button id="transformation-view-models" role="tab" aria-selected="true" aria-controls="transformation-models" data-view="transformation">Models</button><button id="transformation-view-marts" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-marts" data-view="transformation" data-admin-view>Refresh targets</button></div>
+<div class="page-head"><div class="page-title"><h1>Transformation</h1><p id="transformation-lead">Inspect model definitions and dependencies, then build or refresh.</p></div></div>
+<div class="subnav" role="tablist" aria-label="Transformation views"><button id="transformation-view-models" role="tab" aria-selected="true" aria-controls="transformation-models" data-view="transformation">Models</button><button id="transformation-view-wap" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-wap" data-view="transformation" hidden>Manual WAP</button><button id="transformation-view-marts" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-marts" data-view="transformation" data-admin-view>Refresh targets</button></div>
 <div id="transformation-models" role="tabpanel" aria-labelledby="transformation-view-models">
 <div class="toolbar" style="margin-bottom:12px"><button id="refresh-models">Refresh Models</button><button id="run-dbt-build" class="run">Run dbt Build</button><button id="run-dbt-test" class="run">Run dbt Test</button></div>
 <pre id="models-state" role="status" hidden></pre>
 <div class="model-layout"><div class="panel model-list"><h2>Persistent dbt Models</h2><div id="dbt-models"></div><h2>Registered Dynamic WAP Models</h2><div id="wap-models"></div></div>
 <div class="panel"><div class="panel-head"><h2 id="model-title">Choose a model</h2><div class="toolbar"><button id="open-model-sql" class="small" disabled>Open SQL in Worksheet</button><button id="refresh-wap-model" class="small run" hidden>Refresh WAP Model</button></div></div><div id="model-lineage" class="panel-body lineage"></div><pre id="model-sql-preview">Choose a model to inspect its SQL.</pre></div></div>
 </div>
+<div id="transformation-wap" role="tabpanel" aria-labelledby="transformation-view-wap" hidden></div>
 <div id="transformation-marts" role="tabpanel" aria-labelledby="transformation-view-marts" hidden>
 <section id="marts-admin" hidden aria-labelledby="marts-title" class="panel"><div class="panel-head"><div><h2 id="marts-title">Registered refresh targets</h2><small>Save a SELECT definition without executing it. Refresh builds, audits, and publishes the saved definition to iceberg.marts.</small></div><div class="toolbar"><button id="marts-reload" type="button">Reload targets</button><button id="mart-new" type="button">New target</button></div></div>
 <div id="mart-error" class="error" role="alert" hidden></div>
@@ -1220,7 +1232,7 @@ const i18n = {ja: {
  'Choose a browser file or drop it here':'ファイルを選択するか、ここにドロップ', 'No browser file selected. Use a server path below.':'ファイルが選択されていません。下のサーバーパスも使用できます。', 'Use server path':'サーバーパスを使用', 'Local file path':'ローカルファイルパス', 'Target table (optional)':'取り込み先テーブル（任意）',
  'replace':'置換', 'append':'追加', 'upsert':'更新・追加', 'Upsert key columns (required for upsert)':'更新キーのカラム（更新・追加では必須）', 'Upsert key columns, e.g. order_id':'更新キーのカラム（例: order_id）', 'Use input column names, separated by commas for a composite key.':'入力ファイルのカラム名を指定します。複合キーはカンマで区切ってください。',
  'Preview Schema & Sample Rows':'スキーマとサンプル行を確認', 'Ingest File':'ファイルを取り込む', 'Ready':'準備完了', 'Ingestion audit summary':'取り込み監査の概要',
- 'Inspect model definitions and dependencies, then build or refresh.':'モデル定義と依存関係を確認し、ビルドや更新を実行します。', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
+ 'Transformation views':'変換の作業メニュー', 'Inspect model definitions and dependencies, then build or refresh.':'モデル定義と依存関係を確認し、ビルドや更新を実行します。', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
  'Catalog & Lineage':'カタログ & リネージ', 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Catalog access changed. Refresh the page to sign in or reload permissions.':'カタログへのアクセス権が変更されました。ページを再読み込みしてサインインまたは権限を更新してください。', 'Details changed. Refresh details to continue.':'詳細が変更されました。詳細を更新して続行してください。', 'Refresh details':'詳細を更新', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。', 'Iceberg snapshots':'Iceberg スナップショット', 'dbt model lineage':'dbt モデルのリネージ', 'Local model definitions':'ローカルのモデル定義', 'Loading dependencies…':'依存関係を読み込み中…',
  'Autonomous Bears Cockpit':'自律 AI Bears コックピット', 'Run the five resident specialists. Inspect their findings, recommendations, and telemetry.':'5 体の常駐スペシャリストを実行し、検出結果、推奨事項、実行記録を確認します。',
  'Recent warehouse and Bear activity, recorded in ClickHouse.':'ClickHouse に記録された最近のウェアハウスと Bear の操作履歴です。', 'Recent telemetry':'最近の実行記録', 'Latest 100 events':'最新 100 件のイベント', 'Search Pawprints':'監査ログを検索', 'Action, Bear, trace, or model':'操作、Bear、トレース、モデルを検索', 'Status':'状態', 'All statuses':'すべての状態', 'Refresh to load recent Pawprints.':'更新して最近の監査ログを読み込んでください。',
@@ -1649,9 +1661,9 @@ uiAttributes.push({node:bearList,attribute:'aria-label',key:'AI Bears'});$('bear
 for(const bear of bears){
  const tab=document.createElement('button'),tabName=document.createElement('span'),tabState=document.createElement('span');
  tab.id='bear-tab-'+bear.key;tab.setAttribute('role','tab');tab.setAttribute('aria-controls','bear-panel-'+bear.key);tab.dataset.bear=bear.key;
- ui(tabName,bear.name);tabState.className='badge';tab.append(tabName,tabState);bearList.append(tab);
+ ui(tabName,bear.name.replace(/ Bear$/,''));tabState.className='badge';tab.append(tabName,tabState);bearList.append(tab);
  const card=document.createElement('article');card.className='panel bear-panel';card.id='bear-panel-'+bear.key;card.setAttribute('role','tabpanel');card.setAttribute('aria-labelledby',tab.id);
- const content=document.createElement('div');content.className='panel-body';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
+ const content=document.createElement('div');content.className='panel-body';if(bear.key==='data')content.id='bear-data-legacy';const title=document.createElement('h2');ui(title,bear.name);const description=document.createElement('p');ui(description,bear.description);content.append(title,description);
  for(const [key,label,value,multiline] of bear.fields){const id=`bear-${bear.key}-${key}`,field=document.createElement('div'),l=document.createElement('label');l.htmlFor=id;ui(l,label);const input=document.createElement(Array.isArray(value)?'select':multiline?'textarea':'input');input.id=id;if(Array.isArray(value))value.forEach(v=>{const option=new Option(v,v);ui(option,v);input.add(option);});else input.value=value;field.className='bear-field';field.append(l,input);content.append(field);}
  if(bear.key==='data'){const help=document.createElement('p');help.id='bear-data-help';help.className='callout info';content.querySelector('.bear-field').after(help);}
  const footer=document.createElement('div');footer.className='bear-footer';const button=document.createElement('button');button.className='primary run';button.id='bear-'+bear.key+'-run';ui(button,'Run Bear');const state=document.createElement('span');state.className='badge';ui(state,'Ready');state.setAttribute('role','status');const output=document.createElement('pre');output.hidden=true;uiAttributes.push({node:output,attribute:'aria-label',key:'{bear} response',values:()=>({bear:t(bear.name)})});footer.append(button,state);content.append(footer,output);card.append(content);bearPanels.append(card);
@@ -1667,7 +1679,12 @@ for(const bear of bears){
 $('bear-data-action').onchange=updateDataBearForm;updateDataBearForm();
 // wireTabs is declared later as a function, so it is available here.
 const bearTabs=[...bearList.children];
-wireTabs(bearTabs,selected=>{if(databaseMode&&selected.disabled)return;bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;});if(databaseMode)dbObservationNavigate(selected.dataset.bear);});
+wireTabs(bearTabs,selected=>{if(databaseMode&&selected.disabled)return;bearTabs.forEach(b=>{const active=b===selected;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;$('bear-panel-'+b.dataset.bear).hidden=!active;});if(databaseMode)dbObservationNavigate(selected.dataset.bear);},()=>bearList.getAttribute('aria-orientation'));
+if(typeof matchMedia==='function'){
+ const compactBears=matchMedia('(max-width: 1024px)');
+ const syncBearOrientation=()=>bearList.setAttribute('aria-orientation',compactBears.matches?'horizontal':'vertical');
+ syncBearOrientation();compactBears.addEventListener('change',syncBearOrientation);
+}
 bearTabs[0].click();
 let auditEpoch=0,pawprintsPending=null,runtimePending=null;
 function resetAuditIdentity(){
@@ -1701,7 +1718,22 @@ function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tre
 $('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninput=renderCatalogTrees;
 $('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
 $('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('refresh-table-details').disabled=true;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
-function wireTabs(buttons,select){buttons.forEach(b=>{b.onclick=()=>select(b);b.onkeydown=e=>{const available=buttons.filter(button=>!button.disabled&&!button.hidden),i=available.indexOf(b);if(i<0)return;let n;if(['ArrowRight','ArrowDown'].includes(e.key))n=(i+1)%available.length;else if(['ArrowLeft','ArrowUp'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();select(available[n]);available[n].focus();}};});}
+function wireTabs(buttons,select,orientation){
+ buttons.forEach(button=>{
+  button.onclick=()=>select(button);
+  button.onkeydown=event=>{
+   const available=buttons.filter(tab=>!tab.disabled&&!tab.hidden),index=available.indexOf(button);
+   if(index<0)return;
+   const axis=orientation?.();
+   let next;
+   if(event.key==='ArrowRight'&&axis!=='vertical'||event.key==='ArrowDown'&&axis!=='horizontal')next=(index+1)%available.length;
+   else if(event.key==='ArrowLeft'&&axis!=='vertical'||event.key==='ArrowUp'&&axis!=='horizontal')next=(index+available.length-1)%available.length;
+   else if(event.key==='Home')next=0;
+   else if(event.key==='End')next=available.length-1;
+   if(next!==undefined){event.preventDefault();select(available[next]);available[next].focus();}
+  };
+ });
+}
 // Views inside a page (for example Jobs → Run history) share the same tab behaviour.
 function showView(id){const button=$(id);if(button&&!button.hidden)button.click();}
 function selectView(button){
@@ -1712,9 +1744,23 @@ function resetAdminViews(){
 }
 for(const group of new Set([...document.querySelectorAll('[data-view]')].map(b=>b.dataset.view))){
  const buttons=[...document.querySelectorAll(`[data-view="${group}"]`)];
- wireTabs(buttons,button=>{if(button.hasAttribute('data-admin-view')&&currentRole!=='admin')return;selectView(button);});
+ wireTabs(buttons,selectSubView);
 }
 const inspectorTabs=[...document.querySelectorAll('[data-inspect]')];wireTabs(inspectorTabs,selectInspector);
+function selectSubView(button){
+ if(button.hidden||button.disabled||button.hasAttribute('data-admin-view')&&currentRole!=='admin')return;
+ const opensWap=button.id==='transformation-view-wap';
+ const wapWasOpen=!$('transformation-wap').hidden;
+ const crossesWap=databaseMode&&button.dataset.view==='transformation'&&opensWap!==wapWasOpen;
+ if(crossesWap){
+  dataopsRecoveryBoundary();
+  const wap=dataopsPanels.get('p35-wap');
+  if(wap?.aiToken){wap.aiToken=null;dataopsAiRender(wap);}
+ }
+ selectView(button);
+ if(opensWap)dataopsOpen('transformation');
+ if(button.id==='transformation-view-marts'&&databaseMode)return dbMartsOpen();
+}
 function selectInspector(button){
  if(typeof databaseMode!=='undefined'&&databaseMode)return dbSelectInspector(button);
  activeInspector=button.dataset.inspect;
@@ -2606,7 +2652,6 @@ editJob(null);clearSelectedJob();
 const dbWorksheetKey='shirokuma.worksheets.v2';
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
- "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.": "手動 WAP と管理対象 Mart は、それぞれのデータベース／スキーマを選択して利用できます。WAP の build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロールが必要です。旧 dbt の build／test は Database モードでは未対応です。Database dbt はコンパイル済み table／ephemeral SELECT の候補構築と実行ごとの SANDBOX INVOKER VIEW・テストに対応します。モデル単位の WAP 公開は TABLE のみ、table properties は固定の format=PARQUET のみ対応します。UI／API／CLI は互換性のある保存済み1モデルの native TABLE 実行に対応します。Native graph は適格な保存済み VIEW／TABLE／EPHEMERAL 全モデルを実行します。VIEW を含むグラフも、全体の構築・品質検証後に適格な TABLE 候補を公開できます。incremental は未対応です。品質テストは明示選択、保存済み品質テスト一式の合格後、適格なグラフの TABLE 候補を1件ずつ公開できます。",
  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Use Manual WAP for reviewed drafts and authorized publication. Legacy direct Bear/Copilot execution remains unavailable. Shared AI settings are available to platform administrators using global Admin.": "Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。確認済みの下書きと権限に基づく公開には Manual WAP を使用してください。旧 Bear/Copilot の直接実行は利用できません。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。",
  "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview.": "保存済みメタデータの監査を利用できます。SQL・プロンプト・結果は含みません。Pawprints は別の補助的な基盤プレビューです。",
  "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control.": "Database モードでは Compute 操作・Auto-Chill・ガバナンス検査は未対応です。共有ウェアハウスの状態はヘッダーで確認できます。Database の admin ロールは基盤の操作権限を付与しません。",
@@ -2813,11 +2858,10 @@ const dbSource={scope:'',version:0,token:null,origin:null,notice:''};
 const dbSourceInputEvents=new WeakSet();
 let dbPlanAuthorityStamp='',dbPlanAuthorityEpoch=0;
 const dbExplanationHelp='Explains SQL using authorized column names and types. Values and comments are omitted from model input. No execution plan or query results are collected. SQL is not executed.';
-const dbExplanationLead='Query Doctor explains SQL using the active SQL worksheet database, schema and role. Catalog Curator explains metadata with its own authorized context. SRE and Policy show read-only Database observations with separate contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. Use worksheet Copilot and Manual WAP for SQL proposals and reviewed publication. Legacy direct Bear execution remains unavailable.';
-const dbExplanationInstruction='Enter SQL or copy it from the active worksheet.';
+const dbExplanationLead='Explain SQL with Query Doctor or choose a specialist for another task.';
+const dbExplanationInstruction='Explain the SQL entered here using the active worksheet context. Copy worksheet SQL to use it as input.';
 const dbExplanationContextStep='Choose or confirm the database, schema and role in the SQL worksheet.';
 const dbExplanationStateLabel=state=>t({SUCCEEDED:'Completed',RUNNING:'Running',QUEUED:'Queued',FAILED:'Failed',UNKNOWN:'Outcome unknown',CANCELED:'Canceled',NOT_STARTED:'Not started',NOT_COLLECTED:'Not collected',COLLECTED:'Collected',NOT_SUBMITTED:'Not submitted',FINISHED:'Completed'}[state]);
-const dbExplanationFence='SQL explanation and execution plan explanation for TABLEs and supported INVOKER VIEWs are available in Database mode. Catalog Curator offers metadata explanations and description proposals with its own authorized context. SRE and Policy provide read-only observations of your saved records and permission ceilings with separate Database contexts. A separate manual Platform (P-only) scope shows fixed LOCAL observations and Pod-template declaration checks for platform administrators using the global Admin role. SQL proposals are available in worksheet Copilot. Use Manual WAP for reviewed drafts and authorized publication. Legacy direct Bear/Copilot execution remains unavailable. Shared AI settings are available to platform administrators using global Admin.';
 Object.assign(i18n.ja,{
  [dbPlanHelp]:'通常のクエリ受付で非 ANALYZE の実行計画を取得し、ローカルで説明します。LOCAL が起動する場合があります。元の SQL は実行しません。TABLE と対応する INVOKER VIEW を利用でき、すべての依存先への現在のクエリ権限が必要です。未対応の VIEW は「SQLの説明」を使用してください。クエリ結果は取得しません。取得時点の定義を確認します。変更を検出した場合は説明を確定しません。',
  'Acquire plan and explain':'実行計画を取得して説明','Acquire a new plan and explain':'新しい実行計画を取得して説明',
@@ -2850,8 +2894,8 @@ Object.assign(i18n.ja,{
  'Refresh explanation / recover request':'説明を更新／元の要求を復旧','Load explanation history':'説明履歴を読み込む',
  'Choose a saved explanation':'保存済みの説明を選択','Historical explanation (read only)':'過去の説明（表示のみ）',
  'Saved explanation (read only)':'保存された説明（表示のみ）',
- [dbExplanationLead]:'Query Doctor は、アクティブな SQL ワークシートのデータベース・スキーマ・ロールに基づいて SQL を説明します。Catalog Curator は独立した許可済みコンテキストでメタデータを説明します。SRE と Policy はそれぞれ独立したコンテキストで Database の読み取り専用観測を表示します。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。SQL 案と確認後の公開にはワークシートの Copilot と Manual WAP を使用してください。旧 Bear の直接実行は利用できません。',
- [dbExplanationInstruction]:'SQL を入力するか、ワークシートからコピーしてください。',
+ [dbExplanationLead]:'Query Doctor で SQL を説明できます。他の作業は担当 Bear を選んでください。',
+ [dbExplanationInstruction]:'ここに入力した SQL を、アクティブなワークシートのコンテキストで説明します。ワークシートの SQL はコピーして使えます。',
  [dbExplanationContextStep]:'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。',
  'SQL not executed · Execution plan not collected':'SQL は未実行 · 実行計画は未取得',
  'Captured at':'メタデータ取得日時','Updated at':'更新日時','Original SQL (read only)':'元の SQL（表示のみ）',
@@ -2867,7 +2911,6 @@ Object.assign(i18n.ja,{
  'Load explanation history to recover the original request after access changes.':'アクセス変更後に元の要求を復旧するには、説明履歴を読み込んでください。',
  'SUCCEEDED':'完了',
  [dbExplanationHelp]:'SQL と許可されたカラム名・型に基づく説明です。値とコメントはモデル入力から除外します。実行計画・クエリ結果は取得せず、SQL は実行しません。',
- [dbExplanationFence]:'Database モードでは SQL の説明と、TABLE・対応する INVOKER VIEW の実行計画の説明を利用できます。Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SRE と Policy はそれぞれ独立した Database コンテキストで、本人の保存記録と権限の上限を読み取り専用で確認できます。別の手動 Platform（P のみ）スコープでは、グローバル管理者ロールのプラットフォーム管理者が LOCAL の固定観測と Pod テンプレート宣言を確認できます。SQL 案はワークシートの Copilot で利用できます。確認済みの下書きと権限に基づく公開には Manual WAP を使用してください。旧 Bear/Copilot の直接実行は利用できません。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。'
 });
 function dbExplanationCapture(){
  const w=dbCurrent();if(!w)return null;
@@ -2982,6 +3025,9 @@ function dbExplanationSync(){
   $('explanation-'+prefix+'-saved-plan-history').disabled=!!reason||dbExplanation.busy;
   $('explanation-'+prefix+'-saved-plan-cancel').disabled=!!reason||dbExplanation.busy||!savedActive||!['QUEUED','RUNNING'].includes(active.state)||active.cancel_requested;
  }
+ const actionState=$('explanation-doctor-action-state');
+ const actionHint=reason?'Choose a permitted worksheet context to explain SQL.':dbExplanation.busy||dbSource.token?'Wait for the current request.':intent&&!dbExplanationTerminal(intent)?'Use Explanation history and recovery to check the original request.':!$('bear-query-sql').value.trim()?'Enter SQL to enable Explain SQL.':'';
+ actionState.hidden=!actionHint;if(actionHint)ui(actionState,actionHint);
  dbSourceSync();
  $('bear-query-sql').disabled=false;$('explanation-copy').disabled=dbExplanation.busy;
  const record=dbExplanation.record;
@@ -3784,7 +3830,7 @@ function dbCuratorRender(){
 function dbCuratorInstall(){
  const p=dbCurator;p.installed=true;p.role=p.role||currentRole;p.auth='';p.proofs.clear();const saved=readStorage(dbCuratorKey,[]);p.intents=Array.isArray(saved)?saved.flatMap(i=>{try{return [dbCuratorFreeze(Object.fromEntries(['principal','kind','body','key','id','source'].map(k=>[k,i[k]])))];}catch{return [];}}):[];
  for(const id of ['bear-catalog-action','bear-catalog-table']){const n=$(id);n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}
- $('bear-catalog-run').hidden=true;const description=$('bear-panel-catalog').querySelector('p');if(description)ui(description,'Catalog Curator drafts descriptions for one TABLE or VIEW using its own context.');const tab=$('bear-tab-catalog');tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
+ $('bear-catalog-run').hidden=true;const description=$('bear-panel-catalog').querySelector('p');if(description)ui(description,'Choose a role and refresh context, then select a database, schema, and table or view.');const tab=$('bear-tab-catalog');tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
  if(!$('curator-panel')?.dataset.installed){
   const panel=document.createElement('div');panel.id='curator-panel';panel.dataset.installed='true';$('bear-panel-catalog').append(panel);
@@ -3956,7 +4002,7 @@ function dbObservationsInstall(){
   if(p.installed)continue;p.installed=true;p.role=currentRole;
   const host=$('bear-panel-'+p.kind),tab=$('bear-tab-'+p.kind);tab.disabled=false;tab.dataset.databaseUnavailable='false';tab.title='';
   for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
-  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'SRE shows saved own-context Database metadata or manual Platform (P-only) observations and Pod-template declaration checks.':'Policy shows Database permission ceilings or manual Platform (P-only) observations and Pod-template declaration checks.');
+  const description=host.querySelector('p');if(description)ui(description,p.kind==='sre'?'Choose a scope to inspect saved Database activity or Platform (P-only) observations.':'Choose a scope to inspect Database permission ceilings or Platform (P-only) observations.');
   for(const name of ['run','action','manifest']){const n=$('bear-'+p.kind+'-'+name);if(n){n.disabled=true;n.hidden=true;if(n.parentElement)n.parentElement.hidden=true;}}
   const id='observation-'+p.kind+'-';
   if(!$(id+'panel')?.dataset.installed){
@@ -3967,6 +4013,7 @@ function dbObservationsInstall(){
    scope.onchange=()=>{p.scope=scope.value==='platform'?'platform':'database';++p.epoch;p.busy=null;p.notice='';dbPlatformLeave();dbObservationsSync();};
    const platform=document.createElement('div');platform.id=id+'platform';platform.className='toolbar';panel.append(platform);
    for(const [name,label,task] of [['auth','Refresh platform authority',dbPlatformRefreshAuth],['platform-fetch','Fetch platform observation',dbPlatformFetch]]){const b=document.createElement('button');b.id=id+name;b.type='button';ui(b,label);b.onclick=()=>task(p);platform.append(b);}
+   dataopsNode('p','',platform,'This scope inspects fixed LOCAL observations and Pod-template declarations.').className='help';
    const controls=document.createElement('div');controls.id=id+'database-controls';controls.className='table-wrap';panel.append(controls);const toolbar=document.createElement('div');toolbar.className='toolbar';controls.append(toolbar);
    for(const [name,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const field=document.createElement('span'),l=document.createElement('label'),select=document.createElement('select');field.className='field';select.id=id+name;l.htmlFor=select.id;ui(l,label);field.append(l,select);toolbar.append(field);
     select.onchange=()=>{p[name]=select.value;if(name==='role'){p.database='';p.schema='';p.databases=[];p.schemas=[];}if(name==='database'){p.schema='';p.schemas=[];}dbObservationClear(p);dbObservationSync(p);};
@@ -6221,23 +6268,29 @@ function dbExplanationInstall(){
  const lead=$('bears-lead');ui(lead,dbExplanationLead);
  const description=$('bear-panel-query').querySelector('p');if(description)ui(description,dbExplanationInstruction);
  const contextLine=document.createElement('p');contextLine.id='explanation-doctor-context';contextLine.className='status-line';input.before(contextLine);
- ui($('database-bears-notice'),dbExplanationFence);
  $('bear-tab-query').click();
  const copy=document.createElement('button');copy.id='explanation-copy';copy.type='button';ui(copy,'Copy from worksheet');
- copy.onclick=()=>{input.value=$('sql').value;input.dispatchEvent(new Event('input'));dbExplanationSync();};$('bear-query-run').before(copy);
+ copy.onclick=()=>{input.value=$('sql').value;input.dispatchEvent(new Event('input'));dbExplanationSync();};$('bear-query-run').after(copy);
+ $('bear-query-run').setAttribute('aria-describedby','explanation-doctor-context explanation-doctor-action-state');
  const latest=document.createElement('button');latest.id='explanation-latest';latest.type='button';ui(latest,'Load latest SELECT');latest.onclick=dbSourceLoad;copy.after(latest);
  const source=document.createElement('div');source.id='explanation-source';source.className='status-line';source.setAttribute('aria-live','polite');input.after(source);
  for(const prefix of ['doctor','copilot']){
   const panel=document.createElement('div');panel.className='copilot-body';
   const help=document.createElement('p');ui(help,dbExplanationHelp);panel.append(help);
-  const guidance=document.createElement('p');ui(guidance,'After a confirmed completion or failure, request a new explanation explicitly. Otherwise refresh or recover the original request.');panel.append(guidance);
+  if(prefix==='doctor'){
+   const actionState=dataopsNode('p','explanation-doctor-action-state',panel);actionState.className='help';actionState.setAttribute('role','status');
+   const output=document.createElement('div');output.id='explanation-doctor-output';output.setAttribute('aria-live','polite');panel.append(output);
+  }
+  const history=prefix==='doctor'?workflowDetails(panel,'Explanation history and recovery'):panel;
+  const guidance=document.createElement('p');ui(guidance,'After a confirmed completion or failure, request a new explanation explicitly. Otherwise refresh or recover the original request.');history.append(guidance);
   const toolbar=document.createElement('div');toolbar.className='toolbar';
   for(const [action,key,task] of [['recover','Refresh explanation / recover request',()=>dbExplain('recover',true)],['history','Load explanation history',()=>dbExplanationHistory()]]){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;toolbar.append(button);
   }
   const label=document.createElement('label'),select=document.createElement('select');select.id='explanation-'+prefix+'-saved';label.htmlFor=select.id;ui(label,'Choose a saved explanation');select.onchange=()=>select.value!==''?dbExplanationSelect(Number(select.value)):undefined;
-  panel.append(toolbar,label,select);
-  const planHelp=document.createElement('p');ui(planHelp,dbPlanHelp);panel.append(planHelp);
+  history.append(toolbar,label,select);
+  const plan=prefix==='doctor'?workflowDetails(panel,'Execution plan explanation'):panel;
+  const planHelp=document.createElement('p');ui(planHelp,dbPlanHelp);plan.append(planHelp);
   const planToolbar=document.createElement('div');planToolbar.className='toolbar';
   for(const [action,key,task] of [
    ['plan','Acquire plan and explain',()=>dbExplain(prefix,false,'sql_plan_explanation')],
@@ -6246,8 +6299,9 @@ function dbExplanationInstall(){
    ['plan-cancel','Cancel plan acquisition',dbPlanCancel]]){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;planToolbar.append(button);
   }
-  panel.append(planToolbar);
-  const savedHelp=document.createElement('p');ui(savedHelp,'Explains the saved plan locally. Uses its original SQL and captured metadata.');panel.append(savedHelp);
+  plan.append(planToolbar);
+  const savedPlan=prefix==='doctor'?workflowDetails(panel,'Saved plan re-explanation and recovery'):panel;
+  const savedHelp=document.createElement('p');ui(savedHelp,'Explains the saved plan locally. Uses its original SQL and captured metadata.');savedPlan.append(savedHelp);
   const savedToolbar=document.createElement('div');savedToolbar.className='toolbar';
   for(const [action,key,task] of [
    ['saved-plan','Explain saved plan again',()=>dbSavedExplain(prefix)],
@@ -6256,8 +6310,8 @@ function dbExplanationInstall(){
    ['saved-plan-cancel','Discard explanation result',dbSavedCancel]]){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;savedToolbar.append(button);
   }
-  panel.append(savedToolbar);
-  if(prefix==='doctor'){const output=document.createElement('div');output.id='explanation-doctor-output';output.setAttribute('aria-live','polite');panel.append(output);$('bear-panel-query').append(panel);}
+  savedPlan.append(savedToolbar);
+  if(prefix==='doctor')$('bear-panel-query').append(panel);
   else $('copilot-result').before(panel);
  }
  $('bear-query-run').onclick=()=>dbExplain('doctor');$('copilot-explain').onclick=()=>dbExplain('copilot');
@@ -6298,6 +6352,33 @@ Object.assign(i18n.ja,{
 function dbContextExampleReason(w=dbCurrent()){
  return dbReason({...w,mode:'read-only'});
 }
+function workflowDetails(parent,label){
+ const details=dataopsNode('details','',parent);details.className='workflow-details';dataopsNode('summary','',details,label);return details;
+}
+Object.assign(i18n.ja,{
+ 'Choose a permitted worksheet context to explain SQL.':'SQL を説明するには許可されたワークシートのコンテキストを選んでください。',
+ 'Wait for the current request.':'現在のリクエストが終わるまでお待ちください。',
+ 'Use Explanation history and recovery to check the original request.':'「説明の履歴と復旧」で元のリクエストを確認してください。',
+ 'Enter SQL to enable Explain SQL.':'SQL を入力すると説明を実行できます。',
+ 'Explanation history and recovery':'説明の履歴と復旧','Execution plan explanation':'実行計画の説明',
+ 'Saved plan re-explanation and recovery':'保存済み計画の再説明と復旧',
+ 'Choose a task to draft SQL, review a candidate, or refresh a published table.':'SQL 案の作成、候補の確認、公開済みテーブルの更新から選んでください。',
+ 'Draft SQL in Copilot':'Copilot で SQL 案を作成',
+ 'Verify a candidate in Manual WAP':'手動 WAP で候補を検証',
+ 'Refresh a published table in Managed Marts':'管理対象 Mart で公開済みテーブルを更新',
+ 'Review and publication requirements':'確認・公開の手順と権限',
+ 'Legacy direct Bear and Copilot execution is unavailable. Shared AI settings require platform administrator authority and global Admin.':'旧 Bear と Copilot の直接実行は利用できません。共有 AI 設定にはプラットフォーム管理者権限とグローバル Admin が必要です。',
+ 'Models / dbt':'モデル / dbt','Build dbt models, verify and publish candidates, or refresh published tables.':'dbt モデルの構築、候補の検証・公開、公開済みテーブルの更新を行います。',
+ 'Choose a database and schema, then load or create a model. Build and audit require Data Engineer or Admin. Publish and rollback require Admin.':'データベースとスキーマを選び、モデルを読み込むか新規作成します。構築と監査にはデータ作成者または管理者、公開とロールバックには管理者が必要です。',
+ 'Choose a database and refresh context, then compile an approved project or inspect a saved plan.':'データベースを選んでコンテキストを更新し、承認済みプロジェクトをコンパイルするか、保存済みプランを確認します。',
+ 'dbt compatibility and context':'dbt の互換性とコンテキスト',
+ 'Legacy dbt build/test is unavailable in Database mode.':'Database モードでは旧 dbt のビルド・テストは利用できません。',
+ 'This scope inspects fixed LOCAL observations and Pod-template declarations.':'このスコープでは LOCAL の固定観測と Pod テンプレート宣言を確認します。',
+ 'Choose a scope to inspect saved Database activity or Platform (P-only) observations.':'スコープを選び、保存済みの Database アクティビティまたは Platform（P のみ）の観測を確認します。',
+ 'Choose a scope to inspect Database permission ceilings or Platform (P-only) observations.':'スコープを選び、Database の権限上限または Platform（P のみ）の観測を確認します。',
+ 'Choose a role and refresh context, then select a database, schema, and table or view.':'ロールを選んでコンテキストを更新し、対象のデータベース、スキーマ、テーブルまたはビューを選びます。',
+ 'Choose the database and schema for this Mart, then load a saved Mart or a model version registered in Manual WAP.':'対象のデータベースとスキーマを選び、保存済みの Mart または手動 WAP で登録したモデルの版を読み込みます。'
+});
 const dbWorkflowHelp='SQL proposal → successful own proposal (data_engineer/admin): Edit in Manual WAP → explicitly select the same database and E/A role, choose a writable SANDBOX panel schema and matching target schema → Refresh panel context → New model with default SQL and one default source, an otherwise empty draft → explicitly Load proposal draft → review and Save model → Build → Audit → admin Publish. Rollback uses a linked publication, not an arbitrary snapshot. Refresh registered targets through Managed Marts as an authorized admin. Navigation does not import a proposal or change context.';
 Object.assign(i18n.ja,{
  [dbWorkflowHelp]:'SQL 案 → 本人の成功済み案（data_engineer/admin）で Edit in Manual WAP → 同じ DB・E/A ロールと書込可能な SANDBOX のパネルスキーマ・同じ対象スキーマを明示選択 → Refresh panel context → New model で既定 SQL・既定ソース1件以外が空の下書き → 明示的に Load proposal draft → 確認してモデルを保存 → Build → Audit → admin が Publish。Rollback は公開に紐づく操作です。任意のスナップショット復元とは異なります。登録済み対象の更新には権限のある admin が Managed Marts を使用してください。案内ボタンは案の取込やコンテキスト変更を行いません。',
@@ -6321,22 +6402,35 @@ function dbWorkflowSync(){
 function dbWorkflowNavigate(kind){
  dbWorkflowSync();if(!dbWorkflowAllowed(kind))return;
  if(kind==='copilot'){
-  activate($('tab-warehouse'));const details=$('copilot-request').closest('details.copilot');details.open=true;$('copilot-request').focus();return;
+  activate($('tab-warehouse'));
+  const request=$('copilot-request'),details=request.closest('details.copilot');
+  details.open=true;
+  (request.disabled?$('query-database'):request).focus();
+  return;
  }
  activate($('tab-transformation'));
  const root=kind==='wap'?$('p35-wap'):$('db-marts-panel');
- if(kind==='marts'){if(!dbWorkflowAllowed(kind))return;showView('transformation-view-marts');}
+ if(!dbWorkflowAllowed(kind))return;showView('transformation-view-'+kind);
  root.setAttribute('tabindex','-1');root.focus();root.scrollIntoView({block:'nearest'});
 }
 function dbWorkflowInstall(){
+ const dataTab=$('bear-tab-data');dataTab.disabled=false;delete dataTab.dataset.databaseUnavailable;
+ $('bear-data-legacy').hidden=true;
+ const body=dataopsNode('div','',$('bear-panel-data'));body.className='panel-body';
+ dataopsNode('h2','',body,'Data Engineer Bear');
+ dataopsNode('p','',body,'Choose a task to draft SQL, review a candidate, or refresh a published table.');
  for(const prefix of ['bears','copilot']){
-  const toolbar=document.createElement('div');toolbar.id='database-'+prefix+'-workflows';toolbar.className='toolbar';toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label',t('Database SQL workflows'));uiAttributes.push({node:toolbar,attribute:'aria-label',key:'Database SQL workflows'});
-  const help=document.createElement('p');help.id=toolbar.id+'-help';help.className='help';ui(help,dbWorkflowHelp);toolbar.append(help);
+  const toolbar=document.createElement('div');toolbar.id='database-'+prefix+'-workflows';toolbar.className=prefix==='bears'?'bear-workflows':'toolbar';toolbar.setAttribute('role','group');toolbar.setAttribute('aria-label',t('Database SQL workflows'));uiAttributes.push({node:toolbar,attribute:'aria-label',key:'Database SQL workflows'});
   for(const kind of prefix==='bears'?['copilot','wap','marts']:['wap','marts']){
-   const button=document.createElement('button');button.id=prefix+'-guide-'+kind;button.type='button';button.dataset.workflowGuide='true';ui(button,{copilot:'Open worksheet Copilot',wap:'Open Manual WAP',marts:'Open Managed Marts'}[kind]);button.onclick=()=>dbWorkflowNavigate(kind);
-   const reason=document.createElement('span');reason.id=button.id+'-reason';reason.className='help';ui(reason,kind==='wap'?'WAP navigation requires data_engineer or admin (E/A).':kind==='marts'?'Managed Marts navigation requires admin and an available Marts tab.':'Database SQL workflows');button.setAttribute('aria-describedby',help.id+' '+reason.id);toolbar.append(button,reason);
+   const button=document.createElement('button');button.id=prefix+'-guide-'+kind;button.type='button';button.dataset.workflowGuide='true';ui(button,(prefix==='bears'?{copilot:'Draft SQL in Copilot',wap:'Verify a candidate in Manual WAP',marts:'Refresh a published table in Managed Marts'}:{wap:'Open Manual WAP',marts:'Open Managed Marts'})[kind]);button.onclick=()=>dbWorkflowNavigate(kind);
+   const reason=document.createElement('span');reason.id=button.id+'-reason';reason.className='help';ui(reason,kind==='wap'?'WAP navigation requires data_engineer or admin (E/A).':kind==='marts'?'Managed Marts navigation requires admin and an available Marts tab.':'Database SQL workflows');button.setAttribute('aria-describedby',reason.id);toolbar.append(button,reason);
   }
-  if(prefix==='bears')$('database-bears-notice').after(toolbar);else $('copilot-result').before(toolbar);
+  const details=workflowDetails(toolbar,'Review and publication requirements');
+  const help=dataopsNode('p',toolbar.id+'-help',details,dbWorkflowHelp);help.className='help';
+  if(prefix==='bears'){
+   body.append(toolbar);
+   dataopsNode('p','database-bears-notice',details,'Legacy direct Bear and Copilot execution is unavailable. Shared AI settings require platform administrator authority and global Admin.');
+  }else $('copilot-result').before(toolbar);
  }
  dbWorkflowSync();
 }
@@ -7238,14 +7332,8 @@ async function initializeDatabaseUI(session){
   "ingestion",
   "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target."
  ],
- [
-  "transformation",
-  "Manual WAP and Managed Marts are supported with their own database/schema context. WAP build/audit requires the selected data_engineer or admin role; publish/rollback and Managed Marts require an authorized admin role. Legacy dbt build/test is unavailable in Database mode. Database dbt supports compiled table/ephemeral SELECT candidates, run-specific SANDBOX INVOKER VIEWs and tests. Per-model WAP publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes."
- ],
- [
-  "bears",
-  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Use Manual WAP for reviewed drafts and authorized publication. Legacy direct Bear/Copilot execution remains unavailable. Shared AI settings are available to platform administrators using global Admin."
- ],
+ ["transformation"],
+ ["bears"],
  [
   "pawprints",
   "Saved metadata audit is available. SQL, prompts and results are excluded. Pawprints is a separate supplementary platform preview."
@@ -7255,7 +7343,7 @@ async function initializeDatabaseUI(session){
   "Compute controls, Auto-Chill and governance checks are unavailable in Database mode. Check shared warehouse state in the header; Database admin role does not grant platform control."
  ]
 ]) {
-  const panel=$(id),notice=document.createElement('p');notice.id='database-'+id+'-notice';notice.className='callout info';ui(notice,key);panel.prepend(notice);
+  const panel=$(id);if(key){const notice=document.createElement('p');notice.id='database-'+id+'-notice';notice.className='callout info';ui(notice,key);panel.prepend(notice);}
   for(const node of panel.querySelectorAll('button,input,select,textarea')){node.disabled=true;node.dataset.databaseUnavailable='true';}
  }
  // Jobs replaces its legacy contents with a Database panel.
@@ -7331,7 +7419,7 @@ async function initializeDatabaseUI(session){
  dbAuditInstall();
  dbRuntimeInstall();await dbRuntimeRefresh();
  const dbtLink=dbDbtURL();
- if(dbtLink.database&&(dbtLink.plan||dbtLink.run||dbtLink.publication)){await activate($('tab-transformation'));await dbDbtRestore();}
+ if(dbtLink.database&&(dbtLink.plan||dbtLink.run||dbtLink.publication)){showView('transformation-view-models');await activate($('tab-transformation'));await dbDbtRestore();}
  const creationID=dbCreationURL().id;
  if(dbAdminAllowed()&&/^[A-Za-z0-9_-]{1,128}$/.test(creationID||''))await activate($('tab-db-admin'));
 }
@@ -7862,7 +7950,9 @@ function dataopsAiSelect(){
  if(!dataopsAiAuthorized(origin))return;
  p.aiPending=origin;p.aiToken=null;p.aiNotice='';
  activate($('tab-transformation'));
+ showView('transformation-view-wap');
  dataopsAiRender(p);
+ p.root.setAttribute('tabindex','-1');p.root.focus();
 }
 function dataopsAiClear(p){p.aiPending=null;p.aiToken=null;p.aiNotice='';dataopsAiRender(p);}
 function dataopsAiPristine(p){
@@ -8065,7 +8155,7 @@ async function dataopsRefreshAuthorization(){
  }
  dataopsValidate();
 }
-function dataopsOpen(target){const p=dataopsPanels.get(target==='ingestion'?'p35-ingest':target==='transformation'?'p35-wap':'');if(p&&!p.started&&!p.aiPending){p.started=true;dataopsRefresh(p);}}
+function dataopsOpen(target){const p=dataopsPanels.get(target==='ingestion'?'p35-ingest':target==='transformation'&&!$('transformation-wap').hidden?'p35-wap':'');if(p&&!p.started&&!p.aiPending){p.started=true;dataopsRefresh(p);}}
 function dataopsChanged(p){++p.epoch;p.preview=null;p.modelDirty=true;$(p.id+'-sample')?.replaceChildren();ui(p.status,p.id==='p35-ingest'?'Preview required after every input change.':'Save or load a model version before building.');dataopsRender(p);}
 const dataopsSameContext=(a,b)=>JSON.stringify(Object.keys(a||{}).sort().map(k=>[k,a[k]]))===JSON.stringify(Object.keys(b||{}).sort().map(k=>[k,b[k]]));
 async function dataopsRequest(path,context,body,key){
@@ -8491,7 +8581,10 @@ function dataopsLoadModel(p,model,{preserveOrigin=false}={}){
  ui(p.status,model?'Saved version {version}':'Save or load a model version before building.',{version:model?.version});dataopsRender(p);
 }
 function dataopsInstallWap(){
- const p=dataopsPanel('p35-wap','Manual WAP',$('transformation')),id=p.id;p.sources=[];p.aiRevision=0;$('transformation').prepend(p.root);
+ const tab=$('transformation-view-wap');tab.hidden=false;tab.disabled=false;delete tab.dataset.databaseUnavailable;
+ ui(tab,'Manual WAP');
+ const p=dataopsPanel('p35-wap','Manual WAP',$('transformation-wap')),id=p.id;p.sources=[];p.aiRevision=0;
+ const guidance=dataopsNode('p','p35-wap-entry-help',p.body,'Choose a database and schema, then load or create a model. Build and audit require Data Engineer or Admin. Publish and rollback require Admin.');guidance.className='help';p.form.before(guidance);
  p.aiBar=dataopsNode('div',id+'-ai-import',p.body);p.aiBar.className='help';p.aiBar.setAttribute('aria-live','polite');p.body.prepend(p.aiBar);
  dataopsField(p.fields,id+'-models','Saved models','select').onchange=()=>{dataopsChanged(p);const n=$(id+'-models').value;dataopsLoadModel(p,n===''?null:p.models[Number(n)]);};
  dataopsField(p.fields,id+'-model-id','Model ID');dataopsField(p.fields,id+'-sql','SQL','textarea').value='SELECT * FROM source';
@@ -8595,8 +8688,6 @@ function dataopsInstall(){
  const ingest=dataopsInstallIngest(),wap=dataopsInstallWap();
  // Unsupported legacy pathways remain gated; manual WAP is outside marts-admin.
  for(const id of ['ingestion-view-file','ingestion-view-stages'])$(id).disabled=id.endsWith('stages');
- // Keep supported-feature guidance above the independently inserted Manual WAP form.
- for(const id of ['ingestion','transformation'])$(id).prepend($('database-'+id+'-notice'));
  for(const p of [ingest,wap]){p.databases=dbRoleItems(p.role);p.schemas=dbSchemasFor({selected_role:p.role,database_id:p.database});dataopsRender(p,true);}
  dataopsOptions($('export-table-format'),[['csv','CSV'],['jsonl','JSONL (one object per line)']],'csv','File format');
  $('export-table-btn').onclick=dataopsStartExport;
@@ -10056,7 +10147,13 @@ async function dbMartsHistory(){
 }
 function dbMartsRender(){
  dbScheduleSync('mart');
- const p=dbMarts;if(!p.installed)return;const allowed=!p.invalid&&dbMartsAllowed(),selected=dbMartsSelected();$('transformation-view-marts').disabled=!dbRoleWithinHeader('admin');
+ const p=dbMarts;if(!p.installed)return;const allowed=!p.invalid&&dbMartsAllowed(),selected=dbMartsSelected();
+ const tab=$('transformation-view-marts'),tabFocused=document.activeElement===tab;
+ tab.disabled=!dbRoleWithinHeader('admin');
+ if(tab.disabled&&tab.getAttribute('aria-selected')==='true'){
+  showView('transformation-view-models');
+  if(tabFocused)$('transformation-view-models').focus();
+ }
  dataopsOptions($('db-marts-role'),dbRoleWithinHeader('admin')?[['admin','admin']]:[],p.role,'Execution role');dataopsOptions($('db-marts-database'),(p.databases||[]).map(d=>[d.id,d.display_name+' · '+d.sql_catalog]),p.database,'Choose database');dataopsOptions($('db-marts-schema'),(p.schemas||[]).filter(s=>s.sql_name?.toLowerCase()==='marts').map(s=>[s.id,s.display_name+' · '+s.sql_name]),p.schema,'Choose schema');
  dataopsOptions($('db-marts-list'),(allowed?p.marts:[]).map(m=>[m.id,m.definition.name+' · v'+m.revision]),p.selection,'Saved Marts');dataopsOptions($('db-marts-models'),(allowed?p.models:[]).map(m=>[JSON.stringify([m.model_id,m.version]),m.model_id+' · v'+m.version]),$('db-marts-models').value,'Saved models');
  for(const k of [...dbMartsFields,'models','load-model','save'])$('db-marts-'+k).disabled=p.pending||!allowed;
@@ -10068,10 +10165,13 @@ function dbMartsRender(){
  const detail=$('db-marts-run-detail');detail.replaceChildren();const r=p.run;if(r){dataopsNode('p','',detail).textContent='Run ID: '+(r.id||(r.rejection?'not accepted':'UNKNOWN'))+' · Key: '+r.key;if(dbMartsAssociated(r)&&!r.purged){if(r.rejection)dataopsNode('p','',detail).textContent='Not accepted: '+r.rejection;if(r.details)dataopsNode('pre','',detail).textContent=JSON.stringify(r.details,null,2);}}
  const history=$('db-marts-history');history.replaceChildren();if(selected)for(const run of p.history){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[run.id,run.kind,run.status,'v'+run.mart_revision].join(' · ');dataopsButton(row,'','Observe run',()=>{if(p.pending||!dbMartsSelected()||!dbMartsValidRun(run,p.context,p.mart.id)||(dbMartsAssociated(p.run)&&!p.run.rejection&&!dbMartsTerminal(p.run)&&p.run.id!==run.id))return;p.run={id:run.id,mart_id:run.mart_id,mart_revision:run.mart_revision,kind:run.kind,status:run.status,context:dataopsFreeze(dataopsClone(run.context)),principal:dbPrincipal,key:'',sequence:0,details:null};return dbMartsObserve();});}
 }
+function dbMartsOpen(){
+ if(dbMarts.installed&&!dbMarts.started){dbMarts.started=true;return dbMartsRefresh();}
+}
 function dbMartsInstall(){
  const p=dbMarts;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.role='admin';p.database=dbCurrent()?.database_id||'';p.schema='';p.databases=dbRoleItems('admin');p.schemas=[];
  for(const child of $('transformation-marts').children)child.hidden=true;
- const root=dataopsNode('section','db-marts-panel',$('transformation-marts'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Managed Marts');dataopsNode('p','',body,'Mart context is independent of worksheets and Explorer. Register models with Manual WAP, then explicitly load a model version here.').className='help';
+ const root=dataopsNode('section','db-marts-panel',$('transformation-marts'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Managed Marts');dataopsNode('p','',body,'Choose the database and schema for this Mart, then load a saved Mart or a model version registered in Manual WAP.').className='help';
  const selectors=dataopsNode('div','',body);selectors.className='toolbar';for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const n=dataopsField(selectors,'db-marts-'+key,label,'select');n.onchange=()=>{const value=n.value;dbMartsClear();p[key]=value;if(key==='database')p.schema='';return dbMartsRefresh();};}dataopsButton(selectors,'db-marts-refresh','Refresh Marts',()=>{p.started=true;return dbMartsRefresh();});
  const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-marts-list','Saved Marts','select').onchange=dbMartsSelect;dataopsButton(saved,'db-marts-load','Load Mart',dbMartsLoad);dataopsButton(saved,'db-marts-reload','Load current revision',dbMartsLoad);dataopsButton(saved,'db-marts-new','New Mart',()=>{if(p.pending||p.invalid||p.save)return;++p.request;p.mart=null;p.model=null;p.selection='';p.history=[];p.conflict=false;for(const k of dbMartsFields)$('db-marts-'+k).value='';$('db-marts-watch').value='all';dbMartsRender();});
  const form=dataopsNode('form','db-marts-form',body);form.onsubmit=e=>e.preventDefault();const fields=dataopsNode('div','',form);fields.className='job-fields';dataopsField(fields,'db-marts-name','Mart name');dataopsField(fields,'db-marts-models','Saved models','select').onchange=()=>{++p.request;const value=$('db-marts-models').value;if(value){const [id,version]=JSON.parse(value);$('db-marts-model-id').value=id;$('db-marts-version').value=String(version);}p.model=null;dbMartsRender();};
@@ -10079,7 +10179,7 @@ function dbMartsInstall(){
  dataopsNode('p','',form,'Manual-only Marts allow unconditional refresh. Check and conditional refresh require watches (WATCH_REQUIRED).').className='help';dataopsNode('pre','db-marts-model-detail',form);dataopsButton(form,'db-marts-save','Save Mart',dbMartsSave).className='primary';dataopsNode('pre','db-marts-definition-detail',body);
  const actions=dataopsNode('div','',body);actions.className='toolbar';dataopsButton(actions,'db-marts-check','Check changes',()=>dbMartsSubmit('check'));const checkbox=dataopsField(actions,'db-marts-check-changes','Check only when changed');checkbox.type='checkbox';checkbox.checked=false;dataopsButton(actions,'db-marts-refresh-run','Full refresh',()=>dbMartsSubmit('refresh'));dataopsButton(actions,'db-marts-observe','Observe run',dbMartsObserve);
  p.status=dataopsNode('p','db-marts-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('div','db-marts-run-detail',body);dataopsNode('h3','',body,'Mart history');dataopsButton(body,'db-marts-history-refresh','Refresh history',dbMartsHistory);dataopsNode('div','db-marts-history',body);
- delete $('transformation-view-marts').dataset.databaseUnavailable;$('transformation-view-marts').hidden=false;ui($('transformation-view-marts'),'Managed Marts');$('transformation-view-marts').addEventListener('click',()=>{if(!p.started){p.started=true;return dbMartsRefresh();}});dbMartsRender();
+ delete $('transformation-view-marts').dataset.databaseUnavailable;$('transformation-view-marts').hidden=false;ui($('transformation-view-marts'),'Managed Marts');dbMartsRender();
 }
 
 
@@ -10272,7 +10372,7 @@ function dbDbtRenderCompatibility(parent,a){
  const state=dbDbtCompatibility(a),section=dataopsNode('section','db-dbt-compatibility',parent);section.className='db-dbt-compatibility';section.setAttribute('aria-labelledby','db-dbt-compatibility-title');
  dataopsNode('h3','db-dbt-compatibility-title',section,'Compatibility');
  dataopsNode('p','',section,({pending:'Validating settings compatibility',supported:'Supported: SQL / WAP',blocked:'Blocked: unsupported settings',legacy:'Legacy plan: recompile required',invalid:'Compatibility not validated'})[state]);
- if(state==='supported')dataopsNode('p','',section,a.compatibility.version===2?'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.':'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.');
+ if(state==='supported')dataopsNode('p','',workflowDetails(section,'dbt compatibility and context'),a.compatibility.version===2?'SQL / WAP supports run-specific SANDBOX INVOKER VIEWs over TABLE sources and downstream TABLE candidates/tests. TABLE-only publication; VIEW to VIEW is unsupported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.':'SQL / WAP uses compiled table/ephemeral SELECT and tests with error severity, COUNT(*) and zero failures. Views are unsupported by this plan. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.');
  if(state==='blocked'){
   const reasons={UNSUPPORTED_VIEW_SECURITY:'Views require INVOKER security',UNSUPPORTED_VIEW_PROPERTIES:'View write properties are unsupported',UNSUPPORTED_VIEW_DEPENDENCY:'VIEW to VIEW dependencies are unsupported',UNSUPPORTED_MATERIALIZATION:'Unsupported materialization',UNSUPPORTED_MODEL_CONFIG:'Unsupported model setting',UNSUPPORTED_TABLE_PROPERTIES:'Only fixed format=PARQUET is supported',UNSUPPORTED_TEST_CONFIG:'Test requires error severity, COUNT(*) and zero failures'};
   const sharedSettings=['pre_hook','post_hook','on_run_start','on_run_end','hooks','grants','persist_docs','sql_header','store_failures','store_failures_as','incremental_strategy','full_refresh','column_types','unique_key','partition_by','cluster_by','table_format','file_format','location','catalog_name','indexes','bind','dist','sort','sql_where','contract'];
@@ -10696,9 +10796,12 @@ function dbDbtInstall(){
  const p=dbDbt;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.header=currentRole;p.maximum=dbMaximumRole;p.role=currentRole;p.database=dbCurrent()?.database_id||'';p.schema='';p.schemas=[];p.databases=dbRoleItems(p.role);
  // Only Database mode replaces the legacy model controls. Manual WAP/Marts remain separate.
  for(const child of $('transformation-models').children)child.hidden=true;
- delete $('transformation-view-models').dataset.databaseUnavailable;$('transformation-view-models').disabled=false;
+ const tab=$('transformation-view-models');delete tab.dataset.databaseUnavailable;tab.disabled=false;ui(tab,'Models / dbt');
+ ui($('transformation-lead'),'Build dbt models, verify and publish candidates, or refresh published tables.');
  const root=dataopsNode('section','db-dbt-panel',$('transformation-models'));root.className='panel';root.setAttribute('aria-labelledby','db-dbt-title');const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','db-dbt-title',body,'Database dbt');
- for(const copy of ['SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.','Context is independent of Worksheets. History and deep links only read saved records.'])dataopsNode('p','',body,copy).className='help';
+ dataopsNode('p','',body,'Choose a database and refresh context, then compile an approved project or inspect a saved plan.').className='help';
+ const compatibility=workflowDetails(body,'dbt compatibility and context');
+ for(const copy of ['SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.','Context is independent of Worksheets. History and deep links only read saved records.','Legacy dbt build/test is unavailable in Database mode.'])dataopsNode('p','',compatibility,copy).className='help';
  const context=dataopsNode('div','',body);context.className='toolbar';
  for(const [name,label] of [['role','Execution role'],['database','Database']])dataopsField(context,'db-dbt-'+name,label,'select').onchange=()=>{const value=dbDbtNode(name).value;dbDbtPurge();p[name]=value;return dbDbtRefresh();};
  dataopsNode('p','',context,'Candidate Schema: SANDBOX (fixed)');dataopsButton(context,'db-dbt-refresh','Refresh dbt context',dbDbtRefresh);

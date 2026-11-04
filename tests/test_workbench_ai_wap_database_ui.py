@@ -16,7 +16,7 @@ async function selected(count=2,role='admin',sourceSchema='schema'){
  await boot([{...input(),schema_id:sourceSchema,selected_role:role}]);request();objects=Array.from({length:count},(_,i)=>proposalObject(i,sourceSchema));await $('proposal-load').onclick();for(let i=0;i<count;i++){$('proposal-object').value=String(i);await $('proposal-add').onclick();}
  const r=proposalRecord();route=async()=>wrap(r);dbProposal.history=[r];await dbProposalHistory(0);
  assert.equal(dbProposal.wapRecord,dbProposal.record);const p=dataopsPanels.get('p35-wap');
- const before=calls.length;await $('proposal-wap').onclick();assert.equal(calls.length,before);assert.equal(activeTab,'transformation');assert.equal(dbProposal.record,null);
+ const before=calls.length;await $('proposal-wap').onclick();assert.equal(calls.length,before);assert.equal(activeTab,'transformation');assert.equal($('transformation-wap').hidden,false);assert.equal(dbProposal.record,null);
  route=baseWapRoute;return p;
 }
 async function destination(p){
@@ -36,15 +36,11 @@ class AIWapDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP.replace("async function ready(", "async function readyDataops(") + COMMON + PROPOSAL + WAP + body)
 
-    def test_guides_mount_outside_legacy_panels_and_open_existing_copilot_from_details(self):
-        # The common notice and guide precede the forms in the Bears section,
-        # outside the disabled/hidden legacy Bear tabs.
-        self.assertIn("if(prefix==='bears')$('database-bears-notice').after(toolbar)", harness.HTML)
-        self.assertIn('id="bear-cards" class="bear-layout"', harness.HTML)
-        self.assertNotIn("$('bear-tab-data').disabled=false", harness.HTML)
+    def test_data_engineer_guides_open_existing_copilot_from_details(self):
         self.javascript(r"""
-await ready();const cards=$('bear-cards'),legacy=$('bear-data-panel');$('bears').append(cards);cards.append(legacy);legacy.hidden=true;
-await activate($('tab-bears'));const guide=$('database-bears-workflows');assert.equal(guide.parentElement,$('bears'));const notice=$('database-bears-notice'),siblings=$('bears').children;assert.equal(notice.parentElement,guide.parentElement);assert.equal(siblings[siblings.indexOf(notice)+1],guide);assert.ok(siblings.indexOf(guide)<siblings.indexOf(cards));assert.ok(!cards.descendants().includes(guide));
+await ready();await activate($('tab-bears'));const guide=$('database-bears-workflows');
+assert.equal(guide.parentElement.parentElement,$('bear-panel-data'));assert.equal($('bear-data-legacy').hidden,true);
+assert.equal($('bear-tab-data').disabled,false);
 for(let n=$('bears-guide-copilot');n;n=n.parentElement){assert.equal(n.hidden,false);assert.equal(n.disabled,false);}
 assert.equal($('database-copilot-workflows').parentElement,$('copilot-stage').parentElement);assert.equal($('copilot-stage').disabled,true);assert.equal($('copilot-publish').disabled,true);
 request('retained request');editSQL('SELECT retained');queryResult={columns:['retained'],rows:[[9]]};const result=queryResult,w=dbCurrent(),context=JSON.stringify(dbContext(w)),inputs=JSON.stringify(dbInput(w)),count=worksheets.length,proposal=dbProposal.record;
@@ -55,7 +51,7 @@ assert.equal(dbCurrent(),w);assert.equal(worksheets.length,count);assert.equal(J
 
     def test_wap_guide_preserves_dirty_draft_and_original_operation_handles_across_contexts(self):
         self.javascript(r"""
-const p=await readyDataops('p35-wap');assert.equal(p.root.parentElement,$('transformation'));assert.ok(!$('transformation-models').descendants().includes(p.root));assert.ok(!$('transformation-marts').descendants().includes(p.root));
+const p=await readyDataops('p35-wap');assert.equal(p.root.parentElement,$('transformation-wap'));assert.ok(!$('transformation-models').descendants().includes(p.root));assert.ok(!$('transformation-marts').descendants().includes(p.root));
 // Panel DB, role and full context intentionally differ from the worksheet.
 Object.assign(p,{database:'separate-db',schema:'separate-schema',role:'data_engineer',context:{...p.context,database_id:'separate-db',schema_id:'separate-schema',sql_catalog:'separate_catalog',sql_schema:'separate_schema',selected_role:'data_engineer',binding_revision:8,generation_id:'separate-generation',grant_revision:23},model:{model_id:'retained',version:7},modelDirty:true});
 for(const [key,value] of Object.entries({'model-id':'retained','sql':'SELECT dirty FROM retained_source','target-schema':'separate-schema',name:'retained_target',target:'1',min:'11','not-null':'code',build:'original-build',audit:'original-audit',publication:'original-publication'}))$('p35-wap-'+key).value=value;
@@ -69,7 +65,15 @@ assert.equal(calls.length,before);assert.equal(wapCalls().length,0);assert.equal
 
     def test_wap_guide_keeps_pending_proposal_and_first_open_only_reads_normal_metadata(self):
         self.javascript(r"""
-await ready();const p=dataopsPanels.get('p35-wap');assert.ok(!p.started);const initial=calls.length;await $('bears-guide-wap').onclick();for(let i=0;i<12;i++)await tick();assert.equal(p.started,true);assert.ok(calls.length>initial);assert.ok(calls.slice(initial).every(c=>!c.options?.method&&!c.options?.body));assert.equal(proposalPosts().length,0);assert.equal(wapCalls().length,0);assert.ok(!p.aiPending);assert.ok(!p.aiOrigin);
+await ready();const p=dataopsPanels.get('p35-wap');assert.ok(!p.started);
+const initial=calls.length;await activate($('tab-transformation'));
+assert.equal(calls.length,initial);assert.equal($('transformation-models').hidden,false);
+let handled=false;$('transformation-view-models').onkeydown({key:'ArrowRight',preventDefault:()=>{handled=true;}});
+assert.equal(handled,true);assert.equal(document.activeElement,$('transformation-view-wap'));
+assert.equal($('transformation-wap').hidden,false);for(let i=0;i<12;i++)await tick();assert.equal(p.started,true);assert.ok(calls.length>initial);assert.ok(calls.slice(initial).every(c=>!c.options?.method&&!c.options?.body));assert.equal(proposalPosts().length,0);assert.equal(wapCalls().length,0);assert.ok(!p.aiPending);assert.ok(!p.aiOrigin);
+$('p35-wap-sql').value='SELECT retained';const before=calls.length;
+$('transformation-view-models').click();$('transformation-view-wap').click();
+assert.equal($('p35-wap-sql').value,'SELECT retained');assert.equal(calls.length,before);
 """)
         self.javascript(r"""
 const p=await selected();const pending=p.aiPending;assert.ok(!p.started);await activate($('tab-bears'));const before=calls.length,form=fields(p),context=p.context;await $('bears-guide-wap').onclick();await tick();assert.equal(p.aiPending,pending);assert.equal(p.context,context);assert.equal(fields(p),form);assert.ok(!p.started);assert.ok(!p.aiOrigin);assert.equal(calls.length,before);assert.equal(wapCalls().length,0);assert.equal(submissions.length,0);
@@ -77,13 +81,17 @@ const p=await selected();const pending=p.aiPending;assert.ok(!p.started);await a
 
     def test_guide_role_rechecks_hidden_marts_denial_locales_and_native_focus(self):
         self.javascript(r"""
-await ready();for(const role of ['data_engineer','bi_viewer']){currentRole=role;dbControls();for(const locale of ['ja','en']){setLanguage(locale);assert.ok(visibleText($('database-bears-workflows')).includes(t(dbWorkflowHelp)));assert.notEqual(i18n.ja[dbWorkflowHelp],dbWorkflowHelp);for(const id of ['bears-guide-marts','copilot-guide-marts']){assert.equal($(id).disabled,true);const reason=$(id+'-reason');assert.equal(reason.hidden,false);assert.match(reason.textContent,/admin/);assert.equal($(id).getAttribute('aria-describedby').includes(reason.id),true);}assert.equal($('bears-guide-wap').disabled,role==='bi_viewer');if(role==='bi_viewer')assert.match($('bears-guide-wap-reason').textContent,/E\/A/);}
+await ready();for(const role of ['data_engineer','bi_viewer']){currentRole=role;dbControls();for(const locale of ['ja','en']){setLanguage(locale);assert.equal($('database-bears-workflows-help').textContent,t(dbWorkflowHelp));assert.notEqual(i18n.ja[dbWorkflowHelp],dbWorkflowHelp);for(const id of ['bears-guide-marts','copilot-guide-marts']){assert.equal($(id).disabled,true);const reason=$(id+'-reason');assert.equal(reason.hidden,false);assert.match(reason.textContent,/admin/);assert.equal($(id).getAttribute('aria-describedby').includes(reason.id),true);}assert.equal($('bears-guide-wap').disabled,role==='bi_viewer');if(role==='bi_viewer')assert.match($('bears-guide-wap-reason').textContent,/E\/A/);}
 await activate($('tab-bears'));const before=calls.length;await $('bears-guide-marts').onclick();await $('copilot-guide-marts').onclick();if(role==='bi_viewer')await $('bears-guide-wap').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);}
 currentRole='admin';dbControls();const tab=$('transformation-view-marts');for(const flag of ['hidden','disabled']){tab[flag]=true;const before=calls.length;await $('bears-guide-marts').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);assert.equal($('bears-guide-marts').disabled,true);tab[flag]=false;}
 dbWorkflowSync();assert.equal($('bears-guide-marts').disabled,false);
 // Direct handler invocation after render must consult the current ceiling.
 dbMaximumRole='bi_viewer';const before=calls.length;await $('bears-guide-wap').onclick();await $('bears-guide-marts').onclick();assert.equal(activeTab,'bears');assert.equal(calls.length,before);dbMaximumRole='admin';dbControls();
 let clicks=0;tab.addEventListener('click',()=>clicks++);await $('bears-guide-marts').onclick();assert.equal(clicks,1);assert.equal(activeTab,'transformation');assert.equal(tab.getAttribute('aria-selected'),'true');assert.equal($('transformation-marts').hidden,false);assert.equal(document.activeElement,$('db-marts-panel'));
+const models=$('transformation-view-models');models.click();models.onkeydown({key:'End',preventDefault(){}});
+assert.equal(document.activeElement,tab);assert.equal($('transformation-marts').hidden,false);
+currentRole='data_engineer';dbControls();assert.equal(tab.disabled,true);assert.equal($('transformation-marts').hidden,true);
+assert.equal(document.activeElement,models);assert.equal(models.getAttribute('aria-selected'),'true');
 for(const id of ['bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts']){const n=$(id);assert.equal(n.tagName,'BUTTON');assert.equal(n.type,'button');assert.equal(typeof n.onclick,'function');assert.equal(n.onkeydown,undefined);assert.ok(n.getAttribute('aria-describedby'));}
 assert.equal($('copilot-stage').disabled,true);assert.equal($('copilot-publish').disabled,true);assert.equal(submissions.length,0);assert.equal(proposalPosts().length,0);assert.equal(wapCalls().length,0);
 """)
@@ -207,6 +215,19 @@ const p=await selected();await destination(p);const d=draft(p);d.sources[0]={ali
             for error in [False,True]:
                 with self.subTest(change=change,error=error):
                     self.javascript("const p=await selected();await destination(p);const reply=envelopeDraft(p),wait=deferred();route=async()=>wait.promise;const loading=dataopsAiLoad(p);await tick();"+change+";const before=fields(p);"+("wait.reject(Error('private late parser'));" if error else "wait.resolve(reply);")+r'''await loading;assert.equal(fields(p),before);assert.ok(!p.aiOrigin);assert.doesNotMatch(visibleText(p.aiBar),/private late parser/);''')
+
+    def test_leaving_wap_subview_invalidates_late_proposal_load(self):
+        for denied in (False, True):
+            with self.subTest(denied=denied):
+                self.javascript("const denied="+str(denied).lower()+r'''
+const p=await selected();await destination(p);
+const before=fields(p),pending=p.aiPending,reply=envelopeDraft(p),wait=deferred();
+route=async()=>wait.promise;const loading=dataopsAiLoad(p);await tick();assert.ok(p.aiToken);
+showView('transformation-view-models');showView('transformation-view-wap');
+wait.resolve(denied?{http:403,body:{code:'FORBIDDEN'}}:reply);await loading;
+assert.equal(fields(p),before);assert.equal(p.aiPending,pending);assert.equal(p.aiOrigin,null);
+assert.equal(p.aiToken,null);assert.equal($('p35-wap-ai-load').disabled,false);
+''')
 
     def test_old_finally_cannot_finish_new_token_or_selection(self):
         self.javascript(r'''

@@ -244,6 +244,21 @@ wait.resolve(boundary==='schema-empty'?{items:[]}:{http:403,get body(){throw Syn
 assert.equal(p.model,model);assert.equal(p.metadata,metadata);assert.equal(p.invalid,false);assert.equal($('p35-wap-sql').value,'SELECT newer_form_sql FROM source');
 ''')
 
+    def test_reconnect_drops_protected_wap_reply_after_subview_roundtrip(self):
+        for denied in (False, True):
+            with self.subTest(denied=denied):
+                self.javascript('const denied='+str(denied).lower()+r'''
+const p=await ready('p35-wap');activate($('tab-transformation'));showView('transformation-view-wap');await tick();
+const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'recover',context:structuredClone(p.context),time:Date.now(),id:'known',state:'FINISHED',ambiguous:false,principal:dbPrincipal,restored:true};
+dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;
+const wait=deferred();let reads=0;route=()=>{reads++;return wait.promise;};
+const work=dataopsReconnect(p);await tick();assert.equal(reads,1);
+showView('transformation-view-models');showView('transformation-view-wap');
+wait.resolve(denied?{http:403,body:{code:'FORBIDDEN'}}:accepted(op.context,{id:op.id,state:'FINISHED',result:{private:'late'}}));await work;
+assert.equal(p.op,op);assert.equal(op.operation,null);assert.equal(op.protected,false);
+assert.equal(p.invalid,false);assert.equal(p.trackingPending,false);assert.equal(reads,1);
+''')
+
     def test_reconnect_wap_metadata_options_preserve_all_selections_and_draft_fields(self):
         for blank in (False, True):
             with self.subTest(blank=blank):
@@ -671,14 +686,14 @@ p.database='db';p.schema='raw';dbControls();unchanged();assert.match(help.textCo
 assert.equal(calls.length,before);assert.equal(submissions.length,0);
 ''')
 
-    def test_installed_notice_order_and_supported_wap_with_legacy_gates(self):
+    def test_dedicated_wap_panel_keeps_legacy_gates(self):
         self.javascript(r'''
 $('transformation').append(Object.assign($('run-dbt-build'),{tagName:'BUTTON'}),Object.assign($('run-dbt-test'),{tagName:'BUTTON'}),Object.assign($('transformation-view-marts'),{tagName:'BUTTON'}));
 const p=await ready('p35-wap');
-assert.equal($('transformation').children[0],$('database-transformation-notice'));
-assert.ok($('transformation').children.includes(p.root));
-assert.match($('database-transformation-notice').textContent,/Manual WAP and Managed Marts are supported/);
-assert.match($('database-transformation-notice').textContent,/Legacy dbt build\/test is unavailable/);
+assert.equal(p.root.parentElement,$('transformation-wap'));
+assert.equal($('transformation-wap').hidden,true);
+assert.equal($('transformation-models').hidden,false);
+assert.equal($('transformation-view-wap').hidden,false);
 assert.match($('database-ingestion-notice').textContent,/file ingestion and registered Stages/);
 assert.equal($('p35-wap-model-id').disabled,false);assert.equal($('transformation-view-marts').disabled,false);
 assert.equal($('db-marts-panel').hidden,false);
@@ -687,14 +702,13 @@ const before=calls.length;
 for(const lang of ['ja','en']){
  setLanguage(lang);dataopsInstall();dbControls();
  assert.equal($('run-dbt-build').disabled,true);assert.equal($('run-dbt-test').disabled,true);
- assert.equal($('database-transformation-notice').textContent,t(uiBindings.get($('database-transformation-notice')).key));
- assert.match($('database-transformation-notice').textContent,lang==='ja'?/データベース／スキーマ.*build／audit には選択中のデータ作成者または管理者ロール、公開／ロールバックと管理対象 Mart には許可された管理者ロール/:/database\/schema.*build\/audit requires the selected data_engineer or admin role; publish\/rollback and Managed Marts require an authorized admin role/);
+ assert.match($('p35-wap-entry-help').textContent,lang==='ja'?/構築と監査にはデータ作成者または管理者、公開とロールバックには管理者/:/Build and audit require Data Engineer or Admin. Publish and rollback require Admin/);
 }
 assert.equal(calls.length,before);
 // A stale panel remains recoverable without claiming the Worksheet makes it ready.
 dataopsInvalidate(p);dataopsRender(p);
 assert.equal($('p35-wap-model-id').disabled,true);assert.equal($('p35-wap-refresh').disabled,false);
-assert.match($('database-transformation-notice').textContent,/own database\/schema context/);
+assert.match($('p35-wap-entry-help').textContent,/Choose a database and schema/);
 assert.equal(submissions.length,0);
 ''')
 

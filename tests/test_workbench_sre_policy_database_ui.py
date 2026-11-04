@@ -196,7 +196,7 @@ await readyObservation('sre');await readyObservation('policy');const snapshot=ot
 for(const kind of ['sre','policy']){await fetchObservation(kind);await fetchObservation(kind);route=async()=>({http:503,body:{error:{code:'AUDIT_STORE_UNAVAILABLE',message:'secret store'}}});await dbObservationFetch(dbObservations[kind]);assert.equal(dbObservations[kind].record,null);assert.doesNotMatch(observationText(kind),/secret store/);await fetchObservation(kind);}
 assert.equal(otherState(),snapshot);assert.equal(calls.length-start,8);assert.ok(calls.slice(start).every(c=>c.path.startsWith('/api/v1/bears/context-observations?')&&!c.options?.method));assert.equal(dbExplanation.intents[0].id,'explanation-1');assert.equal(dbSourceA1Held(dbExplanation.intents[0]),true);
 for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest','bear-data-run','ai-settings-button'])assert.equal($(id).disabled,true,id);
-assert.equal($('bear-tab-data').disabled,true);for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest'])assert.equal($(id).hidden,true,id);
+assert.equal($('bear-tab-data').disabled,false);assert.equal($('bear-data-legacy').hidden,true);for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest'])assert.equal($(id).hidden,true,id);
 """)
 
     def test_real_unknown_sql_curator_proposal_and_wap_intents_survive_observation_reads(self):
@@ -220,7 +220,7 @@ const bearList=new Node();for(const kind of ['sre','query','data','catalog','pol
 eval(""" + json.dumps(handlers) + r""");await boot();assert.equal($('bear-tab-query')['aria-selected'],'true');
 await readyObservation('sre');$('bear-tab-sre').click();assert.equal(dbObservations.sre.selected,true);const old=deferred(),reply=observationReply();route=()=>old.promise;const pending=dbObservationFetch(dbObservations.sre);await tick();
 $('bear-tab-sre').onkeydown({key:'ArrowDown',preventDefault(){}});assert.equal($('bear-tab-query')['aria-selected'],'true');assert.equal(dbObservations.sre.selected,false);$('bear-tab-sre').click();old.resolve(reply);await pending;assert.equal(dbObservations.sre.record,null);assert.ok(dbObservations.sre.context);
-$('bear-tab-data').click();assert.equal($('bear-tab-sre')['aria-selected'],'true');assert.equal($('bear-tab-data').disabled,true);
+$('bear-tab-data').click();assert.equal($('bear-tab-data')['aria-selected'],'true');assert.equal(dbObservations.sre.selected,false);assert.equal($('bear-data-legacy').hidden,true);
 """)
 
     def test_own_denials_leave_other_database_bear_and_all_other_state_byte_equal(self):
