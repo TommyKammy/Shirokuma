@@ -21,7 +21,7 @@ const process=(extra={})=>({creation_id:'creation',database_id:'db',requester_id
  sql_catalog:'sales',display_name:'売上 <script> 🐻',description:'literal <img>',initial_grants:[],
  lifecycle:'REGISTERED',progress_code:'PLAN_REVIEW_REQUIRED',plans:[],next_actions:['plans','reconcile'],access_source:'platform_admin',...extra});
 const plan=(phase='bootstrap',state='AWAITING_APPLY',purpose='APPLY')=>({plan_id:phase+'-plan',operation_id:phase+'-op',phase,purpose,state,
- operation_revision:2,delivery_digest:'digest-'+phase,recovery_digest:purpose==='VERIFY_RECOVERY'?'recovery':null,
+ generation_id:phase+'-generation',sequence:1,operation_revision:2,delivery_digest:'digest-'+phase,recovery_digest:purpose==='VERIFY_RECOVERY'?'recovery':null,
  public_summary:{code:'PLAN',impact:phase==='bootstrap'?'BOOTSTRAP_MAINTENANCE':'FULL_RUNTIME_HANDOFF',fixed_steps:['apply','verify']},steps:[{step:'apply',state:'PENDING'}]});
 let creation=process(),creationPosts=[],creationRoute=null;
 let capability={environment_id:'envA',warehouse_id:'LOCAL',warehouse_revision:3,configured:true,available:true,blocker:null};
@@ -39,7 +39,8 @@ adminRoute=async(path,options)=>{
 dbCreation.capability=null;await dbCreationLoad();
 const edit=(id,value)=>{$(id).value=value;$(id).oninput();};
 const begin=()=>{dbCreation.process=null;dbCreationRender();edit('db-creation-sql_catalog','new_sales');edit('db-creation-display_name','名前 <script> 🐻');edit('db-creation-description','説明 <img>');};
-const show=p=>{creation=p;dbCreation.process=structuredClone(p);dbCreationRender();};
+// Install a successful detail snapshot for tests that exercise the renderer directly.
+const show=p=>{creation=p;dbCreation.process=structuredClone(p);dbCreation.checkedID=p.creation_id;dbCreation.readFailed=false;dbCreationRender();};
 const contents=node=>[node.textContent,...node.children.map(contents)].join('\n');
 '''
 
@@ -191,14 +192,15 @@ for(const locale of ['en','ja']){
 assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 ''')
 
-    def test_visible_phase_review_and_localized_fixed_steps_without_private_ids(self):
+    def test_visible_phase_review_shows_plan_version_and_localized_fixed_steps(self):
         self.javascript(SETUP + r'''
 const bootstrap=plan();bootstrap.steps=[{step:'apply_secrets',state:'SUCCEEDED'},{step:'reconcile_trino',state:'PENDING'},{step:'verify',state:'RUNNING'}];
 bootstrap.public_summary.fixed_steps=bootstrap.steps.map(s=>s.step);
 for(const phase of ['bootstrap','full'])for(const locale of ['en','ja']){
  setLanguage(locale);
- const current={...structuredClone(bootstrap),phase,plan_id:'private-plan-id',operation_id:'private-operation-id'};
- show(process({lifecycle:'RECONCILING',plans:phase==='full'?[plan('bootstrap','PREPARED'),current]:[current],next_actions:['approve']}));
+ const current={...structuredClone(bootstrap),phase,sequence:2,plan_id:'reviewed-plan-id',operation_id:'private-operation-id'};
+ const prior=plan(phase);
+ show(process({lifecycle:'RECONCILING',plans:phase==='full'?[plan('bootstrap','PREPARED'),prior,current]:[prior,current],next_actions:['approve']}));
  const button=$('db-creation-review-'+phase);assert.ok(button);
  for(let node=button;node;node=node.parentElement)assert.notEqual(node.tagName,'DETAILS');
  assert.equal($('db-creation-next-action').textContent,t(phase==='bootstrap'?'Review the foundation plan, then explicitly approve step 1/2.':'Review the SQL connection plan, then explicitly approve step 2/2.'));
@@ -208,7 +210,10 @@ for(const phase of ['bootstrap','full'])for(const locale of ['en','ja']){
  const visible=contents($('db-creation-actions'));assert.ok(visible.includes(t('Issue connection information')+' · '+t('Completed')));
  assert.ok(visible.includes(t('Verify access')+' · '+t('Running')));
  if(phase==='bootstrap')assert.ok(visible.includes(t('Deferred to SQL connection setup (approval 2/2)')));
- assert.doesNotMatch(visible,/private-plan-id|private-operation-id|BOOTSTRAP_MAINTENANCE|FULL_RUNTIME_HANDOFF|reconcile_trino/);
+ assert.ok(contents(section).includes(t('Plan version {version}',{version:2})));
+ assert.ok(contents(section).includes(t('Operation revision {revision}',{revision:2})));
+ assert.ok(contents($('db-creation-process')).includes(t('Plan version {version}',{version:1})));
+ assert.doesNotMatch(visible,/reviewed-plan-id|private-operation-id|bootstrap-generation|digest-bootstrap|BOOTSTRAP_MAINTENANCE|FULL_RUNTIME_HANDOFF|reconcile_trino/);
  assert.equal($('db-creation-approve').disabled,true);
 }
 assert.equal(creationPosts.length,0);
@@ -260,22 +265,32 @@ assert.equal($('db-creation-journey').children[0].children[5].getAttribute('aria
 dbCreationStop();
 ''')
 
-    def test_automatic_checks_and_failed_reads_preserve_consent_focus_and_last_success(self):
+    def test_failed_detail_clears_consent_and_equal_refresh_requires_new_review(self):
         self.javascript(TIMER_SETUP + r'''
 show(process({plans:[plan()],next_actions:['approve']}));await dbCreationLoad();
 await $('db-creation-review-bootstrap').onclick();const checkbox=$('db-creation-confirm');checkbox.checked=true;checkbox.onchange();checkbox.focus();
 const reviewed=dbCreation.review,old=adminRoute,checked=dbCreation.lastCheck;
+const review=$('db-creation-review-bootstrap').onclick,approve=$('db-creation-approve').onclick;
 await advanceTimers(5000);
 assert.equal($('db-creation-confirm'),checkbox);assert.equal(checkbox.checked,true);assert.equal(document.activeElement,checkbox);assert.equal(dbCreation.review,reviewed);
 assert.ok(dbCreation.lastCheck>=checked);const success=dbCreation.lastCheck;
 adminRoute=(path,options)=>{if(path===C+'/creation')throw Error('read failed');return old(path,options);};
 await advanceTimers(5000);assert.equal(dbCreation.lastCheck,success);assert.equal(timers.size,1);
 assert.match($('db-creation-observation').textContent,/Status check failed.*last known state/);
-assert.equal($('db-creation-confirm'),checkbox);assert.equal(checkbox.checked,true);assert.equal(document.activeElement,checkbox);
+assert.deepEqual(dbCreation.process,creation);assert.equal(dbCreation.review,null);
+assert.equal(document.activeElement,$('db-creation-refresh'));
+const hasConsent=()=>$('db-creation-process').descendants().some(node=>node.id==='db-creation-confirm');
+assert.equal(hasConsent(),false);assert.equal($('db-creation-review-bootstrap').disabled,true);
+assert.match($('db-creation-next-action').textContent,/Refresh creation status/);
+await review();await approve();assert.equal(dbCreation.review,null);
 adminRoute=old;await advanceTimers(5000);assert.equal(dbCreation.error,'');assert.equal(dbCreation.readFailed,false);
 assert.doesNotMatch($('db-creation-observation').textContent,/Status check failed/);
-assert.equal($('db-creation-confirm'),checkbox);assert.equal(checkbox.checked,true);assert.equal(document.activeElement,checkbox);
-assert.equal(dbCreation.review,reviewed);assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
+assert.equal(hasConsent(),false);assert.equal($('db-creation-review-bootstrap').disabled,false);
+await review();await approve();assert.equal(dbCreation.review,null);
+await $('db-creation-review-bootstrap').onclick();
+assert.notEqual($('db-creation-confirm'),checkbox);assert.ok(!$('db-creation-confirm').checked);
+assert.equal($('db-creation-approve').disabled,true);
+assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 ''')
 
     def test_hidden_mutation_completion_pauses_then_revalidates_without_post_replay(self):
@@ -300,16 +315,24 @@ creation=process({revision:4,plans:[plan()],next_actions:['approve']});
 await advanceTimers(5000);assert.deepEqual(dbCreation.process,creation);assert.deepEqual(dbCreation.pending,frozen);
 assert.equal(creationPosts.length,1);assert.equal(timers.size,1);
 assert.equal($('db-creation-review-bootstrap').disabled,true);
+const old=adminRoute;
+adminRoute=(path,options)=>{if(path===C+'/creation')throw Error('detail unavailable');return old(path,options);};
 await advanceTimers(5000);assert.equal(creationPosts.length,1);assert.equal(timers.size,1);
+assert.deepEqual(dbCreation.process,creation);assert.deepEqual(dbCreation.pending,frozen);
+assert.equal($('db-creation-retry').disabled,false);
+await $('db-creation-retry').onclick();
+assert.equal(creationPosts.length,2);assert.deepEqual(creationPosts[1],creationPosts[0]);
+assert.deepEqual(dbCreation.pending,frozen);
 ''')
 
-    def test_unchanged_list_check_keeps_draft_and_review_controls(self):
+    def test_rediscovery_preserves_draft_but_requires_current_detail_and_new_review(self):
         self.javascript(SETUP + r'''
 begin();const field=$('db-creation-description');field.focus();field.setSelectionRange(1,4);
 await dbCreationLoad(true);assert.equal($('db-creation-description'),field);assert.equal(document.activeElement,field);assert.equal(field.selectionStart,1);
-show(process({plans:[plan()],next_actions:['approve']}));await dbCreationLoad(true);
+show(process({plans:[plan()],next_actions:['approve']}));
 await $('db-creation-review-bootstrap').onclick();const checkbox=$('db-creation-confirm');checkbox.checked=true;checkbox.onchange();checkbox.focus();
-await dbCreationLoad(true);assert.equal($('db-creation-confirm'),checkbox);assert.equal(checkbox.checked,true);assert.equal(document.activeElement,checkbox);
+await dbCreationLoad(true);assert.equal(dbCreation.review,null);assert.equal($('db-creation-review-bootstrap').disabled,true);
+await dbCreationLoad();assert.equal($('db-creation-review-bootstrap').disabled,false);assert.equal(dbCreation.review,null);
 assert.equal(creationPosts.length,0);
 ''')
 
@@ -464,7 +487,7 @@ show(process({lifecycle:'RECONCILING',plans:[plan()],next_actions:['approve']}))
 dbCreation.list=[structuredClone(creation),process({creation_id:'second',sql_catalog:'old2'})];dbCreationRender();
 await $('db-creation-review-bootstrap').onclick();
 $('db-creation-confirm').checked=true;$('db-creation-confirm').onchange();
-const selected=dbCreation.process,review=dbCreation.review,draft=JSON.stringify(dbCreation.draft),sheets=JSON.stringify(worksheets);
+const selected=dbCreation.process,draft=JSON.stringify(dbCreation.draft),sheets=JSON.stringify(worksheets);
 const labels=()=>$('db-creation-form').descendants().filter(n=>n.tagName==='BUTTON').map(n=>n.textContent);
 assert.ok(labels().includes('old2 · REGISTERED'));
 dbCreationSchedule();const oldTimer=dbCreation.timer;assert.equal(timers.get(oldTimer).due,5000);
@@ -478,7 +501,7 @@ const reading=$('db-creation-discover').onclick();
 assert.equal(timers.has(oldTimer),false);assert.equal(dbCreation.timer,null);
 await tick();assert.equal(listReads,1);assert.equal(timers.size,0);
 await advanceTimers(5000);assert.equal(detailReads,0);assert.equal(timers.size,0);
-assert.equal(dbCreation.process,selected);assert.equal(dbCreation.review,review);
+assert.equal(dbCreation.process,selected);assert.equal(dbCreation.review,null);
 const updated=[process({sql_catalog:'updated1',lifecycle:'READY'}),
  process({creation_id:'second',sql_catalog:'updated2',lifecycle:'READY'}),
  process({creation_id:'third',sql_catalog:'updated3',lifecycle:'REGISTERED'})];
@@ -486,8 +509,8 @@ held.resolve({creations:updated,cursor:'next'});await reading;
 assert.deepEqual(dbCreation.list,updated);assert.equal(dbCreation.cursor,'next');
 for(const label of ['updated1 · READY','updated2 · READY','updated3 · REGISTERED'])assert.ok(labels().includes(label));
 assert.equal(labels().includes('old2 · REGISTERED'),false);assert.equal(dbCreation.error,'');assert.equal($('db-creation-status').textContent,'');
-assert.equal(dbCreation.process,selected);assert.equal(dbCreation.review,review);
-assert.equal($('db-creation-approve').disabled,true); // A rerender never carries checkbox consent forward.
+assert.equal(dbCreation.process,selected);assert.equal(dbCreation.review,null);
+assert.equal($('db-creation-review-bootstrap').disabled,true);
 assert.equal(JSON.stringify(dbCreation.draft),draft);assert.equal(JSON.stringify(worksheets),sheets);
 assert.equal(timers.size,1);assert.equal(timers.get(dbCreation.timer).due,timerNow+5000);
 creation=process({revision:4,lifecycle:'READY',next_actions:[]});
@@ -551,9 +574,12 @@ const assertSelected=()=>{
  assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
  assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST'),false);
 };
-assertSelected();const heading=$('db-creation-heading');await tick();assert.equal(details,1);assertSelected();
+assertSelected();await tick();assert.equal(details,1);assertSelected();
+assert.equal($('db-creation-withdraw').disabled,true);assert.equal($('db-creation-reconcile').disabled,true);
+await $('db-creation-reconcile').onclick();
 held.resolve(structuredClone(stopped));await reading;
-assert.deepEqual(dbCreation.process,stopped);assert.equal($('db-creation-heading'),heading);assertSelected();assert.equal(dbCreation.error,'');
+assert.deepEqual(dbCreation.process,stopped);assertSelected();assert.equal(dbCreation.error,'');
+assert.equal($('db-creation-withdraw').disabled,false);assert.equal($('db-creation-reconcile').disabled,false);
 ''')
 
     def test_generated_fragment_url_reloads_native_static_root_without_query(self):
@@ -823,6 +849,7 @@ assert.match(contents($('db-creation-process')),/Only the original requester/);
 ''')
 
     def test_canonical_limited_recovery_requires_fresh_explicit_full_approval(self):
+        self.assertIn("confirm(t(recovery?'Confirm limited recovery verification for this reviewed plan?'", admin.HTML)
         self.javascript(SETUP + r'''
 const bootstrap=plan('bootstrap','PREPARED'),full=plan('full');
 show(process({plans:[bootstrap,full],next_actions:['approve'],progress_code:'FULL_REVIEW_REQUIRED'}));
@@ -843,6 +870,7 @@ assert.equal(dbCreationCanMutate('/creation/phases/full/approve',ordinaryBody),f
 await dbCreationMutate('/creation/phases/full/approve',ordinaryBody);assert.equal(creationPosts.length,0);
 await $('db-creation-review-full-recovery').onclick();
 assert.match(contents($('db-creation-process')),/VERIFY_RECOVERY_LIMITED/);
+assert.ok(contents($('db-creation-actions')).includes(t('I approve the limited verification in this recovery plan.')));
 const recoveryApprove=$('db-creation-approve');assert.equal(recoveryApprove.disabled,true);
 await recoveryApprove.onclick();assert.equal(creationPosts.length,0);
 creationRoute=async(path,options)=>{
@@ -1009,6 +1037,8 @@ const checkbox=$('db-creation-confirm');checkbox.checked=true;checkbox.onchange(
 await dbCreationLoad();assert.equal($('db-creation-confirm'),checkbox);assert.equal(document.activeElement,checkbox);
 creationRoute=async()=>({http:409,body:{error:'STALE_PLAN',message:'Database creation request rejected'}});await $('db-creation-approve').onclick();
 assert.equal(dbCreation.pending,null);assert.equal(dbCreation.review,null);assert.equal(dbCreation.error,'STALE_PLAN');
+assert.equal($('db-creation-review-bootstrap').disabled,true);
+await dbCreationLoad();assert.equal($('db-creation-review-bootstrap').disabled,false);
 ''')
 
     def test_visibility_revalidation_refreshes_full_control_and_rejects_retained_handler(self):
@@ -1151,6 +1181,33 @@ show(process({plans:[plan()],next_actions:['approve']}));await $('db-creation-re
 const checkbox=$('db-creation-confirm');checkbox.checked=true;checkbox.onchange();const approve=$('db-creation-approve').onclick;
 creation=process({plans:[plan()],next_actions:['approve'],''' + change + r'''});await dbCreationLoad();
 assert.equal(dbCreation.review,null);await approve();assert.equal(creationPosts.length,0);
+''')
+
+    def test_staged_action_handlers_reject_a_changed_plan_at_the_same_root_revision(self):
+        self.assertIn(
+            "confirm(t('Withdraw approval for this creation? Future dispatch stops. "
+            "The LOCAL reservation and effects already applied are retained.'))",
+            admin.HTML,
+        )
+        self.javascript(SETUP + r'''
+const actions=['replan','reconcile','withdraw'];
+show(process({plans:[plan()],next_actions:actions}));
+const handlers=actions.map(action=>$('db-creation-'+action).onclick);
+// Change the plan while leaving the rendered controls and root revision in place.
+creation=process({plans:[{...plan(),operation_revision:3}],next_actions:actions});
+dbCreation.process=structuredClone(creation);
+for(const handler of handlers)await handler();
+assert.equal(creationPosts.length,0);
+dbCreationRender();
+for(const locale of ['ja','en']){
+ setLanguage(locale);
+ const visible=contents($('db-creation-actions'));
+ assert.ok(visible.includes(t('A revised plan requires a new review and approval.')));
+ assert.ok(visible.includes(t('Reconcile checks the saved state. Limited recovery verification requires a separate review and approval.')));
+ await $('db-creation-withdraw').onclick();
+ assert.equal(creationPosts.at(-1).path,C+'/creation/withdraw');
+ assert.deepEqual(JSON.parse(creationPosts.at(-1).options.body),{expected_revision:3});
+}
 ''')
 
     def test_action_rechecked_after_session_preflight_before_post(self):

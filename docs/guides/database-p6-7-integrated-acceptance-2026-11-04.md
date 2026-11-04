@@ -5,7 +5,7 @@ title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
 updated: 2026-11-04
-version: "0.4"
+version: "0.5"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
@@ -25,7 +25,8 @@ tags: [database, workbench, integration, acceptance]
 | AI-04／CMP-05 | 固定のreadiness、診断集計、保存済み失敗metadata、固定Docker 2コンテナの生ログとLoki重大度検索に限定対応した。登録済み基盤のOPA重大度検索と旧名前空間全体の範囲はC2Mで区別する。 |
 | AI-02／AI-03／AI-05 | 既存の限定操作を受入済み。任意Snapshotへの旧rollback、横断raw metadata／説明保存、登録外namespaceと広いpolicy scopeについて、旧操作との対応範囲を確定する。 |
 | ADM-09 | 準備済みの公開材料を使う登録・plan・apply依頼に、操作と対象DBのREADY照合を接続した。対象環境でのoperator受入範囲は所有者判断に残る。 |
-| ADM-10／11 | staged operator操作には条件付きの導線がある。既存退役はデータ・資格情報を保持する。staged経路の受入と物理purgeの要否は範囲判断に残る。 |
+| ADM-10 | 段階作成のbootstrap／full承認、再計画、承認の取下げ、回復照合を同じ作成IDで扱う。現在の計画と状態を確認してから操作する。staged経路をM1で受け入れる範囲は所有者判断に残る。 |
+| ADM-11 | 既存退役はデータ・資格情報を保持する。物理purgeの要否は範囲判断に残る。 |
 | TRF-11 | 承認済みprojectの保存plan、build／test、明示TABLE公開を対象にする。正式VIEW公開・VIEW連鎖・incremental・並列実行は別拡張。 |
 
 [C2Mの収集範囲とSQL-09／ADM-09〜11の照合](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
@@ -41,6 +42,20 @@ WorkbenchのREADY照合は対象DBと操作IDを使う。full `APPLIED` の検�
 隔離Workbenchの実HTTPで登録1件、bootstrapとfullのplan・apply依頼を各1件確認した。外部operator応答を模擬し、既存の適用処理でbootstrapが `PREPARED`、fullが検証済み `APPLIED`、対象DBが同世代・同revisionの `READY` となった。ブラウザーでREADY表示、別操作の拒否、一覧更新時の表示消去、日英表示と閲覧者ロールの制限を確認した。別途、P2-6の実物理適用台帳のコピーを現行HTTPで読み、3DBのREADYと適用世代・revisionの一致を確認した。一時台帳と認証材料を撤去し、共有台帳のDB・操作・クエリIDを照合した。
 
 Workbench回帰1,302件、登録・operator関連の重点試験91件、設計整合チェックが通過した。広い回帰で判明したSQL-09の辞書テストの失敗は、翻訳キーの形式を揃えて解消した。
+
+## ADM-10の段階作成
+
+bootstrapとfullはそれぞれ表示中の計画を確認し、個別に承認する。再計画後は改訂版を改めて確認する。取下げは未完了承認を撤回し、既に生じた効果とLOCAL予約を保持する。回復照合は保存済みの作成状態の観測を依頼する。限定回復の検証と、その後に必要になる通常fullの承認にはそれぞれ明示承認がある。[操作契約](database-p5-0-contract-2026-10-23.md#2-公開api) · [限定回復の契約](database-p5-0-contract-2026-10-23.md#6-unknownと限定verify-recovery)
+
+Workbenchは計画履歴に版を示し、承認画面で対象版と操作revisionを示す。照会失敗やrevision競合時は、保存済み表示を保持して新しい操作を無効にする。同じ詳細を取得できた後も確認・同意からやり直す。結果不明の送信には保存済みの同一キーでの明示再送を使う。
+
+現行の共有ラボは `logical_v1` を運用する。段階作成の実機証拠はP5-6の記録にあり、本人が操作した経路と所要時間の指摘はP5-7に記録している。[P5-6実機受入](database-p5-6-acceptance-2026-10-25.md) · [P5-7本人評価](database-p5-7-owner-acceptance-2026-10-27.md)
+
+隔離Workbenchの実HTTPで取下げ、同じ作成IDの計画第2版、bootstrap／fullの個別承認を確認した。外部operator応答を模擬した正例は `PREPARED` から `APPLIED`、`READY` に進んだ。応答不明の対照ではfullの `UNKNOWN` を保持し、回復照合は1件、同一キーの再送とGETによる追加適用は0件だった。
+
+ブラウザーでは、詳細取得の失敗後に承認欄が消え、再取得後に同意が必要になることと、計画版・操作revisionの日英表示を確認した。ブラウザーの承認確認で操作が止まった際、台帳の承認受付は0件だった。別途、過去の実機台帳の読み取り専用コピーを現行Workbenchで表示し、bootstrap第2版 `PREPARED`、full第1版 `APPLIED`、DB `READY` を照合した。検証用環境を撤去し、共有台帳8表と所有者管理ファイルを照合した。
+
+Workbench回帰1,303件、段階作成・準備・認可・回復・HTTPの重点試験234件、設計整合チェックが通過した。初回の広い回帰で検出した計画履歴の表示順は、既存の状態表記の後ろに版を表示して修正した。
 
 ## 現行環境での予備縦断
 

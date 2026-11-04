@@ -207,7 +207,7 @@ C2Aは各Bearで明示する独立contextについて、現在の本人・保存
 | ADM-07 | desired grant一覧・変更・取消 | 対応、P | A、desired／effectiveを分離。付与はbackend検証が条件 | grants API |
 | ADM-08 | retire依存確認・要求・照会・照合 | 対応、P、非purge | A、既存UNKNOWNと履歴を保全 | retirement API |
 | ADM-09 | 高度なregistry登録、構成plan／operator apply依頼、READY照合 | P＋準備済み材料／profileで条件付き対応。対象DBの登録、apply引継ぎ、適用済み世代の照合をDB管理から確認 | full APPLIEDの検証記録と現在のDB READY・適用bindingを照合。operator受入範囲は所有者判断 | [DB管理と検証記録](database-p6-7-integrated-acceptance-2026-11-04.md#adm-09の登録引継ぎready照合) |
-| ADM-10 | staged plan確認・承認・再計画・回復承認・停止 | 条件付き、P＋元root owner＋staged modeの状態契約 | A、明示承認とoperator証拠 | staged creation操作 |
+| ADM-10 | staged plan確認・承認・再計画・取下げ・回復照合 | 条件付き、P＋元root owner＋staged modeの状態契約 | 直近の作成状態と操作対象を確認。限定回復と通常fullは個別承認。stagedの受入範囲は所有者判断 | [段階作成の操作と検証](database-p6-7-integrated-acceptance-2026-11-04.md#adm-10の段階作成) |
 | ADM-11 | 物理purge、credential／PVCの削除 | 既存retireはカタログ、ストレージ、資格情報を保持 | M1での要否は所有者の破棄範囲判断 | 別計画 |
 
 ## 画面と実装の対応

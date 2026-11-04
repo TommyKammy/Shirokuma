@@ -10736,6 +10736,13 @@ Object.assign(i18n.ja,{
  'Review recovery plan':'回復計画を確認','Approve reviewed plan':'確認した計画を承認','Approve recovery verification':'回復検証を承認',
  'I approve this phase and its warehouse maintenance impact.':'この段階とウェアハウスのメンテナンスへの影響を承認します。',
  'Confirm approval of this reviewed phase?':'確認した段階を承認しますか？','Reconcile creation':'作成状態を照合','Withdraw approval':'承認を撤回',
+ 'Refresh creation status before taking a staged action.':'段階操作を行う前に、作成状態を更新してください。',
+ 'A revised plan requires a new review and approval.':'改訂した計画には再確認と再承認が必要です。',
+ 'Withdraw approval for this creation? Future dispatch stops. The LOCAL reservation and effects already applied are retained.':'この作成の承認を撤回しますか？以後の送信を停止します。LOCAL の予約と適用済みの変更は保持されます。',
+ 'Reconcile checks the saved state. Limited recovery verification requires a separate review and approval.':'照合では保存済みの状態を確認します。限定的な復旧検証には別途確認と承認が必要です。',
+ 'Confirm limited recovery verification for this reviewed plan?':'確認した計画の限定的な復旧検証を承認しますか？',
+ 'I approve the limited verification in this recovery plan.':'この復旧計画の限定的な検証を承認します。',
+ 'Plan version {version}':'計画 第{version}版','Operation revision {revision}':'操作リビジョン {revision}',
  'Request outcome uncertain. Retry only the saved request.':'要求の結果が不明です。保存済みの要求だけを再送してください。',
  'Saved request accepted. Refresh status to observe progress.':'保存した要求は受理されました。状況を再読込して進捗を確認してください。',
  'Browser storage unavailable; request is retained only in this session.':'ブラウザー保存が利用できません。要求はこのセッション内でのみ保持されます。',
@@ -10877,6 +10884,7 @@ function dbCreationNextAction(parent,p,bootstrap,full,owner,stopped,terminal,rea
  if(terminal)next='This database is retiring or retired. Creation history is available below.';
  else if(!owner)next='Only the original requester can change this creation.';
  else if(ready)next=p.access_source==='none'?'READY; SQL use unavailable for the selected role.':'The database is ready. Open a new SQL worksheet to use it.';
+ else if(!dbCreationStagedDetailCurrent())next='Refresh creation status before taking a staged action.';
  else if(['STOPPED','BLOCKED'].includes(progress))next='Creation is stopped or blocked. Review the status and available actions below.';
  else if(['APPLYING','VERIFYING'].includes(progress))next='Setup or verification is running. Status is checked automatically while this screen is visible.';
  else if(progress==='REPLAN_REQUIRED')next=actions.includes('replan')?'Prepare a revised plan, then review it again before approval.':'A revised plan is required, but preparing it is currently unavailable. Review the status and available actions.';
@@ -10900,6 +10908,7 @@ function dbCreationEnvironment(cap){return cap?.configured===true&&typeof cap.en
 function dbCreationStop(){if(dbCreation.timer!==null)clearTimeout(dbCreation.timer);dbCreation.timer=null;dbCreationObservation();}
 function dbCreationSuspend(){
  dbCreationStop();++dbCreation.epoch;++dbCreation.read;dbCreation.review=null;
+ if(!dbCreationLogical())dbCreation.checkedID=null;
  if(dbCreation.pending){dbCreation.pending.busy=false;dbCreationSave();}
  // Keep the in-memory draft and receipt. Reopening revalidates authority with GET.
  dbCreation.scope=dbCreationScope();
@@ -10975,6 +10984,12 @@ async function dbCreationRequest(path,options={},scope=dbCreationScope(),beforeS
 function dbCreationNotice(error,readOnly=false){
  if(error.stale)return;
  dbCreation.error=error.code==='ENVIRONMENT_MISMATCH'?'Server environment does not match the saved request. Its original outcome is unknown; the saved request is retained.':error.code||'Connection unavailable. Last known status retained; refresh to retry.';
+ if(readOnly&&dbCreation.process?.creation_id&&!dbCreationLogical()){
+  const wasReviewFocused=['db-creation-confirm','db-creation-approve'].includes(document.activeElement?.id);
+  dbCreation.review=null;dbCreationRender();
+  if(wasReviewFocused)$('db-creation-refresh')?.focus();
+  return;
+ }
  if(error.code==='PRINCIPAL_STOPPED'&&dbCreation.process)dbCreation.process={...dbCreation.process,blocker:'PRINCIPAL_STOPPED',progress_code:'STOPPED',next_actions:[]};
  if(readOnly&&error.code!=='PRINCIPAL_STOPPED'){$('db-creation-status').textContent=t(dbCreation.error);dbCreationObservation();}
  else dbCreationRender();
@@ -10985,12 +11000,13 @@ function dbCreationSchedule(){
 }
 async function dbCreationLoad(discover=false){
  if(!dbAdminAllowed())return;dbCreationStop();let scope=dbCreationScope(),read=++dbCreation.read;
+ if(discover)dbCreationInvalidateStagedDetail();
  const previousMode=JSON.stringify([dbCreation.capability?.creation_mode,dbCreation.capability?.available,dbCreation.capability?.blocker,dbCreation.capability?.warehouse_state]),previousPrincipals=JSON.stringify(dbCreation.principals);
  try{
   const cap=await dbCreationRequest(dbCreationRoute+'/capabilities',{},scope);if(read!==dbCreation.read)return;
   if(!dbCreationAdoptCapability(cap)){dbCreation.environmentNotice=true;dbCreationRender();return;}
   dbCreationRestore();scope=dbCreationScope();read=++dbCreation.read;
-  const previous=JSON.stringify(dbCreation.process),previousList=JSON.stringify([dbCreation.list,dbCreation.cursor]),hadError=!!dbCreation.error,id=dbCreation.process?.creation_id;
+  const previous=JSON.stringify(dbCreation.process),previousList=JSON.stringify([dbCreation.list,dbCreation.cursor]),hadError=!!dbCreation.error,id=dbCreation.process?.creation_id,hadCurrentDetail=dbCreationStagedDetailCurrent();
   const data=await dbCreationRequest(dbCreationRoute+(id&&!discover?'/'+encodeURIComponent(id):''),{},scope);
   if(scope!==dbCreationScope()||read!==dbCreation.read)return;
   if(!id&&dbCreationLogical()){
@@ -10998,13 +11014,15 @@ async function dbCreationLoad(discover=false){
    if(scope!==dbCreationScope()||read!==dbCreation.read)return;dbCreation.principals=people.principals||[];
   }
   await dbCreationCheckEnvironment(dbCreationBinding(),scope);if(scope!==dbCreationScope()||read!==dbCreation.read)return;
-  dbCreation.error='';dbCreation.readFailed=false;dbCreation.lastCheck=new Date();dbCreation.checkedID=data.creation_id||null;
+  if(id&&!discover&&!dbCreationLogical()&&data.creation_id!==id)throw Error('Invalid creation detail');
+  dbCreation.error='';dbCreation.readFailed=false;dbCreation.lastCheck=new Date();dbCreation.checkedID=!discover&&id&&data.creation_id===id?id:null;
   if(data.creation_id){dbCreation.process=data;if(dbCreation.review?.token!==dbCreationActionToken())dbCreation.review=null;dbCreationRememberURL(data.creation_id);}
   else{dbCreation.list=data.creations||[];dbCreation.cursor=data.cursor||null;}
   const scopedRefresh=dbCreation.renderedScope!==scope,active=document.activeElement;
   const controls=()=>[...$('db-creation-form').querySelectorAll('button,input,select,textarea'),...$('db-creation-process').querySelectorAll('button,input,select,textarea')];
   const focus=scopedRefresh&&controls().includes(active)?{id:active.id,start:active.selectionStart,end:active.selectionEnd}:null;
-  if((data.creation_id?JSON.stringify(dbCreation.process)!==previous:JSON.stringify([dbCreation.list,dbCreation.cursor])!==previousList)||scopedRefresh||dbCreation.renderedPending!==dbCreation.pending||previousMode!==JSON.stringify([dbCreation.capability?.creation_mode,dbCreation.capability?.available,dbCreation.capability?.blocker,dbCreation.capability?.warehouse_state])||previousPrincipals!==JSON.stringify(dbCreation.principals)){
+  const stagedFreshnessChanged=!dbCreationLogical()&&hadCurrentDetail!==dbCreationStagedDetailCurrent();
+  if((data.creation_id?JSON.stringify(dbCreation.process)!==previous:JSON.stringify([dbCreation.list,dbCreation.cursor])!==previousList)||stagedFreshnessChanged||scopedRefresh||dbCreation.renderedPending!==dbCreation.pending||previousMode!==JSON.stringify([dbCreation.capability?.creation_mode,dbCreation.capability?.available,dbCreation.capability?.blocker,dbCreation.capability?.warehouse_state])||previousPrincipals!==JSON.stringify(dbCreation.principals)){
    dbCreationRender();
    if(focus){const target=controls().find(node=>node.id&&node.id===focus.id&&!node.disabled)||$('db-creation-heading');target?.focus();
     if(target&&['INPUT','TEXTAREA'].includes(target.tagName)&&typeof focus.start==='number')target.setSelectionRange(focus.start,focus.end);}
@@ -11037,6 +11055,14 @@ function dbCreationCanonical(value){
  if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(k=>[k,dbCreationCanonical(value[k])]));return value;
 }
 function dbCreationActionToken(process=dbCreation.process){return JSON.stringify([dbCreationScope(),dbCreationCanonical(process)]);}
+function dbCreationStagedDetailCurrent(){
+ const id=dbCreation.process?.creation_id;
+ return !!id&&!dbCreation.readFailed&&dbCreation.checkedID===id;
+}
+function dbCreationInvalidateStagedDetail(){
+ if(!dbCreation.process?.creation_id||dbCreationLogical())return;
+ dbCreation.checkedID=null;dbCreation.review=null;dbCreationRender();
+}
 function dbCreationCanMutate(suffix,payload){
  if(!dbCreation.environment_id)return false;
  if(!suffix)return !dbCreation.process&&(dbCreationLogical()||dbCreation.stage===2)&&dbCreationAvailable();
@@ -11047,7 +11073,7 @@ function dbCreationCanMutate(suffix,payload){
  if(dbCreationLogical())return p.progress_code!=='STOPPED'&&p.blocker!=='PRINCIPAL_STOPPED'&&
   (p.progress_code!=='UNKNOWN'||action==='reconcile')&&
   (action==='reconcile'||action==='withdraw'||action==='resume'&&p.progress_code==='BLOCKED');
- if(action==='resume')return false;
+ if(!dbCreationStagedDetailCurrent()||action==='resume')return false;
  if((p.progress_code==='STOPPED'||p.blocker==='PRINCIPAL_STOPPED')&&!['reconcile','withdraw'].includes(action))return false;
  const plans=p.plans||[],bootstrap=plans.filter(v=>v.phase==='bootstrap'&&v.purpose==='APPLY').at(-1);
  if(['plans','replan','approve'].includes(action)&&plans.some(v=>v.state==='UNKNOWN'))return false;
@@ -11082,9 +11108,14 @@ async function dbCreationMutate(suffix,payload,retry=false){
   const action=request.path===dbCreationRoute?'CREATE':request.path.endsWith('/resume')?'RESUME':null;
   if(action&&(('action' in data&&data.action!==action)||('phase' in data&&data.phase!==null)))throw Error('Invalid creation acknowledgment');
   dbCreation.pending=null;dbCreation.review=null;dbCreation.process={...(dbCreation.process||{}),creation_id:data.creation_id};
+  if(!dbCreationLogical())dbCreation.checkedID=null;
   dbCreation.error='';dbCreationRememberURL(data.creation_id);dbCreationRender();await dbCreationLoad();
  }catch(error){if(scope===dbCreationScope()){
-  if(error.rejection||error.notSent){dbCreation.pending=null;dbCreation.review=null;dbCreationSave();}
+  if(error.rejection||error.notSent){
+   dbCreation.pending=null;dbCreation.review=null;
+   if(dbCreation.process?.creation_id&&!dbCreationLogical())dbCreation.checkedID=null;
+   dbCreationSave();
+  }
   dbCreationNotice(error);
  }}
  finally{if(scope===dbCreationScope()){if(dbCreation.pending===request){request.busy=false;dbCreationSave();dbCreationRender();}dbCreationSchedule();}}
@@ -11111,10 +11142,10 @@ function dbCreationRender(){
   dbAdminNode('p','',parent,dbCreation.pending.busy?'Request in progress.':'Request outcome uncertain. Retry only the saved request.');
   const request=dbCreation.pending,retry=dbAdminButton(parent,'db-creation-retry','Retry frozen request',()=>{if(request===dbCreation.pending)return dbCreationMutate('',null,true);});retry.disabled=request.busy;
  }
- dbAdminButton(parent,'db-creation-refresh','Refresh creation status',()=>{dbCreation.capability=null;return dbCreationLoad();});
+ dbAdminButton(parent,'db-creation-refresh','Refresh creation status',()=>{dbCreationInvalidateStagedDetail();dbCreation.capability=null;return dbCreationLoad();});
  dbAdminButton(parent,'db-creation-discover','Rediscover creations',()=>dbCreationLoad(true));
  const list=dbAdminNode('div','',parent);
- const scope=dbCreationScope();for(const p of dbCreation.list||[])dbAdminButton(list,'',''+p.sql_catalog+' · '+(p.creation_mode==='logical_v1'?dbCreationLogicalLabel(p.progress_code):(p.lifecycle||'').toUpperCase()),()=>{if(scope!==dbCreationScope()||!dbAdminAllowed())return;dbCreation.process=p;dbCreation.review=null;dbCreationRememberURL(p.creation_id);dbCreationRender();return dbCreationLoad();});
+ const scope=dbCreationScope();for(const p of dbCreation.list||[])dbAdminButton(list,'',''+p.sql_catalog+' · '+(p.creation_mode==='logical_v1'?dbCreationLogicalLabel(p.progress_code):(p.lifecycle||'').toUpperCase()),()=>{if(scope!==dbCreationScope()||!dbAdminAllowed())return;dbCreation.process=p;dbCreation.checkedID=null;dbCreation.review=null;dbCreationRememberURL(p.creation_id);dbCreationRender();return dbCreationLoad();});
  if(dbCreation.process?.creation_id){
   dbCreationButton(parent,'db-creation-new','New creation',()=>{
    if(dbCreation.pending)return;
@@ -11228,27 +11259,42 @@ function dbCreationRenderProcess(){
  const owner=p.requester_id===JSON.parse(dbPrincipal)[0],actions=p.next_actions||[],stopped=p.progress_code==='STOPPED'||p.blocker==='PRINCIPAL_STOPPED';
  dbCreationNextAction(actionArea,p,bootstrap,full,owner,stopped,terminalState,ready);
  const path='/'+encodeURIComponent(p.creation_id),revision={expected_revision:p.revision};
+ const token=dbCreationActionToken(p);
+ const current=()=>dbCreationStagedDetailCurrent()&&token===dbCreationActionToken();
+ const stagedButton=(id,label,task)=>{
+  const button=dbCreationButton(actionArea,id,label,()=>{if($(id)===button&&current()&&!dbCreation.pending)return task();},!current());
+  return button;
+ };
  if(!owner)dbAdminNode('p','',box,'Only the original requester can change this creation.');
  if(owner&&!stopped){
   if(actions.includes('plans')){
-   if(!bootstrap)dbCreationButton(actionArea,'db-creation-bootstrap','Prepare foundation plan',()=>dbCreationMutate(path+'/plans',{...revision,phase:'bootstrap'}));
-   else if(bootstrap.state==='PREPARED'&&!full)dbCreationButton(actionArea,'db-creation-full','Prepare SQL connection plan',()=>dbCreationMutate(path+'/plans',{...revision,phase:'full'}));
+   if(!bootstrap)stagedButton('db-creation-bootstrap','Prepare foundation plan',()=>dbCreationMutate(path+'/plans',{...revision,phase:'bootstrap'}));
+   else if(bootstrap.state==='PREPARED'&&!full)stagedButton('db-creation-full','Prepare SQL connection plan',()=>dbCreationMutate(path+'/plans',{...revision,phase:'full'}));
   }
-  if(actions.includes('replan'))dbCreationButton(actionArea,'db-creation-replan','Prepare revised plan',()=>dbCreationMutate(path+'/replan',{...revision,phase:bootstrap?.state==='PREPARED'?'full':'bootstrap'}));
+  if(actions.includes('replan')){
+   stagedButton('db-creation-replan','Prepare revised plan',()=>dbCreationMutate(path+'/replan',{...revision,phase:bootstrap?.state==='PREPARED'?'full':'bootstrap'}));
+   dbAdminNode('p','',actionArea,'A revised plan requires a new review and approval.');
+  }
  }
- if(owner)for(const [action,label] of [['reconcile','Reconcile creation'],['withdraw','Withdraw approval']])if(actions.includes(action))dbCreationButton(actionArea,'db-creation-'+action,label,()=>{
-   if(action==='withdraw'&&!confirm(t('Withdraw approval')))return;return dbCreationMutate(path+'/'+action,revision);
-  });
+ if(owner&&actions.includes('reconcile')){
+  stagedButton('db-creation-reconcile','Reconcile creation',()=>dbCreationMutate(path+'/reconcile',revision));
+  dbAdminNode('p','',actionArea,'Reconcile checks the saved state. Limited recovery verification requires a separate review and approval.');
+ }
+ if(owner&&actions.includes('withdraw'))stagedButton('db-creation-withdraw','Withdraw approval',()=>{
+  if(!confirm(t('Withdraw approval for this creation? Future dispatch stops. The LOCAL reservation and effects already applied are retained.'))||!current())return;
+  return dbCreationMutate(path+'/withdraw',revision);
+ });
  for(const plan of plans){
-  const detail=dbAdminNode('details','',box);dbAdminNode('summary','',detail).textContent=plan.phase+' · '+plan.purpose+' · '+plan.state;
+  const detail=dbAdminNode('details','',box);
+  const version=Number.isSafeInteger(plan.sequence)&&plan.sequence>0?t('Plan version {version}',{version:plan.sequence}):'';
+  dbAdminNode('summary','',detail).textContent=[plan.phase,plan.purpose,plan.state,version].filter(Boolean).join(' · ');
   dbAdminNode('p','',detail).textContent=plan.public_summary?.impact||plan.public_summary?.code||(plan.purpose==='VERIFY_RECOVERY'?'VERIFY_RECOVERY_LIMITED':plan.phase==='bootstrap'?'BOOTSTRAP_MAINTENANCE':'FULL_RUNTIME_HANDOFF');
   for(const step of plan.steps||[])dbAdminNode('p','',detail).textContent=step.step+' · '+step.state;
   for(const step of plan.public_summary?.fixed_steps||[])if(!plan.steps?.some(s=>s.step===step))dbAdminNode('p','',detail).textContent=step;
   const recovery=plan.purpose==='VERIFY_RECOVERY',latest=plans.filter(v=>v.phase===plan.phase&&v.purpose===plan.purpose).at(-1)===plan;
   if(owner&&!stopped&&latest&&(recovery?actions.includes('recover-verify')&&plan.phase==='full':actions.includes('approve')&&plan.state==='AWAITING_APPLY'))
-   dbCreationButton(actionArea,'db-creation-review-'+plan.phase+(recovery?'-recovery':''),recovery?'Review recovery plan':'Review plan',()=>{
-    if(dbCreationActionToken(p)!==dbCreationActionToken()||!actions.includes(recovery?'recover-verify':'approve'))return;
-    dbCreation.review={fingerprint:JSON.stringify(plan),revision:p.revision,plan,token:dbCreationActionToken()};dbCreationRender();$('db-creation-confirm').focus();
+   stagedButton('db-creation-review-'+plan.phase+(recovery?'-recovery':''),recovery?'Review recovery plan':'Review plan',()=>{
+    dbCreation.review={fingerprint:JSON.stringify(plan),revision:p.revision,plan,token};dbCreationRender();$('db-creation-confirm').focus();
    });
  }
  const activeRecovery=p.progress_code==='VERIFYING'&&full?.state==='UNKNOWN'?plans.filter(v=>v.phase==='full'&&v.purpose==='VERIFY_RECOVERY').at(-1):null;
@@ -11256,19 +11302,22 @@ function dbCreationRenderProcess(){
  if(activeRecovery)dbAdminNode('p','',actionArea,'Recovery verification is limited to the server-reviewed fixed steps.');
  dbCreationSummary(box,p);
  const review=dbCreation.review;
- if(review&&review.token===dbCreationActionToken()&&review.revision===p.revision&&plans.some(plan=>JSON.stringify(plan)===review.fingerprint)&&actions.includes(review.plan.purpose==='VERIFY_RECOVERY'?'recover-verify':'approve')&&owner&&!stopped){
+ if(current()&&review&&review.token===token&&review.revision===p.revision&&plans.some(plan=>JSON.stringify(plan)===review.fingerprint)&&actions.includes(review.plan.purpose==='VERIFY_RECOVERY'?'recover-verify':'approve')&&owner&&!stopped){
   const plan=review.plan,recovery=plan.purpose==='VERIFY_RECOVERY',section=dbAdminNode('section','',actionArea);
   dbAdminNode('h4','',section).textContent=t(plan.phase==='bootstrap'?'Foundation setup (approval 1/2)':'SQL connection setup (approval 2/2)')+' · '+t(recovery?'Review recovery plan':'Review plan');dbCreationSummary(section,p);
   dbAdminNode('p','',section,dbCreationGuidance);
+  if(Number.isSafeInteger(plan.sequence)&&plan.sequence>0)ui(dbAdminNode('p','',section),'Plan version {version}',{version:plan.sequence});
+  if(Number.isSafeInteger(plan.operation_revision)&&plan.operation_revision>0)ui(dbAdminNode('p','',section),'Operation revision {revision}',{revision:plan.operation_revision});
   dbCreationPhase(section,plan);
   if(recovery)dbAdminNode('p','',section,'Recovery verification is limited to the server-reviewed fixed steps.');
-  const checkbox=dbAdminField(section,'db-creation-confirm','I approve this phase and its warehouse maintenance impact.');checkbox.type='checkbox';
+  const checkbox=dbAdminField(section,'db-creation-confirm',recovery?'I approve the limited verification in this recovery plan.':'I approve this phase and its warehouse maintenance impact.');checkbox.type='checkbox';
+  const reviewed=()=>current()&&review===dbCreation.review&&$('db-creation-confirm')===checkbox&&!dbCreation.pending;
   const approve=dbCreationButton(section,'db-creation-approve',recovery?'Approve recovery verification':'Approve reviewed plan',()=>{
-   if(!checkbox.checked||review!==dbCreation.review||review.token!==dbCreationActionToken()||!confirm(t('Confirm approval of this reviewed phase?')))return;
+   if(!checkbox.checked||!reviewed()||!confirm(t(recovery?'Confirm limited recovery verification for this reviewed plan?':'Confirm approval of this reviewed phase?'))||!reviewed())return;
    const body={...revision,plan_id:plan.plan_id,operation_id:plan.operation_id,expected_operation_revision:plan.operation_revision,delivery_digest:plan.delivery_digest};
    if(recovery)body.recovery_digest=plan.recovery_digest;
    return dbCreationMutate(path+'/phases/'+plan.phase+(recovery?'/recover-verify':'/approve'),body);
-  },true);checkbox.onchange=()=>{approve.disabled=!checkbox.checked||!!dbCreation.pending;};
+  },true);checkbox.onchange=()=>{approve.disabled=!checkbox.checked||!reviewed();};
  }
  if(p.lifecycle==='READY'){
   if(p.access_source==='none')dbAdminNode('p','',box,'READY; SQL use unavailable for the selected role.');
