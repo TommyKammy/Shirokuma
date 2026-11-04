@@ -2537,6 +2537,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMartsPo
 window.addEventListener('pagehide',stopMartsPolling);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
 window.addEventListener('pagehide',stopJobsPolling);
+document.addEventListener('visibilitychange',()=>dbRawLogsSync());
+window.addEventListener('pagehide',()=>{dbRawLogsClear(true);dbRawLogsSync();});
 editJob(null);clearSelectedJob();
 
 // Database mode is deliberately installed only after /api/session selects it.
@@ -3913,7 +3915,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbManifestAdvisoryInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbRawLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbManifestAdvisoryInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3958,7 +3960,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbRawLogsSync();dbPodBaselineSync();dbControllerBaselineSync();dbManifestAdvisorySync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4659,6 +4661,142 @@ function dbTelemetryLogsTimeKey(value){
  const parts=/^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d{1,9}))?Z$/.exec(value);
  return parts?parts[1]+(parts[2]||'').padEnd(9,'0'):'';
 }
+const dbRawLogs={boundary:'',epoch:0,busy:false,verified:false,notice:''};
+const dbRawLogsLabels={
+ title:['Raw telemetry container logs','テレメトリのコンテナ生ログ'],
+ bounds:['AgentHouse and Loki on LOCAL. Last 10 minutes, up to 100 lines and 64 KiB combined across stdout and stderr per service.','LOCAL の AgentHouse と Loki が対象です。サービスごとに直近10分、標準出力と標準エラー出力を合わせて最大100行、64 KiBです。'],
+ sensitive:['Sensitive, unredacted log text. It may contain credentials or other private data.','ログ本文は無加工で表示されます。認証情報などの機密データが含まれる場合があります。'],
+ fetch:['Fetch raw logs','生ログを取得'],
+ clear:['Clear raw logs','生ログを消去'],
+ verified:['Authority verified. Select Fetch raw logs.','権限を確認しました。「生ログを取得」を選んでください。'],
+ fetching:['Fetching raw logs.','生ログを取得しています。'],
+ failed:['Raw logs could not be loaded.','生ログを取得できませんでした。'],
+ ready:['Raw log request complete.','生ログの取得処理が完了しました。'],
+ available:['Logs available','ログを取得しました'],
+ empty:['Available, zero lines','取得可能（0行）'],
+ unavailable:['Logs unavailable','ログを取得できません'],
+ stdout:['stdout','標準出力（stdout）'],
+ stderr:['stderr','標準エラー出力（stderr）']
+};
+const dbRawLogsNode=key=>$('observation-sre-raw-logs-'+key);
+function dbRawLogsText(key){return dbRawLogsLabels[key]?.[language==='ja'?1:0]??dbTelemetryLogsText(key);}
+function dbRawLogsVisible(){return databaseMode&&activeTab==='bears'&&dbObservations.sre.selected&&dbObservations.sre.scope==='platform'&&!document.hidden;}
+function dbRawLogsBoundary(){return JSON.stringify([dbTelemetryLogsAuth(),dbAuthorizationVersion,dbTelemetryLogsView(),!!document.hidden]);}
+function dbRawLogsClear(forget=false){
+ const p=dbRawLogs;++p.epoch;p.busy=false;p.notice='';
+ if(forget)p.verified=false;
+ const output=dbRawLogsNode('output');
+ if(output){
+  for(const pre of output.querySelectorAll('pre'))pre.textContent='';
+  output.replaceChildren();
+ }
+}
+function dbRawLogsSync(){
+ const panel=dbRawLogsNode('panel');if(!panel?.dataset.installed)return;
+ const p=dbRawLogs,boundary=dbRawLogsBoundary();
+ if(boundary!==p.boundary){dbRawLogsClear(true);p.boundary=boundary;}
+ panel.hidden=!dbRawLogsVisible();
+ for(const key of ['title','bounds','sensitive','auth','fetch','clear'])dbRawLogsNode(key).textContent=dbRawLogsText(key);
+ dbRawLogsNode('auth').disabled=panel.hidden||p.busy||!dbPlatformCanRefresh();
+ dbRawLogsNode('fetch').disabled=panel.hidden||p.busy||!p.verified||!dbTelemetryLogsAllowed();
+ dbRawLogsNode('status').textContent=dbRawLogsText(p.notice||(p.verified?'verified':'denied'));
+}
+function dbRawLogsInstall(){
+ if(dbRawLogsNode('panel')?.dataset.installed)return;
+ const panel=dbAdminNode('section','observation-sre-raw-logs-panel',$('bear-panel-sre'));
+ const node=(tag,key,parent)=>dbAdminNode(tag,'observation-sre-raw-logs-'+key,parent);
+ panel.dataset.installed='true';panel.className='panel';panel.setAttribute('aria-labelledby','observation-sre-raw-logs-title');
+ const head=dbAdminNode('div','',panel);head.className='panel-head';node('h2','title',head);
+ const body=dbAdminNode('div','',panel);body.className='panel-body';node('p','bounds',body);node('p','sensitive',body);
+ const bar=dbAdminNode('div','',body);bar.className='toolbar';
+ dbAdminButton(bar,'observation-sre-raw-logs-auth',dbRawLogsText('auth'),dbRawLogsRefresh);
+ dbAdminButton(bar,'observation-sre-raw-logs-fetch',dbRawLogsText('fetch'),dbRawLogsFetch);
+ dbAdminButton(bar,'observation-sre-raw-logs-clear',dbRawLogsText('clear'),()=>{dbRawLogsClear();dbRawLogsSync();});
+ node('p','status',body).setAttribute('role','status');node('div','output',body);
+ dbRawLogsSync();
+}
+function dbRawLogsStart(notice){
+ dbRawLogsClear();
+ const p=dbRawLogs,epoch=p.epoch,boundary=p.boundary;p.busy=true;p.notice=notice;dbRawLogsSync();
+ return {
+  current:()=>p.epoch===epoch&&p.busy&&dbRawLogsVisible()&&boundary===dbRawLogsBoundary(),
+  finish:()=>{if(p.epoch===epoch)p.busy=false;dbRawLogsSync();}
+ };
+}
+async function dbRawLogsRefresh(){
+ dbRawLogsSync();if(dbRawLogsNode('auth').disabled)return;
+ const p=dbRawLogs;p.verified=false;
+ const read=dbRawLogsStart('refreshing');
+ try{
+  const response=await fetch('/api/session',{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}});
+  if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  if(!response.ok)throw Error('UNAVAILABLE');
+  const session=await response.json();if(!read.current())return;
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  p.verified=session.role==='admin'&&dbTelemetryLogsAllowed()&&dbRawLogsVisible();
+  p.notice=p.verified?'verified':'denied';
+ }catch{if(read.current())p.notice='failed';}
+ finally{read.finish();}
+}
+function dbRawLogsRecord(data){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ if(!exact(data,['scope','agenthouse','loki'])||!exact(data.scope,['since_minutes','tail_lines','max_bytes'])||
+    data.scope.since_minutes!==10||data.scope.tail_lines!==100||data.scope.max_bytes!==65536)fail();
+ const encoder=new TextEncoder();
+ for(const name of ['agenthouse','loki']){
+  const item=data[name];
+  if(!exact(item,['observed_at','status','line_count','stdout','stderr'])||!dbTelemetryLogsTimeKey(item.observed_at)||
+     !['available','unavailable'].includes(item.status))fail();
+  let bytes=0,lines=0;
+  for(const stream of [item.stdout,item.stderr]){
+   if(typeof stream!=='string'||stream.length>65536||/[\uD800-\uDFFF]/u.test(stream)||stream&&!stream.endsWith('\n'))fail();
+   bytes+=encoder.encode(stream).length;
+   for(const line of stream.split('\n').slice(0,-1)){
+    const space=line.indexOf(' ');
+    if(space<0||!dbTelemetryLogsTimeKey(line.slice(0,space))||++lines>100)fail();
+   }
+  }
+  if(bytes>65536||item.line_count!==lines||(item.status==='unavailable'&&lines!==0))fail();
+ }
+ return data;
+}
+function dbRawLogsRender(data){
+ const output=dbRawLogsNode('output');
+ for(const [name,label] of [['agenthouse','AgentHouse'],['loki','Loki']]){
+  const item=data[name],source=dbAdminNode('section','',output);
+  dbAdminNode('h3','',source).textContent=label;
+  const status=item.status==='available'&&item.line_count===0?'empty':item.status;
+  dbAdminNode('p','',source).textContent=[dbRawLogsText(status),dbRawLogsText('observed')+' '+item.observed_at,dbRawLogsText('lines')+' '+item.line_count].join(' · ');
+  if(item.status==='unavailable')continue;
+  for(const stream of ['stdout','stderr']){
+   const id='observation-sre-raw-logs-'+name+'-'+stream;
+   dbAdminNode('h4',id+'-label',source).textContent=dbRawLogsText(stream);
+   const pre=dbAdminNode('pre',id,source);pre.setAttribute('aria-labelledby',id+'-label');pre.tabIndex=0;
+   pre.setAttribute('style','white-space:pre-wrap;overflow-wrap:anywhere;max-height:16rem;overflow:auto;');
+   pre.textContent=item[stream];
+  }
+ }
+}
+async function dbRawLogsFetch(){
+ dbRawLogsSync();if(dbRawLogsNode('fetch').disabled)return;
+ const p=dbRawLogs,read=dbRawLogsStart('fetching');
+ try{
+  const response=await fetch('/api/v1/bears/platform-telemetry-raw-logs',{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}});
+  if(!read.current())return;
+  if([401,403].includes(response.status)){dbRawLogsClear(true);dbAdminSession({});return;}
+  if(!response.ok)throw Error('UNAVAILABLE');
+  const bytes=await response.arrayBuffer();if(!read.current())return;
+  // Workbench JSON can escape each raw byte to as many as six ASCII bytes.
+  if(bytes.byteLength>2*65536*6+4096)throw Error('INVALID_RESPONSE');
+  const data=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+  if(!read.current())return;
+  dbRawLogsRender(dbRawLogsRecord(data));p.notice='ready';
+ }catch{if(read.current()){dbRawLogsNode('output').replaceChildren();p.notice='failed';}}
+ finally{read.finish();}
+}
+
 function dbTelemetryLogsRecord(data){
  const exact=dbSavedExact,levels=['warning','error','fatal'],fail=()=>{throw Error('INVALID_RESPONSE');};
  const count=value=>Number.isInteger(value)&&value>=0&&value<=100;

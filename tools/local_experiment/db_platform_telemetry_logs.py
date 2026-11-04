@@ -16,6 +16,7 @@ from warehouse_operations import OperationError
 _SCOPE = dict(since_minutes=10, tail_lines=100, event_limit=20, streams=['stdout', 'stderr'])
 _MAX_BYTES = 64 * 1024
 _TIMEOUT = 8
+RAW_LOGS_PATH = '/api/v1/bears/platform-telemetry-raw-logs'
 _PROJECTION = (
     '[{{json .Name}},{{json .Id}},{{json (index .Config.Labels "shirokuma.dev.component")}},'
     '{{json .Config.Image}},{{json .HostConfig.PortBindings}},['
@@ -138,25 +139,60 @@ def _sample(name, streams):
                 level_counts=counts, events=[event for _, event in events[:_SCOPE['event_limit']]])
 
 
+def _raw_sample(_name, streams):
+    if sum(map(len, streams)) > _MAX_BYTES:
+        raise ValueError()
+    line_count = 0
+    for stream in streams:
+        if stream and not stream.endswith(b'\n'):
+            raise ValueError()
+        for line in stream.split(b'\n')[:-1]:
+            stamp, separator, _ = line.partition(b' ')
+            timestamp = _TIMESTAMP.fullmatch(stamp)
+            if not separator or not timestamp:
+                raise ValueError()
+            datetime.fromisoformat(timestamp[1].decode('ascii'))
+            line_count += 1
+            if line_count > _SCOPE['tail_lines']:
+                raise ValueError()
+    stdout, stderr = (stream.decode('utf-8') for stream in streams)
+    return dict(status='available', line_count=line_count, stdout=stdout, stderr=stderr)
+
+
 def observe(principal, role):
+    return _observe(
+        principal, role, _sample,
+        dict(status='unavailable', line_count=0, other_count=0,
+             level_counts=dict(warning=0, error=0, fatal=0), events=[]),
+        {**_SCOPE, 'streams': list(_SCOPE['streams'])},
+    )
+
+
+def observe_raw(principal, role):
+    return _observe(
+        principal, role, _raw_sample, dict(status='unavailable', line_count=0, stdout='', stderr=''),
+        dict(since_minutes=_SCOPE['since_minutes'], tail_lines=_SCOPE['tail_lines'], max_bytes=_MAX_BYTES),
+    )
+
+
+def _observe(principal, role, project, unavailable, scope):
     fingerprint = _authority(principal, role)
 
     def check():
         if _authority(principal, role) != fingerprint:
             raise OperationError('PLATFORM_ACCESS_DENIED', 403)
 
-    result = dict(scope={**_SCOPE, 'streams': list(_SCOPE['streams'])})
+    result = dict(scope=scope)
     for source in _SOURCES:
         name, manager, *_ = source
         deadline = time.monotonic() + _TIMEOUT
-        observation = dict(status='unavailable', line_count=0, other_count=0,
-                           level_counts=dict(warning=0, error=0, fatal=0), events=[])
+        observation = unavailable
         try:
             check()
             identity = _owned_id(source, *_docker(
                 ['container', 'inspect', '--format', _PROJECTION, manager.NAME], deadline))
             check()
-            observation = _sample(name, _docker(
+            observation = project(name, _docker(
                 ['logs', '--since=10m', '--tail=100', '--timestamps', identity], deadline))
         except (OSError, ValueError, subprocess.SubprocessError):
             pass

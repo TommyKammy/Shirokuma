@@ -34,9 +34,41 @@ async function logFetch(kind,reply=logReply()){
 """
 
 
+RAW_LOGS = r"""
+const rawPath='/api/v1/bears/platform-telemetry-raw-logs';
+const rawNode=key=>$('observation-sre-raw-logs-'+key);
+const rawCalls=()=>calls.filter(call=>call.path===rawPath);
+const rawText=newest+' <img src=x onerror=alert(1)> 雪🐻  \r\n';
+const rawErr=earlier+' standard error\n';
+const rawReply=()=>({scope:{since_minutes:10,tail_lines:100,max_bytes:65536},
+ agenthouse:{observed_at:sampled,status:'available',line_count:2,stdout:rawText,stderr:rawErr},
+ loki:{observed_at:sampled,status:'available',line_count:0,stdout:'',stderr:''}});
+const rawBytes=value=>new TextEncoder().encode(JSON.stringify(value)).buffer;
+const rawOutput=()=>rawNode('output').descendants();
+const rawPre=()=>rawOutput().filter(node=>node.tagName==='PRE');
+const rawRoute=read=>route=(path,options)=>{
+ if(path!==rawPath)return runtimeFixtureRoute(path,options);
+ assert.deepEqual(options,{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}});
+ return {telemetryResponse:read};
+};
+async function rawBoot(){
+ await logsBoot();
+ activeTab='bears';dbObservationNavigate('sre');
+ sessionRoute=(path,options)=>{
+  assert.deepEqual(options,{cache:'no-store',headers:{'X-Shirokuma-Role':'admin'}});
+  return {...session,role:'admin'};
+ };
+}
+async function rawFetch(value=rawReply()){
+ rawRoute({ok:true,status:200,arrayBuffer:async()=>rawBytes(value)});
+ await rawNode('fetch').onclick();
+}
+"""
+
+
 class PlatformTelemetryLogsDatabaseUI(unittest.TestCase):
     def javascript(self, body):
-        readiness.PlatformTelemetryReadinessDatabaseUI.javascript(self, LOGS + body)
+        readiness.PlatformTelemetryReadinessDatabaseUI.javascript(self, LOGS + RAW_LOGS + body)
 
     def test_manual_authority_scope_and_independent_semantic_outputs(self):
         self.javascript(r"""
@@ -121,4 +153,90 @@ for(const kind of ['sre','compute']){
 }
 dbAdminSession(session);
 assert.equal(logButton('compute','fetch').disabled,true);
+""")
+
+
+    def test_raw_manual_fetch_literal_separate_streams_and_clear(self):
+        self.javascript(r"""
+await rawBoot();
+assert.equal(rawCalls().length,0);
+assert.equal(rawNode('panel').parentElement,$('bear-panel-sre'));
+assert.match(visibleText(rawNode('panel')),/AgentHouse and Loki on LOCAL.*64 KiB.*Sensitive, unredacted/s);
+assert.equal(rawNode('status').role,'status');assert.equal(rawNode('output')['aria-live'],undefined);
+assert.equal(rawNode('fetch').disabled,true);
+await rawFetch();assert.equal(rawCalls().length,0);
+await rawNode('auth').onclick();assert.equal(rawCalls().length,0);assert.equal(rawNode('fetch').disabled,false);
+const writesBefore=writes.length;
+await rawFetch();
+assert.deepEqual(rawPre().map(pre=>pre.textContent),[rawText,rawErr,'','']);
+assert.ok(rawPre().every(pre=>!uiBindings.has(pre)&&pre.children.length===0));
+assert.match(visibleText(rawNode('output')),/Available, zero lines/);
+assert.equal(writes.length,writesBefore);
+rawNode('clear').click();assert.equal(rawOutput().length,0);assert.equal(rawCalls().length,1);
+await rawFetch();const refreshing=rawNode('auth').onclick();assert.equal(rawOutput().length,0);await refreshing;
+assert.equal(rawCalls().length,2);assert.equal(dbTelemetryLogs.sre.record,null);
+language='ja';dbObservationsSync();assert.match(visibleText(rawNode('panel')),/機密データ/);
+""")
+
+    def test_raw_authority_refresh_applies_current_ceiling_for_same_principal(self):
+        self.javascript(r"""
+await rawBoot();await rawNode('auth').onclick();await rawFetch();
+sessionRoute=()=>({...session,username:'different',role:'bi_viewer',maximum_role:'bi_viewer'});
+await rawNode('auth').onclick();
+assert.equal(dbMaximumRole,'admin');assert.equal(rawOutput().length,0);
+sessionRoute=()=>({...session,role:'bi_viewer',maximum_role:'bi_viewer'});
+await rawNode('auth').onclick();
+assert.equal(dbMaximumRole,'bi_viewer');assert.equal(rawNode('fetch').disabled,true);
+await rawFetch();assert.equal(rawCalls().length,1);
+""")
+
+    def test_raw_rejects_invalid_utf8_framing_and_combined_bounds(self):
+        self.javascript(r"""
+await rawBoot();await rawNode('auth').onclick();
+const invalid=[
+ {stderr:'Docker diagnostic\n'}, {stdout:rawText.slice(0,-1)}, {stdout:earlier+' \uD800\n'},
+ {stdout:earlier+' '+'界'.repeat(22000)+'\n'},
+ {stdout:(earlier+' x\n').repeat(100),line_count:101},
+ {status:'unavailable'}, {line_count:0}, {unexpected:'discard'},
+ {stdout:'2026-02-30T00:00:00Z invalid\n'}
+];
+for(const change of invalid){
+ const reply=rawReply();Object.assign(reply.agenthouse,change);await rawFetch(reply);
+ assert.equal(rawOutput().length,0);assert.match(rawNode('status').textContent,/could not be loaded/);
+}
+rawRoute({ok:true,status:200,arrayBuffer:async()=>Uint8Array.of(255).buffer});
+await rawNode('fetch').onclick();assert.equal(rawOutput().length,0);
+const unavailableRaw=rawReply();unavailableRaw.loki.status='unavailable';await rawFetch(unavailableRaw);
+assert.match(visibleText(rawNode('output')),/Logs unavailable/);assert.equal(rawPre().length,2);
+""")
+
+    def test_raw_late_body_and_stale_denial_do_not_replace_new_context(self):
+        self.javascript(r"""
+await rawBoot();await rawNode('auth').onclick();await rawFetch();
+const body=deferred();rawRoute({ok:true,status:200,arrayBuffer:()=>body.promise});
+const old=rawNode('fetch').onclick();assert.equal(rawOutput().length,0);await tick();
+activeTab='compute';dbObservationsSync();activeTab='bears';dbObservationsSync();
+assert.equal(rawNode('fetch').disabled,true);
+await rawNode('auth').onclick();await rawFetch();
+body.resolve(rawBytes({...rawReply(),agenthouse:{...rawReply().agenthouse,stdout:earlier+' stale\n'}}));await old;
+assert.equal(rawPre()[0].textContent,rawText);
+
+const denial=deferred();route=()=>denial.promise;
+const pending=rawNode('fetch').onclick();await tick();
+dbAdminSession({});assert.equal(rawOutput().length,0);
+dbAdminSession(session);await rawNode('auth').onclick();await rawFetch();
+denial.resolve({http:403});await pending;
+assert.equal(dbAdmin.platform,true);assert.equal(rawPre()[0].textContent,rawText);
+
+const held=deferred();rawRoute({ok:true,status:200,arrayBuffer:()=>held.promise});
+const clearing=rawNode('fetch').onclick();await tick();rawNode('clear').click();
+held.resolve(rawBytes(rawReply()));await clearing;assert.equal(rawOutput().length,0);
+await rawFetch();const rawScope=$('observation-sre-scope');rawScope.value='database';rawScope.onchange();
+assert.equal(rawOutput().length,0);assert.equal(rawNode('panel').hidden,true);
+rawScope.value='platform';rawScope.onchange();await rawNode('auth').onclick();await rawFetch();
+dbObservationNavigate('policy');dbObservationNavigate('sre');
+assert.equal(rawOutput().length,0);assert.equal(rawNode('fetch').disabled,true);
+await rawNode('auth').onclick();await rawFetch();
+document.hidden=true;dbRawLogsSync();document.hidden=false;dbRawLogsSync();
+assert.equal(rawOutput().length,0);assert.equal(rawNode('fetch').disabled,true);
 """)

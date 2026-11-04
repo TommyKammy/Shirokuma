@@ -157,18 +157,20 @@ class TelemetryLogsTests(unittest.TestCase):
                 logs.observe(principal, role)
         self.read.assert_not_called()
 
-    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None):
+    def request(self, handler, *, method='GET', suffix='', headers='', body='', role='admin', principal=None, raw_logs=False):
         class Connection:
             def __init__(self,raw):self.incoming,self.outgoing=io.BytesIO(raw),io.BytesIO()
             def makefile(self,*args):return self.incoming
             def sendall(self,raw):self.outgoing.write(raw)
-        raw=(method+' /api/v1/bears/platform-telemetry-logs'+suffix+' HTTP/1.1\r\n'
+        path = logs.RAW_LOGS_PATH if raw_logs else '/api/v1/bears/platform-telemetry-logs'
+        raw=(method+' '+path+suffix+' HTTP/1.1\r\n'
             'Host: 127.0.0.1\r\nConnection: close\r\nX-Shirokuma-Role: '+role+'\r\n'+headers+'\r\n'+body).encode()
         conn=Connection(raw)
         with patch.object(readiness.base.runtime_profile,'active',return_value=True),patch.object(readiness.auth,'authenticate_principal',return_value=principal or self.principal),patch.object(handler,'log_message'):
             handler(conn,('127.0.0.1',1),SimpleNamespace())
         response=HTTPResponse(Connection(conn.outgoing.getvalue()));response.begin()
-        return response.status, json.loads(response.read())
+        result = response.status, json.loads(response.read())
+        return (*result, response.getheader('Cache-Control')) if raw_logs else result
 
     def test_both_strict_inputless_routes(self):
         cases = [({}, 200), ({'headers': 'Content-Length: 0\r\n'}, 200),
@@ -186,6 +188,99 @@ class TelemetryLogsTests(unittest.TestCase):
                     self.assertEqual(set(result), {'scope', 'agenthouse', 'loki'})
                 else:
                     self.read.assert_not_called()
+
+
+    def test_raw_exact_streams_on_both_http_adapters_and_summary_unchanged(self):
+        stdout = STAMP + 'Z <script>雪🐻</script>  \r\n'.encode()
+        stderr = STAMP + b'.123456789Z \n'
+        self.read.side_effect = lambda args, deadline: (
+            (stdout, stderr) if args[0] == 'logs' else self.read_owned(args, deadline))
+        for handler in self.handlers():
+            self.read.reset_mock()
+            status, result, cache = self.request(handler, raw_logs=True)
+            self.assertEqual((status, cache), (200, 'no-store'))
+            self.assertEqual(result['scope'], dict(since_minutes=10, tail_lines=100, max_bytes=65536))
+            for name in ('agenthouse', 'loki'):
+                item = result[name]
+                self.assertEqual(set(item), {'observed_at', 'status', 'line_count', 'stdout', 'stderr'})
+                self.assertEqual((item['status'], item['line_count']), ('available', 2))
+                self.assertEqual((item['stdout'], item['stderr']), (stdout.decode(), stderr.decode()))
+            self.assertEqual([call.args[0][0] for call in self.read.call_args_list],
+                             ['container', 'logs', 'container', 'logs'])
+            _, summary = self.request(handler)
+            self.assertNotIn('script', json.dumps(summary))
+            self.assertEqual(summary['loki']['line_count'], 2)
+            self.assertNotIn('stdout', summary['loki'])
+
+    def test_raw_strict_input_and_platform_authority(self):
+        for handler in self.handlers():
+            for options, expected in (
+                ({'method': 'POST'}, 404), ({'suffix': '?'}, 400),
+                ({'suffix': '?since=1'}, 400), ({'suffix': '#x'}, 400),
+                ({'headers': 'Content-Length: 1\r\n', 'body': 'x'}, 400),
+                ({'headers': 'Transfer-Encoding: chunked\r\n'}, 400),
+                ({'headers': 'X-Test: a\r\nX-Test: b\r\n'}, 400),
+                ({'role': 'bi_viewer'}, 403),
+                ({'principal': replace(self.principal, maximum_role='data_engineer')}, 403),
+                ({'principal': replace(self.principal, platform_admin=False)}, 403),
+            ):
+                status, _, cache = self.request(handler, raw_logs=True, **options)
+                self.assertEqual((status, cache), (expected, 'no-store'))
+        self.read.assert_not_called()
+
+    def test_raw_origin_is_checked_on_both_adapters_before_capture(self):
+        for handler in self.handlers():
+            for origin in ('', 'null', 'http://foreign.example', 'http://127.0.0.1/path',
+                           'http://127.0.0.1\r\nOrigin: http://127.0.0.1'):
+                self.read.reset_mock()
+                status, error, cache = self.request(handler, raw_logs=True,
+                                                    headers=f'Origin: {origin}\r\n')
+                self.assertEqual((status, error['code'], cache), (403, 'INVALID_ORIGIN', 'no-store'))
+                self.read.assert_not_called()
+            status, _, cache = self.request(handler, raw_logs=True,
+                                            headers='Origin: http://127.0.0.1\r\n')
+            self.assertEqual((status, cache), (200, 'no-store'))
+            self.assertEqual(self.read.call_count, 4)
+            self.assertEqual(self.request(handler, headers='Origin: http://foreign.example\r\n')[0], 200)
+
+    def test_raw_invalid_sources_fail_independently(self):
+        good = STAMP + b'Z ok\n'
+        for streams in ((b'Docker diagnostic\n', good), (good, b'Docker diagnostic\n'),
+                        (good, good[:-1]), (good, STAMP + b'Z \xff\n'),
+                        (good * 100, good), (good, STAMP + b'Z ' + b'a' * 65536 + b'\n'),
+                        (b'2026-02-30T00:00:00Z invalid\n', good), None):
+            self.read.reset_mock()
+
+            def read(args, deadline):
+                if self.read.call_count == 1 and streams is None:
+                    return b'[]\n', b''
+                if self.read.call_count == 2 and args[0] == 'logs':
+                    return streams
+                return self.read_owned(args, deadline)
+
+            self.read.side_effect = read
+            result = logs.observe_raw(self.principal, 'admin')
+            for name, status in (('agenthouse', 'unavailable'), ('loki', 'available')):
+                item = result[name]
+                self.assertEqual((item['status'], item['line_count'], item['stdout'], item['stderr']),
+                                 (status, 0, '', ''))
+            self.assertEqual(self.read.call_count, 3 if streams is None else 4)
+
+    def test_raw_revocation_before_read_and_before_response(self):
+        for fail_at in (1, 2, 4):
+            self.read.reset_mock()
+            self.users['p']['password_hash'] = 'before'
+
+            def read(args, deadline):
+                if self.read.call_count == fail_at:
+                    self.users['p']['password_hash'] = 'changed'
+                return self.read_owned(args, deadline)
+
+            self.read.side_effect = read
+            with self.assertRaises(OperationError) as denied:
+                logs.observe_raw(self.principal, 'admin')
+            self.assertEqual(denied.exception.status, 403)
+            self.assertEqual(self.read.call_count, fail_at)
 
 
 class DockerCaptureTests(unittest.TestCase):
