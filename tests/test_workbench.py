@@ -1668,8 +1668,15 @@ const run=eval(HANDLER);
                 self.assertEqual(panel['aria-labelledby'], tab['id'])
                 self.assertEqual('hidden' in panel, name != 'warehouse')
         self.assertIn('hidden', doc.by_id('tab-db-admin'))
+        legacy = doc.by_id('legacy-header-warehouse')
+        self.assertNotIn('hidden', legacy)
+        self.assertTrue(any(n['tag'] == 'header' for n in legacy['ancestors']))
         for identifier in ('quick-warehouse-state', 'quick-wake', 'quick-chill'):
-            self.assertTrue(any(n['tag'] == 'header' for n in doc.by_id(identifier)['ancestors']))
+            self.assertIn(legacy, doc.by_id(identifier)['ancestors'])
+        entry = doc.by_id('database-compute-status')
+        self.assertEqual(entry['tag'], 'button')
+        self.assertEqual(entry['aria-controls'], 'compute')
+        self.assertIn('hidden', entry)
 
     def test_workbench_controls_belong_to_their_workspaces(self):
         doc = self.workbench_document()

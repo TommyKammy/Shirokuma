@@ -27,7 +27,15 @@ class WarehouseRuntimeUI(unittest.TestCase):
 
     def test_physical_observation_and_engine_proof_are_separate(self):
         self.javascript(r'''
-await start();assert.match($('quick-warehouse-state').textContent,/Physical Chilled.*2026-10-29/);
+const observed=Date.parse(runtime.observed_at);Date.now=()=>observed;
+await start();
+assert.equal($('legacy-header-warehouse').hidden,true);
+assert.equal($('database-compute-status').hidden,false);
+assert.equal($('database-compute-state').textContent,'LOCAL · Chilled');
+assert.match($('runtime-physical').textContent,/Physical Chilled.*2026-10-29/);
+assert.match($('warehouse-state').textContent,/Physical Chilled.*2026-10-29/);
+$('database-compute-status').onclick();
+assert.equal(activeTab,'compute');assert.equal($('tab-compute').getAttribute('aria-selected'),'true');
 assert.match($('runtime-proof').textContent,/unverified/);
 runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();
 assert.match($('runtime-proof').textContent,/unverified/);assert.doesNotMatch($('quick-warehouse-state').textContent,/Ready/);
@@ -35,6 +43,49 @@ runtime.engine_verified=true;await refreshStatus();assert.match($('runtime-proof
 runtime.engine_verified_at='2026-10-29T01:03:00Z';await refreshStatus();assert.match($('runtime-proof').textContent,/verified at/);
 assert.equal(posts().length,0);
 for(const call of calls.filter(c=>c.path===BASE)){assert.equal(call.options.headers['X-Shirokuma-Role'],'admin');assert.equal(call.options.body,undefined);}
+''')
+
+    def test_header_surfaces_shared_operation_and_observation_problems(self):
+        self.javascript(r'''
+const observed=Date.parse(runtime.observed_at);Date.now=()=>observed;
+await start();runtime.physical_state='active';
+for(const [phase,qualifier] of [['ACCEPTED','Operation in progress'],['RUNNING','Operation in progress'],['FAILED','Last operation failed'],['UNKNOWN','Operation outcome unknown'],['FINISHED','']]){
+ runtime.operation_phase=phase;await refreshStatus();
+ assert.equal($('database-compute-state').textContent,'LOCAL · Active'+(qualifier?' · '+qualifier:''));
+}
+runtime.physical_state='unknown';await refreshStatus();
+assert.equal($('database-compute-state').textContent,'LOCAL · Unknown');
+runtimeRoute=()=>{throw Error('offline');};await refreshStatus();
+assert.equal($('database-compute-state').textContent,'LOCAL · State unavailable');
+setLanguage('ja');
+assert.equal($('database-compute-state').textContent,'LOCAL · '+t('State unavailable'));
+assert.notEqual(t('State unavailable'),'State unavailable');
+assert.equal(posts().length,0);
+''')
+
+    def test_viewer_header_rebinds_only_when_observation_meaning_changes(self):
+        self.javascript(r'''
+const observed=Date.parse(runtime.observed_at);let now=observed;Date.now=()=>now;
+runtime.available_actions=[];runtime.physical_state='active';runtime.operation_phase='RUNNING';
+await start(false);
+const header=$('database-compute-state'),binding=()=>uiBindings.get(header);
+const fresh=binding();
+assert.equal(header.textContent,'LOCAL · Active · Operation in progress');
+now=observed+10*60000-1;await refreshStatus();
+assert.equal(binding(),fresh);
+now+=1;await refreshStatus();
+const stale=binding();
+assert.notEqual(stale,fresh);
+assert.equal(header.textContent,'LOCAL · Stale observation: Active · Operation was in progress');
+assert.match($('runtime-summary').textContent,/may be outdated/);
+now+=60000;await refreshStatus();
+assert.equal(binding(),stale);
+setLanguage('ja');
+assert.equal(binding(),stale);
+assert.equal(header.textContent,'LOCAL · 古い観測: 稼働中 · 観測時は操作中');
+runtime.observed_at=new Date(now).toISOString();await refreshStatus();
+assert.equal(header.textContent,'LOCAL · 稼働中 · 操作中');
+assert.equal(posts().length,0);
 ''')
 
     def test_platform_authority_and_api_actions_both_required(self):
@@ -332,6 +383,7 @@ assert.equal($('compute-sre-check').disabled,true);assert.equal($('compute-polic
         self.javascript(r"""
 api=async path=>(await fetch(path)).json();runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});const prior=route;route=async(path,options)=>path==='/api/status'?{status:'healthy',data_mode:'database'}:prior(path,options);
 await start();const draft=JSON.stringify(dbInput(dbCurrent())),sql=$('sql').value;
+assert.equal($('database-compute-state').textContent,'LOCAL · Not supported');
 for(const lang of ['en','ja']){setLanguage(lang);await refreshStatus();assert.equal(dbRuntimeSupport(),'unsupported');assert.equal($('runtime-guidance').textContent,t('Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.'));assert.equal($('quick-status-error').textContent,$('runtime-guidance').textContent);assert.doesNotMatch($('runtime-guidance').textContent,/automatically|自動起動します/);for(const id of ['runtime-wake','runtime-chill','runtime-reconcile','runtime-save'])assert.equal($(id).disabled,true);}
 assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal($('sql').value,sql);assert.equal(posts().length,0);
 """)

@@ -515,15 +515,31 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #database-results>details{padding:8px 14px;border-top:1px solid var(--line);font-size:12px}
 #database-results>details pre{margin-top:8px}
 @media(max-width:1024px){
- #database-workspace{grid-template-columns:1fr}
+ #database-workspace{grid-template-columns:minmax(0,1fr)}
  #database-workspace>.explorer{order:0;position:static;max-height:none}
  #database-workspace-main{order:1}
  #database-workspace #catalog-tree{max-height:300px}
  #database-workspace #worksheet-tabs{flex-wrap:wrap;overflow:visible}
  #database-workspace-main>.editor-tabs{align-items:flex-start}
  #database-workspace-main .editor-panel,#database-workspace-main .results-panel{order:initial}
+ html[data-data-mode=database] .app-header .environment{display:none}
+ :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0;max-width:100%}
+ :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) select{min-width:0;max-width:100%}
 }
-@media(max-width:760px){#database-worksheet-pane{padding:8px}#database-details{margin:8px}#database-context-bar .field{flex-basis:120px}}
+#database-compute-status{min-height:32px;min-width:0;max-width:100%;white-space:normal;text-align:start}
+#database-compute-state{min-width:0;overflow-wrap:anywhere}
+@media(max-width:760px){
+ #database-worksheet-pane{padding:8px}
+ #database-details{margin:8px}
+ #database-context-bar .field{flex-basis:120px}
+ html[data-data-mode=database] .app-header .header-spacer{display:none}
+ html[data-data-mode=database] .app-header :is(#database-compute-status,#role-controls,#ai-settings-button,#lang-switcher){order:0}
+ html[data-data-mode=database] #role-controls{max-width:100%;flex-wrap:wrap}
+ html[data-data-mode=database] :is(#role-selector,#ai-settings-button){min-height:32px}
+ html[data-data-mode=database] .warehouse-strip{min-width:0;max-width:100%}
+ html[data-data-mode=database] .warehouse-strip .badge{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+}
+@media(max-width:360px){html[data-data-mode=database] .app-header .brand-product{display:none}}
 .db-creation-steps{display:flex;flex-wrap:wrap;gap:12px 28px;padding-inline-start:24px;margin:16px 0 20px;max-width:75ch}
 .db-creation-steps li{flex:1 1 150px;min-width:0;overflow-wrap:anywhere;padding-inline-end:8px}
 .db-creation-steps [aria-current="step"]{font-weight:700;color:var(--accent)}
@@ -559,8 +575,6 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #observation-activity-panel :is(input,select,button){min-width:0;max-width:100%}
 #observation-activity-panel :is(p,td,th,button){white-space:normal;overflow-wrap:anywhere}
 #observation-activity-panel .table-wrap{max-width:100%;overflow-x:auto}
-html[data-data-mode=database] #quick-status-error{white-space:normal;overflow-wrap:anywhere}html[data-data-mode=database] #quick-warehouse-state{white-space:normal;overflow-wrap:anywhere}
-
 /* Database dbt uses the established operational toolbar and table vocabulary. */
 #db-dbt-panel{min-width:0;max-width:100%}
 #db-dbt-panel .toolbar{align-items:end;gap:12px;flex-wrap:wrap;margin-block:12px}
@@ -690,7 +704,8 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <span class="brand"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="2.6" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><circle cx="10" cy="11" r="7" fill="currentColor"/><circle cx="10" cy="13" r="2.4" fill="var(--surface)"/></svg>Shirokuma <span class="brand-product">Workbench</span></span>
 <span class="environment">Local lab · mac-studio-solo</span>
 <span class="header-spacer"></span>
-<div class="header-group" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status" hidden></span></div>
+<div id="legacy-header-warehouse" class="header-group" aria-label="Global warehouse controls"><span id="quick-warehouse-state" class="badge" role="status">Warehouse: Loading…</span><button id="quick-wake">Wake</button><button id="quick-chill">Chill</button><span id="quick-status-error" class="error" role="status" hidden></span></div>
+<button id="database-compute-status" class="small" type="button" aria-controls="compute" aria-describedby="tab-compute" hidden><span id="database-compute-state" role="status">LOCAL · Loading…</span><span aria-hidden="true">↗</span></button>
 <span class="divider"></span>
 <div id="role-controls"><label id="role-selector-label" for="role-selector">Role</label><select id="role-selector"><option value="admin">Admin</option><option value="data_engineer">Data Engineer</option><option value="bi_viewer">BI Viewer</option></select><span id="role-indicator" class="badge" role="status" hidden>Read-only role</span></div>
 <button id="ai-settings-button" class="quiet small" aria-haspopup="dialog" aria-controls="ai-settings">AI Model Settings</button>
@@ -7187,6 +7202,11 @@ function dbApplyRole(){
 async function initializeDatabaseUI(session){
  dbAISettingsInstall();
  document.documentElement.dataset.dataMode='database';
+ $('legacy-header-warehouse').hidden=true;
+ const computeStatus=$('database-compute-status');
+ computeStatus.hidden=false;
+ dbRenderHeaderComputeState('Loading…');
+ computeStatus.onclick=()=>{const tab=$('tab-compute');activate(tab);tab.focus();};
  dbPrincipal=JSON.stringify([session.username,session.authenticated]);
  dbMaximumRole=session.maximum_role;dbUpdateMaximumRole(session.maximum_role);
  dbAdminSession(session);
@@ -7272,7 +7292,7 @@ async function initializeDatabaseUI(session){
  refreshStatus=async()=>{const identity=dbIdentity();if(await dbRuntimeRefresh())return;try{const data=await api('/api/status');if(identity!==dbIdentity())return;message('status-error','');logicalWarehouseStatus=data.creation_mode==='logical_v1';dbRuntimeConfirmProfile(data,'status');
   if(logicalWarehouseStatus)dbRenderWarehouseStatus(data.warehouse?.state);
   else{ui($('warehouse-state'),data.status==='healthy'?'Ready':'Unavailable');ui($('quick-warehouse-state'),'Database mode supports LOCAL only.');if(dbRuntimeSupport()==='unsupported'){ui($('quick-status-error'),dbRuntimeDefaultGuidance());$('quick-status-error').hidden=false;}}
- }catch(error){if(identity===dbIdentity()){if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
+ }catch(error){if(identity===dbIdentity()){dbRenderHeaderComputeState('State unavailable');if(logicalWarehouseStatus){dbRenderWarehouseStatus();message('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else message('status-error',error.message);}}};
  applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
  activate=button=>{
@@ -12026,9 +12046,9 @@ Object.assign(i18n.ja,{
 Object.assign(i18n.en,{'Runtime transitioning':'Transitioning'});
 for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
 function dbRuntimeStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,dbMaximumRole,dbAdmin.platform,dbAuthorizationVersion]);}
-function dbRuntimePurge(){
+function dbRuntimePurge(render=true){
  const p=dbRuntime;++p.serial;p.scope='';p.status=null;p.operation=null;p.intent=null;p.pending=false;p.reading=false;p.observing=false;p.dirty=false;p.base=null;p.conflict=false;p.failed=false;
- if(p.installed){$('runtime-minutes').value='';dbRuntimeRender();}
+ if(p.installed){$('runtime-minutes').value='';if(render)dbRuntimeRender();}
 }
 function dbRuntimeSync(){
  const p=dbRuntime;if(p.scope!==dbRuntimeStamp()){dbRuntimePurge();p.scope=dbRuntimeStamp();}dbRuntimeRender();
@@ -12057,6 +12077,16 @@ function dbRuntimeBlockers(){
 }
 function dbRuntimeCanChill(){const counts=dbRuntimeBlockers();return !!counts&&counts.every(([,value])=>value===0);}
 function dbRuntimePhysicalLabel(state){return t(({active:'Active',chilled:'Chilled',starting:'Runtime transitioning',unknown:'Unknown'})[state]||'Unknown');}
+let dbHeaderComputeStateKey;
+function dbRenderHeaderComputeState(label,stale=false,operation=''){
+ const key=JSON.stringify([label,stale,operation]);
+ if(key===dbHeaderComputeStateKey)return;
+ dbHeaderComputeStateKey=key;
+ ui($('database-compute-state'),'LOCAL · {state}{operation}',()=>({
+  state:stale?t('Stale observation: {state}',{state:t(label)}):t(label),
+  operation:operation?' · '+t(operation):''
+ }));
+}
 function dbRuntimePhaseLabel(phase){return t(({ACCEPTED:'Accepted',RUNNING:'Running',SUCCEEDED:'Completed',FINISHED:'Completed',FAILED:'Failed',UNKNOWN:'Unknown',RECONCILED:'Revalidated'})[phase]||'Unknown');}
 function dbRuntimeActionLabel(action){return t(({WAREHOUSE_WAKE:'Wake',WAREHOUSE_CHILL:'Chill',WAREHOUSE_AUTO_CHILL:'Auto-Chill',WAREHOUSE_RECONCILE:'Revalidate state'})[action]||'Unknown action');}
 // Pure explanations reuse the operation guards; observations never add age or health gates.
@@ -12096,6 +12126,15 @@ function dbRuntimeRender(){
  const showLocal=!!op&&(!globalID||globalID===op.id||op.observation===data||dbRuntimeLocked());
  const rawPhase=showLocal?op.phase:data?.operation_phase,rawAction=showLocal?op.action:data?.operation_action,operationID=showLocal?op.id:globalID;
  const phase=['ACCEPTED','RUNNING','SUCCEEDED','FINISHED','FAILED','UNKNOWN','RECONCILED'].includes(rawPhase)?rawPhase:rawPhase?'UNKNOWN':null,action=['WAREHOUSE_WAKE','WAREHOUSE_CHILL','WAREHOUSE_AUTO_CHILL','WAREHOUSE_RECONCILE'].includes(rawAction)?rawAction:null;
+ const [,headerLabel,,minutes]=dbRuntimeSummary(),stale=minutes!==null&&minutes>=dbRuntimeStaleMinutes;
+ let headerOperation='';
+ if(data){
+  if(p.pending)headerOperation='Operation in progress';
+  else if(p.intent||showLocal&&op.observationUnavailable||phase==='UNKNOWN')headerOperation='Operation outcome unknown';
+  else if(phase==='FAILED')headerOperation='Last operation failed';
+  else if(['ACCEPTED','RUNNING'].includes(phase))headerOperation=stale?'Operation was in progress':'Operation in progress';
+ }
+ dbRenderHeaderComputeState(headerLabel,stale,headerOperation);
  ui($('replicas'),'Replicas {ready} / {desired}',{ready:Number.isSafeInteger(data?.ready_replicas)?data.ready_replicas:'—',desired:Number.isSafeInteger(data?.replicas)?data.replicas:'—'});
  const errorCode=showLocal&&/^[A-Z][A-Z0-9_]{0,63}$/.test(op.error_code)?op.error_code:null;
  ui($('runtime-receipt-info'),operationID?(errorCode?'Operation {id} · {code}':'Operation {id}'):'',{id:operationID,code:errorCode});
@@ -12152,7 +12191,8 @@ async function dbRuntimeRefresh(){
   const data=await dbRuntimeRequest(dbRuntimeBase,{stamp});if(!current())return true;supported=data?.warehouse==='LOCAL';
   if(data?.warehouse!=='LOCAL'||!['active','chilled','starting','unknown'].includes(data.physical_state)||typeof data.observed_at!=='string'||!Number.isFinite(Date.parse(data.observed_at)))throw Error('DTO');
   if(!Array.isArray(data.available_actions)||!data.available_actions.includes('wake')){
-   dbRuntimePurge();p.scope=dbRuntimeStamp();
+   // Install the validated observation before rendering the cleared scope.
+   dbRuntimePurge(false);p.scope=dbRuntimeStamp();
   }
   p.status=data;p.failed=false;p.support='logical';p.supportPrincipal=dbPrincipal;
   const policy=data.policy;if(Number.isSafeInteger(policy?.minutes)&&policy.minutes>=0&&policy.minutes<=1440&&Number.isSafeInteger(policy?.revision)&&policy.revision>=0){
@@ -12277,6 +12317,11 @@ Object.assign(i18n.ja,{
  'Runtime records':'稼働の記録','Declarations and policy':'宣言とポリシー','Logs and telemetry':'ログとテレメトリ',
  'What this observation means':'この観測の意味',
  'State unavailable':'取得不可',
+ 'Stale observation: {state}':'古い観測: {state}',
+ 'Operation in progress':'操作中',
+ 'Operation was in progress':'観測時は操作中',
+ 'Last operation failed':'前回の操作は失敗',
+ 'Operation outcome unknown':'操作結果不明',
  'Reading the runtime state…':'稼働状態を取得しています…',
  'Could not read the runtime state. The current state is unknown; this is not the same as stopped or zero usage. Refresh to try again.':'稼働状態を取得できませんでした。現在の状態は不明で、休止中や使用量0とは異なります。更新して再度お試しください。',
  'Running at the last observation. The engine verification below is a separate record and may be older.':'最後の観測では稼働中です。下のエンジン検証は別の記録で、この観測より古い場合があります。',
@@ -12297,6 +12342,7 @@ function dbRuntimeCapability(){
  if(dbAdmin.platform)return 'Read-only with the current role. Select the admin role to operate shared LOCAL.';
  return 'Read-only: you can check the state. Authorized SQL starts shared LOCAL automatically; platform operators Wake, Chill and change Auto-Chill.';
 }
+const dbRuntimeStaleMinutes=10;
 // Missing, failed and observed states stay distinct; an observation never asserts the current state.
 function dbRuntimeSummary(){
  const p=dbRuntime,data=p.status;
@@ -12312,7 +12358,7 @@ function dbRuntimeSummaryRender(){
  if(!$('runtime-summary'))return;
  const [tone,label,text,minutes]=dbRuntimeSummary(),badge=$('runtime-state-badge');
  badge.className='badge'+(tone?' '+tone:'');ui(badge,label);
- ui($('runtime-summary'),'{text} {age}',()=>({text:t(text),age:minutes===null?'':(minutes<1?t('Observed less than a minute ago.'):t('Observed {minutes} min ago.',{minutes}))+(minutes>=10?' '+t('This observation may be outdated. Refresh status.'):'')}));
+ ui($('runtime-summary'),'{text} {age}',()=>({text:t(text),age:minutes===null?'':(minutes<1?t('Observed less than a minute ago.'):t('Observed {minutes} min ago.',{minutes}))+(minutes>=dbRuntimeStaleMinutes?' '+t('This observation may be outdated. Refresh status.'):'')}));
  ui($('runtime-capability'),dbRuntimeCapability());
  // Per-action conditions explain disabled controls to operators; others read the capability line once.
  const allowed=dbAdminAllowed();
