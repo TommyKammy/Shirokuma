@@ -419,11 +419,25 @@ auditNoLegacy();
     def test_missing_db_and_backend_scope_eligibility_are_enforced(self):
         self.run_audit(r'''
 await auditBoot();assert.equal($('db-audit-scope').options.find(o=>o.value==='platform').disabled,true);
-await auditChange('database','');await dbAuditSearch();assert.equal(auditRequests().length,0);
-await auditChange('database','db');auditCapabilities=()=>({scopes:[],sources:['query']});await dbAuditSearch();assert.equal(auditRequests().length,0);
+await auditChange('database','');
+const database=$('db-audit-database');
+for(let i=0;i<2;i++){
+ await dbAuditSearch();await periodicRefresh();
+ assert.equal(auditRequests().length,0);assert.equal(dbAudit.items.length,0);
+ assert.match($('db-audit-status').textContent,/Choose a currently available database/);
+ assert.equal(database.options.find(o=>o.value==='db').disabled,false);
+}
+await auditChange('database','db');await dbAuditSearch();
+assert.equal(auditRequests().length,1);assert.equal(dbAudit.items.length,1);
+await dbAuditDetail(dbAudit.items[0].id);assert.ok(dbAudit.detail);
+inventory=inventory.filter(d=>d.id!=='db');await dbAuditSearch();dbAuditValidate();
+assert.equal(auditRequests().length,1);assert.equal(dbAudit.items.length,0);assert.equal(dbAudit.detail,null);
+assert.equal(database.options.find(o=>o.value==='db').disabled,true);
+assert.equal(database.options.find(o=>o.value==='finance').disabled,false);
+await auditChange('database','finance');auditCapabilities=()=>({scopes:[],sources:['query']});await dbAuditSearch();assert.equal(auditRequests().length,1);
 assert.equal(dbAudit.items.length,0);
 auditCapabilities=null;inventory=[{...inventory[0],id:'replacement'}];await dbAuditOpen();
-assert.equal($('db-audit-database').options.find(o=>o.value==='db').disabled,true);
+assert.equal($('db-audit-database').options.find(o=>o.value==='finance').disabled,true);
 assert.equal($('db-audit-database').options.find(o=>o.value==='replacement').disabled,false);auditNoLegacy();
 ''')
 

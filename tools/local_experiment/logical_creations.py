@@ -1097,8 +1097,22 @@ def _run_refresh(request):
             proof = db.execute("SELECT private_ref FROM logical_effects WHERE creation_id=? AND effect_key=? AND state='ACKNOWLEDGED'",
                 (root['id'], prefix+'verify_'+identity['id'])).fetchone()
             registry.put_identity(db, dict(identity, state='ACTIVE', revision=2, verification_ref=proof[0]))
-        db.execute("UPDATE logical_requests SET dispatch_state='COMPLETE',result_json=? WHERE id=? AND claim_id=?",
-                   (_json(dict(engine_verified=True)), request['id'], request['claim_id']))
+        operation_id = pins['operation_id']
+        if operation_id is not None:
+            refresh = grant_management._linked_auth_refresh(db, operation_id, request['actor'])
+            if (refresh is None or refresh['id'] != request['id']
+                    or refresh['pins_json'] != request['pins_json'] or grant[0] != refresh['after_role']):
+                raise OperationError('RECONCILIATION_REQUIRED')
+            changed = db.execute("""UPDATE operations SET state='APPLIED'
+                WHERE id=? AND actor=? AND action='GRANT_CHANGE' AND state='AWAITING_APPLY' AND apply_id IS NULL""",
+                (operation_id, request['actor']))
+            if changed.rowcount != 1:
+                raise OperationError('RECONCILIATION_REQUIRED')
+        changed = db.execute("""UPDATE logical_requests SET dispatch_state='COMPLETE',result_json=?
+            WHERE id=? AND claim_id=? AND dispatch_state='CLAIMED'""",
+            (_json(dict(engine_verified=True)), request['id'], request['claim_id']))
+        if changed.rowcount != 1:
+            raise OperationError('RECONCILIATION_REQUIRED')
 
 
 def _account_refresh_loop(stop, baseline, interval):

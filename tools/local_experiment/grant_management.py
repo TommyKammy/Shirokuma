@@ -2,6 +2,7 @@
 
 No connection or backend is opened at import time. Epoch tombstones survive deletes.
 """
+import hashlib
 import json
 import uuid
 from contextlib import nullcontext
@@ -341,6 +342,59 @@ def list_grants(principal, role, database_id):
             WHERE g.database_id=? ORDER BY principal_id''', (database_id,))]}
 
 
+def _linked_auth_refresh(db, operation_id, actor):
+    # Use the immutable mutation audit, since current grant/binding pins may
+    # have advanced since a historical refresh completed.
+    rows = db.execute("""SELECT q.*, a.database_id, a.principal_id, a.expected_revision,
+        a.desired_revision, a.effective_epoch, a.after_role, r.payload AS grant_payload,
+        root.warehouse_id
+        FROM logical_requests q JOIN db_creations root ON root.id=q.creation_id
+        JOIN grant_audit a ON a.operation_id=? AND a.database_id=root.database_id AND a.actor=q.actor
+        JOIN operations o ON o.id=a.operation_id AND o.actor=a.actor
+        JOIN grant_requests r ON r.operation_id=o.id AND r.actor=o.actor
+        WHERE q.actor=? AND q.route='private:logical-auth-refresh' AND q.idempotency_key=?
+          AND q.action='AUTH_REFRESH' AND q.environment_id=root.environment_id
+          AND root.creation_mode='logical_v1' AND o.action='GRANT_CHANGE' AND o.apply_id IS NULL
+          AND o.expected_revision=a.expected_revision AND a.desired_revision=a.expected_revision+1
+          AND a.apply_operation_id IS NULL AND a.generation_id IS NULL AND a.receipt IS NULL
+          AND r.route='/api/v1/databases/' || a.database_id || '/grants'""",
+        (operation_id, actor, hashlib.sha256(('grant:' + operation_id).encode()).hexdigest())).fetchall()
+    if len(rows) != 1:
+        return None
+    refresh = rows[0]
+    try:
+        pins = json.loads(refresh['pins_json'])
+        payload = json.loads(refresh['grant_payload'])
+        if type(pins) is not dict or refresh['payload'] != refresh['pins_json']:
+            return None
+        if (not _text(pins.get('generation_id')) or any(
+                type(pins.get(key)) is not int or pins[key] < 1
+                for key in ('foundation_revision', 'binding_revision'))):
+            return None
+        expected_pins = dict(operation_id=operation_id, database_id=refresh['database_id'],
+            target_principal_id=refresh['principal_id'], environment_id=refresh['environment_id'],
+            warehouse_id=refresh['warehouse_id'], desired_revision=refresh['desired_revision'],
+            effective_epoch=refresh['effective_epoch'], generation_id=pins['generation_id'],
+            foundation_revision=pins['foundation_revision'], binding_revision=pins['binding_revision'])
+        if (_json(pins) == _json(expected_pins)
+                and _json(payload) == _json(dict(principal_id=refresh['principal_id'],
+                    maximum_role=refresh['after_role'], expected_revision=refresh['expected_revision']))):
+            return refresh
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def _verified_auth_refresh(refresh):
+    if refresh['dispatch_state'] != 'COMPLETE':
+        return False
+    try:
+        result = json.loads(refresh['result_json'])
+    except (ValueError, TypeError):
+        return False
+    return type(result) is dict and result.get('engine_verified') is True
+
+
 def inspect(db, operation_id, actor, admin=False):
     row = db.execute('''SELECT o.*,r.payload FROM operations o
         JOIN grant_requests r ON r.operation_id=o.id WHERE o.id=?''', (operation_id,)).fetchone()
@@ -349,13 +403,11 @@ def inspect(db, operation_id, actor, admin=False):
     result = dict(id=row['id'], actor=row['actor'], action=row['action'], state=row['state'],
         request=json.loads(row['payload']), audit=[dict(a) for a in db.execute(
             'SELECT * FROM grant_audit WHERE operation_id=? ORDER BY id', (operation_id,))])
-    import hashlib
-    refresh = db.execute('''SELECT id FROM logical_requests
-        WHERE actor=? AND route='private:logical-auth-refresh' AND idempotency_key=? AND action='AUTH_REFRESH'
-        ''',
-        (row['actor'], hashlib.sha256(('grant:' + operation_id).encode()).hexdigest())).fetchone()
+    refresh = _linked_auth_refresh(db, operation_id, row['actor'])
     if refresh is not None:
         result['auth_refresh_request_id'] = refresh['id']
+        if row['state'] == 'AWAITING_APPLY' and _verified_auth_refresh(refresh):
+            result['state'] = 'APPLIED'
     return result
 
 
@@ -408,12 +460,17 @@ def _mutate(principal, role, database_id, payload, key, *, connection=None):
         else:
             desired = dm.create_grant(db, target, database_id, payload['maximum_role'])
         after = effective(db, target, database_id)
-        db.execute('''UPDATE operations SET state='SUPERSEDED'
-            WHERE action='GRANT_CHANGE' AND state='AWAITING_APPLY'
-            AND id IN (SELECT a.operation_id FROM grant_audit a
+        pending = db.execute('''SELECT o.id,o.actor FROM operations o
+            WHERE o.action='GRANT_CHANGE' AND o.state='AWAITING_APPLY'
+            AND o.id IN (SELECT a.operation_id FROM grant_audit a
                 JOIN grant_requests r ON r.operation_id=a.operation_id
-                WHERE a.principal_id=? AND a.database_id=?)''',
-            (target,database_id))
+                WHERE a.principal_id=? AND a.database_id=?)''', (target,database_id)).fetchall()
+        for op in pending:
+            # Keep verified history for rows written before refresh completion
+            # recorded APPLIED in the same transaction.
+            refresh = _linked_auth_refresh(db, op['id'], op['actor']) if logical_root is not None else None
+            state = 'APPLIED' if refresh is not None and _verified_auth_refresh(refresh) else 'SUPERSEDED'
+            db.execute("UPDATE operations SET state=? WHERE id=? AND state='AWAITING_APPLY'", (state, op['id']))
         operation_id = str(uuid.uuid4())
         snapshot = (('database_id',database_id),('principal_id',target))
         if cancellation is not None:

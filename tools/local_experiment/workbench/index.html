@@ -7316,7 +7316,7 @@ Object.assign(i18n.ja,{
  'Admin':'管理者','Admin targets must already have a global admin ceiling.':'admin の付与先には、既存の全体ロール上限 admin が必要です。',
  'Desired revision':'希望 revision','Applied revision':'適用 revision','Effective epoch':'有効 epoch',
  'Save desired grant':'希望 grant を保存','Revoke grant':'grant を取り消す',
- 'Grant changes await verified full apply; restrictions and revocation can take effect immediately.':'grant 変更の昇格には検証済み full apply が必要です。制限や取消は即時に反映される場合があります。',
+ 'Higher privileges take effect after backend verification. Restrictions and revocation can take effect immediately.':'権限の昇格はバックエンドの検証後に反映されます。制限や取消は即時に反映される場合があります。',
  'Pending backend verification':'バックエンド検証待ち','Effective':'有効','Revoked':'取消済み',
  'Read model mismatch: expected databases with fixed schemas and safe binding metadata.':'読取モデル不一致: 固定 Schema と安全な binding メタデータを含む databases が必要です。',
  'Display metadata saved.':'表示メタデータを保存しました。','Operator handoff recorded. Check database readiness for current status.':'operator への引継ぎを記録しました。現在の状態は「DB の READY 状態を確認」で確認できます。',
@@ -7584,7 +7584,7 @@ function dbAdminRenderDetail(){
  if(!dbAdmin.rendered){dbAdmin.rendered=true;
   dbAdminNode('p','db-admin-summary',parent);dbAdminNode('h2','',parent,'Safe binding metadata');dbAdminNode('pre','db-admin-binding',parent);
   dbAdminNode('div','db-admin-metadata',parent);dbAdminNode('h2','',parent,'Schema display metadata');dbAdminNode('div','db-admin-schemas',parent);
-  const grants=dbAdminNode('details','',parent);dbAdminNode('summary','',grants,'Desired grants');dbAdminNode('p','',grants,'Grant changes await verified full apply; restrictions and revocation can take effect immediately.');
+  const grants=dbAdminNode('details','',parent);dbAdminNode('summary','',grants,'Desired grants');dbAdminNode('p','',grants,'Higher privileges take effect after backend verification. Restrictions and revocation can take effect immediately.');
   dbAdminNode('div','db-admin-grants',grants);
   const principal=dbAdminField(grants,'db-admin-grant-principal','Principal ID'),role=dbAdminField(grants,'db-admin-grant-role','Desired role','select'),revision=dbAdminField(grants,'db-admin-grant-revision','Expected revision');revision.value='0';
   for(const value of ['bi_viewer','data_engineer','admin']){const option=new Option(value,value);if(value==='admin')ui(option,'Admin');role.add(option);}role.value='bi_viewer';
@@ -11367,7 +11367,7 @@ async function dbCreationSQL(){
 if(typeof document.addEventListener==='function')document.addEventListener('visibilitychange',()=>{dbCreationSuspend();if(!document.hidden&&dbAdminAllowed()&&activeTab==='db-admin')void dbCreationLoad();});
 // Durable audit is an independent reference context, never an execution context.
 const dbAudit={installed:false,scope:'self',role:'',database:'',epoch:0,list:0,selection:0,detailRequest:0,auth:0,
- draft:{},applied:null,cursors:[],cursor:'',next:null,items:[],selected:'',detail:null,proof:null,capabilities:null,url:null,preview:null,previewStamp:null};
+ draft:{},applied:null,cursors:[],cursor:'',next:null,items:[],selected:'',detail:null,proof:null,choiceItems:null,capabilities:null,url:null,preview:null,previewStamp:null};
 Object.assign(i18n.ja,{
  'Saved AI metadata':'AI の保存済みメタデータ','Saved SQL explanation':'保存済み SQL の説明','Saved SQL execution plan explanation':'保存済み SQL 実行計画の説明','Saved-plan re-explanation':'保存済み計画の再説明','Saved SQL proposal':'保存済み SQL 案','Saved catalog description proposal':'保存済みカタログ説明文案',
  'Saved SQL queries':'保存済み SQL クエリ','DataOps operations':'DataOps 操作','Job runs':'ジョブ実行','Job steps':'ジョブの処理',
@@ -11574,7 +11574,7 @@ function dbAuditStamp(){return JSON.stringify([dbPrincipal,dbEpoch,currentRole,d
 function dbAuditPurge(){
  ++dbAudit.epoch;++dbAudit.list;++dbAudit.selection;++dbAudit.detailRequest;
  dbAudit.preview=null;dbAudit.previewStamp=null;
- dbAudit.items=[];dbAudit.selected='';dbAudit.detail=null;dbAudit.applied=null;dbAudit.cursors=[];dbAudit.cursor='';dbAudit.next=null;dbAudit.proof=null;dbAudit.capabilities=null;
+ dbAudit.items=[];dbAudit.selected='';dbAudit.detail=null;dbAudit.applied=null;dbAudit.cursors=[];dbAudit.cursor='';dbAudit.next=null;dbAudit.proof=null;dbAudit.choiceItems=null;dbAudit.capabilities=null;
  if(dbAudit.url){URL.revokeObjectURL(dbAudit.url);dbAudit.url=null;}
  if(dbAudit.installed){$('db-audit-preview-search').value='';dbAuditSelectOptions('db-audit-preview-status',[],'','All statuses');$('db-audit-rows').replaceChildren();$('db-audit-detail').replaceChildren();$('db-audit-preview').replaceChildren();ui($('db-audit-context'),'Search to load saved metadata.');ui($('db-audit-status'),'Search to load saved metadata.');dbAuditChoices([]);}
 }
@@ -11588,7 +11588,7 @@ function dbAuditValidate(){
  if(!dbAudit.installed)return;
  const p=dbAudit.proof,cached=dbInventories.get(dbAudit.role)?.items,d=cached?.find(d=>d.id===dbAudit.database);
  if(dbAuditReason()||p&&cached&&p.scope!=='platform'&&(!d||dbAuditBinding(d)!==p.binding))dbAuditPurge();
- else dbAuditChoices(p&&dbInventoryCurrent(p.items)?p.items:[]);
+ else{const items=p?.items??dbAudit.choiceItems;dbAuditChoices(dbInventoryCurrent(items)?items:[]);}
 }
 const dbAuditBinding=d=>JSON.stringify([d?.id,d?.state,d?.binding_revision,d?.generation_id,d?.grant_revision??null,d?.allowed_roles]);
 function dbAuditPaging(){
@@ -11645,7 +11645,7 @@ async function dbAuditAuthorize(stamp,current=()=>stamp===dbAuditStamp(),updateC
  if(!current()||!dbInventoryCurrent(items))return null;
  if(updateChoices)dbAuditChoices(items);
  const d=items.find(d=>d.id===database);
- if(scope!=='platform'&&(!d||d.state!=='READY'||!d.allowed_roles?.includes(role)))throw Object.assign(Error('AUDIT_AUTH'),{auditChoices:updateChoices?items:null});
+ if(scope!=='platform'&&(!d||d.state!=='READY'||!d.allowed_roles?.includes(role)))throw Object.assign(Error('AUDIT_AUTH'),{auditChoices:items});
  const capabilities=await dbAPI('/api/v1/audit/capabilities',role);
  if(!current()||!dbInventoryCurrent(items))return null;
  if(!Array.isArray(capabilities.scopes)||!capabilities.scopes.includes(scope)||scope==='platform'&&(!dbAdmin.platform||dbAuditReason()))throw Error('AUDIT_AUTH');
@@ -11670,7 +11670,17 @@ async function dbAuditResponse(path,stamp,current){
 }
 function dbAuditFailure(error,current){
  if(!current())return;
- dbAuditPurge();$('db-audit-status').setAttribute('role','alert');ui($('db-audit-status'),error.code==='STALE_CURSOR'?'Cursor expired. Search again.':'Audit unavailable. Check the reference role and database, then search again.');
+ const items=error.auditChoices;
+ const read=dbInventoryCurrent(items)?dbAuthorizationReads.get(items):null;
+ dbAuditPurge();$('db-audit-status').setAttribute('role','alert');
+ if(read){
+  // Keep authorization for the selector after purge invalidates the audit request.
+  const choices=items.slice();
+  dbAuthorizationReads.set(choices,{...read,current:null});
+  dbAudit.choiceItems=choices;dbAuditChoices(choices);
+  ui($('db-audit-status'),'Choose a currently available database and permitted reference role.');return;
+ }
+ ui($('db-audit-status'),error.code==='STALE_CURSOR'?'Cursor expired. Search again.':'Audit unavailable. Check the reference role and database, then search again.');
 }
 function dbAuditFilters(){
  const values={};for(const key of ['source','state','search','from','to','limit'])values[key]=$('db-audit-'+key).value;
@@ -11796,8 +11806,8 @@ async function dbAuditRefreshAuthorization(){
   if(dbAudit.proof&&dbAudit.proof.binding!==p.binding){dbAuditPurge();return;}
   dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
  }catch(error){if(stamp===dbAuditStamp()){
-  const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
-  dbAudit.scope='self';dbAuditPurge();dbAuditChoices(items);
+  dbAuditFailure(error,()=>stamp===dbAuditStamp());
+  dbAudit.scope='self';dbAuditChoices(dbAudit.choiceItems||[]);
  }}
 }
 async function dbAuditOpen(){
@@ -11805,11 +11815,7 @@ async function dbAuditOpen(){
  const stamp=dbAuditStamp();try{const p=await dbAuditAuthorize(stamp,undefined,true);if(!p||stamp!==dbAuditStamp())return;
   dbAudit.proof=p;dbAudit.capabilities=p.capabilities;dbAuditChoices(p.items);
   dbAuditSelectOptions('db-audit-source',(p.capabilities.sources||[]).filter(v=>typeof v==='string').map(value=>({value,label:value,labelKey:dbAuditSourceKey(value)})),$('db-audit-source').value,'All sources');dbAuditPresets();
- }catch(error){if(stamp===dbAuditStamp()){
-  // A missing selected DB does not hide other DBs from this fresh inventory.
-  const items=error.auditChoices&&dbInventoryCurrent(error.auditChoices)?error.auditChoices:[];
-  dbAuditPurge();dbAuditChoices(items);ui($('db-audit-status'),'Audit unavailable. Check the reference role and database, then search again.');
- }}
+ }catch(error){dbAuditFailure(error,()=>stamp===dbAuditStamp());}
 }
 function dbAuditInstall(){
  if(dbAudit.installed)return;dbAudit.installed=true;

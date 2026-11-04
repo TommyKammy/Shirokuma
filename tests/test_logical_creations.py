@@ -942,6 +942,79 @@ class AccountRefreshPendingTests(LogicalFixture):
             return logical_registry.request_auth_refresh(db, 'executor', 'reader', None,
                 dict(database_id=dbid, reason='ACCOUNT_AUTHORITY_CHANGED', idempotency_key=logical._id()))
 
+    def change_reader_grant(self, dbid, maximum_role, expected_revision):
+        with patch.object(logical, 'dispatch_async'):
+            return logical.grant_management.mutate(self.alice, 'admin', dbid,
+                dict(principal_id='reader', maximum_role=maximum_role, expected_revision=expected_revision),
+                'reader-grant-'+str(expected_revision))
+
+    def grant_operation(self, operation):
+        with control_store.connect() as db:
+            return logical.grant_management.inspect(db, operation['id'], self.alice.principal_id)
+
+    def test_verified_grant_refresh_completes_public_operation_and_preserves_history(self):
+        _, dbid = self.ready()
+        operation = self.change_reader_grant(dbid, 'revoked', 1)
+        refresh_id = operation['auth_refresh_request_id']
+        self.assertEqual(self.grant_operation(operation)['state'], 'AWAITING_APPLY')
+        with patch.object(self.provider, 'verify_revoked', create=True,
+                          return_value=dict(verified=True, control_positive=True, identity_denied=True)):
+            logical.dispatch(refresh_id)
+        refresh = self.refreshes()[-1]
+        self.assertEqual(refresh['dispatch_state'], 'COMPLETE')
+        self.assertIs(json.loads(refresh['result_json'])['engine_verified'], True)
+        stored = next(row for row in self.rows('operations') if row['id'] == operation['id'])
+        self.assertEqual(stored['state'], 'APPLIED')
+        self.assertIsNone(stored['apply_id'])
+        effective = next(row for row in self.rows('effective_grants') if row['principal_id'] == 'reader')
+        self.assertEqual((effective['maximum_role'], effective['applied_revision']), ('revoked', 2))
+
+        # Reproduce the legacy row left by successful refresh before this fix.
+        with logical.transaction() as db:
+            db.execute("UPDATE operations SET state='AWAITING_APPLY' WHERE id=?", (operation['id'],))
+        for state, result in (('UNKNOWN', {'engine_verified': True}), ('COMPLETE', {'engine_verified': 1})):
+            with logical.transaction() as db:
+                db.execute("UPDATE logical_requests SET dispatch_state=?,result_json=? WHERE id=?",
+                           (state, json.dumps(result), refresh_id))
+            self.assertEqual(self.grant_operation(operation)['state'], 'AWAITING_APPLY')
+        with logical.transaction() as db:
+            db.execute("UPDATE logical_requests SET dispatch_state='COMPLETE',result_json=? WHERE id=?",
+                       (refresh['result_json'], refresh_id))
+        self.assertEqual(self.grant_operation(operation)['state'], 'APPLIED')
+        self.change_reader_grant(dbid, 'bi_viewer', 2)
+        self.assertEqual(self.grant_operation(operation)['state'], 'APPLIED')
+
+    def test_grant_completion_rolls_back_if_private_completion_fails(self):
+        _, dbid = self.ready()
+        operation = self.change_reader_grant(dbid, 'revoked', 1)
+        before = self.rows('effective_grants')
+        with logical.transaction() as db:
+            db.execute("""CREATE TRIGGER reject_refresh_complete BEFORE UPDATE ON logical_requests
+                WHEN NEW.action='AUTH_REFRESH' AND NEW.dispatch_state='COMPLETE'
+                BEGIN SELECT RAISE(ABORT, 'test completion failure'); END""")
+        with patch.object(self.provider, 'verify_revoked', create=True,
+                          return_value=dict(verified=True, control_positive=True, identity_denied=True)):
+            logical.dispatch(operation['auth_refresh_request_id'])
+        self.assertEqual(self.refreshes()[-1]['dispatch_state'], 'BLOCKED')
+        self.assertEqual(self.grant_operation(operation)['state'], 'AWAITING_APPLY')
+        self.assertEqual(self.rows('effective_grants'), before)
+
+    def test_unverified_and_superseded_grant_refreshes_do_not_apply(self):
+        _, dbid = self.ready()
+        operation = self.change_reader_grant(dbid, 'revoked', 1)
+        with patch.object(self.provider, 'verify_revoked', create=True,
+                          return_value=dict(verified=True, control_positive=True, identity_denied=False)):
+            logical.dispatch(operation['auth_refresh_request_id'])
+        self.assertEqual(self.refreshes()[-1]['dispatch_state'], 'BLOCKED')
+        self.assertEqual(self.grant_operation(operation)['state'], 'AWAITING_APPLY')
+
+        stale = self.change_reader_grant(dbid, 'bi_viewer', 2)
+        latest = self.change_reader_grant(dbid, 'revoked', 3)
+        logical.dispatch(stale['auth_refresh_request_id'])
+        self.assertEqual(self.refreshes()[-2]['dispatch_state'], 'BLOCKED')
+        self.assertEqual(self.grant_operation(stale)['state'], 'SUPERSEDED')
+        self.assertEqual(self.grant_operation(latest)['state'], 'AWAITING_APPLY')
+
     def target_identities(self, dbid):
         return [r for r in self.rows('logical_backend_identities')
                 if r['database_id']==dbid and r['principal_id']=='reader']
