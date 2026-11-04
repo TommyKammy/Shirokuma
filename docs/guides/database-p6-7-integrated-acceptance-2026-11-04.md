@@ -5,7 +5,7 @@ title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
 updated: 2026-11-04
-version: "0.5"
+version: "0.6"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
@@ -26,7 +26,7 @@ tags: [database, workbench, integration, acceptance]
 | AI-02／AI-03／AI-05 | 既存の限定操作を受入済み。任意Snapshotへの旧rollback、横断raw metadata／説明保存、登録外namespaceと広いpolicy scopeについて、旧操作との対応範囲を確定する。 |
 | ADM-09 | 準備済みの公開材料を使う登録・plan・apply依頼に、操作と対象DBのREADY照合を接続した。対象環境でのoperator受入範囲は所有者判断に残る。 |
 | ADM-10 | 段階作成のbootstrap／full承認、再計画、承認の取下げ、回復照合を同じ作成IDで扱う。現在の計画と状態を確認してから操作する。staged経路をM1で受け入れる範囲は所有者判断に残る。 |
-| ADM-11 | 既存退役はデータ・資格情報を保持する。物理purgeの要否は範囲判断に残る。 |
+| ADM-11 | 通常Workbenchで非purge退役の影響、停止対象の予定、閉鎖確認と保持範囲を示す。物理purge・資格情報／PVC削除をM1必須に含めるかは所有者判断に残る。 |
 | TRF-11 | 承認済みprojectの保存plan、build／test、明示TABLE公開を対象にする。正式VIEW公開・VIEW連鎖・incremental・並列実行は別拡張。 |
 
 [C2Mの収集範囲とSQL-09／ADM-09〜11の照合](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)
@@ -56,6 +56,16 @@ Workbenchは計画履歴に版を示し、承認画面で対象版と操作revis
 ブラウザーでは、詳細取得の失敗後に承認欄が消え、再取得後に同意が必要になることと、計画版・操作revisionの日英表示を確認した。ブラウザーの承認確認で操作が止まった際、台帳の承認受付は0件だった。別途、過去の実機台帳の読み取り専用コピーを現行Workbenchで表示し、bootstrap第2版 `PREPARED`、full第1版 `APPLIED`、DB `READY` を照合した。検証用環境を撤去し、共有台帳8表と所有者管理ファイルを照合した。
 
 Workbench回帰1,303件、段階作成・準備・認可・回復・HTTPの重点試験234件、設計整合チェックが通過した。初回の広い回帰で検出した計画履歴の表示順は、既存の状態表記の後ろに版を表示して修正した。
+
+## ADM-11の退役と物理削除の範囲
+
+ADM-08の非purge退役は対象DBの新規受付と予定を止め、保存済みの実行グラフを照合して閉鎖を確定する。DB ID、SQL名、カタログ、テーブル、ストレージ、PVC、資格情報を保持する。P4-8では専用DBで予定3件の停止、UNKNOWNを含むblocker、明示照合による `RETIRED`、選定した物理データと資格情報の保持を確認した。[P4-8実機受入](database-p4-8-acceptance-2026-10-23.md)
+
+Phase 4の計画は、物理purge・ストレージ／PVC削除・資格情報撤去を別計画に置く。現行の論理DB基盤には共有PVCがあり、退役の依存一覧は台帳上の参照を示す。DB専有の削除対象は別途確定する。ADM-11をM1で閉じるには、物理削除の要否と対象範囲について所有者判断が残る。[Phase 4の対象範囲](database-phase4-implementation-plan-2026-10-20.md#固定する対象範囲) · [論理DBの基盤構成](database-logical-create-implementation-2026-10-28.md) · [M1閉鎖監査](database-p6-0r1-capability-closure-audit-2026-11-03.md)
+
+隔離Workbenchの通常画面で、対象DBの有効な予定1件を事前確認した。退役要求で同じ1件の停止が記録され、`READY` → `RETIRING` → 明示照合で `RETIRED` に進んだ。日英の保持・完了表示と、閲覧者ロールでの管理画面の非表示を確認した。実HTTPと台帳の照合で、対象のDB参照・オブジェクト・合成資格情報が保持され、別DBの状態・予定・UNKNOWN実行が変化しないことを確認した。その別DBに対する独立の試験ではUNKNOWNが明示照合後も残り、`RETIRING` に留まった。非Pおよび閲覧者ロールはHTTP 403、`purge` を含む要求はHTTP 400だった。共有環境での退役や物理削除は実行していない。
+
+退役のサーバー・HTTP・CLI試験47件、Workbenchの退役・管理・共通・段階作成回帰172件が通過した。
 
 ## 現行環境での予備縦断
 

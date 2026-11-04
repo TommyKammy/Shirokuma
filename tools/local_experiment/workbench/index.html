@@ -7274,11 +7274,16 @@ async function initializeDatabaseUI(session){
 // Administration owns neither Explorer selection nor worksheet execution context.
 const dbAdmin={platform:false,epoch:0,selection:0,request:0,readinessRead:0,retireRead:0,retirement:null,database:'',databases:[],drafts:new Map(),requests:new Map(),installed:false,rendered:false};
 Object.assign(i18n.ja,{
- 'Database retirement':'DB の利用終了','Preview dependencies':'依存関係を確認','Retire database':'DB の利用終了を要求',
+ 'Database retirement (retain data)':'DB の利用終了（データ保持）','Preview dependencies':'依存関係を確認','Retire database (retain data)':'データを保持して DB の利用終了を要求',
  'Inspect retirement':'利用終了操作を照会','Reconcile retirement':'利用終了操作を照合','Dependencies':'依存関係','Blockers':'完了を妨げる状態',
  'Stopped schedule IDs':'停止したスケジュール ID','Database revision':'DB revision','Operation revision':'操作 revision',
  'Identity links':'参照先の識別情報',
- 'Retirement retains IDs, SQL names, physical tables, storage and credentials. UNKNOWN keeps the database retiring until closure is proven.':'利用終了後も ID・SQL名・物理テーブル・ストレージ・資格情報を保持します。UNKNOWN があれば、安全な終了が確認されるまで retiring を維持します。',
+ 'Retirement blocks new work and stops schedules for this database. Reconciliation checks in-flight work and unresolved effects.':'利用終了を開始すると、対象 DB の新規処理を受け付けず、スケジュールを停止します。照合では、進行中の処理と影響が未確定の処理を確認します。',
+ 'This operation retains the DB ID, SQL name, catalog, tables, object storage, PVCs and credentials. Physical removal is separate.':'この操作では DB ID、SQL 名、カタログ、テーブル、オブジェクトストレージ、PVC、資格情報を保持します。物理削除は別の作業です。',
+ 'Preview · Currently enabled target schedules {schedules} · Current blockers {blockers}':'事前確認 · 対象 DB の有効なスケジュール {schedules} 件 · 現在の阻害要因 {blockers} 件',
+ 'Recorded stopped schedules {schedules} · Blockers in receipt {blockers}':'停止を記録したスケジュール {schedules} 件 · 応答に記載された阻害要因 {blockers} 件',
+ 'RETIRING · New work is blocked. UNKNOWN keeps retirement open until closure is verified.':'RETIRING · 新規処理は受け付けません。UNKNOWN の処理は、終了が確認されるまで利用終了の完了を妨げます。',
+ 'RETIRED · Retirement is complete. New work remains blocked.':'RETIRED · 利用終了が完了しました。引き続き新規処理は受け付けません。',
  'Invalid retirement response.':'利用終了操作の応答が不正です。',
  'DB management':'DB 管理','Refresh current revisions':'現在の revision を再読込',
  'Management selection':'管理対象の選択','Display name':'表示名','Description':'説明',
@@ -7642,13 +7647,27 @@ function dbAdminRetireOperation(data,id=dbAdmin.database,operationID){
  return data&&Object.keys(data).sort().join(',')==='action,actor,blockers,database,database_id,dependencies,id,revision,state,stopped_schedule_ids'&&data.action==='DATABASE_RETIRE'&&typeof data.id==='string'&&!!data.id&&(!operationID||data.id===operationID)&&typeof data.actor==='string'&&!!data.actor&&data.database_id===id&&Number.isSafeInteger(data.revision)&&data.revision>0&&['RETIRING','RETIRED'].includes(data.state)&&dbAdminRetireDatabase(data.database,id)&&data.database.state===data.state.toLowerCase()&&dbAdminRetireDependencies(data.dependencies,id)&&dbAdminRetireDependencies(data.blockers,id,true)&&Array.isArray(data.stopped_schedule_ids)&&data.stopped_schedule_ids.every(v=>typeof v==='string'&&!!v)&&new Set(data.stopped_schedule_ids).size===data.stopped_schedule_ids.length;
 }
 function dbAdminRetirePreview(data){
- return data&&Object.keys(data).sort().join(',')==='blockers,database,dependencies,operation,stopped_schedule_ids'&&dbAdminRetireDatabase(data.database,dbAdmin.database)&&dbAdminRetireDependencies(data.dependencies,dbAdmin.database)&&dbAdminRetireDependencies(data.blockers,dbAdmin.database,true)&&Array.isArray(data.stopped_schedule_ids)&&(data.operation===null?data.stopped_schedule_ids.length===0:dbAdminRetireOperation(data.operation)&&data.stopped_schedule_ids.length===data.operation.stopped_schedule_ids.length&&data.stopped_schedule_ids.every((v,i)=>v===data.operation.stopped_schedule_ids[i]));
+ if(!(data&&Object.keys(data).sort().join(',')==='blockers,database,dependencies,operation,stopped_schedule_ids'&&dbAdminRetireDatabase(data.database,dbAdmin.database)&&dbAdminRetireDependencies(data.dependencies,dbAdmin.database)&&dbAdminRetireDependencies(data.blockers,dbAdmin.database,true)&&Array.isArray(data.stopped_schedule_ids)))return false;
+ const op=data.operation;
+ if(op===null)return data.stopped_schedule_ids.length===0;
+ return dbAdminRetireOperation(op)&&Object.keys(data.database).every(key=>op.database[key]===data.database[key])&&data.stopped_schedule_ids.length===op.stopped_schedule_ids.length&&data.stopped_schedule_ids.every((v,i)=>v===op.stopped_schedule_ids[i]);
 }
 function dbAdminRetireRender(data,preview=false){
  const op=preview?data.operation:data;
  dbAdmin.retirement=op;
  const d=data.database;
  $('db-admin-retire-summary').textContent=[d.id,d.sql_catalog,d.state,'revision '+d.revision,...(op?[op.id,op.state,'revision '+op.revision]:[])].join(' · ');
+ const impact=$('db-admin-retire-impact'),closure=$('db-admin-retire-closure');
+ if(op){
+  ui(impact,'Recorded stopped schedules {schedules} · Blockers in receipt {blockers}',{schedules:op.stopped_schedule_ids.length,blockers:data.blockers.length});
+  ui(closure,op.state==='RETIRING'
+   ?'RETIRING · New work is blocked. UNKNOWN keeps retirement open until closure is verified.'
+   :'RETIRED · Retirement is complete. New work remains blocked.');
+ }else{
+  const schedules=data.dependencies.filter(row=>row.kind==='schedule'&&row.state==='ENABLED').length;
+  ui(impact,'Preview · Currently enabled target schedules {schedules} · Current blockers {blockers}',{schedules,blockers:data.blockers.length});
+ }
+ closure.hidden=!op;
  for(const [name,rows] of [['dependencies',data.dependencies],['blockers',data.blockers]]){
   table($('db-admin-retire-'+name),['Kind','ID','State','Database ID',...(name==='blockers'?['Code']:[]),'Identity links'],rows.map(row=>[row.kind,row.id,row.state,row.database_id,...(name==='blockers'?[row.code]:[]),JSON.stringify(Object.fromEntries(Object.entries(row).filter(([k])=>!['kind','id','state','database_id','code'].includes(k))))]));
  }
@@ -7669,10 +7688,13 @@ async function dbAdminRetireRead(preview){
  }catch(error){if(!error.stale&&scope===dbAdminScope()&&request===dbAdmin.retireRead)message('db-admin-error',error.message);}
 }
 function dbAdminRetireInstall(parent,d){
- const box=dbAdminNode('details','',parent);dbAdminNode('summary','',box,'Database retirement');
- dbAdminNode('p','',box,'Retirement retains IDs, SQL names, physical tables, storage and credentials. UNKNOWN keeps the database retiring until closure is proven.');
+ const box=dbAdminNode('details','',parent);dbAdminNode('summary','',box,'Database retirement (retain data)');
+ dbAdminNode('p','',box,'Retirement blocks new work and stops schedules for this database. Reconciliation checks in-flight work and unresolved effects.');
+ dbAdminNode('p','db-admin-retire-retention',box,'This operation retains the DB ID, SQL name, catalog, tables, object storage, PVCs and credentials. Physical removal is separate.');
  dbAdminButton(box,'db-admin-retire-preview','Preview dependencies',()=>dbAdminRetireRead(true));
  dbAdminNode('p','db-admin-retire-summary',box).setAttribute('role','status');
+ dbAdminNode('p','db-admin-retire-impact',box).setAttribute('role','status');
+ dbAdminNode('p','db-admin-retire-closure',box).hidden=true;
  dbAdminNode('h3','',box,'Dependencies');dbAdminNode('div','db-admin-retire-dependencies',box);
  dbAdminNode('h3','',box,'Blockers');dbAdminNode('div','db-admin-retire-blockers',box);
  dbAdminNode('h3','',box,'Stopped schedule IDs');dbAdminNode('pre','db-admin-retire-stopped',box);
@@ -7683,7 +7705,7 @@ function dbAdminRetireInstall(parent,d){
   if(reconcile&&!/^[A-Za-z0-9_-]{1,128}$/.test(operation.value))throw Error(t('Invalid retirement response.'));
   return {kind:'retire',databaseID:dbAdmin.database,...(reconcile?{operationID:operation.value}:{}),path:reconcile?'/api/v1/operations/'+encodeURIComponent(operation.value)+'/reconcile':'/api/v1/admin/databases/'+encodeURIComponent(dbAdmin.database)+'/retire',payload:{expected_revision:dbAdminInteger(reconcile?expected:revision)}};
  };
- dbAdminActions(box,'db-admin-retire','Retire database',()=>build(false));$('db-admin-retire-save').className='danger';
+ dbAdminActions(box,'db-admin-retire','Retire database (retain data)',()=>build(false));$('db-admin-retire-save').className='danger';
  dbAdminButton(box,'db-admin-retire-inspect','Inspect retirement',()=>dbAdminRetireRead(false));
  dbAdminActions(box,'db-admin-retire-reconcile','Reconcile retirement',()=>build(true));
 }
