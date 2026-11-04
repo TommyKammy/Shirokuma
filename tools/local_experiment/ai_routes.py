@@ -20,6 +20,7 @@ import db_platform_workload_baseline
 import db_platform_foundation_baseline
 import db_platform_foundation_controllers
 import db_platform_pod_baseline
+import db_platform_controller_baseline
 import db_platform_recent_failures
 import db_platform_telemetry_logs
 import db_platform_telemetry_readiness
@@ -167,7 +168,11 @@ def dispatch(handler, method, path, params, principal, role):
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)
         return True
-    if path == '/api/v1/bears/platform-pod-baseline':
+    baseline_source = {
+        '/api/v1/bears/platform-pod-baseline': db_platform_pod_baseline,
+        '/api/v1/bears/platform-controller-baseline': db_platform_controller_baseline,
+    }.get(path)
+    if baseline_source is not None:
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
@@ -180,7 +185,7 @@ def dispatch(handler, method, path, params, principal, role):
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
             raise QueryError('INVALID_INPUT', 400)
         try:
-            result = db_platform_pod_baseline.observe(principal, role)
+            result = baseline_source.observe(principal, role)
         except OperationError as error:
             raise QueryError(error.code, error.status) from None
         handler.respond(result, 200)

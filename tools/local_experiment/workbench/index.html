@@ -619,6 +619,11 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 :is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) .toolbar{flex-wrap:wrap}
 :is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) table{table-layout:fixed;width:100%;min-width:0}
 :is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) :is(.panel-body,p,h2,button,table,th,td,details,summary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .toolbar{flex-wrap:wrap}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) table{table-layout:fixed;width:100%;min-width:0}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}
 </style>
 </head>
 <body>
@@ -3904,7 +3909,7 @@ function dbObservationsInstall(){
    const output=document.createElement('div');output.id=id+'output';output.className='table-wrap';output.setAttribute('aria-live','polite');panel.append(output);
   }
  }
- dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbObservationsSync();
+ dbBaselineInstall();dbFoundationBaselineInstall();dbFoundationControllersInstall();dbRecentFailuresInstall();dbTelemetryReadinessInstall();dbTelemetryLogsInstall();dbPodBaselineInstall();dbControllerBaselineInstall();dbObservationsSync();
 }
 // A single memory-only LOCAL capture shared by the two explicit Platform scopes.
 // Database grant/inventory epochs deliberately do not participate in this authority.
@@ -3949,7 +3954,7 @@ function dbPlatformSync(){
  dbResourcesSync();
  dbUsageSync();dbCapacitySync();dbLifecycleHistorySync();
  dbActivitySync();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbTelemetryLogsSync();dbPodBaselineSync();dbControllerBaselineSync();
  dbAISettingsSync();
 }
 function dbPlatformComputeSync(){
@@ -4850,6 +4855,140 @@ function dbPodBaselineRender(kind){
   const body=dbAdminNode('tbody','',table);
   for(const row of pod.containers){
    const tr=dbAdminNode('tr','',body);line(row.name+' · '+local({container:'Container',init_container:'Init container',ephemeral_container:'Ephemeral container'}[row.kind])+' '+row.ordinal,'td',tr);
+   for(const v of ['read_only_root_filesystem','non_root','drop_all_capabilities','cpu_memory_limits'].map(k=>row.checks[k]))line(local(v==='met'?'Declaration matches':'Declaration missing or mismatched'),'td',tr);
+  }
+ }
+ if(retain)for(const [index,details] of Array.from(node.querySelectorAll('details')).entries()){details.open=!!open[index];if(index===focused)details.querySelector('summary').focus();}
+}
+
+const dbControllerBaseline={policy:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null},compute:{auth:'',view:'',epoch:0,busy:null,record:null,notice:'',rendered:null}};
+const dbControllerBaselineJA={
+ "Namespace controller template declarations": "namespace 内の controller template 宣言",
+ "All Deployment, StatefulSet, DaemonSet, Job and CronJob templates in the exact registered namespace, including unlabelled objects. Ordinary and init containers are included.": "登録された正確な namespace 内の全 Deployment・StatefulSet・DaemonSet・Job・CronJob の template が対象です。ラベルの有無を問わず、通常・init コンテナを含みます。",
+ "These are template declarations captured by the API. They do not establish runtime security, admission approval or an aggregate policy decision. Controllers are not attributed to the Foundation.": "API が取得した template の宣言です。実行時のセキュリティ、admission の承認、全体のポリシー判断は示しません。controller を Foundation 所有とは扱いません。",
+ "Fetch controller template declarations": "controller template 宣言を取得",
+ "Authority verified. Select Fetch controller template declarations.": "権限を確認しました。「controller template 宣言を取得」を選んでください。",
+ "Fetching controller template declarations.": "controller template 宣言を取得しています。",
+ "Controller template declarations unavailable. Refresh authority or fetch again.": "controller template 宣言を取得できません。権限更新または再取得を行ってください。",
+ "Controller source unavailable; no template declarations can be verified.": "controller の参照元を取得できないため、template 宣言を確認できません。",
+ "No controllers returned by the source.": "参照元から返された controller は0件です。",
+ "Controllers": "controller 数"
+};
+function dbControllerBaselineText(key){return language==='ja'&&Object.hasOwn(dbControllerBaselineJA,key)?dbControllerBaselineJA[key]:dbPodBaselineText(key);}
+function dbControllerBaselineID(kind){return 'observation-'+kind+'-controller-baseline-';}
+function dbControllerBaselineRoot(kind){return kind==='policy'?'observation-policy-controller-baseline':'observation-controller-baseline-panel';}
+function dbControllerBaselineAuth(){return JSON.stringify([databaseMode,dbPlatformAuth()]);}
+function dbControllerBaselineView(){return JSON.stringify([language,activeTab,...Object.values(dbObservations).map(o=>[o.kind,o.selected,o.scope,o.role])]);}
+function dbControllerBaselineAllowed(){return databaseMode&&dbObservationPlatform('admin');}
+function dbControllerBaselineLeave(p){++p.epoch;p.busy=null;p.notice='';}
+function dbControllerBaselineSync(){
+ const auth=dbControllerBaselineAuth(),view=dbControllerBaselineView();
+ for(const [kind,p] of Object.entries(dbControllerBaseline)){
+  if(auth!==p.auth){dbControllerBaselineLeave(p);p.record=null;p.rendered=null;p.auth=auth;}
+  if(!dbControllerBaselineAllowed()){p.record=null;p.rendered=null;}
+  if(view!==p.view){dbControllerBaselineLeave(p);p.view=view;}
+  const panel=$(dbControllerBaselineRoot(kind));if(!panel?.dataset.installed)continue;
+  panel.hidden=kind==='policy'&&dbObservations.policy.scope!=='platform';
+  const id=dbControllerBaselineID(kind);
+  for(const [suffix,label] of [['title','Namespace controller template declarations'],['about','All Deployment, StatefulSet, DaemonSet, Job and CronJob templates in the exact registered namespace, including unlabelled objects. Ordinary and init containers are included.'],['boundary','These are template declarations captured by the API. They do not establish runtime security, admission approval or an aggregate policy decision. Controllers are not attributed to the Foundation.'],['auth','Refresh platform authority'],['fetch','Fetch controller template declarations']])$(id+suffix).textContent=dbControllerBaselineText(label);
+  $(id+'auth').disabled=!!p.busy||!dbPlatformCanRefresh();$(id+'fetch').disabled=!!p.busy||!dbControllerBaselineAllowed();
+  dbControllerBaselineRender(kind);
+ }
+}
+function dbControllerBaselineInstall(){
+ for(const kind of ['policy','compute']){
+  if($(dbControllerBaselineRoot(kind))?.dataset.installed)continue;
+  const host=kind==='compute'?$('compute'):dbObservations.policy.installed?$('bear-panel-policy'):null;if(!host)continue;
+  const id=dbControllerBaselineID(kind),panel=dbAdminNode('section',dbControllerBaselineRoot(kind),host);panel.dataset.installed='true';panel.className='panel';panel.setAttribute('role','region');panel.setAttribute('aria-labelledby',id+'title');
+  const head=dbAdminNode('div','',panel);head.className='panel-head';dbAdminNode('h2',id+'title',head);
+  const body=dbAdminNode('div','',panel);body.className='panel-body';dbAdminNode('p',id+'about',body);dbAdminNode('p',id+'boundary',body);
+  const bar=dbAdminNode('div','',body);bar.className='toolbar';
+  dbAdminButton(bar,id+'auth','Refresh platform authority',()=>dbControllerBaselineRefreshAuth(kind));
+  dbAdminButton(bar,id+'fetch','Fetch controller template declarations',()=>dbControllerBaselineFetch(kind));
+  const output=dbAdminNode('div',id+'output',body);output.setAttribute('aria-live','polite');
+ }
+ dbControllerBaselineSync();
+}
+function dbControllerBaselineCapture(kind){
+ const p=dbControllerBaseline[kind],token={},epoch=++p.epoch,auth=dbControllerBaselineAuth(),view=dbControllerBaselineView();p.busy=token;
+ return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbControllerBaselineAuth()&&view===dbControllerBaselineView()};
+}
+async function dbControllerBaselineRefreshAuth(kind){
+ dbControllerBaselineSync();const p=dbControllerBaseline[kind];if(!p||p.busy||!dbPlatformCanRefresh())return;
+ const read=dbControllerBaselineCapture(kind);p.notice='Refreshing platform authority.';dbControllerBaselineSync();
+ try{
+  const response=await fetch('/api/session');if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const session=await response.json();if(!read.current())return;
+  if(!response.ok)throw Error('UNAVAILABLE');
+  dbAdminSession(session);
+  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+  p.notice=dbControllerBaselineAllowed()?'Authority verified. Select Fetch controller template declarations.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+ }catch{if(read.current()){p.record=null;p.notice='Controller template declarations unavailable. Refresh authority or fetch again.';}}
+ finally{if(p.busy===read.token)p.busy=null;dbControllerBaselineSync();}
+}
+async function dbControllerBaselineFetch(kind){
+ dbControllerBaselineSync();const p=dbControllerBaseline[kind];if(!p||p.busy||!dbControllerBaselineAllowed())return;
+ const read=dbControllerBaselineCapture(kind);p.notice='Fetching controller template declarations.';dbControllerBaselineSync();
+ try{
+  const response=await fetch('/api/v1/bears/platform-controller-baseline',{headers:{'X-Shirokuma-Role':'admin'}});if(!read.current())return;
+  if([401,403].includes(response.status)){dbAdminSession({});return;}
+  const text=await response.text();if(!read.current())return;
+  if(!response.ok||new TextEncoder().encode(text).length>65536)throw Error('UNAVAILABLE');
+  const data=JSON.parse(text);if(!read.current())return;
+  p.record=dbControllerBaselineRecord(data);p.notice='';
+ }catch{if(read.current()){p.record=null;p.notice='Controller template declarations unavailable. Refresh authority or fetch again.';}}
+ finally{if(p.busy===read.token)p.busy=null;dbControllerBaselineSync();}
+}
+function dbControllerBaselineRecord(d){
+ const exact=dbSavedExact,fail=()=>{throw Error('INVALID_RESPONSE');};
+ const name=(v,sub=false)=>typeof v==='string'&&v.length>0&&v.length<=(sub?253:63)&&(sub||!v.includes('.'))&&v.split('.').every(x=>(sub||x.length<=63)&&/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?![\s\S])/.test(x));
+ if(new TextEncoder().encode(JSON.stringify(d)).length>65536)fail();
+ if(!exact(d,['scope','warehouse','selected_role','observed_at','baseline_version','coverage','baseline'])||d.scope!=='platform'||d.warehouse!=='LOCAL'||d.selected_role!=='admin'||!dbObservationTime(d.observed_at,true)||d.baseline_version!=='namespace-controller-template-declarations-v1')fail();
+ const c=d.coverage;if(!exact(c,['kind','controller_template','per_container','runtime_security','admission_decision','global_policy'])||c.kind!=='namespace_controller_template_declarations'||c.controller_template!==true||c.per_container!==true||['runtime_security','admission_decision','global_policy'].some(k=>c[k]!==false))fail();
+ const b=d.baseline;if(!exact(b,['availability','code','observed_at','namespace','controller_count','container_count','controllers'])||!dbObservationTime(b.observed_at,true)||!['available','unavailable'].includes(b.availability)||b.code!==(b.availability==='available'?null:'CONTROLLER_BASELINE_UNAVAILABLE'))fail();
+ if(b.availability==='unavailable'){if(b.namespace!==null||b.controller_count!==null||b.container_count!==null||b.controllers!==null)fail();}
+ else{
+  if(!name(b.namespace)||!Number.isInteger(b.controller_count)||!Number.isInteger(b.container_count)||!Array.isArray(b.controllers)||b.controllers.length>64||b.controller_count!==b.controllers.length||b.container_count<0||b.container_count>256)fail();
+  const names=new Set(),kinds=['container','init_container'];let total=0;
+  for(const p of b.controllers){
+   const key=JSON.stringify([p?.kind,p?.name]);
+   if(!exact(p,['kind','name','containers'])||!['Deployment','StatefulSet','DaemonSet','Job','CronJob'].includes(p.kind)||!name(p.name,true)||names.has(key)||!Array.isArray(p.containers)||!p.containers.length||p.containers.length>256)fail();names.add(key);
+   const cn=new Set(),counts=[0,0];let last=-1;
+   for(const row of p.containers){
+    if(!exact(row,['name','kind','ordinal','checks'])||!name(row.name)||cn.has(row.name))fail();cn.add(row.name);
+    const rank=kinds.indexOf(row.kind);if(rank<0||rank<last||!Number.isInteger(row.ordinal)||row.ordinal!==++counts[rank])fail();last=rank;
+    if(!exact(row.checks,['read_only_root_filesystem','non_root','drop_all_capabilities','cpu_memory_limits'])||Object.values(row.checks).some(v=>!['met','not_met'].includes(v)))fail();total++;
+   }
+   if(!counts[0])fail();
+  }
+  if(total!==b.container_count)fail();
+ }
+ return dataopsFreeze(structuredClone(d));
+}
+function dbControllerBaselineRender(kind){
+ const id=dbControllerBaselineID(kind),node=$(id+'output'),p=dbControllerBaseline[kind],allowed=dbControllerBaselineAllowed(),r=allowed?p.record:null,auth=dbControllerBaselineAuth(),old=p.rendered;
+ if(old&&old.auth===auth&&old.record===r&&old.notice===p.notice&&old.language===language&&old.role===currentRole&&old.allowed===allowed)return;
+ // Restore disclosure positions only for this same receipt.
+ const retain=!!r&&old?.record===r&&old.auth===auth&&old.allowed===allowed;
+ const disclosures=retain?Array.from(node.querySelectorAll('details')):[],open=disclosures.map(d=>d.open),focused=disclosures.findIndex(d=>d.querySelector('summary')===document.activeElement);
+ p.rendered={auth,record:r,notice:p.notice,language,role:currentRole,allowed};
+ node.replaceChildren();const local=dbControllerBaselineText,line=(text,tag='p',host=node)=>dbAdminNode(tag,'',host).textContent=text;
+ line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
+ if(p.notice)line(local(p.notice));
+ if(!r){if(!p.notice)line(local(dbControllerBaselineAllowed()?'Authority verified. Select Fetch controller template declarations.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
+ line(local('API snapshot creation time')+': '+r.observed_at);
+ const b=r.baseline;line(local('Source snapshot creation time')+': '+b.observed_at);
+ if(b.availability==='unavailable'){line(local('Controller source unavailable; no template declarations can be verified.'));return;}
+ line(local('Namespace')+': '+b.namespace);line(local('Controllers')+': '+b.controller_count+' · '+local('Containers')+': '+b.container_count);
+ if(!b.controllers.length){line(local('No controllers returned by the source.'));return;}
+ for(const controller of b.controllers){
+  const details=dbAdminNode('details','',node);line(controller.kind+': '+controller.name,'summary',details);
+  const table=dbAdminNode('table','',details),head=dbAdminNode('thead','',table),tr=dbAdminNode('tr','',head);
+  for(const label of ['Container','Read-only root filesystem','Non-root execution','Drop ALL capabilities','Positive CPU and memory limits']){const th=dbAdminNode('th','',tr,local(label));th.setAttribute('scope','col');}
+  const body=dbAdminNode('tbody','',table);
+  for(const row of controller.containers){
+   const tr=dbAdminNode('tr','',body);line(row.name+' · '+local({container:'Container',init_container:'Init container'}[row.kind])+' '+row.ordinal,'td',tr);
    for(const v of ['read_only_root_filesystem','non_root','drop_all_capabilities','cpu_memory_limits'].map(k=>row.checks[k]))line(local(v==='met'?'Declaration matches':'Declaration missing or mismatched'),'td',tr);
   }
  }
@@ -6753,7 +6892,7 @@ function dbAdminSession(session){
  const allowed=session.authenticated===true&&session.platform_admin===true&&session.maximum_role==='admin'&&session.data_mode==='database'&&JSON.stringify([session.username,session.authenticated])===dbPrincipal;
  if(dbAdmin.platform!==allowed){dbRuntimePurge();if(dbAudit.installed)dbAuditPurge();dbAdmin.platform=allowed;dbAdminClear();dbObservationsSync();}
  if(dbAudit.installed)dbAuditValidate();
- dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();
+ dbBaselineSync();dbFoundationBaselineSync();dbFoundationControllersSync();dbRecentFailuresSync();dbTelemetryReadinessSync();dbPodBaselineSync();dbControllerBaselineSync();
  dbAISettingsSync();
  dbAdminGate();
 }
