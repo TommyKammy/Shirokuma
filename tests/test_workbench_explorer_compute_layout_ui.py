@@ -28,7 +28,10 @@ for(const id of ['clone-table-btn','export-table-format','export-table-btn'])ass
 assert.equal($('drop-table-btn').parentElement.parentElement,$('db-manage-remove'));assert.notEqual($('drop-table-btn').parentElement,toolbar);
 assert.equal($('db-manage-remove').className,'db-manage-group db-manage-danger');
 const children=$('database-details').children,at=id=>children.indexOf($(id));
-assert.ok(at('db-table-manage')>=0);assert.ok(at('db-table-manage')<at('p35-table-export'));assert.ok(at('p35-table-export')<at('db-clone-panel'));assert.ok(at('db-clone-panel')<at('db-drop-panel'));
+assert.ok(at('db-table-manage')>at('inspect-columns'));assert.ok(at('db-table-manage')>at('inspect-preview'));
+assert.equal($('db-table-manage').tagName,'DETAILS');assert.equal($('db-table-manage').open,false);
+for(const id of ['p35-table-export','db-clone-panel','db-drop-panel'])assert.equal($(id).parentElement,$('db-table-manage'));
+for(const id of ['db-clone-panel','db-drop-panel']){assert.equal($(id).tagName,'DETAILS');assert.equal($(id).open,false);}
 assert.equal($('explorer-open-lineage').hidden,true);assert.equal(typeof $('explorer-open-lineage').onclick,'function');
 assert.equal($('p35-table-export').hidden,true);assert.equal($('db-table-manage').hidden,false);
 removalReachable($('drop-table-btn'));removalReachable($('open-table-sql'));
@@ -52,16 +55,44 @@ dbObject=stable('orders');dbExplorer.invalid=true;dbExplorerControls();
 assert.ok(dbExplorerReason());assert.equal($('db-manage-copy-reason').textContent,'');assert.equal($('db-manage-remove-reason').textContent,'');
 ''')
 
+    def test_closed_management_and_recovery_do_not_fetch_or_reset_drafts(self):
+        self.javascript(r'''
+await explorerReady();const before=calls.length;
+$('db-table-manage').open=true;$('db-clone-panel').open=true;
+$('db-clone-name').value='draft_copy';$('db-clone-name').focus();
+for(let i=0;i<3;i++){dbExplorerControls();setLanguage(i%2?'ja':'en');}
+assert.equal($('db-table-manage').open,true);assert.equal($('db-clone-panel').open,true);
+assert.equal($('db-clone-name').value,'draft_copy');assert.equal(document.activeElement,$('db-clone-name'));
+$('db-clone-close').onclick();assert.equal($('db-clone-panel').open,false);assert.equal(document.activeElement,$('db-clone-summary'));
+dbClone.op={principal:dbPrincipal,key:'private-key',id:null,context:{selected_role:'admin'},payload:{source:ref('orders')},state:'UNKNOWN',ambiguous:true};
+dbDrop.op={principal:dbPrincipal,key:'private-drop-key',id:null,context:{selected_role:'admin'},payload:{source:ref('orders')},state:'UNKNOWN',ambiguous:true};
+dbObject=null;dbExplorerControls();
+assert.equal($('db-table-manage').hidden,false);assert.equal($('db-table-manage').open,false);
+assert.equal($('db-manage-recovery').hidden,false);
+for(const kind of ['clone','drop']){
+ assert.equal($('db-'+kind+'-panel').open,false);assert.equal($('db-'+kind+'-recovery').hidden,false);
+ assert.match($('db-'+kind+'-recovery').textContent,/UNKNOWN|結果不明/);
+ assert.doesNotMatch($('db-'+kind+'-recovery').textContent,/private|orders/);
+ $('db-'+kind+'-recovery').onclick();assert.equal($('db-'+kind+'-panel').open,true);
+ assert.equal($('db-'+(kind==='clone'?'drop':'clone')+'-panel').open,false);
+ assert.equal(document.activeElement,$('db-'+kind+'-observe'));
+}
+assert.ok(!$('db-clone-operation-details').open);assert.ok(!$('db-drop-operation-details').open);
+assert.equal(calls.length,before);
+setLanguage('ja');assert.match($('db-drop-recovery').textContent,/保存済みの登録解除/);
+''')
+
     def test_export_receipt_appears_only_for_a_requested_export(self):
         self.javascript(r'''
 await explorerReady();assert.equal($('p35-table-export').hidden,true);
-dataopsExport={id:'op',key:'key',context:{sql_catalog:'db',sql_schema:'raw',selected_role:'admin'},table:'raw.orders',state:'QUEUED',pending:false};dataopsExportRender();
-assert.equal($('p35-table-export').hidden,false);
+dataopsExport={principal:dbPrincipal,id:'op',key:'key',context:{sql_catalog:'db',sql_schema:'raw',selected_role:'admin'},table:'raw.orders',state:'QUEUED',pending:false};dataopsExportRender();
+assert.equal($('p35-table-export').hidden,false);assert.equal($('db-export-recovery').hidden,false);assert.match($('db-export-recovery').textContent,/Saved export: QUEUED/);
+const count=calls.length;$('db-export-recovery').onclick();assert.equal($('db-table-manage').open,true);assert.equal(document.activeElement,$('p35-export-receipt'));assert.equal(calls.length,count);
 assert.equal($('p35-export-observe').textContent,'Look up export operation');
 dataopsExport.id=null;dataopsExport.path='/api/v1/table-exports';dataopsExportRender();
 assert.equal($('p35-export-observe').textContent,'Resend original request');
 assert.match($('p35-export-receipt').children[0].textContent,/it may start the operation/);
-dataopsExport=null;dataopsExportRender();assert.equal($('p35-table-export').hidden,true);
+dataopsExport=null;dataopsExportRender();assert.equal($('p35-table-export').hidden,true);assert.equal($('db-export-recovery').hidden,true);
 ''')
 
 

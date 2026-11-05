@@ -330,6 +330,10 @@ assert.equal(dbClone.notice,key);setLanguage('ja');assert.equal($('db-clone-noti
 setLanguage('en');assert.equal($('db-clone-notice').textContent,key);
 route=async()=>({snapshots:cloneSnapshots.map(snapshot_id=>({snapshot_id}))});await dbCloneRefresh();
 route=async()=>{throw Error('response lost');};await dbCloneRun();const before=calls.length;
+assert.equal($('db-clone-resend-warning').parentElement,$('db-clone-panel'));
+assert.equal($('db-clone-resend-warning').hidden,false);
+assert.equal($('db-clone-observe').getAttribute('aria-describedby'),'db-clone-resend-warning');
+assert.ok(!$('db-clone-operation-details').open);
 for(const locale of ['ja','en']){
  setLanguage(locale);
  const keys=['After reload or a selection change, reselect the original source TABLE in Explorer, then select Observe operation to recover the original request with its saved key and inputs.',

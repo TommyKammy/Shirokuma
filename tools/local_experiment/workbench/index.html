@@ -679,7 +679,20 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #database-details #explorer-open-lineage[hidden]{display:none}
 #inspector-tabs #inspect-tab-ddl,#inspector-tabs #inspect-tab-snapshots{margin-left:14px}
 .db-manage{min-width:0;margin:0;padding:16px 14px 18px;border-top:1px solid var(--line)}
-.db-manage>h3{margin-bottom:12px}
+.db-manage>summary{font-weight:600;cursor:pointer}
+.db-manage summary:focus-visible,.db-manage-recovery button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.db-manage-recovery{padding:10px 14px;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line)}
+.db-manage :is(#db-clone-panel,#db-drop-panel){min-width:0;max-width:100%;padding:14px 0;margin-top:16px;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>summary{cursor:pointer;font-weight:600}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>:not(summary){margin-top:12px}
+.db-manage :is(input,select,button){min-width:0;max-width:100%;box-sizing:border-box}
+.db-manage button,.db-manage-recovery button{white-space:normal;overflow-wrap:anywhere}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>button{margin-right:8px;margin-bottom:4px}
+.db-manage .job-fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.db-manage details details{min-width:0;overflow-wrap:anywhere}
+.db-manage details details>summary{cursor:pointer}
+.db-manage #db-drop-ack{flex:none}
+.db-manage #db-drop-name{width:100%}
 .db-manage-group{min-width:0;padding:12px 0 0}
 .db-manage-group+.db-manage-group{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line)}
 .db-manage-group h4{margin:0 0 4px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
@@ -8891,7 +8904,7 @@ function dataopsExportControls(){
  $('export-table-btn').title=t(dbObject?.kind==='VIEW'?'View export is unsupported. Select a stable readable table.':'Select a stable readable table.');
 }
 function dataopsExportRender(){
- const area=$('p35-export-receipt');if(!area)return;area.replaceChildren();const op=dataopsExport;
+ const area=$('p35-export-receipt');if(!area)return;area.replaceChildren();const op=dataopsExport;dbManageSync();
  // The receipt area appears only once an export was requested.
  if(area.parentElement)area.parentElement.hidden=!op;
  $('p35-export-observe').disabled=!dataopsCanObserve(op)||!!op?.trackingPending;$('p35-export-cancel').disabled=!dataopsCanCancel(op)||!!op?.trackingPending;
@@ -8962,6 +8975,9 @@ function dataopsInstall(){
 }
 // Explorer details: SQL actions stay with the title; copy, export and catalog removal sit apart with their conditions.
 Object.assign(i18n.ja,{
+ 'Saved export':'保存済みの書き出し','Saved table operations':'保存済みのテーブル操作','Saved clone':'保存済みの複製','Saved catalog removal':'保存済みの登録解除',
+ 'Close form':'フォームを閉じる','Operation details':'操作の詳細','More about catalog removal':'登録解除の補足',
+ 'Removes the whole TABLE registration and all snapshots. Data and metadata files are kept. No automatic Undrop.':'TABLE 全体と全スナップショットの登録を解除します。データとメタデータのファイルは保持します。自動 Undrop はありません。',
  'Table management':'テーブルの管理','Copy and export':'複製と書き出し',
  'Clone opens a form to copy a snapshot into a new sandbox table. Export starts immediately in the selected file format.':'複製はフォームを開き、スナップショットを新しいサンドボックスのテーブルへコピーします。書き出しは選択した形式ですぐに開始します。',
  'Remove from catalog':'カタログからの登録解除',
@@ -8970,8 +8986,8 @@ Object.assign(i18n.ja,{
 for(const key of Object.keys(i18n.ja))if(!i18n.en[key])i18n.en[key]=key;
 function dbManageInstall(){
  if(dbManageInstall.done)return;dbManageInstall.done=true;
- const section=document.createElement('section');section.id='db-table-manage';section.className='db-manage';section.setAttribute('aria-labelledby','db-table-manage-title');
- const title=document.createElement('h3');title.id='db-table-manage-title';ui(title,'Table management');section.append(title);
+ const section=document.createElement('details');section.open=false;section.id='db-table-manage';section.className='db-manage';section.setAttribute('aria-labelledby','db-table-manage-title');
+ const title=document.createElement('summary');title.id='db-table-manage-title';ui(title,'Table management');section.append(title);
  for(const [id,heading,help,controls,extra] of [
   ['db-manage-copy','Copy and export','Clone opens a form to copy a snapshot into a new sandbox table. Export starts immediately in the selected file format.',['clone-table-btn','export-table-format','export-table-btn'],''],
   ['db-manage-remove','Remove from catalog','Removes only the catalog registration. Data files are kept. You confirm the exact table name before sending.',['drop-table-btn'],' db-manage-danger']]){
@@ -8982,16 +8998,45 @@ function dbManageInstall(){
   box.append(h,p,bar,reason);section.append(box);
  }
  // Receipts and opened forms follow the group that started them.
- $('database-details').append(section,...['p35-table-export','db-clone-panel','db-drop-panel'].map($).filter(node=>node?.parentElement));
+ section.append(...['p35-table-export','db-clone-panel','db-drop-panel'].map($).filter(node=>node?.parentElement));
+ const recovery=dataopsNode('div','db-manage-recovery',$('database-details'));recovery.className='toolbar db-manage-recovery';recovery.setAttribute('role','group');recovery.setAttribute('aria-labelledby','db-manage-recovery-title');
+ dataopsNode('span','db-manage-recovery-title',recovery,'Saved table operations').className='visually-hidden';
+ for(const [kind,label] of [['clone','Saved clone'],['drop','Saved catalog removal'],['export','Saved export']]){
+  const button=dataopsButton(recovery,'db-'+kind+'-recovery',label,()=>{const op=kind==='export'?dataopsExport:kind==='clone'?dbClone.op:dbDrop.op;if(op?.principal!==dbPrincipal)return;dbManageOpen(kind);$(kind==='export'?'p35-export-receipt':'db-'+kind+'-observe').focus();});
+  button.hidden=true;
+ }
+ $('database-details').append(section);
+ $('p35-export-receipt').tabIndex=-1;
+ for(const kind of ['clone','drop']){
+  const panel=$('db-'+kind+'-panel');panel.open=false;
+  for(const ids of [['refresh','submit'],['observe','cancel','new']]){
+   const bar=dataopsNode('div','db-'+kind+'-'+ids[0]+'-actions',panel);bar.className='toolbar';$('db-'+kind+'-'+ids[0]).before(bar);bar.append(...ids.map(id=>$('db-'+kind+'-'+id)));
+  }
+  dataopsButton(panel,'db-'+kind+'-close','Close form',()=>{panel.open=false;$('db-'+kind+'-summary').focus();});
+ }
  // The Lineage tab is the single entry point; the duplicate header shortcut stays wired but hidden.
  $('explorer-open-lineage').hidden=true;
  dbManageSync();
 }
+function dbManageOpen(kind){
+ dbManageSync();$('db-table-manage').open=true;
+ for(const name of ['clone','drop'])$('db-'+name+'-panel').open=name===kind;
+}
 function dbManageSync(){
  if(!dbManageInstall.done)return;
- const object=dbObject,section=$('db-table-manage');section.hidden=!object;
+ const object=dbObject,section=$('db-table-manage');
+ const selection=dataopsRefKey(dataopsRef(object));
+ if(dbManageInstall.selection!==selection){section.open=false;for(const kind of ['clone','drop'])$('db-'+kind+'-panel').open=false;dbManageInstall.selection=selection;}
+ let saved=false;
+ for(const [kind,op,label] of [['clone',dbClone.op,'Saved clone'],['drop',dbDrop.op,'Saved catalog removal']]){
+  const button=$('db-'+kind+'-recovery'),own=op?.principal===dbPrincipal;button.hidden=!own;
+  if(own){saved=true;ui(button,'{text}',()=>({text:t(label)+': '+t((kind==='drop'?op.state:dataopsState(op))||'UNKNOWN')}));}
+ }
+ const exportOwn=dataopsExport?.principal===dbPrincipal;const exportButton=$('db-export-recovery');exportButton.hidden=!exportOwn;
+ if(exportOwn)ui(exportButton,'{text}',()=>({text:t('Saved export')+': '+t(dataopsState(dataopsExport)||'UNKNOWN')}));
+ $('db-manage-recovery').hidden=!saved&&!exportOwn;section.hidden=!object&&!saved&&!exportOwn;
  // A cleared object (role, grant or context change) must not leave its name as the current target.
- const title=$('table-title');if(!object&&['true','cleared'].includes(title.dataset.object)){const d=dbDatabases.find(d=>d.id===dbExplorer.database_id),s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);title.textContent=s?.display_name||d?.display_name||t('Data Explorer');title.dataset.object='cleared';}
+ const title=$('table-title');if(!object&&(['true','cleared'].includes(title.dataset.object)||title.textContent===t('Table Inspector'))){const d=dbDatabases.find(d=>d.id===dbExplorer.database_id),s=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);title.textContent=s?.display_name||d?.display_name||t('Data Explorer');title.dataset.object='cleared';}
  const copy=$('db-manage-copy-reason'),remove=$('db-manage-remove-reason');
  if(!object||dbExplorerReason()){ui(copy,'');ui(remove,'');return;}
  const exportable=dbExplorerCanOpen()&&object.kind==='TABLE'&&!!dataopsRef(object)&&object.capabilities?.export!==false;
@@ -9368,7 +9413,7 @@ function dbCloneControls(){
  $('clone-table-btn').disabled=!dbCloneEligible()||busy||held;
  $('clone-table-btn').dataset.databaseUnavailable='false';
  $('clone-table-btn').title=dbCloneEligible()?'':t('Clone requires an engineer or administrator and a readable TABLE.');
- $('db-clone-panel').hidden=!p.opened&&!op;
+ $('db-clone-panel').hidden=false;dbManageSync();
  const name=$('db-clone-name').value,validName=/^[a-z][a-z0-9_]{0,30}$/.test(name)&&!['system','information_schema','tpch','tpcds'].includes(name);
  $('db-clone-name').setAttribute('aria-invalid',String(!!name&&!validName));
  $('db-clone-name-invalid').hidden=!name||validName;
@@ -9382,7 +9427,8 @@ function dbCloneControls(){
  for(const id of ['db-clone-name','db-clone-snapshot','db-clone-role'])$(id).disabled=busy||held;
  message('db-clone-notice',t((p.noticeScope===dbCloneScope()?p.notice:'')||(!ready?'Refresh clone context after source or role changes.':'')));
  const out=$('db-clone-receipt');out.replaceChildren();
- if(op&&!op.id&&dbCloneCanObserve(op))dataopsNode('p','',out,'Resending uses the original body and key. If the request was never accepted, it may start the operation.');
+ $('db-clone-resend-warning').hidden=!(op&&!op.id&&dbCloneCanObserve(op));
+ if(!$('db-clone-resend-warning').hidden)$('db-clone-observe').setAttribute('aria-describedby','db-clone-resend-warning');else $('db-clone-observe').removeAttribute('aria-describedby');
  if(op){
   const line=(key,value)=>{const n=dataopsNode('p','',out);dataopsNode('strong','',n,key);n.append(': '+String(value??''));};
   if(protectedDisplay){
@@ -9457,8 +9503,9 @@ async function dbCloneRun(observe=false,cancel=false){
  }
 }
 function dbCloneInstall(){
- const p=dbClone,root=dataopsNode('section','db-clone-panel',$('database-details'));root.hidden=true;
- dataopsNode('h3','',root,'Physical snapshot copy');dataopsNode('p','',root,'Copies snapshot rows into a NEW table. No overwrite, zero copy, history or partition/property copy.');
+ const p=dbClone;if(p.installed){p.owner=null;dbCloneSync();dbCloneControls();return;}p.installed=true;
+ const root=dataopsNode('details','db-clone-panel',$('database-details'));root.open=false;
+ dataopsNode('summary','db-clone-summary',root,'Physical snapshot copy');dataopsNode('p','',root,'Copies snapshot rows into a NEW table. No overwrite, zero copy, history or partition/property copy.');
  for(const id of ['source','context'])dataopsNode('p','db-clone-'+id,root).className='help';
  const fields=dataopsNode('div','',root);fields.className='job-fields';
  p.role=p.role||(['data_engineer','admin'].includes(currentRole)?currentRole:'data_engineer');
@@ -9473,11 +9520,13 @@ function dbCloneInstall(){
  dataopsButton(root,'db-clone-submit','Create snapshot copy',()=>dbCloneRun());
  dataopsNode('p','',root,'Cancellation stops remaining work; it does not roll back a copied table.');
  const notice=dataopsNode('p','db-clone-notice',root);notice.setAttribute('role','status');
- const receipt=dataopsNode('div','db-clone-receipt',root);receipt.setAttribute('aria-live','polite');
+ const extra=dataopsNode('details','db-clone-operation-details',root);dataopsNode('summary','',extra,'Operation details');
+ const receipt=dataopsNode('div','db-clone-receipt',extra);receipt.setAttribute('aria-live','polite');
+ dataopsNode('p','db-clone-resend-warning',root,'Resending uses the original body and key. If the request was never accepted, it may start the operation.');
  dataopsButton(root,'db-clone-observe','Observe operation',()=>dbCloneRun(true));dataopsButton(root,'db-clone-cancel','Cancel operation',()=>dbCloneRun(true,true));
  dataopsButton(root,'db-clone-new','New clone intent',()=>{if(p.busy||p.op?.pending||!p.op||dbCloneHeld(p.op)||p.op.principal!==dbPrincipal)return;p.op=null;dbClonePersist();p.context=null;p.scope='';dbCloneControls();});
  p.owner=null;dbCloneSync();
- $('clone-table-btn').onclick=()=>{p.opened=true;dbCloneControls();$('db-clone-name').focus();return dbCloneRefresh();};
+ $('clone-table-btn').onclick=async()=>{dbManageOpen('clone');$('db-clone-summary').focus();dbCloneControls();await dbCloneRefresh();if(p.context&&$('db-clone-panel').open&&$('db-table-manage').open&&document.activeElement===$('db-clone-summary'))$('db-clone-name').focus();};
  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===$('clone-table-btn')&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
  dbCloneControls();
 }
@@ -9565,7 +9614,7 @@ function dbDropControls(){
  if(op&&(op.receiptScope!==scope||!dbDropCanObserve(op)))op.operation=null;
  const busy=!!p.busy||!!op?.pending,ready=!!p.preview&&p.scope===scope&&!reason;
  const button=$('drop-table-btn');button.hidden=false;button.disabled=!!reason||busy||!!op;button.dataset.databaseUnavailable='false';button.title=t(reason);ui(button,'Remove from catalog (keep data)');
- $('db-drop-panel').hidden=!p.opened&&!op;
+ $('db-drop-panel').hidden=false;dbManageSync();
  $('db-drop-refresh').disabled=busy||!!op||!!reason;
  $('db-drop-submit').disabled=busy||!!op||!ready||$('db-drop-name').value!==p.preview?.confirmation_name||!$('db-drop-ack').checked;
  $('db-drop-name').disabled=busy||!!op||!ready;$('db-drop-ack').disabled=busy||!!op||!ready;
@@ -9573,26 +9622,27 @@ function dbDropControls(){
  ui($('db-drop-observe'),op&&!op.id?'Look up removal by original key':'Look up removal operation');
  $('db-drop-cancel').disabled=busy||!op?.id||!dbDropCanObserve(op)||op.phase==='SENT'||dbDropHeld(op)&&op.state==='UNKNOWN'||op?.ambiguous||['FINISHED','FAILED','CANCELED'].includes(op?.state);
  $('db-drop-new').disabled=busy||!op||dbDropHeld(op);
+ const previewOpen=$('db-drop-identification')?.open;const receiptOpen=$('db-drop-receipt-identification')?.open;
  const out=$('db-drop-preview');out.replaceChildren();
  if(ready){
   dataopsNode('p','',out,[p.context.sql_catalog,p.context.sql_schema,p.preview.label].join(' / '));
   dataopsNode('p','',out,'Whole TABLE / all snapshots');
   dataopsNode('p','',out,'Snapshot').append(': '+(p.preview.head??t('No current snapshot')));
-  const identity=dataopsNode('details','db-drop-identification',out);identity.open=false;
+  const identity=dataopsNode('details','db-drop-identification',out);identity.open=!!previewOpen;
   dataopsNode('summary','',identity,'Identification details');
   dataopsNode('p','',identity,'Source').append(': '+JSON.stringify(p.preview.source));
   dataopsNode('p','',identity,'Context').append(': '+JSON.stringify(p.context));
   dataopsNode('p','',identity,'Preview digest').append(': '+p.preview.preview_fingerprint);
  }
  const status=$('db-drop-status');status.replaceChildren();
- if(p.notice)dataopsNode('p','',status,p.notice);
- if(!ready&&!op)dataopsNode('p','',status,reason||'Refresh the preview before confirming removal.');
+ const guidance=!op?(!ready?reason||'Refresh the preview before confirming removal.':''):op.ambiguous||op.state==='UNKNOWN'?'Outcome unknown. Observe with the saved key; do not submit again.':op.phase==='SENT'?'Removal was sent. Observe the original request; cancellation cannot establish stoppage or undo removal.':dbDropHeld(op)?'Removal is preparing. Observe manually; cancellation can prevent dispatch only.':'';
+ ui($('db-drop-notice'),'{text}',()=>({text:[p.notice,guidance].filter(Boolean).map(key=>t(key)).join(' ')}));
  if(op){
   dataopsNode('p','',status,'Operation ID').append(': '+(op.id||'UNKNOWN'));
   dataopsNode('p','',status,'Status').append(': '+t(op.state||'UNKNOWN'));
   if(op.operation){const r=op.operation;
    dataopsNode('p','',status,[(r.context||op.context).sql_catalog,(r.context||op.context).sql_schema,r.label].join(' / '));
-   const identity=dataopsNode('details','db-drop-receipt-identification',status);identity.open=false;
+   const identity=dataopsNode('details','db-drop-receipt-identification',status);identity.open=!!receiptOpen;
    dataopsNode('summary','',identity,'Identification details');
    dataopsNode('p','',identity,'Original source Ref').append(': '+JSON.stringify(r.source||op.payload.source));
    dataopsNode('p','',identity,'Context').append(': '+JSON.stringify(r.context||op.context));
@@ -9697,9 +9747,11 @@ function dbDropInstall(){
  i18n.en['Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.']='Catalog removal requires current Admin database access and a readable, writable TABLE in raw, sandbox, staging or marts.';
  const button=$('drop-table-btn');button.parentElement.parentElement.append(button);button.dataset.action='catalog-unregister-keep-data';button.setAttribute('aria-controls','db-drop-panel');
  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===button)uiAttributes.splice(i,1);
- const root=dataopsNode('section','db-drop-panel',$('database-details'));root.setAttribute('aria-label',t('Remove from catalog (keep data)'));
- dataopsNode('h3','',root,'Remove from catalog (keep data)');
- dataopsNode('p','',root,'Removes the whole TABLE registration, including all snapshots. Data files and metadata files are retained. There is no automatic Undrop. VIEW, SQL and Job references are not rewritten. Dependency completeness is not established.');
+ const root=dataopsNode('details','db-drop-panel',$('database-details'));root.open=false;root.setAttribute('aria-labelledby','db-drop-summary');
+ dataopsNode('summary','db-drop-summary',root,'Remove from catalog (keep data)');
+ dataopsNode('p','',root,'Removes the whole TABLE registration and all snapshots. Data and metadata files are kept. No automatic Undrop.');
+ const more=dataopsNode('details','db-drop-more',root);dataopsNode('summary','',more,'More about catalog removal');
+ dataopsNode('p','',more,'Removes the whole TABLE registration, including all snapshots. Data files and metadata files are retained. There is no automatic Undrop. VIEW, SQL and Job references are not rewritten. Dependency completeness is not established.');
  dataopsNode('p','db-drop-cooperation-help',root,'Before removing this registration, pause other applications and tools that could create or replace a TABLE with the same name. Catalog removal cannot atomically check the UUID or current snapshot.').className='help';
  dataopsNode('div','db-drop-preview',root);
  const name=dataopsField(root,'db-drop-name','Type the exact physical table name');name.autocomplete='off';name.oninput=dbDropControls;
@@ -9707,11 +9759,13 @@ function dbDropInstall(){
  dataopsButton(root,'db-drop-refresh','Refresh removal preview',dbDropRefresh);
  dataopsButton(root,'db-drop-submit','Remove from catalog (keep data)',()=>dbDropRun()).className='small danger';
  dataopsNode('p','',root,'Cancellation can prevent dispatch only. Once sent, the outcome remains uncertain until an acknowledgement; it cannot roll back removal.');
- const status=dataopsNode('div','db-drop-status',root);status.setAttribute('role','status');status.setAttribute('aria-live','polite');
+ const notice=dataopsNode('p','db-drop-notice',root);notice.setAttribute('role','status');
+ const extra=dataopsNode('details','db-drop-operation-details',root);dataopsNode('summary','',extra,'Operation details');
+ const status=dataopsNode('div','db-drop-status',extra);status.setAttribute('role','status');status.setAttribute('aria-live','polite');
  dataopsButton(root,'db-drop-observe','Observe operation',()=>dbDropRun(true));
  dataopsButton(root,'db-drop-cancel','Cancel operation',()=>dbDropRun(true,true));
  dataopsButton(root,'db-drop-new','New removal intent',()=>{if(p.busy||!p.op||dbDropHeld(p.op))return;p.op=null;dbDropPersist();dbDropInvalidate();});
- button.onclick=async()=>{p.opened=true;dbDropControls();await dbDropRefresh();if(p.preview)$('db-drop-name').focus();};
+ button.onclick=async()=>{dbManageOpen('drop');$('db-drop-summary').focus();dbDropControls();await dbDropRefresh();if(p.preview&&$('db-drop-panel').open&&$('db-table-manage').open&&document.activeElement===$('db-drop-summary'))$('db-drop-name').focus();};
  dbDropControls();
 }
 

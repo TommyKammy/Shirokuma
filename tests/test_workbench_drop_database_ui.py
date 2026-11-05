@@ -47,6 +47,16 @@ class DropUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP+'\n'+body)
 
+    def test_preview_failure_keeps_visible_guidance_outside_operation_details(self):
+        self.javascript(r'''
+await dropReady();const posts=()=>submissions.filter(r=>r.body).length,before=posts();
+route=async()=>{throw Error('preview transport failed');};await dbDropRefresh();
+assert.equal(dbDrop.preview,null);assert.equal($('db-drop-submit').disabled,true);
+assert.equal($('db-drop-notice').parentElement,$('db-drop-panel'));
+assert.match($('db-drop-notice').textContent,/preview transport failed.*Refresh the preview/);
+assert.ok(!$('db-drop-operation-details').open);assert.equal(posts(),before);
+''')
+
     def test_collapsed_identification_visible_decisions_and_original_receipt_identity(self):
         self.javascript(r'''
 await dropReady();
@@ -55,12 +65,13 @@ const instruction='Before removing this registration, pause other applications a
 const impact='Removes the whole TABLE registration, including all snapshots. Data files and metadata files are retained. There is no automatic Undrop. VIEW, SQL and Job references are not rewritten. Dependency completeness is not established.';
 const source=structuredClone(dbDrop.source),fingerprint=dbDrop.preview.preview_fingerprint;
 for(const locale of ['ja','en']){
- setLanguage(locale);dbDropControls();
+ $('db-drop-identification').open=false;setLanguage(locale);dbDropControls();
  const identity=$('db-drop-identification'),text=visibleText($('db-drop-panel'));
  assert.equal(identity.tagName,'DETAILS');assert.equal(identity.open,false);assert.equal(identity.children[0].tagName,'SUMMARY');assert.equal(identity.children[0].textContent,locale==='ja'?'識別情報':'Identification details');
- for(const expected of ['sales / raw / orders',t('Whole TABLE / all snapshots'),t('Snapshot'),': 0',t(impact),t(instruction)])assert.ok(text.includes(expected),expected);
+ for(const expected of ['sales / raw / orders',t('Whole TABLE / all snapshots'),t('Snapshot'),': 0',t('Removes the whole TABLE registration and all snapshots. Data and metadata files are kept. No automatic Undrop.'),t(instruction)])assert.ok(text.includes(expected),expected);
  assert.equal(text.includes(fingerprint),false);assert.equal(text.includes(JSON.stringify(source)),false);assert.equal(text.includes('"warehouse_id"'),false);
- identity.open=true;assert.ok(visibleText(identity).includes(fingerprint));assert.ok(visibleText(identity).includes(JSON.stringify(source)));assert.ok(visibleText(identity).includes('"warehouse_id"'));
+ assert.ok(!visibleText($('db-drop-panel')).includes(t(impact)));$('db-drop-more').open=true;assert.ok(visibleText($('db-drop-panel')).includes(t(impact)));$('db-drop-more').open=false;
+ identity.open=true;dbDropControls();assert.equal($('db-drop-identification').open,true);assert.ok(visibleText($('db-drop-identification')).includes(fingerprint));assert.ok(visibleText(identity).includes(JSON.stringify(source)));assert.ok(visibleText(identity).includes('"warehouse_id"'));
  assert.equal(submissions.length,1);
 }
 dropConfirm(' orders');assert.equal($('db-drop-submit').disabled,true);dropConfirm();
@@ -362,7 +373,7 @@ assert.deepEqual(dbTreeObjects.get('test').items.map(o=>o.id),['other']);
 removalReachable($('db-drop-panel'));removalReachable($('db-drop-observe'));
 assert.ok(removalText('db-drop-status').includes(JSON.stringify(original)));assert.ok(removalText('db-drop-status').includes('sales / raw / orders'));
 objects=[];await dbRefreshExplorer();dbClearExplorer();activate($('tab-catalog'));
-assert.equal($('db-drop-panel').parentElement,$('database-details'));removalReachable($('db-drop-observe'));
+assert.equal($('db-drop-panel').parentElement,$('db-table-manage'));assert.equal($('db-table-manage').open,false);assert.equal($('db-drop-recovery').hidden,false);$('db-drop-recovery').onclick();assert.equal($('db-drop-panel').open,true);removalReachable($('db-drop-observe'));
 dbDrop.op=null;dbDrop.owner=null;dbDrop.handles.clear();dbDropControls();
 assert.equal(dbObject,null);assert.equal(dbDrop.op.key,key);assert.equal(JSON.stringify(dbDrop.op.payload),body);
 activate($('tab-warehouse'));activate($('tab-catalog'));removalReachable($('db-drop-observe'));
