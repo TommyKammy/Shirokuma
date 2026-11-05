@@ -39,6 +39,22 @@ class DataopsUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP + '\n' + body)
 
+    def test_wap_raw_results_closed_with_visible_state_and_stable_focus(self):
+        self.javascript(r'''
+const p=await ready('p35-wap');
+p.op={key:'wap-key',id:'wap-op',context:structuredClone(p.context),principal:dbPrincipal,protected:true,state:'FAILED',operation:{state:'FAILED',committed:true,cleanup_error:'cleanup failed',error:'engine failed',result:{long_payload:'raw payload'}}};
+for(const lang of ['ja','en']){
+ setLanguage(lang);dataopsRenderOperation(p);
+ const raw=p.receipt.descendants().find(n=>n.tagName==='PRE');assert.equal(raw.parentElement.tagName,'DETAILS');assert.ok(!raw.parentElement.open);
+ assert.ok(p.receipt.children.some(n=>n.tagName==='P'&&n.children.some(c=>c.textContent.includes('cleanup failed'))));
+ assert.ok(p.receipt.children.some(n=>n.tagName==='P'&&n.children.some(c=>c.textContent.includes('engine failed'))));
+ raw.parentElement.open=true;raw.parentElement.children[0].focus();dataopsRenderOperation(p);
+ const next=p.receipt.descendants().find(n=>n.tagName==='PRE').parentElement;assert.equal(next.open,true);assert.equal(document.activeElement,next.children[0]);next.open=false;
+}
+p.receipt.descendants().find(n=>n.tagName==='DETAILS').open=true;p.op={...p.op,key:'different-operation'};dataopsRenderOperation(p);assert.ok(!p.receipt.descendants().find(n=>n.tagName==='DETAILS').open);
+assert.equal(submissions.length,0);
+''')
+
     def test_reloaded_selected_cleanup_cancel_needs_no_fresh_grant_or_context_reads(self):
         for state in ('ACTIVE', 'CANCELING'):
             with self.subTest(state=state):

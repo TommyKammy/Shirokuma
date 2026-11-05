@@ -609,6 +609,12 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #observation-activity-panel :is(p,td,th,button){white-space:normal;overflow-wrap:anywhere}
 #observation-activity-panel .table-wrap{max-width:100%;overflow-x:auto}
 /* Database dbt uses the established operational toolbar and table vocabulary. */
+
+/* Transformation disclosures keep long identifiers and bilingual controls within narrow panels. */
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(details,.panel-body,.job-fields,.toolbar){min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(p,summary,label,button){white-space:normal;overflow-wrap:anywhere}
+:is(#p35-wap,#db-marts-panel) pre{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-width:100%}
+:is(#p35-wap,#db-marts-panel) :is(input,select,textarea){min-width:0;max-width:100%;box-sizing:border-box}
 #db-dbt-panel{min-width:0;max-width:100%}
 #db-dbt-panel .toolbar{align-items:end;gap:12px;flex-wrap:wrap;margin-block:12px}
 #db-dbt-panel .toolbar>div{min-width:0;flex:1 1 160px}
@@ -8663,7 +8669,13 @@ function dataopsPanel(id,title,parent){
  return p;
 }
 function dataopsRenderOperation(p){
- const area=p.receipt;area.replaceChildren();const op=p.op;
+ const area=p.receipt,op=p.op,wap=p.id==='p35-wap';
+ const identity=JSON.stringify([dbPrincipal,p.context,op?.key,p.metadata?.model_id,p.metadata?.version,p.metadata?.id,p.metadata?.build_id,p.metadata?.audit_id,p.metadata?.publication_id]);
+ const walk=n=>Array.from(n.children||[]).flatMap(c=>[c,...walk(c)]);
+ const old=wap&&area.dataset.identity===identity?walk(area).filter(n=>n.tagName==='DETAILS'):[],focused=old.find(n=>n.children[0]===document.activeElement);
+ const label=n=>uiBindings.get(n.children[0])?.key||n.children[0]?.textContent;
+ area.dataset.identity=identity;area.replaceChildren();
+ try{
  if(p.principal!==dbPrincipal)return;
  if(p.metadata&&!p.invalid)dataopsRenderWapMetadata(area,p.metadata);
  if(!op||op.principal!==undefined&&op.principal!==dbPrincipal)return;
@@ -8676,7 +8688,11 @@ function dataopsRenderOperation(p){
  if(dataopsState(op)==='UNKNOWN')dataopsNode('p','',area,'Unknown execution requires manual reconciliation. Observe the saved operation.');
  if(!op.protected){dataopsNode('p','',area,'Results hidden until access is revalidated.');return;}
  if(op.operation){row('Committed',op.operation.committed);row('Cleanup error',op.operation.cleanup_error||'');
-  const result=op.operation.result;if(result){const metadata=result.build||result.audit||result.publication;if(metadata)dataopsRenderWapMetadata(area,metadata);else{const pre=dataopsNode('pre','',area);pre.textContent=JSON.stringify(result,null,2);}}}
+  if(wap){for(const key of ['error','error_code','errors'])if(op.operation[key])row('Error',typeof op.operation[key]==='string'?op.operation[key]:JSON.stringify(op.operation[key]));}
+  const result=op.operation.result;if(result){if(wap)for(const key of ['error','error_code','errors'])if(result[key])row('Error',typeof result[key]==='string'?result[key]:JSON.stringify(result[key]));const metadata=result.build||result.audit||result.publication;if(metadata)dataopsRenderWapMetadata(area,metadata);else{const parent=wap?workflowDetails(area,'Raw operation result'):area;const pre=dataopsNode('pre','',parent);pre.textContent=JSON.stringify(result,null,2);}}}
+ }finally{
+  if(wap){const details=walk(area).filter(n=>n.tagName==='DETAILS');details.forEach((n,i)=>{if(old[i]&&label(n)===label(old[i])){n.open=old[i].open;if(old[i]===focused)n.children[0].focus();}});}
+ }
 }
 
 function dataopsRenderWapMetadata(area,record){
@@ -8736,6 +8752,13 @@ function dataopsRender(p,inventory=false){
    for(const source of p.sources||[])dataopsOptions(source.table,p.tables.map((o,i)=>[String(i),o.label]),source.table.value);
   }
   const existing=$(id+'-target').value!=='';
+  const target=p.model?.current_target_ref||p.model?.target;
+  const lookup=$(id+'-metadata-id').parentElement.parentElement,identity=JSON.stringify([dbPrincipal,allowed,p.context,p.model?.model_id,p.model?.version]);
+  if(lookup.dataset.identity!==identity){lookup.open=false;lookup.dataset.identity=identity;}
+  const draft=p.modelDirty||!p.model,chosen=existing?p.tables[Number($(id+'-target').value)]:null;
+  const table=draft?(chosen?.label||$(id+'-name').value):target?.physical_name||p.tables.find(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(target))?.label;
+  const schema=p.schemas.find(s=>s.id===(draft?$(id+'-target-schema').value:target?.schema_id))?.sql_name;
+  $(id+'-action-target').textContent=allowed&&table?[t(draft?'Draft WAP target':'Saved WAP target'),p.context.sql_catalog+'.'+(table.includes('.')?table:[schema,table].filter(Boolean).join('.')),p.role,p.model?.version?'v'+p.model.version:''].filter(Boolean).join(' · '):'';
   $(id+'-name').disabled=waiting||!allowed||existing;$(id+'-target-schema').disabled=waiting||!allowed||existing;
   for(const [action,capability] of [['build-action','wap_build'],['audit-action','wap_audit'],['publish','wap_publish'],['rollback','wap_rollback']]){
    $(id+'-'+action).disabled=waiting||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p))||!dataopsAllowed(p,capability)||(action==='build-action'&&(!p.model||p.modelDirty))||(action==='audit-action'&&!$(id+'-build').value)||(action==='publish'&&(!$(id+'-build').value||!$(id+'-audit').value))||(action==='rollback'&&!$(id+'-publication').value);
@@ -8897,6 +8920,8 @@ function dataopsLoadModel(p,model,{preserveOrigin=false}={}){
  ui(p.status,model?'Saved version {version}':'Save or load a model version before building.',{version:model?.version});dataopsRender(p);
 }
 function dataopsInstallWap(){
+ Object.assign(i18n.ja,{'Draft WAP target':'WAP 下書きの対象','Saved WAP target':'WAP 保存済みモデルの対象','Saved run details':'保存実行の詳細','Draft Mart target':'Mart 下書きの対象','Not accepted':'未受付'});
+ Object.assign(i18n.ja,{'Saved WAP metadata':'保存済み WAP メタデータ','Raw operation result':'操作結果の JSON','Error':'エラー','WAP target and action':'WAP の対象と操作','Publication replaces the selected target with the audited build. Rollback restores the linked publication.':'公開は選択した対象を監査済み構築結果で置き換えます。ロールバックは紐づく公開を復元します。'});
  const tab=$('transformation-view-wap');tab.hidden=false;tab.disabled=false;delete tab.dataset.databaseUnavailable;
  ui(tab,'Manual WAP');
  const p=dataopsPanel('p35-wap','Manual WAP',$('transformation-wap')),id=p.id;p.sources=[];p.aiRevision=0;
@@ -8909,13 +8934,16 @@ function dataopsInstallWap(){
  dataopsNode('div',id+'-sources',p.form);dataopsButton(p.form,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
  dataopsButton(p.form,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);}));
  for(const [kind,label] of [['build','Build'],['audit','Audit'],['publication','Publication']])dataopsField(p.fields,id+'-'+kind,label,'select').onchange=()=>dataopsRender(p);
- dataopsField(p.fields,id+'-metadata-id','Metadata ID (optional, from another authorized session)');
- dataopsField(p.fields,id+'-metadata-kind','Type','select',[['build','Build'],['audit','Audit'],['publication','Publication']]);
- dataopsButton(p.form,id+'-metadata-load','Load metadata',()=>dataopsTask(p,async current=>{
+ const metadata=workflowDetails(p.form,'Saved WAP metadata');
+ dataopsField(metadata,id+'-metadata-id','Metadata ID (optional, from another authorized session)');
+ dataopsField(metadata,id+'-metadata-kind','Type','select',[['build','Build'],['audit','Audit'],['publication','Publication']]);
+ dataopsButton(metadata,id+'-metadata-load','Load metadata',()=>dataopsTask(p,async current=>{
   const kind=$(id+'-metadata-kind').value,value=$(id+'-metadata-id').value.trim();if(!value)throw Error(t('Choose a saved metadata record.'));
   const reply=await dataopsRequest('/api/v1/wap/'+({build:'builds',audit:'audits',publication:'publications'})[kind]+'/'+encodeURIComponent(value),p.context);if(!current())return;
   const record=reply[kind],n=$(id+'-'+kind);n.add(new Option(value,value));n.value=value;p.metadata=record;
  }));
+ dataopsNode('p',id+'-action-target',p.form).className='help';
+ dataopsNode('p','',p.form,'Publication replaces the selected target with the audited build. Rollback restores the linked publication.').className='help';
  for(const [action,label,path,cap] of [['build-action','Build saved version','build','wap_build'],['audit-action','Audit build','audit','wap_audit'],['publish','Publish audited build (admin)','publish','wap_publish'],['rollback','Rollback publication (admin)','rollback','wap_rollback']]){
   dataopsButton(p.form,id+'-'+action,label,()=>{
    if(!dataopsAllowed(p,cap)||dataopsOwnedUnresolved(p))return;
@@ -10627,13 +10655,23 @@ function dbMartsRender(){
  $('db-marts-observe').disabled=p.pending||(p.save?!dbMartsCanRecoverSave():!dbMartsAssociated(p.run)||p.run?.purged||(!p.run?.id&&!p.run?.payload));$('db-marts-history-refresh').disabled=p.pending||!selected;$('db-marts-check-changes').disabled=p.pending||!allowed;
  $('db-marts-model-detail').textContent=allowed&&p.model?JSON.stringify({model_id:p.model.model_id,version:p.model.version,sources:p.model.sources,target:p.mart?.current_target_ref||p.model.current_target_ref||p.model.target,min_rows:p.model.min_rows,not_null:p.model.not_null},null,2):'';
  $('db-marts-definition-detail').textContent=selected?JSON.stringify({id:p.mart.id,owner:p.mart.owner,revision:p.mart.revision,current_target_ref:p.mart.current_target_ref,last_success_at:p.mart.last_success_at,last_success_baseline:p.mart.last_success_baseline,reconciliation_required:p.mart.reconciliation_required,blocked_run_id:p.mart.blocked_run_id},null,2):'';
- const detail=$('db-marts-run-detail');detail.replaceChildren();const r=p.run;if(r){dataopsNode('p','',detail).textContent='Run ID: '+(r.id||(r.rejection?'not accepted':'UNKNOWN'))+' · Key: '+r.key;if(dbMartsAssociated(r)&&!r.purged){if(r.rejection)dataopsNode('p','',detail).textContent='Not accepted: '+r.rejection;if(r.details)dataopsNode('pre','',detail).textContent=JSON.stringify(r.details,null,2);}}
- const history=$('db-marts-history');history.replaceChildren();if(selected)for(const run of p.history){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[run.id,run.kind,run.status,'v'+run.mart_revision].join(' · ');dataopsButton(row,'','Observe run',()=>{if(p.pending||!dbMartsSelected()||!dbMartsValidRun(run,p.context,p.mart.id)||(dbMartsAssociated(p.run)&&!p.run.rejection&&!dbMartsTerminal(p.run)&&p.run.id!==run.id))return;p.run={id:run.id,mart_id:run.mart_id,mart_revision:run.mart_revision,kind:run.kind,status:run.status,context:dataopsFreeze(dataopsClone(run.context)),principal:dbPrincipal,key:'',sequence:0,details:null};return dbMartsObserve();});}
+ const target=selected?(p.mart.current_target_ref||p.mart.definition.target):(p.model?.current_target_ref||p.model?.target),targetSchema=p.schemas.find(s=>s.id===target?.schema_id)?.sql_name;
+ const targetName=target?.physical_name||p.mart?.definition?.target?.physical_name||p.model?.target?.physical_name,version=p.model?.version||p.mart?.definition?.version;
+ $('db-marts-target-summary').textContent=allowed&&target?[t(selected?'Mart target':'Draft Mart target'),targetSchema&&targetName?[p.context.sql_catalog,targetSchema,targetName].join('.'):t('Unavailable'),p.mart?.definition?.name||$('db-marts-name').value,version?'v'+version:'',p.conflict?'REVISION_CONFLICT':'',dbMartsHeld()?t('Mart recovery required'):''].filter(Boolean).join(' · '):'';
+ const identity=JSON.stringify([dbPrincipal,p.context,p.mart?.id,p.mart?.revision,p.model?.model_id,p.model?.version]);
+ for(const id of ['model-detail','definition-detail']){const disclosure=$('db-marts-'+id).parentElement;if(disclosure.dataset.identity!==identity){disclosure.open=false;disclosure.dataset.identity=identity;}}
+ const detail=$('db-marts-run-detail'),r=p.run;dbBearReset(detail,JSON.stringify([identity,r?.id||r?.key]));if(r){dataopsNode('p','',detail).textContent=t('Status')+': '+t(r.rejection?'Not accepted':r.status||'UNKNOWN');dataopsNode('p','',dbBearDetails(detail,'request','Request details')).textContent='Run ID: '+(r.id||(r.rejection?'not accepted':'UNKNOWN'))+' · Key: '+r.key;if(dbMartsAssociated(r)&&!r.purged){if(r.rejection)dataopsNode('p','',detail).textContent='Not accepted: '+r.rejection;if(r.details){
+  const d=r.details;dataopsNode('p','',detail).textContent=t('Status')+': '+d.status+' · '+t('Committed')+': '+String(d.committed??'UNKNOWN');
+  for(const [label,value] of [['Cleanup error',d.cleanup_error],['Error',d.error||d.error_code||d.errors],['Publication status',d.result?.publication_state],['Quality',d.result?.audit?.passed??d.result?.passed],['Rows',d.result?.audit?.count??d.result?.build?.count],['Changed',d.result?.changed],['Unchanged',d.result?.unchanged],['Publication',d.result?.publication?.id],['Target snapshot',d.result?.publication?.target?.snapshot]])if(value!==undefined&&value!==null)dataopsNode('p','',detail).textContent=t(label)+': '+(typeof value==='object'?JSON.stringify(value):String(value));
+  dataopsNode('pre','',dbBearDetails(detail,'result','Raw run result')).textContent=JSON.stringify(d,null,2);
+ }}}
+ const history=$('db-marts-history'),focusedRun=history.dataset.identity===identity?document.activeElement?.dataset.martRun:null;history.dataset.identity=identity;history.replaceChildren();if(selected)for(const run of p.history){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[run.id,run.kind,run.status,'v'+run.mart_revision].join(' · ');const button=dataopsButton(row,'','Observe run',()=>{if(p.pending||!dbMartsSelected()||!dbMartsValidRun(run,p.context,p.mart.id)||(dbMartsAssociated(p.run)&&!p.run.rejection&&!dbMartsTerminal(p.run)&&p.run.id!==run.id))return;p.run={id:run.id,mart_id:run.mart_id,mart_revision:run.mart_revision,kind:run.kind,status:run.status,context:dataopsFreeze(dataopsClone(run.context)),principal:dbPrincipal,key:'',sequence:0,details:null};return dbMartsObserve();});button.dataset.martRun=run.id;if(focusedRun===run.id)button.focus();}
 }
 function dbMartsOpen(){
  if(dbMarts.installed&&!dbMarts.started){dbMarts.started=true;return dbMartsRefresh();}
 }
 function dbMartsInstall(){
+ Object.assign(i18n.ja,{'Model and quality details':'モデルと品質条件の詳細','Mart definition details':'Mart 定義の詳細','Raw run result':'実行結果の JSON','Mart target':'Mart の対象','Full refresh replaces the saved target using this model version and its quality checks.':'全件更新は、このモデルの版と品質条件を使って保存済み対象を置き換えます。','Mart recovery required':'Mart の復旧が必要です。','Committed':'コミット済み','Cleanup error':'クリーンアップエラー','Error':'エラー','Changed':'変更あり','Unchanged':'変更なし'});
  const p=dbMarts;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.role='admin';p.database=dbCurrent()?.database_id||'';p.schema='';p.databases=dbRoleItems('admin');p.schemas=[];
  for(const child of $('transformation-marts').children)child.hidden=true;
  const root=dataopsNode('section','db-marts-panel',$('transformation-marts'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Managed Marts');dataopsNode('p','',body,'Choose the database and schema for this Mart, then load a saved Mart or a model version registered in Manual WAP.').className='help';
@@ -10641,7 +10679,8 @@ function dbMartsInstall(){
  const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-marts-list','Saved Marts','select').onchange=dbMartsSelect;dataopsButton(saved,'db-marts-load','Load Mart',dbMartsLoad);dataopsButton(saved,'db-marts-reload','Load current revision',dbMartsLoad);dataopsButton(saved,'db-marts-new','New Mart',()=>{if(p.pending||p.invalid||p.save)return;++p.request;p.mart=null;p.model=null;p.selection='';p.history=[];p.conflict=false;for(const k of dbMartsFields)$('db-marts-'+k).value='';$('db-marts-watch').value='all';dbMartsRender();});
  const form=dataopsNode('form','db-marts-form',body);form.onsubmit=e=>e.preventDefault();const fields=dataopsNode('div','',form);fields.className='job-fields';dataopsField(fields,'db-marts-name','Mart name');dataopsField(fields,'db-marts-models','Saved models','select').onchange=()=>{++p.request;const value=$('db-marts-models').value;if(value){const [id,version]=JSON.parse(value);$('db-marts-model-id').value=id;$('db-marts-version').value=String(version);}p.model=null;dbMartsRender();};
  dataopsField(fields,'db-marts-model-id','Model ID');const version=dataopsField(fields,'db-marts-version','Version');version.type='number';version.min='1';for(const k of ['name','model-id','version'])$('db-marts-'+k).oninput=()=>{++p.request;if(k!=='name')p.model=null;dbMartsRender();};dataopsButton(form,'db-marts-load-model','Load model version',dbMartsLoadModel);dataopsField(form,'db-marts-watch','Watch sources','select',[['all','All model sources'],['manual','Manual only']]).onchange=()=>{++p.request;dbMartsRender();};
- dataopsNode('p','',form,'Manual-only Marts allow unconditional refresh. Check and conditional refresh require watches (WATCH_REQUIRED).').className='help';dataopsNode('pre','db-marts-model-detail',form);dataopsButton(form,'db-marts-save','Save Mart',dbMartsSave).className='primary';dataopsNode('pre','db-marts-definition-detail',body);
+ dataopsNode('p','',form,'Manual-only Marts allow unconditional refresh. Check and conditional refresh require watches (WATCH_REQUIRED).').className='help';dataopsNode('pre','db-marts-model-detail',workflowDetails(form,'Model and quality details'));dataopsButton(form,'db-marts-save','Save Mart',dbMartsSave).className='primary';dataopsNode('pre','db-marts-definition-detail',workflowDetails(body,'Mart definition details'));
+ dataopsNode('p','db-marts-target-summary',body);dataopsNode('p','',body,'Full refresh replaces the saved target using this model version and its quality checks.').className='help';
  const actions=dataopsNode('div','',body);actions.className='toolbar';dataopsButton(actions,'db-marts-check','Check changes',()=>dbMartsSubmit('check'));const checkbox=dataopsField(actions,'db-marts-check-changes','Check only when changed');checkbox.type='checkbox';checkbox.checked=false;dataopsButton(actions,'db-marts-refresh-run','Full refresh',()=>dbMartsSubmit('refresh'));dataopsButton(actions,'db-marts-observe','Observe run',dbMartsObserve);
  p.status=dataopsNode('p','db-marts-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('div','db-marts-run-detail',body);dataopsNode('h3','',body,'Mart history');dataopsButton(body,'db-marts-history-refresh','Refresh history',dbMartsHistory);dataopsNode('div','db-marts-history',body);
  delete $('transformation-view-marts').dataset.databaseUnavailable;$('transformation-view-marts').hidden=false;ui($('transformation-view-marts'),'Managed Marts');dbMartsRender();
@@ -11169,10 +11208,10 @@ function dbDbtNativeProof(parent,proof){
  const detail=dataopsNode('details','',parent);dataopsNode('summary','',detail,'Native proof details');
  dataopsNode('pre','',detail).textContent=JSON.stringify(proof,null,2);
 }
-function dbDbtSummary(parent,a){
- const p=dbDbt;dataopsNode('p','',parent).textContent=a.id+' · '+a.actor+' · '+(a.created_at||'');
- dataopsNode('p','',parent,'Saved context');dataopsNode('p','',parent).textContent=[a.context.database_id,a.context.sql_catalog,a.context.schema_id,a.context.sql_schema,a.context.selected_role].join(' / ');
- dataopsNode('p','',parent,dbDbtState(a));if(a.error_code){dataopsNode('p','',parent).textContent=a.error_code;if(['STALE_RESOURCE','DBT_SOURCE_CHANGED','DBT_CANDIDATE_CHANGED','INVALID_BINDING','TARGET_CHANGED','SCHEMA_NOT_FOUND'].includes(a.error_code))dataopsNode('p','',parent,'Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.');}
+function dbDbtSummary(parent,a,compact=false){
+ const p=dbDbt;if(compact)dataopsNode('p','',parent,dbDbtState(a));const identity=compact?workflowDetails(parent,'Saved run details'):parent;dataopsNode('p','',identity).textContent=a.id+' · '+a.actor+' · '+(a.created_at||'');
+ dataopsNode('p','',identity,'Saved context');dataopsNode('p','',identity).textContent=[a.context.database_id,a.context.sql_catalog,a.context.schema_id,a.context.sql_schema,a.context.selected_role].join(' / ');
+ if(!compact)dataopsNode('p','',parent,dbDbtState(a));if(a.error_code){dataopsNode('p','',parent).textContent=a.error_code;if(['STALE_RESOURCE','DBT_SOURCE_CHANGED','DBT_CANDIDATE_CHANGED','INVALID_BINDING','TARGET_CHANGED','SCHEMA_NOT_FOUND'].includes(a.error_code))dataopsNode('p','',parent,'Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.');}
  if(a.kind==='publication'&&['native_table','native_graph'].includes(a.origin)){
   const intent=a.native_publication?.intent||a.native_audit?.intent,run=p.run?.id===a.run_id?p.run:null,model=run?.models?.find(m=>m.unique_id===a.node_id),plan=p.plan?.id===a.plan_id?p.plan:null,pm=plan?.models?.find(m=>m.unique_id===a.node_id),schema=p.schemas.find(s=>s.id===plan?.target_schema);
   dbDbtNativeFacts(parent,{origin:a.origin,target:pm&&schema?{catalog:a.context.sql_catalog,schema:schema.sql_name,name:pm.relation?.[2]}:null,source_actor:intent?.source_actor??run?.actor,publisher_actor:intent?.publisher_actor??a.actor,candidate:intent?.candidate??model?.candidate,quality:intent?.quality?{status:intent.quality.length>0&&intent.quality.every(t=>t.status==='PASSED')?'PASSED':t('Not recorded'),count:intent.quality.length}:run?{status:run.tests_status,count:run.tests?.length??0}:null,expected_target:a.expected_target,audit:a.native_audit,views:a.views});
@@ -11200,6 +11239,7 @@ function dbDbtRender(){
  dbDbtNode('refresh').disabled=p.pending;
  dbDbtNode('compile').disabled=locked||!allowed||!p.projects.some(x=>x.id===dbDbtNode('project').value)||!dbDbtNode('source').value||!dbDbtNode('target').value;
  const method=dbDbtMethod(),graph=method==='native_graph',native=method==='native_table';
+ for(const name of ['compiled-details','execution-details']){const n=dbDbtNode(name),identity=JSON.stringify([dbPrincipal,allowed,p.context,p.plan?.id,p.plan?.source_digest,name==='execution-details'?method:null]);if(n.dataset.identity!==identity){n.open=false;n.dataset.identity=identity;}}
  dbDbtNode('method').value=method;dbDbtNode('method').disabled=locked||!allowed||!p.plan;
  dbDbtNode('native-controls').hidden=!(native||graph)||!allowed;dbDbtNode('native-help').hidden=!(native||graph)||!allowed;dbDbtNode('native-quality-help').hidden=!(native||graph)||!allowed;
  dbDbtNode('node').parentElement.hidden=!native;
@@ -11221,16 +11261,25 @@ function dbDbtRender(){
  dbDbtNode('cancel').disabled=locked||!dbDbtOwnRun()||p.run.cancel_requested||['CANCELED','FAILED','UNKNOWN','CANCELING'].includes(p.run.state);
  dbDbtNode('reconcile').disabled=locked||!dbDbtCanReconcile();dbDbtNode('history-refresh').disabled=locked||!allowed;
  ui(dbDbtNode('reason'),!allowed?(p.role==='bi_viewer'||!dbRoleWithinHeader('data_engineer')?'Viewer access is unavailable. Choose an authorized data_engineer or admin role; source SQL is hidden.':'Refresh an authorized Database and SANDBOX context.'):p.intentBlocked?'Saved context differs. Reselect the original context; requests are never retargeted.':['native_table','native_graph'].includes(p.run?.executor)?dbDbtState(p.run):dbDbtBuildReason());
+ dbDbtNode('run-effect').textContent=allowed&&p.plan?[t('Run effect'),p.context?.sql_catalog,p.plan.project_name||p.plan.project_id,t('Candidate Schema: SANDBOX (fixed)'),graph?t('Native graph (VIEW / TABLE / EPHEMERAL)'):native?p.plan.models?.find(m=>m.unique_id===selected)?.name:t('SQL / WAP'),method==='sql_wap'||dbDbtQuality()?t('Run quality tests'):'NOT_RUN',t(method!=='sql_wap'&&!dbDbtQuality()?'Build-only: publication unavailable.':'Creates SANDBOX candidates; publication requires separate review.')].filter(Boolean).join(' · '):'';
+ const walk=n=>Array.from(n.children||[]).flatMap(c=>[c,...walk(c)]),retained=[];
+ const keyed=node=>{const counts=new Map();return new Map(walk(node).filter(n=>['DETAILS','SUMMARY','BUTTON'].includes(n.tagName)).map(n=>{
+  const label=n.tagName==='DETAILS'?n.children[0]:n,base=n.tagName+':'+(n.id||uiBindings.get(label)?.key||uiBindings.get(label?.children[0])?.key||label?.textContent||''),index=counts.get(base)||0;counts.set(base,index+1);return [base+':'+index,n];}));};
+ for(const name of ['receipt','plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history']){
+  const node=dbDbtNode(name),identity=JSON.stringify([dbPrincipal,allowed,p.context,p.plan?.id,p.plan?.source_digest,...(['plan-detail','models','sql'].includes(name)?[]:[p.run?.id,p.standalone?.id,(p.run?.models||[]).map(m=>m.unique_id),Object.values(p.publications).map(a=>a.id),p.review,p.intent?.key||p.rejectedIntent?.key])]);
+  const old=node.dataset.identity===identity?keyed(node):new Map();
+  retained.push({node,old,focused:[...old].find(([,n])=>n===document.activeElement)?.[0]});node.dataset.identity=identity;node.replaceChildren();
+ }
+ try{
  const receipt=dbDbtNode('receipt');receipt.replaceChildren();const saved=p.intent||p.rejectedIntent;if(allowed&&saved?.principal===dbPrincipal){dataopsNode('p','',receipt).textContent=[t('Request key'),saved.key,saved.context.database_id,saved.context.sql_schema,saved.context.selected_role].join(' · ');if(saved.action==='build'&&saved.body.executor==='native_graph'){dataopsNode('p','',receipt).textContent=['native_graph',saved.body.plan_id,t('Quality tests')+': '+(saved.body.native_tests===true),t('Saved graph counts')+': '+(saved.graphPlan?.models?.length??''),t('Test count')+': '+(saved.graphPlan?.tests?.length??'')].join(' · ');}if(saved.rejection){const detail=dataopsNode('details','',receipt);dataopsNode('summary','',detail,'Rejected request receipt');dataopsNode('pre','',detail).textContent=JSON.stringify(saved,null,2);}}
- for(const name of ['plan-detail','models','sql','run-detail','candidates','tests','publications','confirmation','history'])dbDbtNode(name).replaceChildren();
  if(!allowed)return;
  const a=p.plan,r=p.run;
- if(a){dbDbtSummary(dbDbtNode('plan-detail'),a);dbDbtRenderCompatibility(dbDbtNode('plan-detail'),a);dataopsNode('p','',dbDbtNode('plan-detail'),'Project version / source digest');dataopsNode('p','',dbDbtNode('plan-detail')).textContent=[a.project_name||a.project_id,a.project_version||JSON.stringify(a.compiler_versions||{}),a.source_digest||'',t('Staging materialization')+': '+(a.staging_materialization||t('Project default (no override)')),t('Source Schema')+': '+a.source_schema,t('Target Schema')+': '+a.target_schema].join(' · ');
+ if(a){dataopsNode('p','',dbDbtNode('plan-detail'),dbDbtState(a));if(a.error_code){dataopsNode('p','',dbDbtNode('plan-detail')).textContent=a.error_code;if(['STALE_RESOURCE','DBT_SOURCE_CHANGED','DBT_CANDIDATE_CHANGED','INVALID_BINDING','TARGET_CHANGED','SCHEMA_NOT_FOUND'].includes(a.error_code))dataopsNode('p','',dbDbtNode('plan-detail'),'Source or target identity changed. Refresh context and compile a new plan after inspecting the schemas.');}const savedPlan=workflowDetails(dbDbtNode('plan-detail'),'Saved plan details');dbDbtSummary(savedPlan,a);dbDbtRenderCompatibility(dbDbtNode('plan-detail'),a);dataopsNode('p','',savedPlan,'Project version / source digest');dataopsNode('p','',savedPlan).textContent=[a.project_name||a.project_id,a.project_version||JSON.stringify(a.compiler_versions||{}),a.source_digest||'',t('Staging materialization')+': '+(a.staging_materialization||t('Project default (no override)')),t('Source Schema')+': '+a.source_schema,t('Target Schema')+': '+a.target_schema].join(' · ');
  dbDbtTable(dbDbtNode('models'),['Model','Materialization','Applied table format','Dependencies',graph?'Native graph compatibility':'Native saved-plan compatibility'],(a.models||[]).map(m=>[m.name,m.materialized==='ephemeral'?t('Ephemeral, expanded into SQL'):m.materialized==='table'?t('Table candidate'):m.materialized==='view'?t('Sandbox INVOKER view'):m.materialized,dbDbtFormat(m),JSON.stringify(m.depends_on||[]),t(dbDbtModelReason(m.unique_id))]));
  for(const m of a.models||[]){const detail=dataopsNode('details','',dbDbtNode('sql'));dataopsNode('summary','',detail).textContent=m.unique_id+' · '+JSON.stringify(m.relation);dataopsNode('pre','',detail).textContent=m.compiled_sql||'';dataopsNode('p','',detail,'Dependencies');dataopsNode('pre','',detail).textContent=JSON.stringify(m.depends_on||[],null,2);}
  const sources=dataopsNode('details','',dbDbtNode('sql'));dataopsNode('summary','',sources,'Sources / refs');dataopsNode('pre','',sources).textContent=JSON.stringify({sources:a.sources||[],source_bindings:a.source_bindings||[],refs:a.refs||[]},null,2);const suite=dataopsNode('details','',dbDbtNode('sql'));dataopsNode('summary','',suite,'Tests and failure counts');dataopsNode('pre','',suite).textContent=JSON.stringify((a.tests||[]).map(x=>({unique_id:x.unique_id,name:x.name,test_type:x.test_type,depends_on:x.depends_on})),null,2);
  }else dataopsNode('p','',dbDbtNode('plan-detail'),'Choose a saved plan or compile an approved project.');
- if(r){dbDbtSummary(dbDbtNode('run-detail'),r);if(!locked&&['READY','NATIVE_VERIFIED','FAILED','CANCELED','PUBLISHED'].includes(r.state)){dataopsNode('p','',dbDbtNode('run-detail'),'Inspect the saved plan again to prepare a different explicit run.');dataopsButton(dbDbtNode('run-detail'),'','Inspect plan',()=>dbDbtObserve('plan',r.plan_id));}else if(r.state==='UNKNOWN'&&['native_table','native_graph'].includes(r.executor))dataopsNode('p','',dbDbtNode('run-detail'),'Backend outcome unknown. Reconcile existing operations; publication is blocked.');dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','TABLE snapshot / VIEW version',...(r.executor==='native_graph'?['Dependencies','Operation ID']:[]),'Candidate Ref details'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),dbDbtCandidateVersion(m),...(r.executor==='native_graph'?[(m.depends_on||a?.models?.find(x=>x.unique_id===m.unique_id)?.depends_on||[]).join(', '),(m.operation_ids||[]).join(', ')]:[]),parent=>dbDbtCandidateDetails(parent,m)]));
+ if(r){dbDbtSummary(dbDbtNode('run-detail'),r,true);if(!locked&&['READY','NATIVE_VERIFIED','FAILED','CANCELED','PUBLISHED'].includes(r.state)){dataopsNode('p','',dbDbtNode('run-detail'),'Inspect the saved plan again to prepare a different explicit run.');dataopsButton(dbDbtNode('run-detail'),'','Inspect plan',()=>dbDbtObserve('plan',r.plan_id));}else if(r.state==='UNKNOWN'&&['native_table','native_graph'].includes(r.executor))dataopsNode('p','',dbDbtNode('run-detail'),'Backend outcome unknown. Reconcile existing operations; publication is blocked.');dbDbtTable(dbDbtNode('candidates'),['Model','Status','Applied table format','TABLE snapshot / VIEW version',...(r.executor==='native_graph'?['Dependencies','Operation ID']:[]),'Candidate Ref details'],(r.models||[]).map(m=>[m.name,m.state,dbDbtFormat(m),dbDbtCandidateVersion(m),...(r.executor==='native_graph'?[(m.depends_on||a?.models?.find(x=>x.unique_id===m.unique_id)?.depends_on||[]).join(', '),(m.operation_ids||[]).join(', ')]:[]),parent=>dbDbtCandidateDetails(parent,m)]));
  dbDbtTable(dbDbtNode('tests'),['Model','Status','Failure count',...(r.native_tests===true?['Operation ID']:[])],(r.tests||[]).map(x=>[x.unique_id+' · '+x.name,x.state,x.failure_count??'',...(r.native_tests===true?[x.operation_id||'']:[])]));
  if(r.executor==='native_graph'){dataopsNode('p','',dbDbtNode('publications'),dbDbtGraphPublicationReason(r));dbDbtNativeProof(dbDbtNode('run-detail'),r);}
  for(const m of r.models||[]){if(m.materialized!=='table')continue;const row=dataopsNode('div','',dbDbtNode('publications'));dataopsNode('p','',row).textContent=m.name;
@@ -11241,7 +11290,7 @@ function dbDbtRender(){
   const target=p.schemas.find(s=>s.id===a?.target_schema),pm=a?.models?.find(x=>x.unique_id===m.unique_id),name=Array.isArray(pm?.relation)?pm.relation[2]:null;
   const review=dbDbtNode('confirmation');review.className='db-dbt-confirm';dataopsNode('h3','',review,'Review publication');
   if(['native_table','native_graph'].includes(r.executor)){const v=p.preview;dbDbtNativeFacts(review,v);if(r.executor==='native_graph'){dataopsNode('p','',review,'Whole graph quality: all saved tests PASSED.');dataopsNode('p','',review,'Only the selected TABLE is published. Dependencies and other TABLEs are not published simultaneously.');}dataopsNode('p','',review,'Native publication requires admin confirmation, quality PASSED and a fresh row audit >= 1. Same-DB MARTS only.');dataopsNode('p','',review,v.expected_target.target===null?'New target (reviewed absent)':'Replace reviewed target');dbDbtNativeProof(review,v);}
-  else{dataopsNode('p','',review,'Target FQN');dataopsNode('p','',review).textContent=target&&name?[a.context.sql_catalog,target.sql_name,name].join('.'):'Unavailable';dataopsNode('pre','',review).textContent=JSON.stringify({node_id:m.unique_id,candidate:m.candidate,wap_version:m.wap_version},null,2);dataopsNode('p','',review,'Publication requires admin and every planned test to pass. Each model publishes independently.');}
+  else{dataopsNode('p','',review,'Target FQN');dataopsNode('p','',review).textContent=target&&name?[a.context.sql_catalog,target.sql_name,name].join('.'):'Unavailable';dataopsNode('pre','',workflowDetails(review,'Candidate Ref details')).textContent=JSON.stringify({node_id:m.unique_id,candidate:m.candidate,wap_version:m.wap_version},null,2);dataopsNode('p','',review,'Publication requires admin and every planned test to pass. Each model publishes independently.');}
   const publish=dataopsButton(review,'db-dbt-publish','Audit and publish',()=>dbDbtSubmit('publish',m.unique_id));publish.className='primary';publish.disabled=locked||!target||!name;dataopsButton(review,'','Close publication review',()=>{p.review=null;p.preview=null;dbDbtRender();});
  }
  }
@@ -11249,6 +11298,10 @@ function dbDbtRender(){
  if(p.standalone){dbDbtSummary(dbDbtNode('publications'),p.standalone);dataopsButton(dbDbtNode('publications'),'','Inspect plan',()=>dbDbtObserve('plan',p.standalone.plan_id)).disabled=locked;}
  const history=dbDbtNode('history');for(const warning of p.historyWarning||[]){const label={run:'Run history unavailable. Retry Refresh dbt history; saved publications remain available.',plan:'Plan history unavailable. Retry Refresh dbt history.',publication:'Publication history unavailable. Retry Refresh dbt history.'}[warning.kind];dataopsNode('p','',history).textContent=t(label)+' '+warning.code;}if(!p.historyWarning&&!p.plans.length&&!p.runs.length&&!p.publicationHistory.length)dataopsNode('p','',history,'No saved records yet. Compile a project to create a plan.');
  for(const [kind,records] of [['plan',p.plans],['run',p.runs],['publication',p.publicationHistory]])for(const x of records){const row=dataopsNode('div','',history);dataopsNode('p','',row).textContent=[x.id,x.context.database_id,x.context.sql_catalog,x.context.sql_schema,x.context.selected_role,x.created_at||'',t(dbDbtState(x))].join(' · ');dataopsButton(row,'',kind==='plan'?'Inspect plan':kind==='publication'?'Observe saved state':'Inspect run',()=>dbDbtObserve(kind,x.id,undefined,kind==='publication')).disabled=locked;}
+ }finally{
+  for(const {node,old,focused} of retained){const next=keyed(node);for(const [key,n] of next)if(n.tagName==='DETAILS'&&old.has(key))n.open=old.get(key).open;
+   if(focused&&next.has(focused)&&!next.get(focused).disabled)next.get(focused).focus();}
+ }
 }
 function dbDbtURL(write=false){
  if(!globalThis.location)return {};const url=new URL(globalThis.location.href),hash=url.hash.slice(1),split=hash.indexOf('?'),prefix=split>=0?hash.slice(0,split):hash.includes('=')?'':hash,params=new URLSearchParams(split>=0?hash.slice(split+1):prefix?'':hash);
@@ -11258,6 +11311,7 @@ function dbDbtURL(write=false){
 }
 async function dbDbtRestore(){const link=dbDbtURL();if(!link.database||![link.plan,link.run,link.publication].some(Boolean)||(link.publication?[link.database,link.publication]:[link.database,link.plan,link.run]).filter(Boolean).some(x=>! /^[a-zA-Z0-9_-]{1,160}$/.test(x)))return;dbDbt.database=link.database;await dbDbtRefresh();if(!dbDbtAllowed())return;await dbDbtObserve(link.publication?'publication':link.run?'run':'plan',link.publication||link.run||link.plan,link.publication?undefined:link.run?link.plan:undefined,!!link.publication);}
 function dbDbtInstall(){
+ Object.assign(i18n.ja,{'Saved plan details':'保存プランの詳細','Execution details':'実行方式の詳細','Compiled model details':'コンパイル済みモデルの詳細','Run effect':'実行対象と影響','Build-only: publication unavailable.':'構築のみ。公開はできません。','Creates SANDBOX candidates; publication requires separate review.':'SANDBOX に候補を作成します。公開には別途確認が必要です。'});
  const p=dbDbt;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.header=currentRole;p.maximum=dbMaximumRole;p.role=currentRole;p.database=dbCurrent()?.database_id||'';p.schema='';p.schemas=[];p.databases=dbRoleItems(p.role);
  // Only Database mode replaces the legacy model controls. Manual WAP/Marts remain separate.
  for(const child of $('transformation-models').children)child.hidden=true;
@@ -11273,7 +11327,7 @@ function dbDbtInstall(){
  const inputs=dataopsNode('div','',body);inputs.className='toolbar';for(const [name,label] of [['project','Approved project'],['source','Source Schema'],['target','Target Schema']])dataopsField(inputs,'db-dbt-'+name,label,'select').onchange=()=>{p.nativeTests=false;dbDbtRender();};
  dataopsField(inputs,'db-dbt-materialization','Staging materialization','select',[['','Project default (no override)'],['ephemeral','Explicit ephemeral override'],['table','Explicit table override']]).onchange=()=>{p.nativeTests=false;dbDbtRender();};
  dataopsNode('p','',body,'Project and schema inputs apply to the next compile. Build and publish use the selected saved artifacts.').className='help';
- dataopsNode('p','',body,'Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.').className='help';
+ dataopsNode('p','',compatibility,'Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.').className='help';
  const saved=dataopsNode('div','',body);saved.className='toolbar';saved.setAttribute('role','group');saved.setAttribute('aria-labelledby','db-dbt-run-label');dataopsNode('span','db-dbt-run-label',saved,'Run saved plan');
  dataopsField(saved,'db-dbt-method','Execution method','select',[['sql_wap','SQL / WAP'],['native_table','Native TABLE'],['native_graph','Native graph (VIEW / TABLE / EPHEMERAL)']]).onchange=()=>{if(p.pending||p.intent)return;const value=dbDbtNode('method').value;if(!['sql_wap','native_table','native_graph'].includes(value))return;p.review=null;p.preview=null;p.method=value;p.node='';p.nativeTests=false;dbDbtRender();};
  const graph=dataopsNode('div','db-dbt-graph-summary',body);dataopsNode('p','db-dbt-graph-reason',graph).setAttribute('aria-live','polite');dataopsNode('p','db-dbt-graph-counts',graph);
@@ -11282,11 +11336,14 @@ function dbDbtInstall(){
  const qualityLabel=dataopsNode('label','',native);const quality=dataopsNode('input','db-dbt-native-tests',qualityLabel);quality.type='checkbox';quality.setAttribute('aria-describedby','db-dbt-native-tests-reason');dataopsNode('span','',qualityLabel,'Run quality tests');quality.onchange=()=>{if(p.pending||p.intent)return;p.nativeTests=quality.checked===true;dbDbtRender();};
  dataopsNode('p','db-dbt-native-tests-reason',native).setAttribute('aria-live','polite');
  dataopsNode('p','db-dbt-native-reason',native).setAttribute('aria-live','polite');
- dataopsNode('p','db-dbt-native-quality-help',body,'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Quality PASSED enables explicit admin review for same-DB MARTS publication and row audit >= 1.').className='help';
- dataopsNode('p','db-dbt-native-help',body,'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.').className='help';
+ const executionDetails=workflowDetails(body,'Execution details');executionDetails.id='db-dbt-execution-details';
+ dataopsNode('p','db-dbt-native-quality-help',executionDetails,'Select Run quality tests to run the complete attached suite against the new candidate. Build-only tests are NOT_RUN. Quality PASSED enables explicit admin review for same-DB MARTS publication and row audit >= 1.').className='help';
+ dataopsNode('p','db-dbt-native-help',executionDetails,'Creates one new same-DB SANDBOX candidate. Tests are not run; publication is unavailable. Execution revalidates current project, policy and sources.').className='help';
+ dataopsNode('p','db-dbt-run-effect',body);
  const actions=dataopsNode('div','',body);actions.className='toolbar';for(const [name,label,fn] of [['compile','Compile project',()=>dbDbtSubmit('compile')],['build','Build candidates and test',()=>dbDbtSubmit('build')],['observe','Observe saved state',()=>dbDbtObserve()],['recover','Recover original receipt',()=>dbDbtRecover()],['close-rejected','Close rejected request and choose again',dbDbtCloseRejected],['cancel','Cancel saved run',()=>dbDbtSubmit('cancel')],['reconcile','Reconcile existing operations',()=>dbDbtSubmit('reconcile')]])dataopsButton(actions,'db-dbt-'+name,label,fn);
  p.status=dataopsNode('p','db-dbt-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('p','db-dbt-reason',body);dataopsNode('p','db-dbt-receipt',body);
- for(const [name,label,tag] of [['plan-detail','Saved plans','div'],['models','Compiled models','div'],['sql','Model SQL and lineage','div'],['run-detail','Saved runs','div'],['candidates','Candidate models','div'],['tests','Tests and failure counts','div'],['publications','Publication','div'],['confirmation',null,'div']]){if(label)dataopsNode('h3','',body,label);const n=dataopsNode(tag,'db-dbt-'+name,body);if(['models','candidates','tests'].includes(name))n.className='table-wrap';}
+ let compiled;
+ for(const [name,label,tag] of [['plan-detail','Saved plans','div'],['models','Compiled models','div'],['sql','Model SQL and lineage','div'],['run-detail','Saved runs','div'],['candidates','Candidate models','div'],['tests','Tests and failure counts','div'],['publications','Publication','div'],['confirmation',null,'div']]){if(name==='models'){compiled=workflowDetails(body,'Compiled model details');compiled.id='db-dbt-compiled-details';}const parent=['models','sql'].includes(name)?compiled:body;if(label)dataopsNode('h3','',parent,label);const n=dataopsNode(tag,'db-dbt-'+name,parent);if(['models','candidates','tests'].includes(name))n.className='table-wrap';}
  dataopsButton(body,'db-dbt-history-refresh','Refresh dbt history',dbDbtHistory);dataopsNode('div','db-dbt-history',body);dbDbtNode('compile').className='primary';dbDbtNode('build').className='run';dbDbtNode('cancel').className='stop';dbDbtRender();
 }
 

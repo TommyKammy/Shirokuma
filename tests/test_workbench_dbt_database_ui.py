@@ -564,6 +564,22 @@ for(const change of [a=>a.origin='native_table',a=>a.origin='sql_wap',a=>a.run_i
 graphAckChange=null;await dbDbtRecover();assert.equal(p.intent,null);assert.deepEqual(posts().at(-1),first);assert.equal(p.publications[ids[2]].origin,'native_graph');assert.equal(receipts.size,2);clearTimeout(p.timer);
 """)
 
+    def test_transformation_disclosures_preserve_focus_and_reset_by_plan_identity(self):
+        self.javascript(r"""
+await compile();const count=posts().length;
+for(const lang of ['ja','en']){
+ setLanguage(lang);dbDbtRender();const compiled=dbDbtNode('compiled-details');assert.ok(!compiled.open);
+ const sql=dbDbtNode('sql').children[0];assert.ok(!sql.open);compiled.open=true;sql.open=true;sql.children[0].focus();
+ dbDbtRender();assert.equal(compiled.open,true);assert.equal(dbDbtNode('sql').children[0].open,true);assert.equal(document.activeElement,dbDbtNode('sql').children[0].children[0]);
+ compiled.open=false;dbDbtNode('sql').children[0].open=false;
+}
+const sql=dbDbtNode('sql').children[0];sql.open=true;dbDbtNode('compiled-details').open=true;
+p.plan={...p.plan,id:'different-plan',error_code:'DBT_SOURCE_CHANGED'};dbDbtRender();
+assert.ok(!dbDbtNode('compiled-details').open);assert.ok(!dbDbtNode('sql').children[0].open);
+assert.ok(dbDbtNode('plan-detail').children.some(n=>n.tagName==='P'&&n.textContent==='DBT_SOURCE_CHANGED'));
+assert.equal(posts().length,count);
+""")
+
     def test_native_presentation_concise_facts_and_closed_full_proofs(self):
         self.javascript(NATIVE_PUBLICATION + r"""
 function visible(n){return n.textContent+' '+(n.tagName==='DETAILS'&&!n.open?n.children.filter(c=>c.tagName==='SUMMARY'):n.children).map(visible).join(' ');}
@@ -590,7 +606,9 @@ for(const state of ['PUBLISHED','COMMITTED_RECORDING_FAILED','UNKNOWN']){
  assert.ok(shown.includes('Committed: '+publication.committed));assert.match(shown,/Published Snapshot: published-snapshot/);
  assert.doesNotMatch(shown,/full-quality-proof|full-build-proof|publish-op/);
  assert.deepEqual(JSON.parse(raw.textContent).native_publication,publication.native_publication);
- raw.parentElement.open=true;assert.match(visible(node),/full-build-proof/);
+ raw.parentElement.open=true;raw.parentElement.children[0].focus();dbDbtRender();
+ const retained=dbDbtNode('publications').descendants().find(n=>n.tagName==='DETAILS'&&text(n).includes('Native proof details'));assert.equal(retained.open,true);assert.equal(document.activeElement,retained.children[0]);assert.match(visible(dbDbtNode('publications')),/full-build-proof/);
+ retained.open=false;
  const operations=node.descendants().find(n=>n.tagName==='DETAILS'&&text(n).includes('Operation IDs'));assert.ok(operations);assert.ok(!operations.open);
 }
 const standalone=document.createElement('div');dbDbtNativeFacts(standalone,{...JSON.parse(preview),expected_target:{target:{snapshot:'reviewed-snapshot'}}});
@@ -1210,7 +1228,7 @@ run.operations=Array.from({length:12},(_,i)=>({id:'full-operation-'+i+'-<img src
 await dbDbtObserve('run','run-1');
 for(const lang of ['en','ja']){
  setLanguage(lang);dbDbtRender();
- const area=dbDbtNode('run-detail'),detail=area.children.find(n=>n.tagName==='DETAILS');
+ const area=dbDbtNode('run-detail'),detail=area.children.find(n=>n.tagName==='DETAILS'&&/Operation IDs|操作 ID/.test(text(n.children[0])));
  assert.ok(detail);assert.equal(Boolean(detail.open),false);assert.equal(detail.children[0].tagName,'SUMMARY');
  assert.match(text(detail.children[0]),lang==='ja'?/操作 ID \(12件\)/:/Operation IDs \(12\)/);
  const summary=text(detail.children[0]).replace(/\s+/g,' ');
@@ -1576,7 +1594,7 @@ for(const lang of ['ja','en']){
  assert.match(text(dbDbtNode('models')),/PARQUET/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/コネクタ既定/:/Connector default/);
 }
-const detail=dbDbtNode('plan-detail');assert.ok(detail.children.indexOf(dbDbtNode('compatibility'))<detail.children.length-1);
+const detail=dbDbtNode('plan-detail');assert.equal(dbDbtNode('compatibility').parentElement,detail);assert.ok(detail.children.some(n=>n.tagName==='DETAILS'&&!n.open));
 await dbDbtSubmit('build');assert.match(text(dbDbtNode('candidates')),/PARQUET/);
 assert.match(text(dbDbtNode('candidates')),/Connector default/);
 // Run format is read from the run, never inferred from a subsequently inspected plan.

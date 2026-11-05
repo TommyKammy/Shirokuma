@@ -37,6 +37,19 @@ class MartsUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
 
+    def test_mart_disclosures_keep_results_visible_and_focus_by_record(self):
+        self.javascript(r'''
+await createMart();await dbMartsSubmit('refresh');const count=posts().length;
+for(const lang of ['ja','en']){
+ setLanguage(lang);dbMartsRender();const raw=$('db-marts-run-detail').descendants().find(n=>n.tagName==='PRE');assert.equal(raw.parentElement.tagName,'DETAILS');assert.ok(!raw.parentElement.open);
+ assert.ok($('db-marts-run-detail').children.some(n=>n.tagName==='P'&&n.textContent.includes('succeeded')));
+ assert.ok($('db-marts-run-detail').children.some(n=>n.tagName==='P'&&n.textContent.includes('true')));
+ raw.parentElement.open=true;raw.parentElement.children[0].focus();dbMartsRender();const next=$('db-marts-run-detail').descendants().find(n=>n.tagName==='PRE').parentElement;assert.equal(next.open,true);assert.equal(document.activeElement,next.children[0]);next.open=false;
+}
+const definition=$('db-marts-definition-detail').parentElement;assert.ok(!definition.open);definition.open=true;dbMartsRender();assert.equal(definition.open,true);
+p.mart={...p.mart,revision:p.mart.revision+1};dbMartsRender();assert.equal(definition.open,false);assert.equal(posts().length,count);
+''')
+
     def test_explicit_model_full_context_header_quality_and_current_target(self):
         self.javascript(r'''
 await createMart();const save=posts()[0],body=JSON.parse(save.options.body);
