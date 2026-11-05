@@ -585,7 +585,44 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-creation-next-action{font-weight:600;max-width:75ch}
 #db-creation-actions{margin-block:16px;overflow-wrap:anywhere}
 #db-creation-observation{max-width:75ch;font-size:13px}
-#db-audit-panel .toolbar{flex-wrap:wrap;align-items:end}#db-audit-panel .field{min-width:9rem;flex:1}#db-audit-panel .field input,#db-audit-panel .field select{width:100%;max-width:100%;min-width:0}#db-audit-panel .table-wrap{max-width:100%;overflow-x:auto}#db-audit-panel td{overflow-wrap:anywhere}#db-audit-context,#db-audit-detail,#db-audit-preview{overflow-wrap:anywhere}
+#db-audit-panel{padding:20px;container:db-audit / inline-size}
+#db-audit-panel>*{min-width:0;max-width:100%}
+#db-audit-panel>h2{margin:0 0 12px}
+#db-audit-panel p{overflow-wrap:anywhere}
+#db-audit-panel #db-audit-target{margin:0 0 24px}
+#db-audit-panel .toolbar{flex-wrap:wrap;align-items:end;gap:12px}
+#db-audit-panel .field{display:grid;gap:6px;min-width:0;max-width:100%;flex:1 1 220px}
+#db-audit-panel .field label{margin:0;overflow-wrap:anywhere}
+#db-audit-panel .field input,#db-audit-panel .field select{width:100%;max-width:100%;min-width:0}
+#db-audit-panel button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#db-audit-panel #db-audit-form{display:grid;grid-template-columns:minmax(0,1fr);gap:20px 12px;margin-bottom:24px}
+#db-audit-panel #db-audit-submit{grid-column:1 / -1;justify-self:end}
+#db-audit-panel #db-audit-presets-label{flex-basis:100%;font-weight:600}
+#db-audit-panel #db-audit-presets-help{margin:8px 0 24px}
+#db-audit-panel #db-audit-status{margin:0 0 12px}
+#db-audit-panel #db-audit-context{margin-bottom:20px;overflow-wrap:anywhere}
+#db-audit-panel .table-wrap{max-width:100%;overflow-x:auto}
+#db-audit-panel td{overflow-wrap:anywhere}
+#db-audit-panel>#db-audit-rows+.toolbar{margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
+#db-audit-panel #db-audit-detail{margin-top:24px;overflow-wrap:anywhere}
+#db-audit-panel #db-audit-detail:empty{margin-top:0}
+#db-audit-panel #db-audit-guide{margin-block:24px;padding-top:20px;border-top:1px solid var(--line)}
+#db-audit-panel #db-audit-guide p{margin-block:12px}
+#db-audit-panel #db-audit-guide li+li{margin-top:8px}
+#db-audit-panel #db-audit-preview-controls{margin-top:20px}
+#db-audit-panel #db-audit-preview-controls p{margin:0 0 12px}
+#db-audit-panel #db-audit-preview{margin-top:20px;overflow-wrap:anywhere}
+@container db-audit (min-width:480px){
+ #db-audit-panel #db-audit-form{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@container db-audit (min-width:760px){
+ #db-audit-panel #db-audit-form{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container db-audit (min-width:1380px){
+ #db-audit-panel #db-audit-form{grid-template-columns:repeat(6,minmax(0,1fr))}
+ #db-audit-panel #db-audit-form>.field:nth-child(-n+3){grid-column:span 2}
+}
+@media(max-width:600px){#db-audit-panel{padding:14px}}
 #runtime-panel{min-width:0;max-width:100%}
 #runtime-panel p{max-width:75ch;overflow-wrap:anywhere;margin:0 0 8px}
 #runtime-panel p:last-child{margin-bottom:0}#runtime-panel p:empty{display:none}
