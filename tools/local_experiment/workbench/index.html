@@ -72,10 +72,8 @@ label{display:block;margin:12px 0 4px;font-size:12px;font-weight:600;color:var(-
 form small,.help{display:block;margin:4px 0 0;font-size:12px;color:var(--muted)}
 .job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;min-width:0}
 .job-fields>*{min-width:0}
-#db-jobs-panel .job-fields{grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr))}
 #db-jobs-panel .job-json{grid-column:1/-1}
 #db-jobs-panel textarea{width:100%;min-height:7rem}
-#db-jobs-panel .toolbar{flex-wrap:wrap;margin-bottom:12px}
 #db-jobs-panel h2,#db-jobs-panel h3{margin-bottom:10px}
 #db-jobs-history>div{border-top:1px solid var(--line);padding:12px 0}
 .job-enable-label{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;font-weight:500;color:var(--ink)}
@@ -375,6 +373,37 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
 .bear-list .badge{font-size:11px}
 
+/* Jobs: size each workflow row from the available panel width. */
+#db-jobs-panel{container:db-jobs / inline-size}
+#db-jobs-panel .panel-body{padding:20px}
+#db-jobs-panel label{margin:0 0 6px}
+#db-jobs-panel .toolbar{align-items:end;gap:12px;margin-bottom:20px}
+#db-jobs-panel .toolbar :is(input:not([type=checkbox]),select){width:100%}
+#db-jobs-panel button{white-space:normal}
+#db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar,.jobs-input-row){display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+#db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar,.jobs-input-row)>*{min-width:0}
+#db-jobs-panel #db-jobs-form{margin-block:24px}
+#db-jobs-panel #db-jobs-form>.job-fields{grid-template-columns:minmax(0,1fr);gap:18px 12px;margin-top:20px}
+#db-jobs-panel #db-jobs-form>.workflow-details{margin-top:20px}
+#db-jobs-panel #db-jobs-files{margin-top:20px}
+#db-jobs-panel .jobs-actions{margin-top:20px}
+#db-jobs-panel #db-jobs-next{margin-block:12px 20px}
+#db-jobs-panel #db-jobs-run-detail:not(:empty){margin-block:20px}
+/* Keep the shared schedule independent of the Job definition grid. */
+#db-jobs-panel #db-schedule-job-form>.job-fields{grid-template-columns:minmax(0,1fr);gap:18px 12px;margin-block:20px}
+#db-jobs-panel #db-schedule-job-form .job-fields>div:has(>#db-schedule-job-arguments){grid-column:1/-1}
+#db-jobs-panel #db-schedule-job-weekdays{grid-column:1/-1}
+#db-jobs-panel .panel-body>.toolbar>div:has(>#db-schedule-job-list){flex:1 1 260px}
+@container db-jobs (min-width:600px){
+ #db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-jobs-panel :is(#db-jobs-form,#db-schedule-job-form)>.job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-jobs-panel .jobs-input-row{grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto}
+}
+@container db-jobs (min-width:960px){
+ #db-jobs-panel .jobs-context-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr) auto}
+ #db-jobs-panel .jobs-saved-toolbar{grid-template-columns:minmax(0,1fr) auto auto auto}
+}
+@media(max-width:600px){#db-jobs-panel .panel-body{padding:14px}}
 #db-jobs-panel :is(.panel-body,.toolbar,.job-fields,.job-json,form,details){min-width:0;max-width:100%}
 #db-jobs-panel :is(p,summary,strong,span,button){overflow-wrap:anywhere}
 #db-jobs-panel :is(input,select,textarea){min-width:0;max-width:100%;box-sizing:border-box}
@@ -10217,17 +10246,17 @@ function dbJobsInstall(){
  p.principal=dbPrincipal;p.role=dbCurrent()?.selected_role||currentRole;p.database=dbCurrent()?.database_id||'';p.schema=dbCurrent()?.schema_id||'';p.schemas=[];p.databases=dbRoleItems(p.role);p.files=[];
  for(const child of $('jobs').children)child.hidden=true;
  const root=dataopsNode('section','db-jobs-panel',$('jobs'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Database Jobs');dataopsNode('p','',body,'Jobs context is independent of worksheets and Explorer.').className='help';
- const selectors=dataopsNode('div','',body);selectors.className='toolbar';
+ const selectors=dataopsNode('div','',body);selectors.className='toolbar jobs-context-toolbar';
  for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){
   const node=dataopsField(selectors,'db-jobs-'+key,label,'select');node.onchange=()=>{dbJobsCapture();p[key]=node.value;p.job=null;p.selection='';p.save=null;p.history=[];p.jobs=[];p.context=null;p.invalid=true;for(const k of dbJobsFields)$('db-jobs-'+k).value='';if(key==='database')p.schema='';return dbJobsRefresh();};
  }
  dataopsButton(selectors,'db-jobs-refresh','Refresh Jobs',dbJobsRefresh);
- const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-jobs-list','Saved Jobs','select').onchange=()=>{p.selection=$('db-jobs-list').value;};dataopsButton(saved,'db-jobs-load','Load Job',()=>dbJobsLoad());dataopsButton(saved,'db-jobs-reload','Load current revision',()=>dbJobsLoad(true));
+ const saved=dataopsNode('div','',body);saved.className='toolbar jobs-saved-toolbar';dataopsField(saved,'db-jobs-list','Saved Jobs','select').onchange=()=>{p.selection=$('db-jobs-list').value;};dataopsButton(saved,'db-jobs-load','Load Job',()=>dbJobsLoad());dataopsButton(saved,'db-jobs-reload','Load current revision',()=>dbJobsLoad(true));
  dataopsButton(saved,'db-jobs-new','New Job',()=>{if(p.pending||p.invalid)return;dbJobsCapture();++p.request;dbJobsEditor();});
  dataopsNode('p','db-jobs-current',body);dataopsNode('p','db-jobs-context',body).className='help';
  p.status=dataopsNode('p','db-jobs-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
  dataopsNode('p','db-jobs-next',body);
- const controls=dataopsNode('div','',body);controls.className='toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['retry','Retry original Job request','retry'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
+ const controls=dataopsNode('div','',body);controls.className='toolbar jobs-control-toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['retry','Retry original Job request','retry'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
  $('db-jobs-retry').setAttribute('aria-describedby','db-jobs-retry-help');
  dataopsNode('div','db-jobs-run-detail',body).setAttribute('aria-live','polite');
  p.form=dataopsNode('form','db-jobs-form',body);p.form.onsubmit=e=>e.preventDefault();
@@ -10240,8 +10269,8 @@ function dbJobsInstall(){
  dataopsNode('p','',definitionHelp,'SQL: sql and mode. Alert: read-only Boolean sql. Ingest: input, mode and target or destination. WAP refresh: model_id and version. Table export: source and format (csv/jsonl).').className='help';
  const inputHelp=dataopsNode('details','db-jobs-input-help',p.form);inputHelp.className='workflow-details';inputHelp.open=false;dataopsNode('summary','',inputHelp,'Parameter and input help');
  dataopsNode('p','',inputHelp,'Provide parameter definitions and typed arguments as JSON. Files use the input name referenced by an ingest step.').className='help';
- dataopsNode('div','db-jobs-files',p.form);dataopsButton(p.form,'db-jobs-add-input','Add named input',()=>{if(p.pending||p.invalid)return;const row=dataopsNode('div','',$('db-jobs-files'));row.className='toolbar';const id=crypto.randomUUID(),name=dataopsField(row,'db-job-input-name-'+id,'Input name'),file=dataopsField(row,'db-job-input-file-'+id,'Input file');file.type='file';const record={name,file,row};p.files.push(record);dataopsButton(row,'','Remove',()=>{if(p.pending)return;file.value='';name.value='';p.files=p.files.filter(r=>r!==record);$('db-jobs-files').replaceChildren(...p.files.map(r=>r.row));});});
- const actions=dataopsNode('div','',p.form);actions.className='toolbar';dataopsButton(actions,'db-jobs-save','Save Job',dbJobsSave).className='primary';dataopsButton(actions,'db-jobs-run','Run Job',dbJobsRun).className='run';
+ dataopsNode('div','db-jobs-files',p.form);dataopsButton(p.form,'db-jobs-add-input','Add named input',()=>{if(p.pending||p.invalid)return;const row=dataopsNode('div','',$('db-jobs-files'));row.className='toolbar jobs-input-row';const id=crypto.randomUUID(),name=dataopsField(row,'db-job-input-name-'+id,'Input name'),file=dataopsField(row,'db-job-input-file-'+id,'Input file');file.type='file';const record={name,file,row};p.files.push(record);dataopsButton(row,'','Remove',()=>{if(p.pending)return;file.value='';name.value='';p.files=p.files.filter(r=>r!==record);$('db-jobs-files').replaceChildren(...p.files.map(r=>r.row));});});
+ const actions=dataopsNode('div','',p.form);actions.className='toolbar jobs-actions';dataopsButton(actions,'db-jobs-save','Save Job',dbJobsSave).className='primary';dataopsButton(actions,'db-jobs-run','Run Job',dbJobsRun).className='run';
  dataopsNode('h3','',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
  if(activeTab==='jobs')void dbJobsOpen();
 }
