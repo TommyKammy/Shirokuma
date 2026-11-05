@@ -545,6 +545,66 @@ with patch.object(lifecycle,'_lock',side_effect=AssertionError('warm lock')),pat
             with self.assertRaisesRegex(Exception,'RECOVERY_REQUIRED'):
                 lifecycle.ensure_awake(actor='owner',authorize=lambda:None)
 
+    def test_no_effect_stop_exception_requires_live_safe_admission_and_shared_gate(self):
+        import json
+        import warehouse_runtime_routes as runtime
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            handle = admission.admit(db, actor='owner', kind='query', subject_id='waiter')
+            metadata = dict(process=runtime._PROCESS, pid=os.getpid())
+            db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+                ('stop','owner','WAREHOUSE_CHILL','["LOCAL"]',None,'RUNNING','[]',None,json.dumps(metadata),'{}'))
+        def blocked():
+            with store.connect() as db:
+                return bool(lifecycle._incompatible_runtime(db))
+        self.assertTrue(blocked())
+        with admission.accepted(handle):
+            self.assertTrue(blocked())  # A capability alone does not protect against physical stop.
+            with admission.lifecycle_gate():
+                self.assertFalse(blocked())
+                for changes in ({'physical_started': True}, {'stopping_barrier': True},
+                                {'stopping_barrier': 1}, {'physical_started': 'true'},
+                                {'stopping_barrier': None}, {'process': 'orphan'}, {'pid': 99999999}):
+                    with self.subTest(metadata=changes), store.connect() as db:
+                        db.execute('UPDATE operations SET before_after=? WHERE id=?',
+                                   (json.dumps(dict(metadata, **changes)), 'stop'))
+                        self.assertTrue(lifecycle._incompatible_runtime(db))
+                with store.connect() as db:
+                    db.execute('UPDATE operations SET before_after=? WHERE id=?', (json.dumps(metadata), 'stop'))
+                for action, state in [('WAREHOUSE_CHILL','UNKNOWN'), ('WAREHOUSE_RECONCILE','RUNNING')]:
+                    with self.subTest(action=action, state=state), store.connect() as db:
+                        db.execute('UPDATE operations SET action=?,state=? WHERE id=?', (action,state,'stop'))
+                        self.assertTrue(lifecycle._incompatible_runtime(db))
+                with store.connect() as db:
+                    db.execute("UPDATE operations SET action='WAREHOUSE_CHILL',state='RUNNING' WHERE id='stop'")
+                for state in ('DRAINING','APPLYING','UNKNOWN'):
+                    with self.subTest(control=state), store.connect() as db:
+                        db.execute('UPDATE warehouse_controls SET state=? WHERE warehouse_id=?', (state,'LOCAL'))
+                        self.assertTrue(lifecycle._incompatible_runtime(db))
+                with store.connect() as db:
+                    db.execute("UPDATE warehouse_controls SET state='OPEN' WHERE warehouse_id='LOCAL'")
+                for state in ('UNKNOWN','CANCELED','FINISHED'):
+                    with self.subTest(admission=state), store.connect() as db:
+                        db.execute('UPDATE warehouse_admissions SET state=? WHERE id=?', (state,handle.id))
+                        self.assertTrue(lifecycle._incompatible_runtime(db))
+                with store.connect() as db:
+                    db.execute("UPDATE warehouse_admissions SET state='UNKNOWN',execution_closure='FENCED_READ_ONLY' WHERE id=?", (handle.id,))
+                    with self.assertRaises(admission.AdmissionConflict):
+                        lifecycle._incompatible_runtime(db)
+
+    def test_warm_fast_path_holds_shared_gate_for_safe_stop_exception(self):
+        import json
+        import warehouse_runtime_routes as runtime
+        with store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            handle = admission.admit(db, actor='owner', kind='query', subject_id='warm-waiter')
+            db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+                ('stop','owner','WAREHOUSE_CHILL','["LOCAL"]',None,'ACCEPTED','[]',None,
+                 json.dumps(dict(process=runtime._PROCESS,pid=os.getpid())), '{}'))
+        with admission.accepted(handle), patch.object(lifecycle, 'requires_wake', return_value=False), \
+                patch.object(lifecycle, '_lock', side_effect=AssertionError('warm path acquired physical lock')):
+            self.assertTrue(lifecycle.ensure_awake(actor='owner', authorize=lambda: None)['engine_verified'])
+
 
     def test_metric_aggregate_uses_real_provider_request_and_fresh_private_identity(self):
         import base64
@@ -957,6 +1017,118 @@ lifecycle.observe_startup(provider)
 
 
 class CompletedQueryIntegrationTests(unittest.TestCase):
+    def test_same_epoch_waiter_preserves_initial_sql_post(self):
+        from contextlib import ExitStack, contextmanager, nullcontext
+        import data_management
+        import query_context
+        import query_service
+        import request_auth
+        import warehouse_resident as wr
+        from test_request_auth import PrincipalTests
+        fixture = PrincipalTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        with store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET warehouse_id='LOCAL'")
+            schema = data_management.create_schema(db, fixture.sales, 'marts', 'Marts', 'marts', 'test')
+        principal = fixture.principal()
+        context = query_context.resolve_context(principal, fixture.sales, schema.id, 'bi_viewer',
+            warehouse_id='LOCAL', expected_binding_revision=1)
+        decision = request_auth.authorize_database(principal, fixture.sales, 'bi_viewer',
+            expected_generation_id=context.generation_id)
+        config = dict(warehouse_id='LOCAL', foundation_generation_id=context.generation_id, foundation_revision=1)
+        wake_started, waiter_waiting, post_started, waiter_finished = [threading.Event() for _ in range(4)]
+        broken_post = threading.Event()
+        ready = threading.Event()
+        original_lock = lifecycle._lock
+        lock_calls = []
+        closes = []
+        pins = {}
+
+        class Provider:
+            bound = True
+            def compute_state(inner): return 'ACTIVE'
+            def bound_alive(inner): return inner.bound
+            def close(inner):
+                closes.append(True)
+                inner.bound = False
+                if post_started.is_set(): broken_post.set()
+            def open(inner): inner.bound = True
+            def bind_registered(inner, proof):
+                self.assertEqual(proof, {'saved': 'registered-proof'})
+
+        provider = Provider()
+
+        @contextmanager
+        def ordered_lock(cancelled=None):
+            # The first waiter owns the physical Wake. The second has already
+            # observed a cold local epoch before waiting for serialization.
+            lock_calls.append(threading.get_ident())
+            second = len(lock_calls) == 2
+            if second:
+                waiter_waiting.set()
+                self.assertTrue(post_started.wait(5))
+            with original_lock(cancelled):
+                try:
+                    yield
+                finally:
+                    if second: waiter_finished.set()
+
+        def physical(*args, **kwargs):
+            kwargs['mutation_started']()
+            wake_started.set()
+            self.assertTrue(waiter_waiting.wait(5))
+            ready.set()
+            return {'state': 'active'}
+
+        def transport(url, method, pin, body=None):
+            self.assertEqual(method, 'POST')
+            if body == b'SELECT 1':
+                self.assertTrue(provider.bound_alive())
+                post_started.set()
+                self.assertTrue(waiter_finished.wait(5))
+                if broken_post.is_set():
+                    raise ConnectionError('Provider closed the borrowed tunnel during initial POST')
+            return dict(id='backend-' + body.decode().split()[-1], data=[[1]])
+
+        def cleanup():
+            for pin in pins.values(): query_service._close_query_owner(pin)
+        self.addCleanup(cleanup)
+        with ExitStack() as owner:
+            transition = owner.enter_context(patch.object(wr, '_logical_transition', side_effect=physical))
+            invalidate = owner.enter_context(patch.object(wr, 'invalidate_persistent_trino', wraps=wr.invalidate_persistent_trino))
+            patches = [patch.object(lifecycle, 'applicable', return_value=True),
+                patch('runtime_profile.logical_config', return_value=config),
+                patch.object(lifecycle, '_LOCAL_PROOF_ID', None),
+                patch.object(lifecycle, '_lock', side_effect=ordered_lock),
+                patch.object(query_service, '_pins', pins), patch.object(query_service, '_origin', None),
+                patch.object(query_service, '_lifetime', owner),
+                patch('trino_auth.prepare_backend_v2', return_value=(decision, {'X-Trino-User': 'scoped'})),
+                patch('trino_auth.backend_ssl_context', return_value=None), patch('trino_auth.validate_backend_url'),
+                patch.object(wr, 'persistent_trino', side_effect=lambda: nullcontext('https://trusted:8443')),
+                patch.object(query_service, '_transport', side_effect=transport),
+                patch.object(wr, '_logical_foundation', return_value={'saved': True}),
+                patch.object(wr, '_logical_wake_expected', return_value={}),
+                patch.object(wr, '_logical_status', side_effect=lambda *args: {'state': 'active' if ready.is_set() else 'chilled'}),
+                patch('logical_creations._provider', provider), patch('logical_creations._bound_profile'),
+                patch('logical_creations._foundation', return_value={'verification_ref': 'saved'}),
+                patch('logical_creations._registered_probe', return_value={'saved': 'registered-proof'})]
+            for item in patches: owner.enter_context(item)
+            first = query_service.submit(principal, context, 'SELECT 1', mode='read-only',
+                max_rows=10, request_id='first-waiter', worksheet_id=None)
+            self.assertTrue(wake_started.wait(5))
+            second = query_service.submit(principal, context, 'SELECT 2', mode='read-only',
+                max_rows=10, request_id='second-waiter', worksheet_id=None)
+            for page in (first, second):
+                self.assertTrue(pins[page['id']].initial_done.wait(10))
+            self.assertEqual(query_service._row(first['id'])['state'], 'FINISHED')
+            self.assertEqual(query_service._row(second['id'])['state'], 'FINISHED')
+            self.assertFalse(broken_post.is_set())
+            self.assertEqual(len(closes), 1)
+            invalidate.assert_called_once()
+            transition.assert_called_once()
+            self.assertFalse(lifecycle.requires_wake())
+
     def test_real_completed_submit_uses_warm_lifecycle_without_physical_probe(self):
         from contextlib import ExitStack, nullcontext
         import data_management

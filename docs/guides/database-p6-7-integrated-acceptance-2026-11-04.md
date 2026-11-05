@@ -4,13 +4,15 @@ doc_id: DB-P6-7
 title: Database Workbench integration acceptance
 status: in_progress
 created: 2026-11-04
-updated: 2026-11-04
-version: "0.7"
+updated: 2026-11-05
+version: "0.8"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
 
 # DB-P6-7 Workbench統合受入
+
+2026-11-05 JST、[M1前の小規模負荷確認](database-p6-7-small-load-2026-11-05.md)で、固定LOCALのSQL・Ingest・Job混合負荷、起動待ちSQLの取消、処理中の休止拒否、休止復帰後のデータ保持を確認した。発見した共有起動時の競合2件を修正し、UNKNOWNの元履歴を保持した回復と最終再試験を記録した。M1本人受入の判定は継続する。
 
 2026-11-04 JST、6F-R1を含む `9e9ce251` を基準に、現行ラボの通常Workbenchで予備縦断に着手した。専用の新規DB `p67_integrated_20261104` と合成データを使った。独立したclean環境と故障環境での受入は別の判定欄に置く。[統合受入条件](database-full-capability-and-compute-plan-2026-10-28.md#db-p6-7-統合受入)
 

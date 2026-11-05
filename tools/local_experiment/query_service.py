@@ -567,9 +567,10 @@ def _ensure_query_awake(principal, query_id):
     import warehouse_lifecycle as lifecycle
     if lifecycle.applicable():
         _wake_authorize(principal, query_id)
-        lifecycle.ensure_awake(actor=principal.principal_id,
-            authorize=lambda: _wake_authorize(principal, query_id),
-            cancelled=lambda: _row(query_id)['state'] in _TERMINAL)
+        with admission.accepted(_pins[query_id].admission):
+            lifecycle.ensure_awake(actor=principal.principal_id,
+                authorize=lambda: _wake_authorize(principal, query_id),
+                cancelled=lambda: _row(query_id)['state'] in _TERMINAL)
         _wake_authorize(principal, query_id)
         return True
     return False

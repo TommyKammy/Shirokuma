@@ -236,84 +236,108 @@ def ensure_awake(*, actor, authorize, cancelled=None):
     authorize()
     if cancelled and cancelled():
         raise OperationError('WAKE_CANCELED',409)
-    if _warm_ready():
-        return dict(state='active',engine_verified=True)
-    with admission.lifecycle_gate(), _lock(cancelled):
-        authorize()
-        if cancelled and cancelled():
-            raise OperationError('WAKE_CANCELED', 409)
-        with control_store.connect() as db:
-            foundation = wr._logical_foundation(db)
-            admission.check_open(db, 'LOCAL')
-            import warehouse_runtime_routes as runtime
-            if _incompatible_runtime(db):
-                raise OperationError('WAREHOUSE_RECOVERY_REQUIRED', 409)
-            if any(row['kind'] == 'wake' for row in admission.blockers(db)):
-                raise OperationError('WAREHOUSE_RECOVERY_REQUIRED', 409)
-            expected = wr._logical_wake_expected(foundation, db)
-            observed = wr._logical_status('LOCAL', foundation)
-        shared = _shared_proof()
-        if observed['state'] == 'active' and shared is not None:
-            import logical_creations
-            try:
-                _repair_provider()
-                authorize()
-                _adopt_proof(shared)
-            except BaseException:
-                invalidate_proof()
-                raise
-            return dict(state='active', engine_verified=True)
-        # Wake is independent of the waiting query's capability and cancellation.
-        token = admission._current.set(None)
-        operation_token = None
-        automatic_operation = None
-        try:
+    with admission.lifecycle_gate():
+        if _warm_ready():
+            return dict(state='active',engine_verified=True)
+        with _lock(cancelled):
             authorize()
+            if cancelled and cancelled():
+                raise OperationError('WAKE_CANCELED', 409)
+            # Another local waiter may have repaired and adopted this epoch
+            # while we waited. Rebinding again would close its active tunnels.
+            if _warm_ready():
+                return dict(state='active', engine_verified=True)
             with control_store.connect() as db:
-                db.execute('BEGIN IMMEDIATE')
-                handle = admission.admit(db, actor=actor, kind='wake', subject_id=str(uuid.uuid4()))
-                if _management_operation.get() is None:
-                    import warehouse_runtime_routes as runtime
-                    automatic_operation = handle.subject_id
-                    db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
-                        (automatic_operation,actor,'WAREHOUSE_WAKE','["LOCAL"]',None,'RUNNING','[]',None,
-                         json.dumps(dict(process=runtime._PROCESS,pid=os.getpid())),json.dumps(dict(started=admission._now()))))
-                    operation_token = _management_operation.set(automatic_operation)
-            started = False
-            try:
-                with admission.accepted(handle), control_store.connect() as db:
-                    authorize()
-                    if cancelled and cancelled():
-                        raise OperationError('WAKE_CANCELED', 409)
-                    def dispatch():
-                        nonlocal started
-                        mark_physical_started()
-                        started = True
-                    result = wr._logical_transition('wake', 'LOCAL', foundation, db, authorize=authorize, mutation_started=dispatch)
+                foundation = wr._logical_foundation(db)
+                admission.check_open(db, 'LOCAL')
+                import warehouse_runtime_routes as runtime
+                if _incompatible_runtime(db):
+                    raise OperationError('WAREHOUSE_RECOVERY_REQUIRED', 409)
+                if any(row['kind'] == 'wake' for row in admission.blockers(db)):
+                    raise OperationError('WAREHOUSE_RECOVERY_REQUIRED', 409)
+                expected = wr._logical_wake_expected(foundation, db)
+                observed = wr._logical_status('LOCAL', foundation)
+            shared = _shared_proof()
+            if observed['state'] == 'active' and shared is not None:
                 import logical_creations
-                _repair_provider()
-                _save_proof()
-                _finish(handle, 'FINISHED')
-                if automatic_operation:
-                    runtime._update(automatic_operation,'SUCCEEDED')
-            except BaseException as error:
-                invalidate_proof()
-                outcome = 'UNKNOWN' if started else 'CANCELED' if getattr(error, 'code', None) == 'WAKE_CANCELED' else 'FAILED'
-                _finish(handle, outcome)
-                if automatic_operation:
-                    runtime._update(automatic_operation,'UNKNOWN' if started else 'FAILED','WAREHOUSE_WAKE_FAILED')
-                raise
-        finally:
-            if operation_token is not None:
-                _management_operation.reset(operation_token)
-            admission._current.reset(token)
-        return dict(result, engine_verified=True)
+                try:
+                    _repair_provider()
+                    authorize()
+                    _adopt_proof(shared)
+                except BaseException:
+                    invalidate_proof()
+                    raise
+                return dict(state='active', engine_verified=True)
+            # Wake is independent of the waiting query's capability and cancellation.
+            token = admission._current.set(None)
+            operation_token = None
+            automatic_operation = None
+            try:
+                authorize()
+                with control_store.connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    handle = admission.admit(db, actor=actor, kind='wake', subject_id=str(uuid.uuid4()))
+                    if _management_operation.get() is None:
+                        import warehouse_runtime_routes as runtime
+                        automatic_operation = handle.subject_id
+                        db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+                            (automatic_operation,actor,'WAREHOUSE_WAKE','["LOCAL"]',None,'RUNNING','[]',None,
+                             json.dumps(dict(process=runtime._PROCESS,pid=os.getpid())),json.dumps(dict(started=admission._now()))))
+                        operation_token = _management_operation.set(automatic_operation)
+                started = False
+                try:
+                    with admission.accepted(handle), control_store.connect() as db:
+                        authorize()
+                        if cancelled and cancelled():
+                            raise OperationError('WAKE_CANCELED', 409)
+                        def dispatch():
+                            nonlocal started
+                            mark_physical_started()
+                            started = True
+                        result = wr._logical_transition('wake', 'LOCAL', foundation, db, authorize=authorize, mutation_started=dispatch)
+                    import logical_creations
+                    _repair_provider()
+                    _save_proof()
+                    _finish(handle, 'FINISHED')
+                    if automatic_operation:
+                        runtime._update(automatic_operation,'SUCCEEDED')
+                except BaseException as error:
+                    invalidate_proof()
+                    outcome = 'UNKNOWN' if started else 'CANCELED' if getattr(error, 'code', None) == 'WAKE_CANCELED' else 'FAILED'
+                    _finish(handle, outcome)
+                    if automatic_operation:
+                        runtime._update(automatic_operation,'UNKNOWN' if started else 'FAILED','WAREHOUSE_WAKE_FAILED')
+                    raise
+            finally:
+                if operation_token is not None:
+                    _management_operation.reset(operation_token)
+                admission._current.reset(token)
+            return dict(result, engine_verified=True)
 
 
 def _incompatible_runtime(db):
     import warehouse_runtime_routes as runtime
-    return tuple(row for row in runtime_blockers(db)
-        if not (row['action'] == 'WAREHOUSE_WAKE' and runtime._operation(row)['phase'] in ('ACCEPTED','RUNNING')))
+    handle = admission.current()
+    continuing = (getattr(admission._held, 'mode', None) == 'shared'
+        and handle is not None and handle.warehouse_id == 'LOCAL'
+        and admission.control(db)['state'] == 'OPEN'
+        and admission.check_execution(db, handle)['state'] == 'ACTIVE')
+    result = []
+    for row in runtime_blockers(db):
+        live = runtime._operation(row)['phase'] in ('ACCEPTED','RUNNING')
+        if row['action'] == 'WAREHOUSE_WAKE' and live:
+            continue
+        metadata = json.loads(row['before_after'])
+        # A live stop waiting for our shared gate cannot pass check_lifecycle
+        # while this accepted work remains ACTIVE. Never bypass a physical or
+        # persisted stop fence, lost owner, or an unscoped/new caller.
+        if (continuing and live and row['action'] in ('WAREHOUSE_CHILL','WAREHOUSE_AUTO_CHILL')
+                and json.loads(row['targets']) == ['LOCAL']
+                and metadata.get('stopping_barrier', False) is False
+                and metadata.get('physical_started', False) is False):
+            continue
+        result.append(row)
+    return tuple(result)
 
 
 def runtime_blockers(db):

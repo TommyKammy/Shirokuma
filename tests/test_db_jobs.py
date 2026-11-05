@@ -1,8 +1,10 @@
 """Database Job contracts using real SQLite, flock and the P3 transport boundary."""
 import base64
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, replace
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -23,10 +25,126 @@ import manual_wap
 import query_service as qs
 from query_context import QueryError
 import warehouse_admission as admission
+import warehouse_lifecycle as lifecycle_core
+import warehouse_runtime_routes as runtime
+import warehouse_resident as wr
 import test_dataops_service as boundary
 
 
 class DatabaseJobsTests(unittest.TestCase):
+
+    def test_cold_query_and_job_survive_accepted_no_effect_chill(self):
+        # Use real admission, Wake, query and Job orchestration. Only physical
+        # compute/provider and backend SQL are mocked; all scheduling is event based.
+        with control_store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET warehouse_id='LOCAL'")
+        self.c = replace(self.c, warehouse_id='LOCAL')
+        run = self.submit()
+        started, release, ready = threading.Event(), threading.Event(), threading.Event()
+        job_waiting, cancel_waiting, query_waiting = (threading.Event() for _ in range(3))
+        stop_waiting, stop_done = threading.Event(), threading.Event()
+        original_lock, original_gate, original_update = lifecycle_core._lock, admission.lifecycle_gate, runtime._update
+        errors, threads, pages = [], [], []
+
+        def start(target, name):
+            def guarded():
+                try:
+                    target()
+                except BaseException as error:
+                    errors.append(error)
+            thread = threading.Thread(target=guarded, name=name)
+            threads.append(thread)
+            thread.start()
+
+        @contextmanager
+        def observed_lock(cancelled=None):
+            if threading.current_thread().name == 'job-waiter':
+                job_waiting.set()
+            elif started.is_set() and not ready.is_set():
+                (query_waiting if cancel_waiting.is_set() else cancel_waiting).set()
+            with original_lock(cancelled):
+                yield
+
+        @contextmanager
+        def observed_gate(*, exclusive=False, deadline=None):
+            if exclusive:
+                stop_waiting.set()
+            with original_gate(exclusive=exclusive, deadline=deadline):
+                yield
+
+        def physical(action, *args, **kwargs):
+            self.assertEqual(action, 'wake')
+            kwargs['mutation_started']()
+            started.set()
+            self.assertTrue(release.wait(5), 'Wake was not released')
+            ready.set()
+            return dict(state='active')
+
+        def transport(url, method, pin, body=None):
+            self.assertEqual(method, 'POST')
+            if body == b'SELECT 1':
+                self.assertTrue(stop_done.wait(5), 'Chill did not settle while Job remained active')
+            return dict(id='backend_' + str(len(self.f.calls)), data=[[42]])
+
+        def update(identifier, phase, error=None):
+            original_update(identifier, phase, error)
+            if identifier == 'competing-stop':
+                stop_done.set()
+
+        with patch.dict(sys.modules, warehouse_lifecycle=lifecycle_core), \
+                patch.object(lifecycle_core, 'applicable', return_value=True), \
+                patch.object(lifecycle_core, 'requires_wake', side_effect=lambda: not ready.is_set()), \
+                patch.object(lifecycle_core, '_shared_proof', side_effect=lambda: {'epoch':'shared'} if ready.is_set() else None), \
+                patch.object(lifecycle_core, '_save_proof'), patch.object(lifecycle_core, '_adopt_proof'), \
+                patch.object(lifecycle_core, '_repair_provider'), \
+                patch.object(lifecycle_core, '_lock', side_effect=observed_lock), \
+                patch.object(admission, 'lifecycle_gate', side_effect=observed_gate), \
+                patch.object(wr, '_logical_foundation', return_value={}), \
+                patch.object(wr, '_logical_wake_expected', return_value={}), \
+                patch.object(wr, '_logical_status', side_effect=lambda *args: dict(state='active' if ready.is_set() else 'chilled')), \
+                patch.object(wr, '_logical_transition', side_effect=physical) as transition, \
+                patch.object(qs, '_transport', side_effect=transport) as sent, \
+                patch.object(runtime, 'authorize'), patch.object(runtime, '_update', side_effect=update):
+            try:
+                first = qs.submit(self.p, self.c, 'SELECT 42', mode='read-only', max_rows=100, request_id='cold-a', worksheet_id='sheet')
+                pages.append(first)
+                self.assertTrue(started.wait(3))
+                start(lambda: jobs._worker(run['id']), 'job-waiter')
+                self.assertTrue(job_waiting.wait(3))
+                canceled = qs.submit(self.p, self.c, 'SELECT 99', mode='read-only', max_rows=100, request_id='cancel-b', worksheet_id='sheet')
+                pages.append(canceled)
+                self.assertTrue(cancel_waiting.wait(3))
+                self.assertEqual(qs.cancel(self.p, canceled['id'], selected_role='data_engineer')['state'], 'CANCELED')
+                waiter = qs.submit(self.p, self.c, 'SELECT 43', mode='read-only', max_rows=100,
+                    request_id='cold-waiter', worksheet_id='sheet')
+                pages.append(waiter)
+                self.assertTrue(query_waiting.wait(3))
+                with control_store.connect() as db:
+                    db.execute('INSERT INTO operations VALUES (?,?,?,?,?,?,?,?,?,?)',
+                        ('competing-stop','alice','WAREHOUSE_CHILL','["LOCAL"]',None,'ACCEPTED','[]',None,
+                         json.dumps(dict(process=runtime._PROCESS,pid=os.getpid())), '{}'))
+                start(lambda: runtime._run('competing-stop', 'chill', self.p, 'data_engineer'), 'stop-worker')
+                self.assertTrue(stop_waiting.wait(3))
+            finally:
+                release.set()
+                for thread in threads:
+                    thread.join(7)
+                for page in pages:
+                    self.assertTrue(qs._pins[page['id']].initial_done.wait(5))
+            self.assertFalse(any(thread.is_alive() for thread in threads))
+            self.assertEqual(errors, [])
+            self.assertEqual(qs._row(first['id'])['state'], 'FINISHED')
+            self.assertEqual(qs._row(waiter['id'])['state'], 'FINISHED')
+            self.assertEqual(qs._row(canceled['id'])['state'], 'CANCELED')
+            self.assertIsNone(qs._row(canceled['id'])['backend_query_id'])
+            self.assertCountEqual([call.args[3] for call in sent.call_args_list],
+                                  [b'SELECT 42', b'SELECT 43', b'SELECT 1'])
+            transition.assert_called_once()
+            self.assertEqual(transition.call_args.args[0], 'wake')
+            stop = runtime.operation('competing-stop')
+            self.assertEqual((stop['phase'], stop['error_code']), ('FAILED','ADMISSION_CONFLICT'))
+            with control_store.connect() as db:
+                self.assertEqual(db.execute('SELECT status FROM db_job_runs WHERE id=?', (run['id'],)).fetchone()[0], 'succeeded')
 
     def test_external_retiring_polls_do_not_cancel_active_job_child(self):
         run = self.submit()
