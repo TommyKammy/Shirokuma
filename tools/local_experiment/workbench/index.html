@@ -682,17 +682,30 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #observation-activity-panel .table-wrap{max-width:100%;overflow-x:auto}
 /* Database dbt uses the established operational toolbar and table vocabulary. */
 
-/* Transformation disclosures keep long identifiers and bilingual controls within narrow panels. */
-:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(details,.panel-body,.job-fields,.toolbar){min-width:0;max-width:100%}
-:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(p,summary,label,button){white-space:normal;overflow-wrap:anywhere}
-:is(#p35-wap,#db-marts-panel) pre{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-width:100%}
-:is(#p35-wap,#db-marts-panel) :is(input,select,textarea){min-width:0;max-width:100%;box-sizing:border-box}
+/* Transformation forms share Job spacing while retaining their own context and actions. */
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel){container:transformation / inline-size}
+:is(#p35-wap,#db-marts-panel){min-width:0;max-width:100%}
 #db-dbt-panel{min-width:0;max-width:100%}
-#db-dbt-panel .toolbar{align-items:end;gap:12px;flex-wrap:wrap;margin-block:12px}
-#db-dbt-panel .toolbar>div{min-width:0;flex:1 1 160px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .panel-body{padding:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(details,.panel-body,.job-fields,.toolbar,form){min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(p,summary,label,button){white-space:normal;overflow-wrap:anywhere}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) label{margin:0 0 6px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) input[type=checkbox]{flex:none}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .toolbar{align-items:end;gap:12px;flex-wrap:wrap;margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved){display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:18px 12px;margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved)>*{min-width:0}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) pre{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .workflow-details{margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) h3{margin-top:24px}
+#db-dbt-panel .transformation-context>p{margin:0}
+#db-dbt-panel .transformation-saved>span{grid-column:1/-1}
+#db-dbt-panel #db-dbt-native-controls{display:grid;grid-template-columns:minmax(0,1fr);grid-column:1/-1;gap:12px;margin:0}
+#db-dbt-panel #db-dbt-native-controls>label{display:flex;align-items:center;gap:8px;margin:0}
+#db-dbt-panel #db-dbt-native-controls>p{grid-column:1/-1;margin:0}
 #db-dbt-panel :is(select,button){max-width:100%}
 #db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}
-#db-dbt-panel pre{white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;min-width:0}
 #db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}
 #db-dbt-panel table{width:100%}
 #db-dbt-panel details{padding-block:10px;border-bottom:1px solid var(--line)}
@@ -703,7 +716,35 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-dbt-panel .db-dbt-compatibility{padding-block:12px;border-block:1px solid var(--line);margin-block:8px}
 #db-dbt-panel .db-dbt-compatibility h3{margin-bottom:8px}
 #db-dbt-panel .db-dbt-confirm{padding-block:12px;border-top:1px solid var(--line)}
-@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}#db-dbt-panel select{width:100%}#db-dbt-panel .panel-body{padding:12px}}
+#p35-wap .job-fields>div:has(>textarea){grid-column:1/-1}
+#p35-wap textarea{min-height:9rem}
+#p35-wap #p35-wap-sources .toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+#p35-wap .transformation-actions{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-block:20px}
+#p35-wap .workflow-details>div{margin-block:12px}
+#p35-wap :is(form,.panel-body)>button{margin-block:12px;margin-inline-end:12px}
+#db-marts-panel #db-marts-form{margin-block:24px}
+#db-marts-panel #db-marts-form>div:has(>#db-marts-watch){margin-block:20px}
+#db-marts-panel .transformation-actions>div:has(>input[type=checkbox]){display:flex;align-items:center;gap:8px}
+#db-marts-panel .transformation-actions>div:has(>input[type=checkbox]) label{margin:0}
+#db-marts-panel #db-schedule-mart-form>.job-fields{margin-block:20px}
+#db-marts-panel #db-schedule-mart-form .job-fields>div:has(>#db-schedule-mart-arguments),#db-marts-panel #db-schedule-mart-weekdays{grid-column:1/-1}
+#db-marts-panel #db-schedule-mart-weekdays>div{display:inline-flex;align-items:center;gap:6px;margin:8px 12px 0 0}
+#db-marts-panel #db-schedule-mart-weekdays label{margin:0}
+#db-marts-panel .panel-body>.toolbar>div:has(>#db-schedule-mart-list){flex:1 1 260px}
+@container transformation (min-width:600px){
+ :is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-dbt-panel #db-dbt-native-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #p35-wap #p35-wap-sources .toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto}
+}
+@container transformation (min-width:960px){
+ #p35-wap .transformation-context{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+ :is(#p35-wap,#db-marts-panel) .job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-dbt-panel .transformation-context{grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr) auto}
+ #db-marts-panel #db-marts-form>.job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-marts-panel .transformation-context{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+ #db-marts-panel .transformation-saved{grid-template-columns:minmax(0,1fr) auto auto auto}
+}
+@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .panel-body{padding:14px}}
 
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel){min-width:0;max-width:100%}
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
@@ -8997,14 +9038,17 @@ function dataopsInstallWap(){
  const tab=$('transformation-view-wap');tab.hidden=false;tab.disabled=false;delete tab.dataset.databaseUnavailable;
  ui(tab,'Manual WAP');
  const p=dataopsPanel('p35-wap','Manual WAP',$('transformation-wap')),id=p.id;p.sources=[];p.aiRevision=0;
+ const context=dataopsNode('div',id+'-context-controls',p.form);context.className='toolbar transformation-context';
+ for(const name of ['role','database','schema'])context.append($(id+'-'+name).parentElement);
+ context.append($(id+'-refresh'));p.form.prepend(context);
  const guidance=dataopsNode('p','p35-wap-entry-help',p.body,'Choose a database and schema, then load or create a model. Build and audit require Data Engineer or Admin. Publish and rollback require Admin.');guidance.className='help';p.form.before(guidance);
  p.aiBar=dataopsNode('div',id+'-ai-import',p.body);p.aiBar.className='help';p.aiBar.setAttribute('aria-live','polite');p.body.prepend(p.aiBar);
  dataopsField(p.fields,id+'-models','Saved models','select').onchange=()=>{dataopsChanged(p);const n=$(id+'-models').value;dataopsLoadModel(p,n===''?null:p.models[Number(n)]);};
  dataopsField(p.fields,id+'-model-id','Model ID');dataopsField(p.fields,id+'-sql','SQL','textarea').value='SELECT * FROM source';
  dataopsField(p.fields,id+'-target-schema','Target schema','select');dataopsField(p.fields,id+'-name','Target table name');dataopsField(p.fields,id+'-target','Existing table','select');
  const min=dataopsField(p.fields,id+'-min','Minimum rows');min.type='number';min.min='0';min.value='1';dataopsField(p.fields,id+'-not-null','Not-null columns');
- dataopsNode('div',id+'-sources',p.form);dataopsButton(p.form,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
- dataopsButton(p.form,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);}));
+ dataopsNode('div',id+'-sources',p.form);const modelActions=dataopsNode('div','',p.form);modelActions.className='transformation-actions';dataopsButton(modelActions,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
+ dataopsButton(modelActions,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);}));
  for(const [kind,label] of [['build','Build'],['audit','Audit'],['publication','Publication']])dataopsField(p.fields,id+'-'+kind,label,'select').onchange=()=>dataopsRender(p);
  const metadata=workflowDetails(p.form,'Saved WAP metadata');
  dataopsField(metadata,id+'-metadata-id','Metadata ID (optional, from another authorized session)');
@@ -9016,8 +9060,9 @@ function dataopsInstallWap(){
  }));
  dataopsNode('p',id+'-action-target',p.form).className='help';
  dataopsNode('p','',p.form,'Publication replaces the selected target with the audited build. Rollback restores the linked publication.').className='help';
+ const actions=dataopsNode('div','',p.form);actions.className='transformation-actions';
  for(const [action,label,path,cap] of [['build-action','Build saved version','build','wap_build'],['audit-action','Audit build','audit','wap_audit'],['publish','Publish audited build (admin)','publish','wap_publish'],['rollback','Rollback publication (admin)','rollback','wap_rollback']]){
-  dataopsButton(p.form,id+'-'+action,label,()=>{
+  dataopsButton(actions,id+'-'+action,label,()=>{
    if(!dataopsAllowed(p,cap)||dataopsOwnedUnresolved(p))return;
    const body=path==='build'?{model_id:p.model?.model_id,version:p.model?.version}:path==='audit'?{build_id:$(id+'-build').value}:path==='publish'?{build_id:$(id+'-build').value,audit_id:$(id+'-audit').value}:{publication_id:$(id+'-publication').value};
    if(path==='build'&&(!p.model||p.modelDirty))return;
@@ -10808,13 +10853,13 @@ function dbMartsInstall(){
  const p=dbMarts;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.role='admin';p.database=dbCurrent()?.database_id||'';p.schema='';p.databases=dbRoleItems('admin');p.schemas=[];
  for(const child of $('transformation-marts').children)child.hidden=true;
  const root=dataopsNode('section','db-marts-panel',$('transformation-marts'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Managed Marts');dataopsNode('p','',body,'Choose the database and schema for this Mart, then load a saved Mart or a model version registered in Manual WAP.').className='help';
- const selectors=dataopsNode('div','',body);selectors.className='toolbar';for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const n=dataopsField(selectors,'db-marts-'+key,label,'select');n.onchange=()=>{const value=n.value;dbMartsClear();p[key]=value;if(key==='database')p.schema='';return dbMartsRefresh();};}dataopsButton(selectors,'db-marts-refresh','Refresh Marts',()=>{p.started=true;return dbMartsRefresh();});
- const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-marts-list','Saved Marts','select').onchange=dbMartsSelect;dataopsButton(saved,'db-marts-load','Load Mart',dbMartsLoad);dataopsButton(saved,'db-marts-reload','Load current revision',dbMartsLoad);dataopsButton(saved,'db-marts-new','New Mart',()=>{if(p.pending||p.invalid||p.save)return;++p.request;p.mart=null;p.model=null;p.selection='';p.history=[];p.conflict=false;for(const k of dbMartsFields)$('db-marts-'+k).value='';$('db-marts-watch').value='all';dbMartsRender();});
+ const selectors=dataopsNode('div','',body);selectors.className='toolbar transformation-context';for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){const n=dataopsField(selectors,'db-marts-'+key,label,'select');n.onchange=()=>{const value=n.value;dbMartsClear();p[key]=value;if(key==='database')p.schema='';return dbMartsRefresh();};}dataopsButton(selectors,'db-marts-refresh','Refresh Marts',()=>{p.started=true;return dbMartsRefresh();});
+ const saved=dataopsNode('div','',body);saved.className='toolbar transformation-saved';dataopsField(saved,'db-marts-list','Saved Marts','select').onchange=dbMartsSelect;dataopsButton(saved,'db-marts-load','Load Mart',dbMartsLoad);dataopsButton(saved,'db-marts-reload','Load current revision',dbMartsLoad);dataopsButton(saved,'db-marts-new','New Mart',()=>{if(p.pending||p.invalid||p.save)return;++p.request;p.mart=null;p.model=null;p.selection='';p.history=[];p.conflict=false;for(const k of dbMartsFields)$('db-marts-'+k).value='';$('db-marts-watch').value='all';dbMartsRender();});
  const form=dataopsNode('form','db-marts-form',body);form.onsubmit=e=>e.preventDefault();const fields=dataopsNode('div','',form);fields.className='job-fields';dataopsField(fields,'db-marts-name','Mart name');dataopsField(fields,'db-marts-models','Saved models','select').onchange=()=>{++p.request;const value=$('db-marts-models').value;if(value){const [id,version]=JSON.parse(value);$('db-marts-model-id').value=id;$('db-marts-version').value=String(version);}p.model=null;dbMartsRender();};
  dataopsField(fields,'db-marts-model-id','Model ID');const version=dataopsField(fields,'db-marts-version','Version');version.type='number';version.min='1';for(const k of ['name','model-id','version'])$('db-marts-'+k).oninput=()=>{++p.request;if(k!=='name')p.model=null;dbMartsRender();};dataopsButton(form,'db-marts-load-model','Load model version',dbMartsLoadModel);dataopsField(form,'db-marts-watch','Watch sources','select',[['all','All model sources'],['manual','Manual only']]).onchange=()=>{++p.request;dbMartsRender();};
  dataopsNode('p','',form,'Manual-only Marts allow unconditional refresh. Check and conditional refresh require watches (WATCH_REQUIRED).').className='help';dataopsNode('pre','db-marts-model-detail',workflowDetails(form,'Model and quality details'));dataopsButton(form,'db-marts-save','Save Mart',dbMartsSave).className='primary';dataopsNode('pre','db-marts-definition-detail',workflowDetails(body,'Mart definition details'));
  dataopsNode('p','db-marts-target-summary',body);dataopsNode('p','',body,'Full refresh replaces the saved target using this model version and its quality checks.').className='help';
- const actions=dataopsNode('div','',body);actions.className='toolbar';dataopsButton(actions,'db-marts-check','Check changes',()=>dbMartsSubmit('check'));const checkbox=dataopsField(actions,'db-marts-check-changes','Check only when changed');checkbox.type='checkbox';checkbox.checked=false;dataopsButton(actions,'db-marts-refresh-run','Full refresh',()=>dbMartsSubmit('refresh'));dataopsButton(actions,'db-marts-observe','Observe run',dbMartsObserve);
+ const actions=dataopsNode('div','',body);actions.className='toolbar transformation-actions';dataopsButton(actions,'db-marts-check','Check changes',()=>dbMartsSubmit('check'));const checkbox=dataopsField(actions,'db-marts-check-changes','Check only when changed');checkbox.type='checkbox';checkbox.checked=false;dataopsButton(actions,'db-marts-refresh-run','Full refresh',()=>dbMartsSubmit('refresh'));dataopsButton(actions,'db-marts-observe','Observe run',dbMartsObserve);
  p.status=dataopsNode('p','db-marts-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');dataopsNode('div','db-marts-run-detail',body);dataopsNode('h3','',body,'Mart history');dataopsButton(body,'db-marts-history-refresh','Refresh history',dbMartsHistory);dataopsNode('div','db-marts-history',body);
  delete $('transformation-view-marts').dataset.databaseUnavailable;$('transformation-view-marts').hidden=false;ui($('transformation-view-marts'),'Managed Marts');dbMartsRender();
 }
@@ -11454,14 +11499,14 @@ function dbDbtInstall(){
  dataopsNode('p','',body,'Choose a database and refresh context, then compile an approved project or inspect a saved plan.').className='help';
  const compatibility=workflowDetails(body,'dbt compatibility and context');
  for(const copy of ['SQL / WAP supports compiled table/ephemeral SELECT and run-specific SANDBOX INVOKER VIEWs. Publication is TABLE-only. Only fixed format=PARQUET table properties are supported. UI/API/CLI supports native TABLE execution for one compatible saved model. Native graph runs eligible saved VIEW / TABLE / EPHEMERAL models. Graphs containing VIEW may publish eligible TABLE candidates after complete graph and quality verification. Incremental is unsupported. Quality tests require explicit opt-in. Eligible graph TABLE candidates may be published one at a time after the complete saved quality suite passes.','Context is independent of Worksheets. History and deep links only read saved records.','Legacy dbt build/test is unavailable in Database mode.'])dataopsNode('p','',compatibility,copy).className='help';
- const context=dataopsNode('div','',body);context.className='toolbar';
+ const context=dataopsNode('div','',body);context.className='toolbar transformation-context';
  for(const [name,label] of [['role','Execution role'],['database','Database']])dataopsField(context,'db-dbt-'+name,label,'select').onchange=()=>{const value=dbDbtNode(name).value;dbDbtPurge();p[name]=value;return dbDbtRefresh();};
  dataopsNode('p','',context,'Candidate Schema: SANDBOX (fixed)');dataopsButton(context,'db-dbt-refresh','Refresh dbt context',dbDbtRefresh);
- const inputs=dataopsNode('div','',body);inputs.className='toolbar';for(const [name,label] of [['project','Approved project'],['source','Source Schema'],['target','Target Schema']])dataopsField(inputs,'db-dbt-'+name,label,'select').onchange=()=>{p.nativeTests=false;dbDbtRender();};
+ const inputs=dataopsNode('div','',body);inputs.className='toolbar transformation-inputs';for(const [name,label] of [['project','Approved project'],['source','Source Schema'],['target','Target Schema']])dataopsField(inputs,'db-dbt-'+name,label,'select').onchange=()=>{p.nativeTests=false;dbDbtRender();};
  dataopsField(inputs,'db-dbt-materialization','Staging materialization','select',[['','Project default (no override)'],['ephemeral','Explicit ephemeral override'],['table','Explicit table override']]).onchange=()=>{p.nativeTests=false;dbDbtRender();};
  dataopsNode('p','',body,'Project and schema inputs apply to the next compile. Build and publish use the selected saved artifacts.').className='help';
  dataopsNode('p','',compatibility,'Project defaults to views are supported as run-specific SANDBOX INVOKER VIEWs. Only TABLE candidates can be published.').className='help';
- const saved=dataopsNode('div','',body);saved.className='toolbar';saved.setAttribute('role','group');saved.setAttribute('aria-labelledby','db-dbt-run-label');dataopsNode('span','db-dbt-run-label',saved,'Run saved plan');
+ const saved=dataopsNode('div','',body);saved.className='toolbar transformation-saved';saved.setAttribute('role','group');saved.setAttribute('aria-labelledby','db-dbt-run-label');dataopsNode('span','db-dbt-run-label',saved,'Run saved plan');
  dataopsField(saved,'db-dbt-method','Execution method','select',[['sql_wap','SQL / WAP'],['native_table','Native TABLE'],['native_graph','Native graph (VIEW / TABLE / EPHEMERAL)']]).onchange=()=>{if(p.pending||p.intent)return;const value=dbDbtNode('method').value;if(!['sql_wap','native_table','native_graph'].includes(value))return;p.review=null;p.preview=null;p.method=value;p.node='';p.nativeTests=false;dbDbtRender();};
  const graph=dataopsNode('div','db-dbt-graph-summary',body);dataopsNode('p','db-dbt-graph-reason',graph).setAttribute('aria-live','polite');dataopsNode('p','db-dbt-graph-counts',graph);
  const native=dataopsNode('div','db-dbt-native-controls',saved);native.className='toolbar';
