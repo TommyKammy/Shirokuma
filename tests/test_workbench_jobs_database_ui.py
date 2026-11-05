@@ -4,7 +4,15 @@ import unittest
 import test_workbench_database_ui as harness
 
 
-SETUP = r'''
+# Load the shipped legacy status formatter into the shared harness's global scope.
+JOB_STATUS = (
+    harness.SCRIPT[harness.SCRIPT.index('const jobStatuses='):harness.SCRIPT.index('const liveJobStates=')]
+    .replace('const jobStatuses=', 'globalThis.jobStatuses=')
+    + harness.SCRIPT[harness.SCRIPT.index('function jobStatus('):].split('\n', 1)[0]
+    .replace('function jobStatus(', 'globalThis.jobStatus=function(') + '\n'
+)
+
+SETUP = JOB_STATUS + r'''
 for(const s of schemas)Object.assign(s.capabilities,{job_sql:true,job_admin:true});
 const p=dbJobs;
 let timerId=0;const timers=new Map(),visibilityListeners=[];
@@ -49,6 +57,105 @@ async function createJob(){await openJobs();$('db-jobs-name').value='daily';awai
 class JobsUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_early_navigation_waits_for_job_controls_before_loading(self):
+        self.javascript(r'''
+assert.equal(p.installed,false);const before=calls.length;await dbJobsOpen();assert.equal(p.started,false);assert.equal(calls.length,before);
+activeTab='jobs';await boot([input(),input('b')]);await tick();assert.equal(p.installed,true);assert.equal(p.started,true);assert.equal(p.invalid,false);assert.equal(p.status.textContent,t('Ready'));
+assert.equal(jobPosts().length,0);assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/jobs?')).length,1);
+''')
+
+    def test_task_first_failure_facts_and_closed_diagnostics_in_both_languages(self):
+        self.javascript(r'''
+await createJob();await dbJobsRun();for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal($('db-jobs-status').textContent,jobStatus('running'));}
+const visible=n=>n.hidden?'':n.textContent+' '+n.children.filter(c=>n.tagName!=='DETAILS'||n.open||c.tagName==='SUMMARY').map(visible).join(' ');
+const run=jobRuns[0];run.status='failed';run.steps[0].status='failed';run.steps[0].name='<img src=x onerror=alert(1)>';run.steps[0].summary={code:'JOB_STEP_FAILED',row_count:17,verbose:'private technical text'};
+run.steps.push({name:'loaded',action:'ingest',status:'succeeded',summary:{committed_rows:9,partial:true}});
+await dbJobsObserve();
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();const detail=$('db-jobs-run-detail'),text=visible(detail);
+ assert.ok(text.includes(dbJobsStatus('failed')));assert.match(text,/JOB_STEP_FAILED/);assert.match(text,/17/);assert.ok(text.includes('<img src=x onerror=alert(1)>'));
+ assert.ok(text.includes(t('Committed rows')));assert.ok(text.includes(t('Partially completed')));
+ assert.ok(!text.includes('child-1'));assert.ok(!text.includes('private technical text'));assert.equal(detail.descendants().some(n=>n.tagName==='IMG'),false);
+ assert.ok(detail.descendants().filter(n=>n.tagName==='DETAILS').every(n=>n.open===false&&n.className==='workflow-details'));
+ const body=p.form.parentElement;assert.ok(body.children.indexOf(detail)<body.children.indexOf(p.form));assert.ok(body.children.indexOf(p.status)<body.children.indexOf(p.form));assert.ok(body.children.indexOf($('db-jobs-next'))<body.children.indexOf(p.form));
+ assert.equal($('db-jobs-observe').parentElement.parentElement,body);assert.equal($('db-jobs-observe').disabled,false);assert.ok($('db-jobs-current').textContent.includes('daily'));assert.match($('db-jobs-context').textContent,/sales.*marts.*admin/);
+}
+assert.equal(jobPosts().length,2);
+''')
+
+    def test_lookup_unknown_reconcile_and_replay_not_buried_or_automatic(self):
+        self.javascript(r'''
+await createJob();runFailure=true;await dbJobsRun();const original=jobPosts().at(-1);
+const visible=n=>n.hidden?'':n.textContent+' '+n.children.filter(c=>n.tagName!=='DETAILS'||n.open||c.tagName==='SUMMARY').map(visible).join(' ');
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.ok(visible($('db-jobs-run-detail')).includes(t('Retrying sends the original inputs and key and may start the Job if it was not accepted.')));assert.equal($('db-jobs-observe').disabled,true);assert.equal($('db-jobs-retry').hidden,false);}
+assert.equal(jobPosts().length,2);runFailure=false;await $('db-jobs-retry').onclick();const replay=jobPosts().at(-1);assert.equal(replay.options.body,original.options.body);assert.equal(replay.options.headers['Idempotency-Key'],original.options.headers['Idempotency-Key']);
+jobRuns[0].status='unknown';await dbJobsObserve();
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();const text=visible($('db-jobs-run-detail'));assert.ok(text.includes(t('Checking status only reads the saved run. It does not run the Job.')));assert.ok(text.includes(t('The saved run is UNKNOWN. Reconciliation checks backend evidence.')));assert.equal($('db-jobs-reconcile').disabled,false);assert.equal($('db-jobs-retry').hidden,true);}
+assert.equal(jobPosts().length,3);await dbJobsObserve('reconcile');assert.equal(jobPosts().at(-1).path,'/api/v1/jobs/runs/run-1/reconcile');
+''')
+
+    def test_native_disclosure_focus_survives_same_run_poll_language_and_history(self):
+        self.javascript(r'''
+await createJob();await dbJobsRun();await dbJobsListHistory();const area=$('db-jobs-run-detail');
+const details=area.descendants().find(n=>n.tagName==='DETAILS');const summary=details.children[0];
+assert.equal(summary.tagName,'SUMMARY');assert.equal(summary.onclick,undefined);assert.equal(summary.onkeydown,undefined);assert.equal(summary.tabIndex,undefined);
+// Native SUMMARY supplies Enter/Space activation; the harness checks the native contract and focus retention.
+details.open=true;summary.focus();const count=calls.length;
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal(area.descendants().find(n=>n.tagName==='DETAILS'),details);assert.equal(details.open,true);assert.equal(document.activeElement,summary);}
+assert.equal(calls.length,count);await dbJobsObserve();assert.equal(details.open,true);assert.equal(document.activeElement,summary);
+const history=$('db-jobs-history'),outer=history.descendants().find(n=>n.tagName==='DETAILS');outer.open=true;const nested=outer.descendants().find(n=>n.tagName==='DETAILS');nested.open=true;const nestedSummary=nested.children[0];nestedSummary.focus();
+// Model native focus loss when an ancestor removes the focused summary.
+const replace=outer.replaceChildren.bind(outer);outer.replaceChildren=(...nodes)=>{if(outer.descendants().includes(document.activeElement))document.activeElement=null;replace(...nodes);};
+dbJobsRender();assert.equal(nested.open,true);assert.equal(outer.open,true);assert.equal(document.activeElement,nestedSummary);
+const row=history.children[0];assert.ok(row.children.some(n=>n.tagName==='BUTTON'));assert.ok(row.children.filter(n=>n.tagName==='P').length>=3);assert.ok(!row.children.filter(n=>n.tagName==='P').some(n=>n.descendants().some(c=>c.textContent.includes('child-1'))));
+''')
+
+    def test_next_action_waits_for_submission_and_manual_observation(self):
+        self.javascript(r'''
+await createJob();runGate=deferred();const running=dbJobsRun();await tick();
+const check=()=>{for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal($('db-jobs-next').textContent,t('Next action')+': '+t('Wait for the current Job request to finish.'));assert.equal($('db-jobs-observe').disabled,true);}};
+check();runGate.resolve();await running;
+const originalRoute=route,gate=deferred();route=async(path,options)=>{if(path.startsWith('/api/v1/jobs/runs/run-1?'))await gate.promise;return originalRoute(path,options);};
+const observing=dbJobsObserve();await tick();check();gate.resolve();await observing;
+route=originalRoute;jobRuns[0].status='failed';await dbJobsObserve();assert.ok($('db-jobs-next').textContent.includes(t('Inspect the failed step before starting another run.')));
+jobRuns[0].status='succeeded';await dbJobsObserve();assert.ok($('db-jobs-next').textContent.includes(t('Review the run result. Check the saved Job and inputs before running again.')));
+assert.equal(jobPosts().length,2);
+''')
+
+    def test_disclosure_resets_for_job_run_context_role_and_principal(self):
+        changes = [
+            "p.run={...p.run,id:'another-run'};dbJobsRender();",
+            "p.job={...p.job,id:'another-job'};dbJobsRender();",
+            "p.schema='raw';dbJobsRender();",
+            "currentRole='data_engineer';dbJobsRender();",
+            "session.username='another';await dbRefreshAccess();",
+            "inventory[0].binding_revision=99;await dbRefreshAccess();",
+        ]
+        for lang in ('ja', 'en'):
+            for change in changes:
+                with self.subTest(change=change, lang=lang):
+                    self.javascript(r'''
+await createJob();await dbJobsRun();setLanguage('LANG');const area=$('db-jobs-run-detail'),before=area.descendants().find(n=>n.tagName==='DETAILS');before.open=true;before.children[0].focus();const help=$('db-jobs-definition-help');help.open=true;const count=jobPosts().length;
+CHANGE
+assert.equal(jobPosts().length,count);assert.equal(help.open,false);assert.ok(!area.descendants().includes(before));assert.ok(area.descendants().filter(n=>n.tagName==='DETAILS').every(n=>n.open===false));
+'''.replace('CHANGE', change).replace('LANG', lang))
+
+    def test_failure_and_authorization_reasons_remain_outside_disclosures(self):
+        self.javascript(r'''
+await createJob();await dbJobsRun();const originalRoute=route;route=async()=>{throw Error('offline');};await dbJobsObserve();
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal(p.status.textContent,t('Run status check failed. Showing the last known status. Retry the read-only check.'));assert.equal(p.status.parentElement,p.form.parentElement);}
+route=originalRoute;p.job.owner='someone-else';ui(p.status,'running');dbJobsRender();assert.equal(p.status.textContent,t('Job definition belongs to another owner or saved role.'));
+inventory=[];await dbRefreshAccess();assert.equal(p.run.details,null);assert.equal($('db-jobs-observe').disabled,true);assert.ok(!$('db-jobs-run-detail').descendants().some(n=>n.textContent.includes('child-1')));assert.equal(p.status.textContent,t('Job access unavailable. Refresh an authorized context.'));
+''')
+
+    def test_help_and_new_draft_remain_reachable_and_cancel_outcome_visible(self):
+        self.javascript(r'''
+await openJobs();for(const id of ['db-jobs-definition-help','db-jobs-input-help']){const help=$(id);assert.equal(help.tagName,'DETAILS');assert.equal(help.open,false);assert.equal(help.children[0].tagName,'SUMMARY');help.open=true;help.children[0].focus();dbJobsRender();assert.equal(help.open,true);assert.equal(document.activeElement,help.children[0]);}
+assert.equal($('db-jobs-name').disabled,false);assert.equal($('db-jobs-save').disabled,false);assert.equal(p.form.tagName,'FORM');
+$('db-jobs-name').value='daily';await dbJobsSave();await dbJobsRun();await dbJobsObserve('cancel');
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.ok($('db-jobs-run-detail').descendants().some(n=>n.textContent===': '+t('canceled')));assert.equal($('db-jobs-status').textContent,t('canceled'));}
+assert.equal(jobPosts().length,3);
+''')
 
     def test_auto_observes_queued_running_terminal_with_original_context_and_draft(self):
         self.javascript(r'''
@@ -211,11 +318,11 @@ jobRuns[0].status='unknown';await dbJobsObserve();assert.equal(p.run.status,'unk
         self.javascript(r'''
 await createJob();await dbJobsRun();p.run=null;jobRuns[0].status='unknown';
 await dbJobsListHistory();const row=$('db-jobs-history').children[0];
-await row.children.at(-1).onclick();assert.equal(runReads().length,1);assert.equal(p.run.status,'unknown');
+await row.children.find(n=>n.tagName==='BUTTON').onclick();assert.equal(runReads().length,1);assert.equal(p.run.status,'unknown');
 assert.equal($('db-jobs-retry').hidden,true);assert.equal($('db-jobs-reconcile').disabled,false);
 await dbJobsObserve('retry');assert.equal(jobPosts().length,2);
 const purged=p.run;purged.purged=true;purged.details=null;dbJobsRender();
-await $('db-jobs-history').children[0].children.at(-1).onclick();
+await $('db-jobs-history').children[0].children.find(n=>n.tagName==='BUTTON').onclick();
 assert.notEqual(p.run,purged);assert.equal(runReads().length,2);assert.equal(jobPosts().length,2);
 await dbJobsObserve('reconcile');assert.equal(jobPosts().at(-1).path,'/api/v1/jobs/runs/run-1/reconcile');
 assert.equal(jobPosts().filter(c=>c.path.endsWith('/runs')).length,1);

@@ -374,6 +374,12 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .bear-list button{display:grid;justify-items:start;justify-content:stretch;gap:2px;width:100%;min-height:0;padding:8px 10px;border:0;background:transparent;text-align:left;white-space:normal;font-weight:600}
 .bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
 .bear-list .badge{font-size:11px}
+
+#db-jobs-panel :is(.panel-body,.toolbar,.job-fields,.job-json,form,details){min-width:0;max-width:100%}
+#db-jobs-panel :is(p,summary,strong,span,button){overflow-wrap:anywhere}
+#db-jobs-panel :is(input,select,textarea){min-width:0;max-width:100%;box-sizing:border-box}
+#db-jobs-panel .toolbar>label{min-width:0;max-width:100%}
+#db-jobs-panel :is(pre,textarea){white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .workflow-details{margin-top:12px}
 .workflow-details summary{padding-block:8px}
 #bears .workflow-details{min-width:0;max-width:100%;overflow-wrap:anywhere}
@@ -9868,6 +9874,34 @@ Object.assign(i18n.ja,{
  'queued':'待機中','running':'実行中','succeeded':'成功','failed':'失敗','canceled':'取消済み','unknown':'結果不明'
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
+// Native disclosures retain keyboard focus only within the same authorized Job/run.
+const dbJobsDisclosures=new WeakMap();
+function dbJobsResetDetails(node,identity){
+ const old=dbJobsDisclosures.get(node),entries=old?.identity===identity?old:new Map();entries.identity=identity;
+ for(const entry of entries.values())entry.focused=document.activeElement===entry.summary;
+ for(const [key,entry] of entries){if(!entry.used){entries.delete(key);continue;}entry.used=false;entry.details.replaceChildren(entry.summary);}
+ dbJobsDisclosures.set(node,entries);node.replaceChildren();
+}
+function dbJobsDetails(node,key,label){
+ const entries=dbJobsDisclosures.get(node);let entry=entries.get(key);
+ if(!entry){const details=document.createElement('details'),summary=document.createElement('summary');details.className='workflow-details';details.open=false;entry={details,summary};entries.set(key,entry);}
+ entry.used=true;ui(entry.summary,label);entry.details.replaceChildren(entry.summary);node.append(entry.details);
+ if(entry.focused){entry.summary.focus();entry.focused=false;}return entry.details;
+}
+const dbJobsStatus=state=>state==='canceled'?t('canceled'):jobStatus(state);
+Object.assign(i18n.ja,{
+ 'Current Job':'現在の Job','No Job loaded':'読み込み済み Job なし','Next action':'次の操作',
+ 'Job run metadata':'Job 実行のメタデータ','Step diagnostics':'ステップの診断情報','Run diagnostics':'実行の診断情報',
+ 'Job definition and action help':'Job 定義と操作のヘルプ','Parameter and input help':'パラメーターと入力のヘルプ',
+ 'Wait for the current Job request to finish.':'現在の Job 要求が完了するまでお待ちください。',
+ 'Load a saved Job or fill in and save a new Job.':'保存済み Job を読み込むか、新しい Job を入力して保存してください。',
+ 'Review the saved Job and inputs, then run.':'保存済み Job と入力を確認して実行してください。',
+ 'Observe the saved run to check its status.':'保存済みの実行を照会して状態を確認してください。',
+ 'Inspect the failed step before starting another run.':'失敗したステップを確認してから、次の実行を準備してください。',
+ 'Review the run result. Check the saved Job and inputs before running again.':'実行結果を確認できます。再実行する場合は保存済み Job と入力を確認してください。',
+ 'Failure code':'失敗コード','Error code':'エラーコード','Rows ingested':'取り込み行数','Committed rows':'反映した行数','Partially completed':'一部のみ完了','Model count':'モデル数','Triggered':'アラート検知'
+});
+for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
 const dbJobsFields=['name','description','parameters','steps','arguments'];
 const dbJobsTerminal=r=>r&&['succeeded','failed','canceled'].includes(r.status);
 function dbJobsSuspend(){clearTimeout(dbJobs.pollTimer);dbJobs.pollTimer=null;}
@@ -10094,23 +10128,50 @@ function dbJobsRender(){
  $('db-jobs-retry').disabled=waiting||p.tracking||$('db-jobs-retry').hidden||!dbJobsAllowed(r.context,r.schemas);
  $('db-jobs-cancel').disabled=waiting||p.tracking||!r?.id||!sameActor||dbJobsTerminal(r);
  $('db-jobs-reconcile').disabled=waiting||p.tracking||!r?.id||!sameActor||r.purged||r.status!=='unknown'||!dbJobsAllowed(r.context,r.schemas);
- const area=$('db-jobs-run-detail');area.replaceChildren();
- const line=(label,value,parent=area)=>{const row=dataopsNode('p','',parent);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');};
- if(r){line('Run ID',r.id||'unknown');line('Status',t(r.status));line('Execution context',[r.context.sql_catalog,r.context.sql_schema,r.context.selected_role,'v'+r.revision].join(' / '));
+ const authorizedRun=r&&!r.purged&&sameActor&&dbJobsAllowed(r.context,r.schemas);
+ const identity=JSON.stringify([dbPrincipal,currentRole,p.role,p.database,p.schema,allowed?p.context:null,allowed?p.job?.id:null,authorizedRun?[r.context,r.job_id,r.id||r.key]:null]);
+ for(const id of ['db-jobs-definition-help','db-jobs-input-help']){const node=$(id);if(node.dataset.identity!==identity){node.open=false;node.dataset.identity=identity;}}
+ const line=(label,value,parent)=>{const row=dataopsNode('p','',parent);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');};
+ $('db-jobs-current').textContent=t('Current Job')+': '+(allowed&&p.job?p.job.definition.name+' · '+t('Revision')+' '+p.job.revision:t('No Job loaded'));
+ $('db-jobs-context').textContent=allowed?[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / '):'';
+ let next=waiting?'Wait for the current Job request to finish.':!allowed?'Job access unavailable. Refresh an authorized context.':!own?'Job definition belongs to another owner or saved role.':!p.job?'Load a saved Job or fill in and save a new Job.':!dbJobsMatches()?'Save or load the definition before running.':'Review the saved Job and inputs, then run.';
+ if(!waiting&&r&&!dbJobsTerminal(r))next=r.purged?'Run details cleared after access changed. Original cancellation handle retained.':r.id?r.status==='unknown'?'The saved run is UNKNOWN. Reconciliation checks backend evidence.':'Observe the saved run to check its status.':'Job acceptance is unconfirmed.';
+ else if(!waiting&&authorizedRun&&dbJobsTerminal(r)&&allowed&&own&&p.job&&dbJobsMatches())next=r.status==='failed'?'Inspect the failed step before starting another run.':'Review the run result. Check the saved Job and inputs before running again.';
+ $('db-jobs-next').textContent=t('Next action')+': '+t(next);
+ // Localize handler status tokens without changing request state or failure notices.
+ if(p.status.textContent===status&&['queued','running','succeeded','failed','canceled','unknown'].includes(status))ui(p.status,status==='canceled'?'canceled':jobStatuses[status]||'Unknown outcome');
+ const area=$('db-jobs-run-detail');dbJobsResetDetails(area,identity);
+ const steps=(run,parent,key)=>{for(const [index,step] of (run.steps||[]).entries()){
+  line('Step',step.name+' · '+step.action+' · '+dbJobsStatus(step.status),parent);
+  const facts=Object.entries(step.summary||{}).filter(([k,v])=>/^(code|error|error_code|count|.*_count|rows|.*_rows|triggered|status)$/.test(k)&&['string','number','boolean'].includes(typeof v));
+  const labels={code:'Failure code',error:'Error',error_code:'Error code',row_count:'Rows',rows:'Rows',count:'Count',rows_ingested:'Rows ingested',committed_rows:'Committed rows',model_count:'Model count',triggered:'Triggered',status:'Status'};
+  for(const [key,value] of facts)line(labels[key]||key,value,parent);
+  if(step.summary?.partial===true)line('Result',t('Partially completed'),parent);
+  const extra=dbJobsDetails(parent,key+':step:'+index,'Step diagnostics');
+  line('Operation IDs',(step.operation_ids||[]).join(', '),extra);line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '),extra);line('Summary',JSON.stringify(step.summary??{}),extra);
+ }};
+ if(r){line('Status',dbJobsStatus(r.status),area);
   if(r.purged)dataopsNode('p','',area,'Run details cleared after access changed. Original cancellation handle retained.');
-  else if(r.id)dataopsNode('p','',area,'Checking status only reads the saved run. It does not run the Job.').className='help';
-  else if(!$('db-jobs-retry').hidden&&dbJobsAllowed(r.context,r.schemas))dataopsNode('p','db-jobs-retry-help',area,'Retrying sends the original inputs and key and may start the Job if it was not accepted.').className='help';
-  if(!r.purged&&r.details){line('Owner',r.details.owner);for(const step of r.details.steps||[]){line('Step',step.name+' · '+step.action+' · '+t(step.status));line('Operation IDs',(step.operation_ids||[]).join(', '));line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '));line('Summary',JSON.stringify(step.summary??{}));}}
+  else if(authorizedRun){
+   line('Job',r.details?.job_name||(p.job?.id===r.job_id?p.job.definition.name:t('Saved Jobs')),area);line('Execution context',[r.context.sql_catalog,r.context.sql_schema,r.context.selected_role,t('Revision')+' '+r.revision].join(' / '),area);
+   if(r.id)dataopsNode('p','',area,'Checking status only reads the saved run. It does not run the Job.').className='help';
+   else if(!$('db-jobs-retry').hidden)dataopsNode('p','db-jobs-retry-help',area,'Retrying sends the original inputs and key and may start the Job if it was not accepted.').className='help';
+   if(r.status==='unknown'&&r.id)dataopsNode('p','',area,'The saved run is UNKNOWN. Reconciliation checks backend evidence.');
+   const extra=dbJobsDetails(area,'metadata','Job run metadata');line('Run ID',r.id||'unknown',extra);line('Job',r.job_id,extra);line('Execution context',JSON.stringify(r.context),extra);line('Owner',r.details?.owner||'',extra);
+   if(r.details)steps(r.details,area,'current');
+  }
  }
- const history=$('db-jobs-history');history.replaceChildren();if(allowed)for(const run of p.history){
-  const row=dataopsNode('div','',history);line('Job',run.job_name,row);line('Run ID',run.id,row);line('Status',t(run.status),row);line('Revision',run.revision,row);
-  for(const step of run.steps||[]){line('Step',step.name+' · '+t(step.status),row);line('Operation IDs',(step.operation_ids||[]).join(', '),row);line('Query IDs',(step.queries||[]).map(q=>q.id+' · '+t(q.state)).join(', '),row);line('Summary',JSON.stringify(step.summary??{}),row);}
+ const history=$('db-jobs-history');dbJobsResetDetails(history,identity);if(allowed)for(const run of p.history){
+  const row=dataopsNode('div','',history);line('Job',run.job_name,row);line('Status',dbJobsStatus(run.status),row);line('Revision',run.revision,row);
   dataopsButton(row,'','Observe run',()=>{
    if(p.pending||p.tracking||p.invalid||!dbJobsAllowed()||(p.run&&!dbJobsTerminal(p.run)&&p.run.id!==run.id))return;
    if(p.run?.id===run.id&&!p.run.purged&&dbJobsAllowed(p.run.context,p.run.schemas))return dbJobsObserve();
    p.run={id:run.id,details:run,job_id:run.job_id,revision:run.revision,context:dataopsFreeze(dataopsClone(run.context)),schemas:dataopsClone(p.schemas),principal:dbPrincipal,status:run.status,sequence:0,purged:false};
    return dbJobsObserve();
   });
+  dbJobsDisclosures.set(row,dbJobsDisclosures.get(history));const extra=dbJobsDetails(row,'run:'+run.id,'Run diagnostics');
+  line('Run ID',run.id,extra);line('Execution context',JSON.stringify(run.context),extra);
+  dbJobsDisclosures.set(extra,dbJobsDisclosures.get(history));steps(run,extra,'history:'+run.id);
  }
 }
 function dbJobsInstall(){
@@ -10126,22 +10187,28 @@ function dbJobsInstall(){
  dataopsButton(selectors,'db-jobs-refresh','Refresh Jobs',dbJobsRefresh);
  const saved=dataopsNode('div','',body);saved.className='toolbar';dataopsField(saved,'db-jobs-list','Saved Jobs','select').onchange=()=>{p.selection=$('db-jobs-list').value;};dataopsButton(saved,'db-jobs-load','Load Job',()=>dbJobsLoad());dataopsButton(saved,'db-jobs-reload','Load current revision',()=>dbJobsLoad(true));
  dataopsButton(saved,'db-jobs-new','New Job',()=>{if(p.pending||p.invalid)return;dbJobsCapture();++p.request;dbJobsEditor();});
+ dataopsNode('p','db-jobs-current',body);dataopsNode('p','db-jobs-context',body).className='help';
+ p.status=dataopsNode('p','db-jobs-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
+ dataopsNode('p','db-jobs-next',body);
+ const controls=dataopsNode('div','',body);controls.className='toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['retry','Retry original Job request','retry'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
+ $('db-jobs-retry').setAttribute('aria-describedby','db-jobs-retry-help');
+ dataopsNode('div','db-jobs-run-detail',body).setAttribute('aria-live','polite');
  p.form=dataopsNode('form','db-jobs-form',body);p.form.onsubmit=e=>e.preventDefault();
  dataopsNode('p','db-jobs-owner',p.form).className='help';const fields=dataopsNode('div','',p.form);fields.className='job-fields';
  for(const [key,label,tag] of [['name','Job name','input'],['description','Job description','input'],['parameters','Parameters JSON','textarea'],['steps','Ordered steps JSON','textarea'],['arguments','Arguments JSON','textarea']]){
   const node=dataopsField(fields,'db-jobs-'+key,label,tag);if(tag==='textarea'){node.rows=key==='steps'?12:5;node.spellcheck=false;node.parentElement.className='job-json';}node.oninput=()=>{dbJobsCapture();dbJobsRender();};
  }
- dataopsNode('p','',p.form,'SQL and alert are available to engineers. Ingest, WAP refresh and table export require admin. Steps run in array order.').className='help';
- dataopsNode('p','',p.form,'SQL: sql and mode. Alert: read-only Boolean sql. Ingest: input, mode and target or destination. WAP refresh: model_id and version. Table export: source and format (csv/jsonl).').className='help';
- dataopsNode('p','',p.form,'Provide parameter definitions and typed arguments as JSON. Files use the input name referenced by an ingest step.').className='help';
+ const definitionHelp=dataopsNode('details','db-jobs-definition-help',p.form);definitionHelp.className='workflow-details';definitionHelp.open=false;dataopsNode('summary','',definitionHelp,'Job definition and action help');
+ dataopsNode('p','',definitionHelp,'SQL and alert are available to engineers. Ingest, WAP refresh and table export require admin. Steps run in array order.').className='help';
+ dataopsNode('p','',definitionHelp,'SQL: sql and mode. Alert: read-only Boolean sql. Ingest: input, mode and target or destination. WAP refresh: model_id and version. Table export: source and format (csv/jsonl).').className='help';
+ const inputHelp=dataopsNode('details','db-jobs-input-help',p.form);inputHelp.className='workflow-details';inputHelp.open=false;dataopsNode('summary','',inputHelp,'Parameter and input help');
+ dataopsNode('p','',inputHelp,'Provide parameter definitions and typed arguments as JSON. Files use the input name referenced by an ingest step.').className='help';
  dataopsNode('div','db-jobs-files',p.form);dataopsButton(p.form,'db-jobs-add-input','Add named input',()=>{if(p.pending||p.invalid)return;const row=dataopsNode('div','',$('db-jobs-files'));row.className='toolbar';const id=crypto.randomUUID(),name=dataopsField(row,'db-job-input-name-'+id,'Input name'),file=dataopsField(row,'db-job-input-file-'+id,'Input file');file.type='file';const record={name,file,row};p.files.push(record);dataopsButton(row,'','Remove',()=>{if(p.pending)return;file.value='';name.value='';p.files=p.files.filter(r=>r!==record);$('db-jobs-files').replaceChildren(...p.files.map(r=>r.row));});});
  const actions=dataopsNode('div','',p.form);actions.className='toolbar';dataopsButton(actions,'db-jobs-save','Save Job',dbJobsSave).className='primary';dataopsButton(actions,'db-jobs-run','Run Job',dbJobsRun).className='run';
- p.status=dataopsNode('p','db-jobs-status',body);p.status.className='status-line';p.status.setAttribute('role','status');p.status.setAttribute('aria-live','polite');
- const controls=dataopsNode('div','',body);controls.className='toolbar';for(const [id,label,action] of [['observe','Observe run','observe'],['retry','Retry original Job request','retry'],['cancel','Cancel run','cancel'],['reconcile','Reconcile unknown run','reconcile']])dataopsButton(controls,'db-jobs-'+id,label,()=>dbJobsObserve(action));
- $('db-jobs-retry').setAttribute('aria-describedby','db-jobs-retry-help');
- dataopsNode('div','db-jobs-run-detail',body).setAttribute('aria-live','polite');dataopsNode('h3','',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
+ dataopsNode('h3','',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
+ if(activeTab==='jobs')void dbJobsOpen();
 }
-function dbJobsOpen(){if(!dbJobs.started){dbJobs.started=true;return dbJobsRefresh();}dbJobsSyncPolling();}
+function dbJobsOpen(){if(!dbJobs.installed)return;if(!dbJobs.started){dbJobs.started=true;return dbJobsRefresh();}dbJobsSyncPolling();}
 
 // Stages keeps its context, drafts and accepted execution separate from SQL tabs.
 const DB_STAGES_CAPABILITY='stage_admin';
