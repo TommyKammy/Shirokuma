@@ -376,6 +376,8 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .bear-list .badge{font-size:11px}
 .workflow-details{margin-top:12px}
 .workflow-details summary{padding-block:8px}
+#bears .workflow-details{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#bears .workflow-details :is(p,pre,summary){white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
 .bear-workflows{display:grid;gap:8px;justify-items:start}
 .bear-workflows button{white-space:normal;text-align:start}
 @media(max-width:1024px){
@@ -3068,7 +3070,7 @@ function dbExplanationSync(){
  for(const id of ['copilot-result','explanation-doctor-output']){
   const node=$(id),disclosure=dbPlanDisclosures.get(node);
   if(record&&(disclosure?.kind!==record.kind||disclosure?.id!==record.id))dbPlanDisclosures.delete(node);
-  node.replaceChildren();
+  dbBearReset(node,record?JSON.stringify([record.kind,record.id,record.context]):'');
   if(record){
    // Captured evidence and model output are untrusted text, including SQL and metadata names.
    const text=document.createElement('pre');text.textContent=record.text||'';node.append(text);
@@ -3077,14 +3079,15 @@ function dbExplanationSync(){
    if(record.kind==='sql_plan_explanation')dbPlanRender(node,record);
    if(record.kind==='saved_plan_explanation')dbSavedRender(node,record);
    // Database worksheets currently authorize LOCAL only. Never fall back to an opaque ID.
+   const provenance=id==='explanation-doctor-output'?dbBearDetails(node,'source','Result source and metadata'):node;
    const warehouse=record.context.warehouse_id==='LOCAL'?'LOCAL':t('Unavailable');
-   const context=document.createElement('p');context.textContent=`${record.context.sql_catalog}.${record.context.sql_schema} · ${record.context.selected_role} · ${warehouse}`;node.append(context);
-   const model=document.createElement('p');model.textContent=`${record.model.name} · ${t('Captured at')}: ${record.metadata.captured_at} · ${t('Updated at')}: ${record.updated_at}`;node.append(model);
+   const context=document.createElement('p');context.textContent=`${record.context.sql_catalog}.${record.context.sql_schema} · ${record.context.selected_role} · ${warehouse}`;provenance.append(context);
+   const model=document.createElement('p');model.textContent=`${record.model.name} · ${t('Captured at')}: ${record.metadata.captured_at} · ${t('Updated at')}: ${record.updated_at}`;provenance.append(model);
    for(const relation of record.metadata.relations){
-    const ref=document.createElement('p');ref.textContent=`${record.kind!=='sql_explanation'?relation.kind+' · ':''}${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;node.append(ref);
+    const ref=document.createElement('p');ref.textContent=`${record.kind!=='sql_explanation'?relation.kind+' · ':''}${relation.schema}.${relation.table} · ${t('{count} columns',{count:relation.columns.length})}`;provenance.append(ref);
    }
    const sqlLabel=document.createElement('p');ui(sqlLabel,'Original SQL (read only)');
-   const sql=document.createElement('pre');sql.textContent=record.kind==='saved_plan_explanation'?record.source_snapshot.sql:record.input.sql;node.append(sqlLabel,sql);
+   const sql=document.createElement('pre');sql.textContent=record.kind==='saved_plan_explanation'?record.source_snapshot.sql:record.input.sql;provenance.append(sqlLabel,sql);
   }
   if(dbExplanation.notice){const p=document.createElement('p');ui(p,dbExplanation.notice);node.append(p);}
   node.hidden=!record&&!dbExplanation.notice;
@@ -3846,18 +3849,47 @@ function dbCuratorGuidance(){
  if(!p.objects.length)return 'Load source objects, then choose one TABLE or VIEW and explicitly request a proposal.';
  return p.source?'Select Explain and draft descriptions to explicitly request a proposal for the chosen source.':'Choose one TABLE or VIEW, then explicitly request a proposal.';
 }
+// Retain native disclosure state and summary focus across read-only Bear renders.
+const dbBearDisclosures=new WeakMap();
+function dbBearReset(node,identity=''){
+ const previous=dbBearDisclosures.get(node),retained=previous?.identity===identity?previous:new Map();retained.identity=identity;
+ for(const [key,entry] of retained){
+  if(entry.used===false){retained.delete(key);continue;}
+  entry.focused=document.activeElement===entry.summary;entry.used=false;entry.details.replaceChildren(entry.summary);
+ }
+ dbBearDisclosures.set(node,retained);node.replaceChildren();
+}
+function dbBearDetails(node,key,label){
+ const retained=dbBearDisclosures.get(node)||new Map();dbBearDisclosures.set(node,retained);
+ let entry=retained.get(key);
+ if(!entry){const details=document.createElement('details'),summary=document.createElement('summary');details.className='workflow-details bear-details';entry={details,summary,focused:false};retained.set(key,entry);}
+ entry.used=true;const {details,summary}=entry;details.replaceChildren(summary);ui(summary,label);node.append(details);
+ if(entry.focused){summary.focus();entry.focused=false;}return details;
+}
+Object.assign(i18n.ja,{
+ 'Explanation input and privacy':'説明に使う入力とプライバシー','Result source and metadata':'結果の参照元とメタデータ',
+ 'Curator history':'Curator の履歴','Proposal coverage and privacy':'提案の範囲とプライバシー',
+ 'Descriptions are proposals, not applied. Review before use.':'説明文は提案です。適用されません。使用前に確認してください。',
+ 'SQL explanation does not execute SQL.':'SQL の説明では SQL を実行しません。',
+ 'Plan acquisition can wake LOCAL. Confirm before acquiring.':'プラン取得により LOCAL が起動する場合があります。取得前に確認してください。',
+ 'Stored states are not current health.':'保存済みの状態は現在の健全性を示しません。',
+ 'Observation coverage and metadata':'観測の範囲とメタデータ',
+ 'Query record details':'クエリ記録の詳細','AI record details':'AI 記録の詳細',
+ 'Saved observations do not establish live health or permission to chill.':'保存済み観測は現在の健全性や休止の許可を示しません。'
+});
 function dbCuratorRender(){
- const p=dbCurator,node=$('curator-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
- const r=dbCuratorAllowed()?p.record:null;
+ const p=dbCurator,node=$('curator-output'),r=dbCuratorAllowed()?p.record:null;dbBearReset(node,r?JSON.stringify([r.id,r.context]):'');let target=node;const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;target.append(n);};
  if(r){
+  line(t(p.origin==='current'?'Curator current frozen source':'Curator historical frozen source; current selection kept'));
+  line(r.context.sql_catalog+'.'+r.metadata.relation.schema+'.'+r.metadata.relation.table+' · '+r.metadata.relation.kind);
   if(r.proposal){line(r.proposal.summary);line(t('Proposed relation description'));line(r.proposal.description,'pre');line(t('Proposed columns: {count} (partial, maximum 8)',{count:r.proposal.columns.length}));for(const col of r.proposal.columns){line(col.name+' · '+r.metadata.relation.columns.find(c=>c.name===col.name).type);line(col.description,'pre');}}
   else line(t(r.state==='UNKNOWN'?'Curator outcome unknown. Recover the original request explicitly.':r.state==='QUEUED'||r.state==='RUNNING'?'Curator request in progress.':dbExplanationStateLabel(r.state)));
-  line(t('Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.'));
-  line(t(p.origin==='current'?'Curator current frozen source':'Curator historical frozen source; current selection kept'));
-  line(r.metadata.relation.schema+'.'+r.metadata.relation.table+' · '+r.metadata.relation.kind);
+  line(t('Descriptions are proposals, not applied. Review before use.'));
+  line(dbExplanationStateLabel(r.state)+' · '+dbExplanationStateLabel(r.inference_state));
+  target=dbBearDetails(node,'source','Result source and metadata');
   line(r.context.sql_catalog+'.'+r.context.sql_schema+' · '+r.context.selected_role+' · '+r.context.warehouse_id);
   line(r.model.provider+' · '+r.model.name+' · '+r.metadata.captured_at+' · '+dbExplanationStateLabel(r.state)+' · '+dbExplanationStateLabel(r.inference_state));
-  if(r.error_code)line(r.error_code);if(r.cancel_requested)line(t('Model result will be discarded. Physical model stoppage is not confirmed.'));
+  target=node;if(r.error_code)line(r.error_code);if(r.cancel_requested)line(t('Model result will be discarded. Physical model stoppage is not confirmed.'));
  }else line(t(dbCuratorGuidance()));
  if(p.notice)line(t(p.notice));
 }
@@ -3868,7 +3900,7 @@ function dbCuratorInstall(){
  for(let i=uiAttributes.length-1;i>=0;i--)if(uiAttributes[i].node===tab&&uiAttributes[i].attribute==='title')uiAttributes.splice(i,1);
  if(!$('curator-panel')?.dataset.installed){
   const panel=document.createElement('div');panel.id='curator-panel';panel.dataset.installed='true';$('bear-panel-catalog').append(panel);
-  const help=document.createElement('p');ui(help,'Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.');panel.append(help);
+  const help=document.createElement('p');ui(help,'Descriptions are proposals, not applied. Review before use.');panel.append(help);
   const toolbar=document.createElement('div');toolbar.className='toolbar';panel.append(toolbar);
   for(const [name,label] of [['role','Execution role'],['database','Database'],['schema','Schema'],['object','Choose source object'],['saved','Choose saved Curator proposal']]){
    const field=document.createElement('span'),l=document.createElement('label'),select=document.createElement('select');field.className='field';select.id='curator-'+name;l.htmlFor=select.id;ui(l,label);field.append(l,select);toolbar.append(field);
@@ -3877,6 +3909,9 @@ function dbCuratorInstall(){
   const local=document.createElement('span');local.textContent='LOCAL';toolbar.append(local);
   for(const [name,label,task] of [['refresh','Refresh context',dbCuratorRefresh],['load','Load source objects',()=>dbCuratorLoad()],['more','More objects',()=>dbCuratorLoad(true)],['create','Explain and draft descriptions',()=>dbCuratorSubmit()],['recover','Recover oldest original Curator request',()=>dbCuratorSubmit('recover')],['history','Load Curator history',()=>dbCuratorHistory()],['cancel','Discard Curator result',dbCuratorCancel]]){const b=document.createElement('button');b.id='curator-'+name;b.type='button';ui(b,label);b.onclick=task;toolbar.append(b);}
   const output=document.createElement('div');output.id='curator-output';output.setAttribute('aria-live','polite');panel.append(output);
+  const privacy=workflowDetails(panel,'Proposal coverage and privacy');privacy.className+=' bear-details';
+  dataopsNode('p','',privacy,'Only names and column types go to LOCAL. Descriptions are inferred proposals, not applied. Review the content. Column proposals cover some columns, at most 8.');
+  const history=workflowDetails(panel,'Curator history');history.append($('curator-saved').parentElement,$('curator-history'));
  }
  dbCuratorSync();
 }
@@ -4010,25 +4045,26 @@ async function dbObservationFetch(p){
 }
 function dbObservationRender(p){
  if(p.scope==='platform'){dbPlatformRender(p);return;}
- const node=$('observation-'+p.kind+'-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
- const r=dbObservationAllowed(p)?p.record:null;
+ const node=$('observation-'+p.kind+'-output'),r=dbObservationAllowed(p)?p.record:null;dbBearReset(node,r?JSON.stringify([r.context,r.observed_at]):'');let target=node;const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;target.append(n);};
  if(!r){line(t(p.notice||dbObservationGuidance(p)));return;}
  line(t('Captured Database context')+': '+r.context.sql_catalog+'.'+r.context.sql_schema+' · '+dbObservationLabel('role',r.context.selected_role)+' · LOCAL');
  line(t('Observed at')+': '+r.observed_at);
+ const metadata=dbBearDetails(node,'coverage','Observation coverage and metadata');
  if(p.kind==='sre'){
-  line(t('Saved own-context metadata; first 20 candidates per source only. Stored states are not current health.'));
+  line(t('Stored states are not current health.'));target=metadata;line(t('Saved own-context metadata; first 20 candidates per source only. Stored states are not current health.'));target=node;
   for(const [key,label] of [['queries','Displayed query records'],['ai','Displayed AI records']]){const window=r.sre[key];line(t(label)+': '+window.items.length,'h3');
    if(!window.items.length)line(t('No displayable matching own records in this bounded window.'));
-   for(const item of window.items){line(dbObservationLabel('kind',item.kind)+' · '+dbObservationLabel(key==='queries'?'queryState':'aiState',item.state));line(dbObservationLabel('field','record')+': '+item.id);line(t('Stored created at')+': '+item.created_at);if(key==='ai')line(t('Stored updated at')+': '+item.updated_at);}
+   else{const states=new Map();for(const item of window.items){const state=dbObservationLabel(key==='queries'?'queryState':'aiState',item.state);states.set(state,(states.get(state)||0)+1);}line([...states].map(([state,count])=>state+': '+count).join(' · '));}
+   if(window.items.length){target=dbBearDetails(node,'records:'+key,key==='queries'?'Query record details':'AI record details');for(const item of window.items){line(dbObservationLabel('kind',item.kind)+' · '+dbObservationLabel(key==='queries'?'queryState':'aiState',item.state));line(dbObservationLabel('field','record')+': '+item.id);line(t('Stored created at')+': '+item.created_at);if(key==='ai')line(t('Stored updated at')+': '+item.updated_at);}target=node;}
    if(window.omitted)line(t('Non-displayable records in this fetched window (first 20 time-eligible candidates) omitted: {count}. No diagnosis is provided.',{count:window.omitted}));
-   if(window.has_more)line(t('Older candidate records exist; eligible older records are not guaranteed.'));
+   target=metadata;if(window.has_more)line(t('Older candidate records exist; eligible older records are not guaranteed.'));target=node;
   }
  }else{
   line(t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.'));
   for(const key of ['browse','query','write'])line(dbObservationLabel('permission',key)+': '+dbObservationLabel('allowed',r.policy.schema_permissions[key]));
-  line(t('Allowed SQL modes (ceiling)')+': '+r.policy.sql_modes.map(mode=>dbObservationLabel('mode',mode)).join(', '));line(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.'));
+  line(t('Allowed SQL modes (ceiling)')+': '+r.policy.sql_modes.map(mode=>dbObservationLabel('mode',mode)).join(', '));target=metadata;line(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.'));target=node;
  }
- line(t(r.platform.allowed?'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.'));
+ node.append(metadata);target=metadata;line(t(r.platform.allowed?'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.'));
 }
 function dbObservationNavigate(kind){for(const p of Object.values(dbObservations)){if(!p.installed)continue;if(p.selected&&kind!==p.kind){++p.epoch;p.busy=null;p.notice='';}p.selected=kind===p.kind;dbObservationSync(p);}dbPlatformSync();}
 function dbObservationsInstall(){
@@ -4175,18 +4211,20 @@ function dbPlatformRecord(d){
  return dataopsFreeze(structuredClone(d));
 }
 function dbPlatformRender(o){
- const node=$('observation-'+o.kind+'-output');node.replaceChildren();const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;node.append(n);};
+ const node=$('observation-'+o.kind+'-output'),p=dbPlatform,r=dbObservationPlatform('admin')?p.record:null;dbBearReset(node,r?JSON.stringify([r.observed_at,r.context]):'platform');let target=node;const line=(text,tag='p')=>{const n=document.createElement(tag);n.textContent=text;target.append(n);};
  line(t('Platform scope')+' · LOCAL · '+t('Global role')+': '+dbObservationLabel('role',currentRole));
- const p=dbPlatform,r=dbObservationPlatform('admin')?p.record:null;
  if(r)line(t('Observed at')+': '+r.observed_at);
+ const compact=o.kind!=='compute';
+ if(compact)line(t('Saved observations do not establish live health or permission to chill.'));
+ const metadata=compact?dbBearDetails(node,'platform-coverage','Observation coverage and metadata'):node;target=metadata;
  line(t('Deployment desired/ready counts only; pod stoppage, released resources and current SQL health are not established.'));
  line(t('Historical engine proof only; no live engine probe or current SQL health guarantee.'));
  line(t('Saved admissions are incomplete blockers; this is not a security audit or permission to chill.'));
- if(p.notice)line(t(p.notice));
+ target=node;if(p.notice)line(t(p.notice));
  if(!r){if(!p.notice)line(t(dbObservationPlatform('admin')?'Platform authority verified. Select Fetch platform observation.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.'));return;}
  for(const [key,title,failure] of [['physical','Deployment summary','Deployment source unavailable.'],['engine_evidence','Saved engine proof','Engine proof source unavailable.'],['auto_chill','Saved auto-chill policy','Auto-chill policy source unavailable.'],['saved_admissions','Saved admissions','Saved admissions source unavailable.']]){
-  const s=r[key];line(t(title),'h3');line(t('Observed at')+': '+s.observed_at);
-  if(key==='saved_admissions')line(t('Counts exclude query admissions with verified execution closure; saved UNKNOWN history is unchanged.'));
+  const s=r[key];line(t(title),'h3');target=metadata;line((compact?t(title)+' · ':'')+t('Observed at')+': '+s.observed_at);target=node;
+  if(key==='saved_admissions'){target=metadata;line(t('Counts exclude query admissions with verified execution closure; saved UNKNOWN history is unchanged.'));target=node;}
   if(s.availability==='unavailable'){line(t(failure));continue;}
   const value=(label,v)=>line(t(label)+': '+v);
   if(key==='physical'){
@@ -4196,6 +4234,7 @@ function dbPlatformRender(o){
   else if(key==='auto_chill'){if(s.minutes===0)line(t('Disabled (0 min)'));else value('Idle minutes',s.minutes);}
   else{value('Active admissions',s.active);value('Unknown admissions',s.unknown);}
  }
+ if(compact)node.append(metadata);
 }
 
 // Independent manual declaration snapshot. No Database grant or old observation busy state.
@@ -6310,7 +6349,9 @@ function dbExplanationInstall(){
  const source=document.createElement('div');source.id='explanation-source';source.className='status-line';source.setAttribute('aria-live','polite');input.after(source);
  for(const prefix of ['doctor','copilot']){
   const panel=document.createElement('div');panel.className='copilot-body';
-  const help=document.createElement('p');ui(help,dbExplanationHelp);panel.append(help);
+  const help=document.createElement('p');ui(help,dbExplanationHelp);
+  const privacy=prefix==='doctor'?workflowDetails(panel,'Explanation input and privacy'):panel;privacy.append(help);
+  if(prefix==='doctor')dataopsNode('p','',panel,'SQL explanation does not execute SQL.');
   if(prefix==='doctor'){
    const actionState=dataopsNode('p','explanation-doctor-action-state',panel);actionState.className='help';actionState.setAttribute('role','status');
    const output=document.createElement('div');output.id='explanation-doctor-output';output.setAttribute('aria-live','polite');panel.append(output);
@@ -6333,7 +6374,7 @@ function dbExplanationInstall(){
    ['plan-cancel','Cancel plan acquisition',dbPlanCancel]]){
    const button=document.createElement('button');button.id='explanation-'+prefix+'-'+action;button.type='button';ui(button,key);button.onclick=task;planToolbar.append(button);
   }
-  plan.append(planToolbar);
+  if(prefix==='doctor')dataopsNode('p','',plan,'Plan acquisition can wake LOCAL. Confirm before acquiring.');plan.append(planToolbar);
   const savedPlan=prefix==='doctor'?workflowDetails(panel,'Saved plan re-explanation and recovery'):panel;
   const savedHelp=document.createElement('p');ui(savedHelp,'Explains the saved plan locally. Uses its original SQL and captured metadata.');savedPlan.append(savedHelp);
   const savedToolbar=document.createElement('div');savedToolbar.className='toolbar';

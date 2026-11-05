@@ -41,6 +41,13 @@ $('bear-query-sql').before=node=>{field.append(node);field.children.splice(field
 '''
         self.javascript(fixture + body)
 
+    def test_doctor_supplements_closed_and_advanced_actions_remain_in_details(self):
+        self.javascript(r"""
+await boot();const insideDetails=n=>{for(let p=n.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')return true;return false;};
+for(const action of ['recover','plan','plan-recover','plan-cancel','saved-plan-recover','saved-plan-cancel'])assert.equal(insideDetails($('explanation-doctor-'+action)),true,action);
+const count=calls.length;dbExplanation.record=record();dbExplanationSync();const node=$('explanation-doctor-output'),detail=node.children.find(n=>n.tagName==='DETAILS');assert.ok(detail);assert.ok(!detail.open);detail.open=true;const summary=detail.querySelector('summary');summary.focus();dbExplanationSync();assert.equal(detail.open,true);assert.equal(document.activeElement,summary);assert.equal(calls.length,count);assert.ok(node.children.some(n=>n.textContent==='SQL explanation'));
+""")
+
     def test_original_a1_explicit_recovery_after_both_drafts_and_reload_uses_only_original_get(self):
         for state in ['RUNNING', 'UNKNOWN']:
             with self.subTest(state=state):

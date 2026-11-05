@@ -305,13 +305,13 @@ await fetchObservation('sre',sre);await fetchObservation('policy',policy);const 
 for(const locale of ['ja','en']){
  setLanguage(locale);const before=otherState(),start=calls.length;dbControls();dbObservationRender(dbObservations.sre);dbObservationRender(dbObservations.policy);
  const output=$('observation-sre-output'),lines=output.children.map(n=>n.textContent),text=observationText('sre'),policyLines=$('observation-policy-output').children.map(n=>n.textContent),policyText=observationText('policy');
- assert.equal(lines[0],t('Captured Database context')+': sales.marts · '+(locale==='ja'?'管理者':'Admin')+' · LOCAL');assert.equal(lines[1],t('Observed at')+': '+sre.observed_at);assert.ok(lines.findIndex(line=>line.includes('query-trace-0'))>1);assert.ok(text.indexOf(sre.observed_at)<text.indexOf('query-trace-0'));
- assert.equal(policyLines[0],t('Captured Database context')+': sales.raw · '+(locale==='ja'?'管理者':'Admin')+' · LOCAL');assert.equal(policyLines[1],t('Observed at')+': '+policy.observed_at);assert.ok(policyLines.findIndex(line=>line.startsWith(locale==='ja'?'参照:':'Browse:'))>1);
+ assert.equal(lines[0],t('Captured Database context')+': sales.marts · '+(locale==='ja'?'管理者':'Admin')+' · LOCAL');assert.equal(lines[1],t('Observed at')+': '+sre.observed_at);const details=output.children.filter(n=>n.tagName==='DETAILS');assert.ok(details.length);assert.ok(details.every(n=>!n.open));assert.ok(lines.includes(t('Stored states are not current health.')));assert.ok(!lines.some(line=>line.includes('query-trace-0')));
+ assert.equal(policyLines[0],t('Captured Database context')+': sales.raw · '+(locale==='ja'?'管理者':'Admin')+' · LOCAL');assert.ok(policyText.includes(t('Observed at')+': '+policy.observed_at));assert.ok(policyLines.findIndex(line=>line.startsWith(locale==='ja'?'参照:':'Browse:'))>1);
  for(const value of ['database_id','schema_id','generation_id','binding_revision','grant_revision','selected_role','gen','schema']){assert.ok(!lines.slice(0,2).join('\n').includes(value),value);}
  assert.doesNotMatch(text,/binding_revision:|grant_revision:|generation_id:|FINISHED|SUCCEEDED|QUEUED|RUNNING|FAILED|CANCELED|UNKNOWN/);assert.doesNotMatch(policyText,/browse: true|query: true|write: true|read-only|sandbox-write|admin-write/);
  const expectedKinds=locale==='ja'?['クエリ','SQL の説明','実行計画の説明','保存済みプランの説明','SQL 案','カタログの説明文案']:['Query','SQL explanation','Execution plan explanation','Saved plan explanation','SQL proposal','Catalog proposal'];for(const label of expectedKinds)assert.ok(text.includes(label),label);
  const expectedStates=locale==='ja'?['待機中','実行中','完了','成功','失敗','キャンセル済み','結果不明']:['Queued','Running','Finished','Succeeded','Failed','Canceled','Outcome unknown'];for(const label of expectedStates)assert.ok(text.includes(label),label);
- assert.ok(lines.includes(locale==='ja'?'クエリ · 完了':'Query · Finished'));assert.ok(lines.includes(locale==='ja'?'保存済みプランの説明 · 成功':'Saved plan explanation · Succeeded'));
+ assert.ok(lines.some(line=>line.includes((locale==='ja'?'完了':'Finished')+': ')));assert.equal(details.length,3);assert.ok(text.includes(locale==='ja'?'保存済みプランの説明 · 成功':'Saved plan explanation · Succeeded'));
  assert.ok(text.includes((locale==='ja'?'レコード ID':'Record ID')+': query-trace-0'));assert.ok(text.includes(t('Older candidate records exist; eligible older records are not guaranteed.')));
  const permissionLabels=locale==='ja'?['参照: 許可','クエリ: 許可','書き込み: 許可']:['Browse: Allowed','Query: Allowed','Write: Allowed'];for(const label of permissionLabels)assert.ok(policyLines.includes(label));for(const mode of locale==='ja'?['読み取り専用','サンドボックス書き込み','管理者書き込み']:['Read only','Sandbox write','Admin write'])assert.ok(policyText.includes(mode));
  assert.equal(policyLines.filter(line=>line===t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.')).length,1);
@@ -407,6 +407,14 @@ await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchO
 await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');const removedSchema=dbObservations.sre.schemas.find(s=>s.id==='finance-marts');removedSchema.capabilities.query=false;dbControls();assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.sre.context,null);assert.equal(dbObservations.policy.record,policy);removedSchema.capabilities.query=true;
 await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');session.platform_admin=false;dbAdminSession(session);for(const p of Object.values(dbObservations)){assert.equal(p.record,null);assert.equal(p.context,null);}
 session.platform_admin=true;dbAdminSession(session);await populate();dbInvalidateReceipt('admin',true);for(const p of Object.values(dbObservations)){assert.equal(p.record,null);assert.equal(p.context,null);}
+""")
+
+    def test_supplementary_details_keep_state_focus_and_failures_visible_without_reads(self):
+        self.javascript(r"""
+await boot();await readyObservation('sre');const reply=observationReply();reply.sre.queries.items[0].state='UNKNOWN';await fetchObservation('sre',reply);
+const node=$('observation-sre-output'),detail=node.children.find(n=>n.tagName==='DETAILS'),summary=detail.querySelector('summary');assert.ok(!detail.open);detail.open=true;summary.focus();const count=calls.length;
+for(const locale of ['ja','en']){setLanguage(locale);dbObservationRender(dbObservations.sre);assert.equal(detail.open,true);assert.equal(document.activeElement,summary);assert.ok(node.children.some(n=>n.textContent.includes(dbObservationLabel('queryState','UNKNOWN'))));assert.equal(calls.length,count);}
+$('observation-sre-fetch').focus();dbObservationRender(dbObservations.sre);assert.equal(document.activeElement,$('observation-sre-fetch'));
 """)
 
     def test_existing_wrapping_scroll_components_and_no_new_css_or_product_inputs(self):

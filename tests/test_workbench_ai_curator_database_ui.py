@@ -36,6 +36,12 @@ class CuratorDatabaseUI(unittest.TestCase):
         with patch.object(harness.subprocess, 'run', strict_run if strict_dom else run):
             harness.DatabaseUI.javascript(self, COMMON + CURATOR + body)
 
+    def test_curator_history_secondary_and_unknown_recovery_visible(self):
+        self.javascript(r"""
+await boot();const history=$('curator-history').parentElement;assert.equal(history.tagName,'DETAILS');assert.ok(!history.open);assert.equal($('curator-saved').parentElement.parentElement,history);assert.notEqual($('curator-recover').parentElement.tagName,'DETAILS');assert.notEqual($('curator-cancel').parentElement.tagName,'DETAILS');
+await curatorContext();objects=[curatorObject()];await dbCuratorLoad();change('object','0');await curatorSubmit(curatorPending({state:'UNKNOWN',inference_state:'UNKNOWN'}));const output=$('curator-output');assert.ok(output.children.some(n=>n.textContent.includes(t('Curator outcome unknown. Recover the original request explicitly.'))));const detail=output.children.find(n=>n.tagName==='DETAILS');assert.ok(!detail.open);detail.open=true;const summary=detail.querySelector('summary');summary.focus();const count=calls.length;dbCuratorRender();assert.equal(document.activeElement,summary);assert.equal(detail.open,true);assert.equal(calls.length,count);
+""")
+
     def test_staged_guidance_is_bilingual_and_rendering_has_no_side_effects(self):
         self.javascript(r'''
 {
@@ -159,7 +165,7 @@ await curatorReady();const original=localStorage.setItem;localStorage.setItem=(k
     def test_safe_literal_names_types_normalized_partial_proposal_and_bilingual(self):
         self.javascript(r'''
 await curatorReady();await curatorSubmit();const r=dbCurator.record;assert.deepEqual(r.proposal.columns.map(c=>c.name),['合計','詳細']);
-for(const locale of ['ja','en']){setLanguage(locale);const node=$('curator-output'),text=visibleText(node);assert.equal(node.children[0].textContent,r.proposal.summary);assert.ok(text.includes(r.metadata.relation.table));assert.ok(text.includes('decimal(12,2)'));assert.ok(text.includes('{"type":"list","element":"string"}'));assert.ok(text.includes(t('Proposed columns: {count} (partial, maximum 8)',{count:2})));assert.ok(text.includes('local-model'));assert.ok(text.includes(r.metadata.captured_at));assert.ok(text.includes('sales.marts · admin · LOCAL'));assert.ok(text.includes(t('Curator current frozen source')));assert.equal(node.querySelector('img'),undefined);assert.doesNotMatch(text,/object_id|binding_revision/);assert.equal($('curator-create').textContent,t('Explain and draft descriptions'));}
+for(const locale of ['ja','en']){setLanguage(locale);const node=$('curator-output'),text=visibleText(node);assert.equal(node.children[0].textContent,t('Curator current frozen source'));assert.ok(node.children[1].textContent.includes(r.metadata.relation.table));assert.equal(node.children[2].textContent,r.proposal.summary);assert.ok(text.includes(r.metadata.relation.table));assert.ok(text.includes('decimal(12,2)'));assert.ok(text.includes('{"type":"list","element":"string"}'));assert.ok(text.includes(t('Proposed columns: {count} (partial, maximum 8)',{count:2})));assert.ok(text.includes('local-model'));assert.ok(text.includes(r.metadata.captured_at));assert.ok(text.includes('sales.marts · admin · LOCAL'));assert.ok(text.includes(t('Curator current frozen source')));assert.equal(node.querySelector('img'),undefined);assert.doesNotMatch(text,/object_id|binding_revision/);assert.equal($('curator-create').textContent,t('Explain and draft descriptions'));}
 ''')
 
     def test_strict_record_and_proposal_rejections(self):

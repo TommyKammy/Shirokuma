@@ -703,7 +703,7 @@ for(const id of ['copilot-result','explanation-doctor-output']){
  assert.match(visibleText(details),/dependency provenance; not an operator-to-relation mapping/);
  assert.doesNotMatch(visibleText(node),/Mixed field|decimal\(24|"relations"/);
  assert.equal(node.descendants().some(n=>['BUTTON','INPUT','TEXTAREA'].includes(n.tagName)),false);
- assert.ok(node.children.some(n=>n.tagName==='PRE'&&n.textContent===$('sql').value));
+ assert.ok(node.descendants().some(n=>n.tagName==='PRE'&&n.textContent===$('sql').value));
 }
 retained.open=true;dbExplanationSync();assert.equal(tree('copilot-result'),retained);assert.equal(retained.open,true);
 setLanguage('ja');assert.equal(tree('copilot-result'),retained);assert.equal(retained.open,true);
