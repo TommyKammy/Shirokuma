@@ -862,6 +862,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <symbol id="i-jobs" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.5"/></symbol>
 <symbol id="i-bears" viewBox="0 0 16 16"><circle cx="4" cy="4.2" r="1.7"/><circle cx="12" cy="4.2" r="1.7"/><circle cx="8" cy="9" r="5"/><path d="M6.6 10.6c.8.6 2 .6 2.8 0"/></symbol>
 <symbol id="i-catalog" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5.5" ry="2"/><path d="M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2"/></symbol>
+<symbol id="i-db-admin" viewBox="0 0 16 16"><ellipse cx="6" cy="3.5" rx="4.5" ry="1.75"/><path d="M1.5 3.5v8c0 1 2 1.75 4.5 1.75M10.5 3.5v3M1.5 7.5c0 1 2 1.75 4.5 1.75"/><path d="M10.75 8.25h1.5l.25 1 .75.5 1-.25.75 1.25-.75.75v1l.75.75-.75 1.25-1-.25-.75.5-.25 1h-1.5l-.25-1-.75-.5-1 .25L8 13.25l.75-.75v-1L8 10.75l.75-1.25 1 .25.75-.5z"/><circle cx="11.5" cy="11.75" r=".75"/></symbol>
 <symbol id="i-audit" viewBox="0 0 16 16"><path d="M3.5 2.5h7l2 2v9h-9z"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/></symbol>
 <symbol id="i-compute" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="4.5" rx="1"/><rect x="2" y="9" width="12" height="4.5" rx="1"/><path d="M4.5 4.75h.01M4.5 11.25h.01"/></symbol>
 </svg>
@@ -886,7 +887,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer"><svg class="icon" aria-hidden="true"><use href="#i-jobs"/></svg>Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></button>
 <button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears"><svg class="icon" aria-hidden="true"><use href="#i-bears"/></svg>AI Bears</button>
 <h2 class="nav-category">Manage &amp; Monitor</h2>
-<button id="tab-db-admin" role="tab" aria-controls="db-admin" aria-selected="false" tabindex="-1" data-tab="db-admin" hidden>DB management</button>
+<button id="tab-db-admin" role="tab" aria-controls="db-admin" aria-selected="false" tabindex="-1" data-tab="db-admin" hidden><svg class="icon" aria-hidden="true"><use href="#i-db-admin"/></svg><span id="tab-db-admin-label">DB management</span></button>
 <button id="tab-pawprints" role="tab" aria-controls="pawprints" aria-selected="false" tabindex="-1" data-tab="pawprints"><svg class="icon" aria-hidden="true"><use href="#i-audit"/></svg>Audit Log</button>
 <button id="tab-compute" role="tab" aria-controls="compute" aria-selected="false" tabindex="-1" data-tab="compute"><svg class="icon" aria-hidden="true"><use href="#i-compute"/></svg>Compute &amp; Governance</button>
 <p class="nav-note">Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.</p>
@@ -7789,7 +7790,7 @@ Object.assign(i18n.ja,{
  'Resolve pending or uncertain requests before changing the management database.':'管理対象を切り替える前に、処理中または結果不明の要求を確認してください。'
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
-ui($('tab-db-admin'),'DB management');ui($('db-admin-title'),'DB management');ui($('db-admin-refresh'),'Refresh current revisions');
+ui($('tab-db-admin-label'),'DB management');ui($('db-admin-title'),'DB management');ui($('db-admin-refresh'),'Refresh current revisions');
 function dbAdminAllowed(){return databaseMode&&dbAdmin.platform&&dbMaximumRole==='admin'&&currentRole==='admin';}
 function dbAdminGate(){
  const allowed=dbAdminAllowed();$('tab-db-admin').hidden=!allowed;
@@ -7990,7 +7991,7 @@ function dbAdminActions(parent,id,label,build){
 }
 function dbAdminInstall(){
  if(dbAdmin.installed)return;dbAdmin.installed=true;
- ui($('tab-db-admin'),'DB management');ui($('db-admin-title'),'DB management');ui($('db-admin-refresh'),'Refresh current revisions');
+ ui($('tab-db-admin-label'),'DB management');ui($('db-admin-title'),'DB management');ui($('db-admin-refresh'),'Refresh current revisions');
  const root=$('db-admin-content');
  const select=dbAdminField(root,'db-admin-select','Management selection','select');
  select.onchange=()=>{if(dbAdminSelect(select.value))return dbAdminLoadGrants();};
