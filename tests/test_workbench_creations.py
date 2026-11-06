@@ -41,6 +41,9 @@ const edit=(id,value)=>{$(id).value=value;$(id).oninput();};
 const begin=()=>{dbCreation.process=null;dbCreationRender();edit('db-creation-sql_catalog','new_sales');edit('db-creation-display_name','名前 <script> 🐻');edit('db-creation-description','説明 <img>');};
 // Install a successful detail snapshot for tests that exercise the renderer directly.
 const show=p=>{creation=p;dbCreation.process=structuredClone(p);dbCreation.checkedID=p.creation_id;dbCreation.readFailed=false;dbCreationRender();};
+const historyPicker=()=>$('db-creation-history-picker');
+const chooseCreation=id=>{const picker=historyPicker();picker.value=id;picker.onchange();};
+const openCreation=id=>{chooseCreation(id);return $('db-creation-history-open').click();};
 const contents=node=>[node.textContent,...node.children.map(contents)].join('\n');
 '''
 
@@ -61,25 +64,25 @@ const advanceTimers=async milliseconds=>{
 class CreationUI(unittest.TestCase):
     javascript = admin.harness.DatabaseUI.javascript
 
-    def test_observation_hidden_before_request_and_visible_for_selected_or_uncertain_request(self):
+    def test_routine_observation_hidden_for_new_selected_and_uncertain_requests(self):
         self.javascript(SETUP + r'''
 begin();
 for(const locale of ['en','ja']){
  setLanguage(locale);dbCreationRender();
  assert.equal($('db-creation-observation').hidden,true);assert.equal($('db-creation-observation').textContent,'');
 }
-setLanguage('en');show(process());assert.equal($('db-creation-observation').hidden,false);
-await dbCreationLoad();assert.match($('db-creation-observation').textContent,/Last successful status check/);
+setLanguage('en');show(process());assert.equal($('db-creation-observation').hidden,true);
+await dbCreationLoad();assert.equal($('db-creation-observation').textContent,'');
 begin();assert.equal($('db-creation-observation').hidden,true);
 await $('db-creation-next').onclick();await $('db-creation-next').onclick();
 const held=deferred();creationRoute=()=>held.promise;const posting=$('db-creation-submit').onclick();await tick();
 assert.equal($('db-creation-observation').hidden,true);
 held.reject(Error('lost reply'));await posting;
 assert.equal(dbCreation.process,null);assert.ok(dbCreation.pending);assert.equal(dbCreation.pending.busy,false);
-assert.equal($('db-creation-observation').hidden,false);
+assert.equal($('db-creation-observation').hidden,true);
 assert.match(contents($('db-creation-form')),/Request outcome uncertain/);
 assert.match($('db-creation-status').textContent,/Connection unavailable/);
-assert.doesNotMatch($('db-creation-observation').textContent,/Last successful status check/);
+assert.equal($('db-creation-observation').textContent,'');
 assert.equal(creationPosts.length,1);
 ''')
 
@@ -254,8 +257,7 @@ await advanceTimers(10000);assert.equal(timers.size,0);assert.equal(creationPost
 creation=process({lifecycle:'RECONCILING',progress_code:'APPLYING',plans:[plan('bootstrap','APPLYING')],next_actions:[]});
 held.resolve({creation_id:'creation',request_id:'ack',accepted_revision:3});await posting;
 assert.equal(dbCreation.process.progress_code,'APPLYING');assert.equal(timers.size,1);
-assert.match($('db-creation-observation').textContent,/Automatic status checking every 5 seconds/);
-assert.match($('db-creation-observation').textContent,/Last successful status check/);
+assert.equal($('db-creation-observation').textContent,'');
 let checks=0;const old=adminRoute;adminRoute=(path,options)=>{if(path===C+'/creation')++checks;return old(path,options);};
 for(const update of [process({revision:4,plans:[plan('bootstrap','PREPARED')],next_actions:['plans']}),process({revision:5,lifecycle:'READY',progress_code:'READY',next_actions:[]})]){
  creation=update;await advanceTimers(4999);assert.notDeepEqual(dbCreation.process,creation);
@@ -270,13 +272,13 @@ dbCreationStop();
         self.javascript(TIMER_SETUP + r'''
 show(process({plans:[plan()],next_actions:['approve']}));await dbCreationLoad();
 await $('db-creation-review-bootstrap').onclick();const checkbox=$('db-creation-confirm');checkbox.checked=true;checkbox.onchange();checkbox.focus();
-const reviewed=dbCreation.review,old=adminRoute,checked=dbCreation.lastCheck;
+const reviewed=dbCreation.review,old=adminRoute;
 const review=$('db-creation-review-bootstrap').onclick,approve=$('db-creation-approve').onclick;
 await advanceTimers(5000);
 assert.equal($('db-creation-confirm'),checkbox);assert.equal(checkbox.checked,true);assert.equal(document.activeElement,checkbox);assert.equal(dbCreation.review,reviewed);
-assert.ok(dbCreation.lastCheck>=checked);const success=dbCreation.lastCheck;
 adminRoute=(path,options)=>{if(path===C+'/creation')throw Error('read failed');return old(path,options);};
-await advanceTimers(5000);assert.equal(dbCreation.lastCheck,success);assert.equal(timers.size,1);
+await advanceTimers(5000);assert.equal(timers.size,1);
+assert.equal($('db-creation-observation').hidden,false);
 assert.match($('db-creation-observation').textContent,/Status check failed.*last known state/);
 assert.deepEqual(dbCreation.process,creation);assert.equal(dbCreation.review,null);
 assert.equal(document.activeElement,$('db-creation-refresh'));
@@ -285,7 +287,8 @@ assert.equal(hasConsent(),false);assert.equal($('db-creation-review-bootstrap').
 assert.match($('db-creation-next-action').textContent,/Refresh creation status/);
 await review();await approve();assert.equal(dbCreation.review,null);
 adminRoute=old;await advanceTimers(5000);assert.equal(dbCreation.error,'');assert.equal(dbCreation.readFailed,false);
-assert.doesNotMatch($('db-creation-observation').textContent,/Status check failed/);
+assert.equal($('db-creation-observation').hidden,true);
+assert.equal($('db-creation-observation').textContent,'');
 assert.equal(hasConsent(),false);assert.equal($('db-creation-review-bootstrap').disabled,false);
 await review();await approve();assert.equal(dbCreation.review,null);
 await $('db-creation-review-bootstrap').onclick();
@@ -299,7 +302,7 @@ assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 show(process());const held=deferred();creationRoute=()=>held.promise;
 const posting=$('db-creation-bootstrap').onclick();await tick();document.hidden=true;
 held.resolve({creation_id:'creation',request_id:'ack',accepted_revision:3});await posting;
-assert.equal(timers.size,0);assert.match($('db-creation-observation').textContent,/checking paused/);
+assert.equal(timers.size,0);assert.equal($('db-creation-observation').textContent,'');
 await advanceTimers(15000);assert.equal(creationPosts.length,1);
 dbCreationSuspend();document.hidden=false;await dbCreationLoad();assert.equal(timers.size,1);
 await advanceTimers(5000);assert.equal(timers.size,1);assert.equal(creationPosts.length,1);
@@ -433,18 +436,17 @@ const grants=['alice','bob','carol'].map(principal_id=>({principal_id,desired_ro
 creation=process({lifecycle,progress_code:progress,revision:13,next_actions:[],blocker:null,plans:history,initial_grants:grants});
 const original=structuredClone(creation),draft=JSON.stringify(dbCreation.draft),sheets=JSON.stringify(worksheets),worksheet=worksheetId;
 dbCreation.process=null;await dbCreationLoad(true);
-const button=$('db-creation-form').descendants().find(n=>n.tagName==='BUTTON'&&n.textContent==='sales · '+lifecycle.toUpperCase());
-assert.ok(button,'list must show the current lifecycle');
+assert.ok(historyPicker().options.some(n=>n.textContent==='sales · '+lifecycle.toUpperCase()),'list must show the current lifecycle');
 const old=adminRoute,held=deferred();let details=0;
 adminRoute=(path,options)=>{if(path===C+'/creation'){++details;return held.promise;}return old(path,options);};
-const reading=button.onclick();
+const reading=openCreation('creation');
 const assertCurrent=()=>{
  assert.equal($('db-creation-progress').textContent,lifecycle.toUpperCase());
  const box=$('db-creation-process'),text=contents(box),controls=box.descendants().filter(n=>n.tagName==='BUTTON');
  assert.equal(box.descendants().some(n=>n.textContent==='READY'),false);
  assert.equal(box.descendants().some(n=>n.textContent==='Warehouse maintenance; waiting for full approval or verification.'),false);
  assert.equal(controls.some(n=>n.id==='db-creation-sql'),false);
- assert.equal(controls.length,0);
+ assert.deepEqual(controls.map(n=>n.id),['db-creation-refresh','db-creation-new']);
  for(const p of history){
   assert.ok(text.includes(p.phase+' · '+p.purpose+' · APPLIED'));
   assert.ok(text.includes('VERIFY_RECOVERY · APPLIED'));
@@ -456,7 +458,7 @@ const assertCurrent=()=>{
  assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
  assert.equal(calls.some(c=>c.options?.method==='POST'),false);
 };
-assertCurrent();await tick();assert.equal(details,1);
+assert.equal(dbCreation.process,null);await tick();assert.equal(details,1);assert.equal(dbCreation.process,null);
 held.resolve(structuredClone(creation));await reading;assertCurrent();
 adminRoute=old;creation={...creation,display_name:'Refreshed history'};
 await $('db-creation-refresh').onclick();assertCurrent();assert.equal(dbCreation.error,'');
@@ -489,7 +491,15 @@ dbCreation.list=[structuredClone(creation),process({creation_id:'second',sql_cat
 await $('db-creation-review-bootstrap').onclick();
 $('db-creation-confirm').checked=true;$('db-creation-confirm').onchange();
 const selected=dbCreation.process,draft=JSON.stringify(dbCreation.draft),sheets=JSON.stringify(worksheets);
-const labels=()=>$('db-creation-form').descendants().filter(n=>n.tagName==='BUTTON').map(n=>n.textContent);
+const disclosure=$('db-creation-history'),picker=historyPicker();
+assert.equal(disclosure.tagName,'DETAILS');assert.equal(disclosure.open,false);
+assert.equal(disclosure.children[0].tagName,'SUMMARY');assert.equal(disclosure.children[0].textContent,'Creation history');
+assert.equal(picker.tagName,'SELECT');
+assert.equal(picker.parentElement.children[0].htmlFor,picker.id);
+assert.ok(disclosure.descendants().includes($('db-creation-discover')));
+assert.ok($('db-creation-process').descendants().includes($('db-creation-refresh')));
+disclosure.open=true;chooseCreation('second');picker.focus();
+const labels=()=>picker.options.map(n=>n.textContent);
 assert.ok(labels().includes('old2 · REGISTERED'));
 dbCreationSchedule();const oldTimer=dbCreation.timer;assert.equal(timers.get(oldTimer).due,5000);
 const held=deferred(),old=adminRoute;let listReads=0,detailReads=0;
@@ -508,7 +518,8 @@ const updated=[process({sql_catalog:'updated1',lifecycle:'READY'}),
  process({creation_id:'third',sql_catalog:'updated3',lifecycle:'REGISTERED'})];
 held.resolve({creations:updated,cursor:'next'});await reading;
 assert.deepEqual(dbCreation.list,updated);assert.equal(dbCreation.cursor,'next');
-for(const label of ['updated1 · READY','updated2 · READY','updated3 · REGISTERED'])assert.ok(labels().includes(label));
+assert.equal(disclosure.open,true);assert.equal(historyPicker(),picker);assert.equal(picker.value,'second');assert.equal(document.activeElement,picker);
+for(const label of ['updated1 · Ready','updated2 · Ready','updated3 · REGISTERED'])assert.ok(labels().includes(label));
 assert.equal(labels().includes('old2 · REGISTERED'),false);assert.equal(dbCreation.error,'');assert.equal($('db-creation-status').textContent,'');
 assert.equal(dbCreation.process,selected);assert.equal(dbCreation.review,null);
 assert.equal($('db-creation-review-bootstrap').disabled,true);
@@ -545,7 +556,7 @@ assert.deepEqual(dbCreation.list,latest);assert.equal(dbCreation.timer,freshTime
 assert.equal(dbCreation.error,'');assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 ''')
 
-    def test_list_selection_renders_blocked_creation_before_identical_detail_response(self):
+    def test_history_open_waits_for_authorized_detail_before_selecting_blocked_creation(self):
         self.javascript(r'''
 globalThis.location={href:'http://localhost/#workbench?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
@@ -560,8 +571,15 @@ assert.equal($('db-creation-heading').textContent,'p54cli');
 dbCreation.review={token:dbCreationActionToken()};
 const sheets=JSON.stringify(worksheets),worksheet=worksheetId,held=deferred(),old=adminRoute;let details=0;
 adminRoute=(path,options)=>{if(path===C+'/p54stop'){++details;return held.promise;}return old(path,options);};
-const button=$('db-creation-form').descendants().find(n=>n.tagName==='BUTTON'&&n.textContent==='p54stop · REGISTERED');
-assert.ok(button);const reading=button.onclick();
+const disclosure=$('db-creation-history');disclosure.open=true;
+const open=$('db-creation-history-open');assert.equal(open.disabled,true);
+chooseCreation('p54stop');assert.equal(dbCreation.process.creation_id,'p54cli');assert.equal(details,0);
+const detailRoute=adminRoute;
+adminRoute=(path,options)=>path===C+'/p54stop'?{http:404,body:{error:'CREATION_NOT_FOUND'}}:old(path,options);
+await open.click();assert.equal(dbCreation.process.creation_id,'p54cli');
+assert.equal(dbCreationURL().id,'p54cli');assert.equal($('db-creation-status').textContent,'CREATION_NOT_FOUND');
+adminRoute=detailRoute;
+open.focus();const reading=open.click();
 const assertSelected=()=>{
  assert.equal(dbCreation.process.creation_id,'p54stop');assert.equal(dbCreation.review,null);
  assert.equal($('db-creation-heading').textContent,'p54stop');assert.equal($('db-creation-progress').textContent,'Creation blocked');
@@ -575,11 +593,11 @@ const assertSelected=()=>{
  assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
  assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST'),false);
 };
-assertSelected();await tick();assert.equal(details,1);assertSelected();
-assert.equal($('db-creation-withdraw').disabled,true);assert.equal($('db-creation-reconcile').disabled,true);
-await $('db-creation-reconcile').onclick();
+await tick();assert.equal(details,1);assert.equal(dbCreation.process.creation_id,'p54cli');
+assert.equal(dbCreationURL().id,'p54cli');
 held.resolve(structuredClone(stopped));await reading;
 assert.deepEqual(dbCreation.process,stopped);assertSelected();assert.equal(dbCreation.error,'');
+assert.equal(document.activeElement,$('db-creation-heading'));assert.equal(disclosure.open,true);
 assert.equal($('db-creation-withdraw').disabled,false);assert.equal($('db-creation-reconcile').disabled,false);
 ''')
 
@@ -1132,7 +1150,9 @@ dbCreation.draft.sql_catalog='unfinished_draft';dbCreation.capability={available
 await dbCreationLoad();assert.equal(dbCreation.process.creation_id,'creation');assert.equal(dbCreationURL().id,'creation');
 assert.equal(new URL(location.href).searchParams.has('creation'),false);
 const before=calls.filter(c=>c.path===C+'/capabilities').length;
-assert.equal($('db-creation-new').textContent,'New creation');await $('db-creation-new').onclick();
+assert.equal($('db-creation-new').textContent,'New creation');
+setLanguage('ja');dbCreationRender();assert.equal($('db-creation-new').textContent,'新しく作成');
+setLanguage('en');dbCreationRender();await $('db-creation-new').onclick();
 assert.equal(dbCreation.process,null);assert.equal(new URL(location.href).searchParams.has('creation'),false);
 assert.equal(new URL(location.href).searchParams.get('view'),'sql');assert.equal(new URL(location.href).hash,'#worksheet-a');
 assert.equal($('db-creation-sql_catalog').value,'unfinished_draft');assert.equal(dbCreation.capability.available,true);
@@ -1390,9 +1410,12 @@ capability.environment_id='envA';await dbCreationLoad();assert.equal(dbCreation.
 
     def test_environment_change_during_get_ignores_old_list_response(self):
         self.javascript(SETUP + r'''
+const disclosure=$('db-creation-history');disclosure.open=true;chooseCreation('creation');
 const held=deferred(),old=adminRoute;adminRoute=(path,options)=>path===C?held.promise:old(path,options);
 const reading=dbCreationLoad(true);await tick();capability.environment_id='envB';held.resolve({creations:[process({sql_catalog:'old-environment-record'})],cursor:null});await reading;
 assert.equal(dbCreation.environment_id,'envB');assert.deepEqual(dbCreation.list,[]);assert.equal(dbCreation.process,null);assert.equal(creationPosts.length,0);
+assert.equal(disclosure.open,false);assert.equal(historyPicker().value,'');assert.equal(historyPicker().options.length,1);
+assert.equal($('db-creation-history-open').disabled,true);
 ''')
 
     def test_frozen_environment_header_first_post_retry_and_gets_without_mutation_header(self):
@@ -1460,8 +1483,11 @@ adminRoute=(path,options)=>{
  if(path===C+'/principals')return heldPeople.promise;
  return oldRoute(path,options);
 };
+const disclosure=$('db-creation-history');disclosure.open=true;chooseCreation('creation');
 const newButton=$('db-creation-new');assert.equal(newButton.textContent,'New creation');
 const loading=newButton.onclick(); // Actual production READY → New handler.
+assert.equal(disclosure.open,false);assert.equal(historyPicker().value,'');
+assert.equal(document.activeElement,$('db-creation-title'));
 assert.equal(dbCreation.capability,null);
 assert.equal(document.getElementById('db-creation-heading'),null);
 assert.equal($('db-creation-heading'),null);
@@ -1482,25 +1508,16 @@ assert.equal(dbCreation.pending,null);assert.equal(dbCreation.readFailed,false);
 assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 '''
         run = subprocess.run
-        legacy = False
         def strict_heading_lookup(argv, *args, **kwargs):
             self.assertEqual(argv, ['node', '-'])
             source = kwargs['input']
             needle = 'const $=id=>strictRemoved&&'
             self.assertEqual(source.count(needle), 1)
             source = source.replace(needle, "const $=id=>id==='db-creation-heading'&&document.getElementById?document.getElementById(id):strictRemoved&&", 1)
-            if legacy:
-                fixed = "function dbCreationStage(stage){dbCreation.stage=stage;dbCreationRender();$('db-creation-heading')?.focus();}"
-                self.assertEqual(source.count(fixed), 1)
-                source = source.replace(fixed, fixed.replace('?.focus()', '.focus()'), 1)
             kwargs['input'] = source
             return run(argv, *args, **kwargs)
         with patch.object(subprocess, 'run', side_effect=strict_heading_lookup):
             self.javascript(body)
-            legacy = True
-            # Negative control changes only the in-memory test script, never HTML.
-            with self.assertRaisesRegex(AssertionError, r"Cannot read properties of null.*focus"):
-                self.javascript(body)
 
     def test_capability_loading_unknown_failure_and_legacy_compatibility_preserve_intent(self):
         self.javascript(SETUP + LOGICAL_SETUP + r'''
@@ -1553,10 +1570,11 @@ assert.equal(frames.slice(0,-1).some(frame=>/approval [12]\/2|two separate appro
 ''')
 
     def test_logical_root_list_public_progress_localized_and_legacy_root_mode_independent(self):
-        self.javascript(SETUP + LOGICAL_SETUP + r'''
-await logicalBegin();$('sql').value='SELECT list_preserved';dbSave();
+        self.javascript(r'''
 globalThis.location={href:'http://localhost/#db-admin?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
+''' + SETUP + LOGICAL_SETUP + r'''
+await logicalBegin();$('sql').value='SELECT list_preserved';dbSave();
 const before=JSON.stringify({worksheets,worksheetId,jobs:{context:dbJobs.context,save:dbJobs.save,database:dbJobs.database,schema:dbJobs.schema,role:dbJobs.role,selection:dbJobs.selection,drafts:[...dbJobs.drafts]},explorer:dbExplorer});
 const pending={key:'list-key',body:'frozen-list-body',busy:false};dbCreation.pending=pending;
 const draft=dbCreation.draft;draft.sql_catalog='list_draft';
@@ -1566,15 +1584,13 @@ dbCreation.list=[...roots,legacy];
 for(const locale of ['en','ja'])for(const mode of ['logical_v1',undefined]){
  setLanguage(locale);dbCreation.capability={...capability};if(mode===undefined)delete dbCreation.capability.creation_mode;
  dbCreationRender();
- const buttons=$('db-creation-form').descendants().filter(n=>n.tagName==='BUTTON');
- for(const [index,label] of ['Creation blocked','Creating database','Creation outcome unknown','Ready'].entries())assert.ok(buttons.some(n=>n.textContent===roots[index].sql_catalog+' · '+t(label)));
- assert.ok(buttons.some(n=>n.textContent==='legacy · REGISTERED'));
+ const options=historyPicker().options;
+ for(const [index,label] of ['Creation blocked','Creating database','Creation outcome unknown','Ready'].entries())assert.ok(options.some(n=>n.textContent===roots[index].sql_catalog+' · '+t(label)));
+ assert.ok(options.some(n=>n.textContent==='legacy · '+t('REGISTERED')));
  for(const root of dbCreation.list){
-  const label=root.creation_mode==='logical_v1'?dbCreationLogicalLabel(root.progress_code):'REGISTERED';
-  // Select through the real handler, keeping the background read mocked out.
-  const load=dbCreationLoad;dbCreationLoad=async()=>{};
-  await buttons.find(n=>n.textContent===root.sql_catalog+' · '+label).onclick();dbCreationLoad=load;
-  assert.equal(dbCreation.process,root);assert.equal(dbCreationURL().id,root.creation_id);
+  const old=adminRoute;adminRoute=(path,opts)=>path===C+'/'+root.creation_id?structuredClone(root):old(path,opts);
+  await openCreation(root.creation_id);adminRoute=old;
+  assert.deepEqual(dbCreation.process,root);assert.equal(dbCreationURL().id,root.creation_id);
   assert.equal(dbCreationLogical(),root.creation_mode==='logical_v1');
   if(root===legacy)assert.equal($('db-creation-journey').descendants().filter(n=>n.tagName==='LI').length,6);else noLegacy();
   assert.equal(dbCreation.pending,pending);assert.equal(pending.key,'list-key');assert.equal(pending.body,'frozen-list-body');
@@ -1773,7 +1789,7 @@ for(const locale of ['en','ja']){
   const active=['CREATING','VERIFYING'].includes(progress_code);
   show(logical({progress_code,lifecycle:progress_code==='READY'?'READY':'REGISTERED'}));dbCreationSchedule();
   assert.equal(timers.size,1);assert.equal([...timers.values()][0].due-timerNow,active?1000:5000);
-  assert.ok($('db-creation-observation').textContent.includes(t(active?'Automatic status checking every second.':'Automatic status checking every 5 seconds.')));
+  assert.equal($('db-creation-observation').hidden,true);assert.equal($('db-creation-observation').textContent,'');
  }
  for(const lifecycle of ['RETIRING','RETIRED']){
   show(logical({lifecycle,progress_code:'CREATING'}));dbCreationSchedule();
