@@ -751,8 +751,17 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-dbt-panel .db-dbt-compatibility{padding-block:12px;border-block:1px solid var(--line);margin-block:8px}
 #db-dbt-panel .db-dbt-compatibility h3{margin-bottom:8px}
 #db-dbt-panel .db-dbt-confirm{padding-block:12px;border-top:1px solid var(--line)}
+#p35-wap>.panel-body{max-width:66rem;min-width:0}
 #p35-wap .job-fields>div:has(>textarea){grid-column:1/-1}
 #p35-wap textarea{min-height:9rem}
+#p35-wap :is(.wap-guide,.wap-editor,.wap-history){min-width:0;overflow-wrap:anywhere}
+#p35-wap .wap-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;padding-inline-start:24px}
+#p35-wap .wap-steps li[aria-current=step]{font-weight:700;color:var(--accent-ink)}
+#p35-wap .wap-editor h3{margin-block:18px 0}
+#p35-wap button{max-width:100%;white-space:normal}
+@container transformation (min-width:600px){
+ #p35-wap .wap-steps{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
 #p35-wap #p35-wap-sources .toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 #p35-wap .transformation-actions{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-block:20px}
 #p35-wap .workflow-details>div{margin-block:12px}
@@ -8501,7 +8510,7 @@ async function dataopsAiLoad(p){
   // All validation precedes the first form mutation. The normal explicit Save remains mandatory.
   $(p.id+'-sql').value=draft.sql;$(p.id+'-sources').replaceChildren();p.sources=[];
   for(const source of draft.sources)dataopsAddSource(p,source.alias,source.ref);
-  p.model=null;p.modelDirty=true;p.aiOrigin=dataopsFreeze({...origin,destination_context:destination});p.aiPending=null;p.aiToken=null;p.aiNotice='';++p.epoch;
+  p.model=null;p.modelDirty=true;$(p.id+'-editor').open=true;p.aiOrigin=dataopsFreeze({...origin,destination_context:destination});p.aiPending=null;p.aiToken=null;p.aiNotice='';++p.epoch;
   ui(p.status,'Save or load a model version before building.');dataopsRender(p);
  }catch(error){
   if(!current())return;
@@ -8596,7 +8605,7 @@ function dataopsInvalidate(p){
  ++p.epoch;p.preview=null;p.model=null;p.models=[];p.objects=[];p.tables=[];p.invalid=true;
  for(const id of ['sample','models','target','target-schema','build','audit','publication']){const n=$(p.id+'-'+id);if(n)n.replaceChildren();}
  for(const source of p.sources||[])source.table.replaceChildren();
- p.metadata=null;
+ p.metadata=null;p.wapEvidence=null;
  if(p.op){p.op.protected=false;p.op.receipt=null;p.op.operation=null;}
  for(const records of [p.requests,p.actions])for(const record of records?.values()||[])if(record.operation){record.operation.protected=false;record.operation.operation=null;record.operation.receipt=null;}
  ui(p.status,'Access changed. Protected data cleared; refresh context explicitly.');dataopsRender(p);
@@ -8608,9 +8617,9 @@ function dataopsValidate(){
   else dataopsRenderAvailability(p);
   if(p.id==='p35-ingest')dataopsIngestContext(p);
   dataopsRecoveryRender(p);
-  $(p.id+'-accepted-context').hidden=p.id==='p35-ingest'||p.principal!==dbPrincipal;
+  $(p.id+'-accepted-context').hidden=['p35-ingest','p35-wap'].includes(p.id)||p.principal!==dbPrincipal;
   if(p.op?.principal!==undefined&&p.op.principal!==dbPrincipal){dataopsRenderOperation(p);$(p.id+'-observe').hidden=true;$(p.id+'-cancel').hidden=true;$(p.id+'-observe-help').hidden=true;}
-  if(p.id==='p35-wap')dataopsAiRender(p);
+  if(p.id==='p35-wap'){dataopsRenderWapGuide(p);dataopsAiRender(p);}
  }
  if(dataopsExport&&!dataopsExport.invalid&&!dataopsExportAuthorized(dataopsExport)){dataopsExport.invalid=true;dataopsExport.receipt=null;dataopsExport.operation=null;dataopsExportRender();}
  dataopsExportControls();
@@ -8647,7 +8656,7 @@ async function dataopsRefresh(p){
  dataopsPurgeForeignDraft(p);
  p.started=true;++p.epoch;p.inventoryLoading=true;p.inventoryReady=false;p.aiOrigin=null;const epoch=p.epoch,role=p.role,database=p.database,schema=p.schema,principal=dbPrincipal;
  dataopsPurgeLoadedModel(p);
- p.metadata=null;if(p.op){p.op.protected=false;p.op.operation=null;}
+ p.metadata=null;p.wapEvidence=null;if(p.op){p.op.protected=false;p.op.operation=null;}
  for(const key of ['build','audit','publication'])$(p.id+'-'+key)?.replaceChildren();
  for(const source of p.sources||[])source.table.value='';
  p.invalid=true;p.preview=null;p.model=null;p.models=[];p.tables=[];p.objects=[];$(p.id+'-sample')?.replaceChildren();dataopsRender(p);
@@ -8942,23 +8951,12 @@ function dataopsRender(p,inventory=false){
   dataopsIngestContext(p);
  }else{
   if(inventory){
-   dataopsOptions($(id+'-models'),p.models.map((m,i)=>[String(i),m.model_id+' · v'+m.version]),'','New model');
+   dataopsOptions($(id+'-models'),p.models.map((m,i)=>[String(i),m.model_id+' · v'+m.version]),p.model?String(p.models.indexOf(p.model)):'','New model');
    dataopsOptions($(id+'-target-schema'),p.schemas.map(s=>[s.id,s.sql_name]),$(id+'-target-schema').value||p.schema,'Target schema');
    dataopsOptions($(id+'-target'),p.tables.map((o,i)=>[String(i),o.label]),p.model?$(id+'-target').value:'','Create table name');
    for(const source of p.sources||[])dataopsOptions(source.table,p.tables.map((o,i)=>[String(i),o.label]),source.table.value);
   }
-  const existing=$(id+'-target').value!=='';
-  const target=p.model?.current_target_ref||p.model?.target;
-  const lookup=$(id+'-metadata-id').parentElement.parentElement,identity=JSON.stringify([dbPrincipal,allowed,p.context,p.model?.model_id,p.model?.version]);
-  if(lookup.dataset.identity!==identity){lookup.open=false;lookup.dataset.identity=identity;}
-  const draft=p.modelDirty||!p.model,chosen=existing?p.tables[Number($(id+'-target').value)]:null;
-  const table=draft?(chosen?.label||$(id+'-name').value):target?.physical_name||p.tables.find(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(target))?.label;
-  const schema=p.schemas.find(s=>s.id===(draft?$(id+'-target-schema').value:target?.schema_id))?.sql_name;
-  $(id+'-action-target').textContent=allowed&&table?[t(draft?'Draft WAP target':'Saved WAP target'),p.context.sql_catalog+'.'+(table.includes('.')?table:[schema,table].filter(Boolean).join('.')),p.role,p.model?.version?'v'+p.model.version:''].filter(Boolean).join(' · '):'';
-  $(id+'-name').disabled=waiting||!allowed||existing;$(id+'-target-schema').disabled=waiting||!allowed||existing;
-  for(const [action,capability] of [['build-action','wap_build'],['audit-action','wap_audit'],['publish','wap_publish'],['rollback','wap_rollback']]){
-   $(id+'-'+action).disabled=waiting||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p))||!dataopsAllowed(p,capability)||(action==='build-action'&&(!p.model||p.modelDirty))||(action==='audit-action'&&!$(id+'-build').value)||(action==='publish'&&(!$(id+'-build').value||!$(id+'-audit').value))||(action==='rollback'&&!$(id+'-publication').value);
-  }
+  dataopsRenderWapGuide(p);
  }
  dataopsRenderOperation(p);
  if(id==='p35-wap')dataopsAiRender(p);
@@ -9017,9 +9015,61 @@ async function dataopsObserve(p,cancel){
   if(current()&&stamp===dataopsRecoveryStamp(p)){if(dataopsAuthError(error))dataopsInvalidate(p);p.status.className='error';p.status.setAttribute('role','alert');ui(p.status,error.message);}
  }finally{if(p.trackingToken===tracking){p.trackingToken=null;p.trackingPending=false;dataopsRender(p);}}
 }
+// Keep only the last authorized immutable artifact of each kind, in memory.
+function dataopsWapEvidence(p){
+ const scope=JSON.stringify([dataopsAiAuth({selected_role:p.role}),p.role,p.database,p.schema,p.context]);
+ if(!dataopsAllowed(p,'wap_models')||!p.inventoryReady||!dataopsSameContext(p.context,p.inventoryContext)){p.wapEvidence=null;return null;}
+ if(p.wapEvidence?.scope!==scope)p.wapEvidence={scope};
+ return p.wapEvidence;
+}
+function dataopsRememberWap(p,kind,id,record,{historical=false,operationId}={}){
+ const evidence=dataopsWapEvidence(p);
+ if(!evidence||!id||record?.id!==id||record.database_id!==p.context.database_id||
+    !record.model_id||!Number.isSafeInteger(record.version)||record.version<1||!record.operation_id||
+    (!historical&&record.operation_id!==operationId))return;
+ // An authorized GET can read across execution roles in the same binding.
+ // Platform Admin and granted roles can have different grant revisions.
+ const switchedRole=historical&&record.context?.selected_role!==p.role;
+ const context=switchedRole?{...record.context,selected_role:p.role,grant_revision:p.context.grant_revision}:record.context;
+ if(!['data_engineer','admin'].includes(record.context?.selected_role)||!dataopsSameContext(context,p.context))return;
+ if(kind==='build'&&(!record.stage?.snapshot||record.destination?.database_id!==p.database))return;
+ if(kind==='audit'&&(!record.stage?.snapshot||!record.build_id||typeof record.passed!=='boolean'||
+    !Number.isSafeInteger(record.count)||record.count<0||!record.null_counts||typeof record.null_counts!=='object'||Array.isArray(record.null_counts)||
+    !Object.values(record.null_counts).every(n=>Number.isSafeInteger(n)&&n>=0&&n<=record.count)))return;
+ if(kind==='publication'&&(record.kind!=='publish'||!record.build_id||!record.audit_id||record.destination?.database_id!==p.database||!record.target?.snapshot))return;
+ evidence[kind]=dataopsFreeze(dataopsClone(record));
+}
+function dataopsWapSelection(p){
+ const evidence=dataopsWapEvidence(p),op=p.op?.principal===dbPrincipal?p.op:null;
+ const selected=kind=>{
+  const record=evidence?.[kind];
+  return !p.modelDirty&&record&&record.id===$(p.id+'-'+kind).value&&
+   record.model_id===p.model?.model_id&&record.version===p.model?.version&&
+   (op?.id!==record.operation_id||!op.ambiguous&&dataopsState(op)==='FINISHED')?record:null;
+ };
+ const candidate=selected('build'),audit=selected('audit'),publication=selected('publication');
+ const build=candidate&&[p.model.target,p.model.current_target_ref].some(target=>dataopsSameContext(target,candidate.destination))?candidate:null;
+ const paired=build&&audit?.build_id===build.id&&audit.stage.snapshot===build.stage.snapshot&&
+  dataopsRefKey(audit.stage.ref)===dataopsRefKey(build.stage.ref)?audit:null;
+ const published=paired?.passed===true&&publication?.build_id===build.id&&publication.audit_id===paired.id&&
+  dataopsSameContext(publication.destination,build.destination)?publication:null;
+ return {build,audit:paired,published};
+}
 function dataopsCaptureWap(p,operation,preserveSelection=false){
  if(p.id!=='p35-wap'||!operation?.result)return;
- for(const [kind,key] of [['build','build_id'],['audit','audit_id'],['publication','publication_id']])if(operation.result[key]){const n=$(p.id+'-'+kind),value=operation.result[key],selected=n.value;if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));n.value=preserveSelection?selected:value;}
+ const complete=operation.state==='FINISHED'&&!p.op?.ambiguous&&
+  operation.child_unknown!==true&&!operation.queries?.some(q=>q.state==='UNKNOWN');
+ for(const kind of ['build','audit','publication']){
+  const value=operation.result[kind+'_id'];if(!value)continue;
+  const n=$(p.id+'-'+kind),selected=n.value;
+  if(![...n.options].some(o=>o.value===''))n.add(new Option(t('No selection'),''));
+  if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));
+  n.value=preserveSelection?selected:value;
+  // Audit reads the build and persists evidence without committing a table change.
+  if(complete&&(kind==='audit'||operation.committed===true)){
+   dataopsRememberWap(p,kind,value,operation.result[kind],{operationId:operation.id});
+  }
+ }
 }
 function dataopsIngestFileAllowed(p){
  return p.inventoryReady&&!p.inventoryLoading&&p.inventoryContext===p.context&&dataopsAllowed(p,'manual_ingest');
@@ -9140,26 +9190,148 @@ function dataopsInstallIngest(){
 }
 function dataopsAddSource(p,alias='',ref=null){
  const row=dataopsNode('div','',$(p.id+'-sources'));row.className='toolbar';const key=crypto.randomUUID();
- const a=dataopsField(row,p.id+'-alias-'+key,'Source alias'),select=dataopsField(row,p.id+'-source-'+key,'Table','select');a.value=alias;
+ const a=dataopsField(row,p.id+'-alias-'+key,'Source alias'),select=dataopsField(row,p.id+'-source-'+key,'Input table','select');a.value=alias;
  const source={row,alias:a,table:select};p.sources.push(source);dataopsOptions(select,p.tables.map((o,i)=>[String(i),o.label]),ref?String(p.tables.findIndex(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(ref))):'');
  a.oninput=select.onchange=()=>dataopsChanged(p);dataopsButton(row,'','Remove source',()=>{p.sources=p.sources.filter(s=>s!==source);row.remove();dataopsChanged(p);});
+}
+function dataopsWapErrors(p,focus=false){
+ const id=p.id,name=$(id+'-name').value.trim(),min=Number($(id+'-min').value);
+ const errors=[
+  ['name',$(id+'-target').value===''&&(!/^[a-z][a-z0-9_]{0,30}$/.test(name)||['system','information_schema','tpch','tpcds'].includes(name))?'Enter a bare table name: 1–31 lowercase letters, digits or underscores, starting with a letter. Reserved names are unavailable.':''],
+  ['min',!Number.isSafeInteger(min)||min<1?'Enter a whole number of at least 1.':'']
+ ];
+ for(const [field,message] of errors){
+  const input=$(id+'-'+field),error=$(id+'-'+field+'-error');
+  input.setAttribute('aria-invalid',String(!!message));error.hidden=!message;wbTaskText(error,message);
+ }
+ const invalid=errors.find(([,message])=>message);
+ if(invalid&&focus)$(id+'-'+invalid[0]).focus();
+ return !!invalid;
+}
+function dataopsWapTarget(p,target){
+ const schema=p.schemas.find(s=>s.id===target?.schema_id)?.sql_name;
+ const table=target?.physical_name||p.tables.find(o=>target?.object_id&&dataopsRefKey(dataopsRef(o))===dataopsRefKey(target))?.physical_name;
+ return target?.database_id===p.database&&schema&&table?[p.context.sql_catalog,schema,table].join('.'):'';
+}
+function dataopsRenderWapGuide(p){
+ const id=p.id,allowed=dataopsAllowed(p,'wap_models'),waiting=p.pending||p.trackingPending||p.inventoryLoading;
+ const held=dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p);
+ const {build,audit,published}=dataopsWapSelection(p);
+ const saved=allowed&&p.model&&!p.modelDirty;
+ const target=allowed?dataopsWapTarget(p,published?.destination||build?.destination||p.model?.current_target_ref||p.model?.target):'';
+ const phase=!saved?0:!build?1:audit?.passed!==true?2:!published?3:4;
+ $(id+'-steps').setAttribute('aria-label',t('Manual WAP progress'));
+ const steps=['Define and save','Build','Audit quality','Publish'];
+ steps.forEach((label,i)=>{
+  const n=$(id+'-step-'+i);n.setAttribute('aria-current',i===phase?'step':'false');
+  wbTaskText(n,i<phase?'{step}: complete':i===phase?'{step}: current':'{step}',{step:t(label)});
+ });
+ const c=p.context;
+ wbTaskText($(id+'-guide-context'),allowed?'Database / schema / role: {context}':'Select an authorized database, schema and role.',{context:allowed?[c.sql_catalog,c.sql_schema,c.selected_role].join(' / '):''});
+ wbTaskText($(id+'-guide-model'),allowed&&p.model?'Saved model: {model} · v{version}':'No saved model selected.',{model:p.model?.model_id,version:p.model?.version});
+ wbTaskText($(id+'-action-target'),target?'Saved WAP target: {target}':'Saved output table not available.',{target});
+ const op=p.op?.principal===dbPrincipal?p.op:null;
+ const next=waiting?'Wait for the current request.':held?
+  op?.ambiguous?'Outcome unknown. Check the original request before continuing.':'Check the original request before continuing.':
+  !allowed?'Choose or refresh the WAP context.':
+  phase===0?'Define and save a model version, or load a saved model.':
+  phase===1?'Build the saved model version.':
+  phase===2?(audit?'Quality failed. Review the results and edit the model or build again.':'Audit the selected build to check its quality.'):
+  phase===3?(!target?'The output table could not be resolved. Review the saved build.':dataopsAllowed(p,'wap_publish')?'Review the output and the Build/Audit pair before publishing.':'An Admin can publish this audited build.'):
+  'Publication verified for the selected Build/Audit pair.';
+ wbTaskText($(id+'-guide-next'),next);
+ const quality=$(id+'-quality-result');quality.hidden=!audit;
+ wbTaskText(quality,audit?'{quality} · Rows: {count} · NULL counts: {nulls}':'',{quality:t(audit?.passed?'Passed':'Failed'),count:audit?.count,nulls:audit?Object.entries(audit.null_counts).map(([k,v])=>k+': '+v).join(', ')||t('No columns checked'):''});
+ const review=$(id+'-publish-review');review.hidden=phase!==3||!target;
+ const effect=build?.destination.object_id?'Replace the output table contents with this audited build.':'Create the output table from this audited build.';
+ wbTaskText(review,!review.hidden?'Publish to {target} using Build {build} and Audit {audit}. {effect}':'',{target,build:build?.id,audit:audit?.id,effect:t(effect)});
+ const existing=$(id+'-target').value!=='';
+ for(const key of ['name','target-schema']){
+  const n=$(id+'-'+key);n.disabled=!!waiting||!allowed||existing;n.parentElement.hidden=existing;
+ }
+ for(const [action,capability,ready,primary] of [
+  ['build-action','wap_build',saved,phase===1],
+  ['audit-action','wap_audit',build,phase===2&&!audit],
+  ['publish','wap_publish',phase===3&&target,phase===3],
+  ['rollback','wap_rollback',$(id+'-publication').value,false]
+ ]){
+  const n=$(id+'-'+action);n.disabled=!!waiting||held||!dataopsAllowed(p,capability)||!ready;
+  n.className=primary?'primary':'';
+  if(action!=='rollback')n.hidden=!ready||(!primary&&!(action==='build-action'&&(phase===4||audit?.passed===false)));
+ }
+ $(id+'-save').disabled=!!waiting||!allowed;
+ for(const key of ['metadata-id','metadata-kind','metadata-load','build','audit','publication'])$(id+'-'+key).disabled=!!waiting||!allowed;
+ $(id+'-open-recovery').hidden=!held;
+ const outcome=$(id+'-outcome');
+ p.status.hidden=p.status.className!=='error';
+ const state=op&&dataopsState(op);
+ const expected={'manual-wap-build':build,'manual-wap-audit':audit,'manual-wap-publish':published}[op?.action];
+ const unverifiedResult=state==='FINISHED'&&op.action!=='manual-wap-rollback'&&
+  op.action?.startsWith('manual-wap-')&&expected?.operation_id!==op.id;
+ const receipt=op?.protected&&op.capture===dataopsRecoveryStamp(p)&&dataopsRecoveryAuthorized(p,op)?op.operation:null;
+ const showOutcome=op&&(op.ambiguous||['FAILED','CANCELED','REJECTED','UNKNOWN','UNCONFIRMED'].includes(state)||receipt?.cleanup_error);
+ outcome.hidden=!showOutcome&&!unverifiedResult;
+ $(id+'-observe').hidden=!op||op.restored||(!held&&!showOutcome)||!dataopsCanObserve(op);
+ $(id+'-cancel').hidden=!op||!dataopsCanCancel(op);
+ $(id+'-observe-help').hidden=$(id+'-observe').hidden||!!op?.id;
+ wbTaskText(outcome,showOutcome?'Original operation: {state}. {detail}':unverifiedResult?'Operation finished. No matching result is verified; check saved metadata.':'',{state:state?t(state):'',detail:receipt?.cleanup_error||receipt?.error_code||(typeof receipt?.error==='string'?receipt.error:'')});
+ const unverified=allowed&&[['build',build],['audit',audit],['publication',published]].some(([k,record])=>$(id+'-'+k).value&&!record);
+ $(id+'-history-note').hidden=!unverified;
 }
 function dataopsWapPayload(p){
  const id=p.id,sources={};for(const s of p.sources){const alias=s.alias.value.trim(),ref=s.table.value!==''?dataopsRef(p.tables[Number(s.table.value)]):null;if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)||alias in sources||!ref)throw Error(t('Duplicate or invalid source alias.'));sources[alias]=ref;}
  const targetIndex=$(id+'-target').value,target=targetIndex!==''?dataopsRef(p.tables[Number(targetIndex)]):{database_id:p.database,schema_id:$(id+'-target-schema').value,physical_name:$(id+'-name').value.trim()};
  if(!Object.keys(sources).length||!$(id+'-model-id').value.trim()||!$(id+'-sql').value.trim()||!target||(!target.object_id&&(!p.schemas.some(s=>s.id===target.schema_id)||!target.physical_name)))throw Error(t('Choose a model ID, SQL, sources and target.'));
- const min=Number($(id+'-min').value);if(!Number.isSafeInteger(min)||min<0)throw Error(t('Minimum rows'));
+ const min=Number($(id+'-min').value);
  return {model_id:$(id+'-model-id').value.trim(),sql:$(id+'-sql').value,sources,target,expected_version:p.model?.version??null,min_rows:min,not_null:$(id+'-not-null').value.split(',').map(v=>v.trim()).filter(Boolean)};
 }
 function dataopsLoadModel(p,model,{preserveOrigin=false}={}){
  if(!preserveOrigin){p.aiOrigin=null;p.aiDetails=null;p.aiDetailsKey='';}p.aiToken=null;++p.epoch;p.model=model||null;p.modelDirty=!model;const id=p.id;
  $(id+'-model-id').value=model?.model_id||'';$(id+'-model-id').readOnly=!!model;$(id+'-sql').value=model?.sql||'SELECT * FROM source';
+ for(const field of ['name','min']){
+  $(id+'-'+field).setAttribute('aria-invalid','false');$(id+'-'+field+'-error').hidden=true;
+ }
  $(id+'-min').value=model?.min_rows??1;$(id+'-not-null').value=(model?.not_null||[]).join(', ');
  $(id+'-sources').replaceChildren();p.sources=[];for(const [alias,ref] of Object.entries(model?.sources||{source:null}))dataopsAddSource(p,alias,ref);
- const target=model?.target;$(id+'-name').value=target?.physical_name||'';$(id+'-target-schema').value=target?.schema_id||p.schema;
+ const target=model?.current_target_ref||model?.target;$(id+'-name').value=target?.physical_name||'';$(id+'-target-schema').value=target?.schema_id||p.schema;
  $(id+'-target').value=target?.object_id?String(p.tables.findIndex(o=>dataopsRefKey(dataopsRef(o))===dataopsRefKey(target))):'';
  ui(p.status,model?'Saved version {version}':'Save or load a model version before building.',{version:model?.version});dataopsRender(p);
 }
+Object.assign(i18n.ja,{
+ 'Manual WAP progress':'手動 WAP の進捗','Define and save':'定義と保存','Audit quality':'品質監査',
+ '{step}: complete':'{step}：完了','{step}: current':'{step}：現在',
+ 'Database / schema / role: {context}':'データベース / スキーマ / ロール：{context}',
+ 'Select an authorized database, schema and role.':'権限のあるデータベース、スキーマ、ロールを選択してください。',
+ 'Saved model: {model} · v{version}':'保存済みモデル：{model} · v{version}','No saved model selected.':'保存済みモデルが選択されていません。',
+ 'Saved WAP target: {target}':'保存済みの公開先：{target}','Saved output table not available.':'保存済みの出力テーブルを確認できません。',
+ 'Outcome unknown. Check the original request before continuing.':'結果が不明です。続行する前に元のリクエストを確認してください。',
+ 'Check the original request before continuing.':'続行する前に元のリクエストを確認してください。',
+ 'Choose or refresh the WAP context.':'WAP の接続先を選択または更新してください。',
+ 'Define and save a model version, or load a saved model.':'モデルを定義して保存するか、保存済みモデルを読み込んでください。',
+ 'Build the saved model version.':'保存済みのモデルをビルドしてください。',
+ 'Quality failed. Review the results and edit the model or build again.':'品質監査に失敗しました。結果を確認してモデルを編集するか、再度ビルドしてください。',
+ 'Audit the selected build to check its quality.':'選択したビルドの品質を監査してください。',
+ 'The output table could not be resolved. Review the saved build.':'出力テーブルを特定できません。保存済みのビルドを確認してください。',
+ 'Review the output and the Build/Audit pair before publishing.':'公開前に出力先とビルド・監査の組み合わせを確認してください。',
+ 'An Admin can publish this audited build.':'管理者は監査済みのビルドを公開できます。',
+ 'Publication verified for the selected Build/Audit pair.':'選択したビルドと監査の組み合わせで公開を確認しました。',
+ '{quality} · Rows: {count} · NULL counts: {nulls}':'{quality} · 行数：{count} · NULL 件数：{nulls}','No columns checked':'検査対象の列なし',
+ 'Publish to {target} using Build {build} and Audit {audit}. {effect}':'ビルド {build} と監査 {audit} を使い、{target} に公開します。{effect}',
+ 'Replace the output table contents with this audited build.':'出力テーブルの内容をこの監査済みビルドで置き換えます。',
+ 'Create the output table from this audited build.':'この監査済みビルドから出力テーブルを作成します。',
+ 'Define or edit model':'モデルの定義・編集','Source SQL and input tables':'ソース SQL と入力テーブル',
+ 'Choose the input tables and use their aliases in SQL.':'入力テーブルを選び、SQL ではその別名を使用してください。',
+ 'Input table':'入力テーブル','Publish destination':'公開先','Existing output table (optional)':'既存の出力テーブル（任意）',
+ 'Output schema':'出力スキーマ','New output table name':'新規出力テーブル名',
+ 'Enter only the new table name, for example daily_totals. Select its schema separately.':'daily_totals のようにテーブル名だけを入力してください。スキーマは別に選びます。',
+ 'Quality rules':'品質ルール','Enter a whole number of at least 1.':'1 以上の整数を入力してください。',
+ 'Enter a bare table name: 1–31 lowercase letters, digits or underscores, starting with a letter. Reserved names are unavailable.':'英小文字で始まる 1〜31 文字の英小文字、数字、アンダースコアでテーブル名を入力してください。予約名は使用できません。',
+ 'Operation finished. No matching result is verified; check saved metadata.':'操作は終了しましたが、選択と一致する結果は確認できません。保存済みメタデータを確認してください。','Open WAP recovery':'WAP の復旧を開く','History, metadata and recovery':'履歴・メタデータ・復旧','Original operation: {state}. {detail}':'元の操作：{state}。{detail}',
+ 'Selection alone does not verify a result. Load the matching saved model and authorized metadata.':'選択だけでは結果を確認できません。対応する保存済みモデルと権限のあるメタデータを読み込んでください。',
+ 'Saved model response did not match this request.':'保存の応答がリクエストと一致しません。',
+ 'Saved metadata did not match the requested ID.':'保存済みメタデータが指定した ID と一致しません。',
+ 'Rollback restores the linked publication.':'ロールバックは紐づく公開を復元します。'
+});
 function dataopsInstallWap(){
  Object.assign(i18n.ja,{'Draft WAP target':'WAP 下書きの対象','Saved WAP target':'WAP 保存済みモデルの対象','Saved run details':'保存実行の詳細','Draft Mart target':'Mart 下書きの対象','Not accepted':'未受付'});
  Object.assign(i18n.ja,{'Saved WAP metadata':'保存済み WAP メタデータ','Raw operation result':'操作結果の JSON','Error':'エラー','WAP target and action':'WAP の対象と操作','Publication replaces the selected target with the audited build. Rollback restores the linked publication.':'公開は選択した対象を監査済み構築結果で置き換えます。ロールバックは紐づく公開を復元します。'});
@@ -9169,38 +9341,104 @@ function dataopsInstallWap(){
  const context=dataopsNode('div',id+'-context-controls',p.form);context.className='toolbar transformation-context';
  for(const name of ['role','database','schema'])context.append($(id+'-'+name).parentElement);
  context.append($(id+'-refresh'));p.form.prepend(context);
- const guidance=dataopsNode('p','p35-wap-entry-help',p.body,'Choose a database and schema, then load or create a model. Build and audit require Data Engineer or Admin. Publish and rollback require Admin.');guidance.className='help';p.form.before(guidance);
- p.aiBar=dataopsNode('div',id+'-ai-import',p.body);p.aiBar.className='help';p.aiBar.setAttribute('aria-live','polite');p.body.prepend(p.aiBar);
- dataopsField(p.fields,id+'-models','Saved models','select').onchange=()=>{dataopsChanged(p);const n=$(id+'-models').value;dataopsLoadModel(p,n===''?null:p.models[Number(n)]);};
- dataopsField(p.fields,id+'-model-id','Model ID');dataopsField(p.fields,id+'-sql','SQL','textarea').value='SELECT * FROM source';
- dataopsField(p.fields,id+'-target-schema','Target schema','select');dataopsField(p.fields,id+'-name','Target table name');dataopsField(p.fields,id+'-target','Existing table','select');
- const min=dataopsField(p.fields,id+'-min','Minimum rows');min.type='number';min.min='0';min.value='1';dataopsField(p.fields,id+'-not-null','Not-null columns');
- dataopsNode('div',id+'-sources',p.form);const modelActions=dataopsNode('div','',p.form);modelActions.className='transformation-actions';dataopsButton(modelActions,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
- dataopsButton(modelActions,id+'-save','Save model version',()=>dataopsTask(p,async current=>{if(!dataopsAllowed(p,'wap_models'))return;const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);if(!current())return;p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);}));
- for(const [kind,label] of [['build','Build'],['audit','Audit'],['publication','Publication']])dataopsField(p.fields,id+'-'+kind,label,'select').onchange=()=>dataopsRender(p);
- const metadata=workflowDetails(p.form,'Saved WAP metadata');
+ const guide=dataopsNode('section',id+'-guide');guide.className='wap-guide';p.form.prepend(guide);
+ const steps=dataopsNode('ol',id+'-steps',guide);steps.className='wap-steps';steps.setAttribute('aria-label',t('Manual WAP progress'));
+ for(let i=0;i<4;i++)dataopsNode('li',id+'-step-'+i,steps);
+ const scope=dataopsNode('div','',guide);scope.className='wb-task-context';
+ for(const key of ['guide-context','guide-model','action-target'])dataopsNode('p',id+'-'+key,scope);
+ const next=dataopsNode('p',id+'-guide-next',guide);next.setAttribute('role','status');next.tabIndex=-1;
+ dataopsNode('p',id+'-quality-result',guide).setAttribute('role','status');
+ dataopsNode('p',id+'-publish-review',guide);
+ const actions=dataopsNode('div','',guide);actions.className='transformation-actions';
+ guide.append(p.status);dataopsNode('p',id+'-outcome',guide).setAttribute('role','status');
+ const tracking=dataopsNode('div','',guide);tracking.className='toolbar';
+ tracking.append($(id+'-observe'),$(id+'-cancel'));guide.append($(id+'-observe-help'));
+ $(id+'-accepted-context').hidden=true;
+ p.aiBar=dataopsNode('div',id+'-ai-import',p.form);p.aiBar.className='help';p.aiBar.setAttribute('aria-live','polite');
+ const editor=workflowDetails(p.form,'Define or edit model');editor.id=id+'-editor';editor.className+=' wap-editor';editor.open=true;
+ p.fields.hidden=true;
+ dataopsField(p.form,id+'-models','Saved models','select').onchange=()=>{
+  dataopsChanged(p);const n=$(id+'-models').value;dataopsLoadModel(p,n===''?null:p.models[Number(n)]);editor.open=n==='';
+ };
+ editor.before($(id+'-models').parentElement);
+ const group=label=>{
+  dataopsNode('h3','',editor,label);const fields=dataopsNode('div','',editor);fields.className='job-fields';return fields;
+ };
+ const source=group('Source SQL and input tables');
+ dataopsField(source,id+'-model-id','Model ID');dataopsField(source,id+'-sql','SQL','textarea').value='SELECT * FROM source';
+ dataopsNode('p','',editor,'Choose the input tables and use their aliases in SQL.').className='help';
+ dataopsNode('div',id+'-sources',editor);
+ dataopsButton(editor,id+'-add-source','Add source',()=>{dataopsAddSource(p);dataopsChanged(p);});dataopsAddSource(p,'source');
+ const destination=group('Publish destination');
+ dataopsField(destination,id+'-target','Existing output table (optional)','select');
+ dataopsField(destination,id+'-target-schema','Output schema','select');
+ const name=dataopsField(destination,id+'-name','New output table name');
+ const hint=dataopsNode('p',id+'-name-hint',name.parentElement,'Enter only the new table name, for example daily_totals. Select its schema separately.');hint.className='help';
+ const quality=group('Quality rules');
+ const min=dataopsField(quality,id+'-min','Minimum rows');min.type='number';min.min='1';min.value='1';dataopsField(quality,id+'-not-null','Not-null columns');
+ for(const input of [name,min]){
+  const error=dataopsNode('p',input.id+'-error',input.parentElement);error.hidden=true;error.className='error';error.setAttribute('aria-live','polite');
+  input.setAttribute('aria-describedby',(input===name?hint.id+' ':'')+error.id);
+ }
+ const modelActions=dataopsNode('div','',editor);modelActions.className='transformation-actions';
+ dataopsButton(modelActions,id+'-save','Save model version',async()=>{
+  if(!dataopsAllowed(p,'wap_models')||p.pending||p.trackingPending||dataopsWapErrors(p,true))return;
+  let saved=false;
+  await dataopsTask(p,async current=>{
+   const scope=dataopsWapEvidence(p)?.scope;if(!scope)return;
+   const payload=dataopsWapPayload(p),reply=await dataopsRequest('/api/v1/wap/models',p.context,payload);
+   if(!current()||scope!==dataopsWapEvidence(p)?.scope)return;
+   if(reply.model?.model_id!==payload.model_id||reply.model.version!==(payload.expected_version??0)+1)throw Error(t('Saved model response did not match this request.'));
+   p.models=[...p.models.filter(m=>m.model_id!==reply.model.model_id),reply.model];
+   dataopsLoadModel(p,reply.model,{preserveOrigin:true});dataopsRender(p,true);saved=true;
+  });
+  if(saved){editor.open=false;const next=$(id+'-build-action');if(!next.disabled)next.focus();else editor.children[0].focus();}
+ }).className='primary';
+ const history=workflowDetails(p.form,'History, metadata and recovery');history.className+=' wap-history';
+ dataopsButton(tracking,id+'-open-recovery','Open WAP recovery',()=>{history.open=true;$(id+'-recovery-select').focus();});
+ const selections=dataopsNode('div','',history);selections.className='job-fields';
+ for(const [kind,label] of [['build','Build'],['audit','Audit'],['publication','Publication']])dataopsField(selections,id+'-'+kind,label,'select').onchange=()=>dataopsRender(p);
+ dataopsNode('p',id+'-history-note',history,'Selection alone does not verify a result. Load the matching saved model and authorized metadata.').className='help';
+ const metadata=workflowDetails(history,'Saved WAP metadata');
  dataopsField(metadata,id+'-metadata-id','Metadata ID (optional, from another authorized session)');
  dataopsField(metadata,id+'-metadata-kind','Type','select',[['build','Build'],['audit','Audit'],['publication','Publication']]);
  dataopsButton(metadata,id+'-metadata-load','Load metadata',()=>dataopsTask(p,async current=>{
   const kind=$(id+'-metadata-kind').value,value=$(id+'-metadata-id').value.trim();if(!value)throw Error(t('Choose a saved metadata record.'));
-  const reply=await dataopsRequest('/api/v1/wap/'+({build:'builds',audit:'audits',publication:'publications'})[kind]+'/'+encodeURIComponent(value),p.context);if(!current())return;
-  const record=reply[kind],n=$(id+'-'+kind);n.add(new Option(value,value));n.value=value;p.metadata=record;
+  const scope=dataopsWapEvidence(p)?.scope;
+  const reply=await dataopsRequest('/api/v1/wap/'+({build:'builds',audit:'audits',publication:'publications'})[kind]+'/'+encodeURIComponent(value),p.context);
+  if(!current()||!scope||scope!==dataopsWapEvidence(p)?.scope)return;
+  const record=reply[kind],n=$(id+'-'+kind);
+  if(record?.id!==value)throw Error(t('Saved metadata did not match the requested ID.'));
+  if(![...n.options].some(o=>o.value===''))n.add(new Option(t('No selection'),''));
+  if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));
+  n.value=value;p.metadata=record;dataopsRememberWap(p,kind,value,record,{historical:true});ui(p.status,'Ready');
  }));
- dataopsNode('p',id+'-action-target',p.form).className='help';
- dataopsNode('p','',p.form,'Publication replaces the selected target with the audited build. Rollback restores the linked publication.').className='help';
- const actions=dataopsNode('div','',p.form);actions.className='transformation-actions';
+ const receipt=workflowDetails(history,'Saved run details');receipt.append(p.receipt);
+ // Keep recovery outside the form-wide mutation disable loop.
+ p.form.after(history);history.append(p.recovery);
+ dataopsNode('p','',history,'Rollback restores the linked publication.').className='help';
  for(const [action,label,path,cap] of [['build-action','Build saved version','build','wap_build'],['audit-action','Audit build','audit','wap_audit'],['publish','Publish audited build (admin)','publish','wap_publish'],['rollback','Rollback publication (admin)','rollback','wap_rollback']]){
-  dataopsButton(actions,id+'-'+action,label,()=>{
-   if(!dataopsAllowed(p,cap)||dataopsOwnedUnresolved(p))return;
+  dataopsButton(path==='rollback'?history:actions,id+'-'+action,label,()=>{
+   dataopsRenderWapGuide(p);
+   if($(id+'-'+action).disabled||!dataopsAllowed(p,cap))return;
    const body=path==='build'?{model_id:p.model?.model_id,version:p.model?.version}:path==='audit'?{build_id:$(id+'-build').value}:path==='publish'?{build_id:$(id+'-build').value,audit_id:$(id+'-audit').value}:{publication_id:$(id+'-publication').value};
    if(path==='build'&&(!p.model||p.modelDirty))return;
    const signature=JSON.stringify([dbPrincipal,path,p.context,body]);p.actions??=new Map();if(!p.actions.has(signature)||dataopsTerminal(p.actions.get(signature).operation))p.actions.set(signature,{});
-   return dataopsSubmit(p,'/api/v1/wap/'+path,body,p.actions.get(signature));
+   const button=$(id+'-'+action),focused=document.activeElement===button;
+   return dataopsSubmit(p,'/api/v1/wap/'+path,body,p.actions.get(signature)).then(()=>{
+    if(!focused||!button.hidden||p.invalid||![button,document.body].includes(document.activeElement))return;
+    const next=['audit-action','publish','build-action'].map(key=>$(id+'-'+key)).find(n=>!n.hidden&&!n.disabled);
+    (next||$(id+'-guide-next')).focus();
+   });
   });
  }
+ $(id+'-publish').setAttribute('aria-describedby',id+'-publish-review');
  for(const event of ['input','change'])p.form.addEventListener(event,()=>dataopsAiRender(p));
  p.form.onsubmit=e=>e.preventDefault();
- for(const key of ['model-id','sql','target-schema','name','target','min','not-null'])$(id+'-'+key).oninput=$(id+'-'+key).onchange=()=>dataopsChanged(p);
+ for(const key of ['model-id','sql','target-schema','name','target','min','not-null'])$(id+'-'+key).oninput=$(id+'-'+key).onchange=()=>{
+  if(['name','min','target'].includes(key)&&['name','min'].some(field=>!$(id+'-'+field+'-error').hidden))dataopsWapErrors(p);
+  dataopsChanged(p);
+ };
  return p;
 }
 function dataopsExportAuthorized(op){

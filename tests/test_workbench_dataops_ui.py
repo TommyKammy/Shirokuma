@@ -13,6 +13,18 @@ const ref=(id,schema='raw')=>({database_id:'db',schema_id:schema,object_id:id,in
 const stable=(id='orders',schema='raw')=>({id,ref:ref(id,schema),kind:'TABLE',physical_name:id,display_name:id,capabilities:{resolve:true,preview:true,export:true}});
 for(const schema of schemas)Object.assign(schema.capabilities,{manual_ingest:schema.id==='raw',wap_models:true,wap_build:true,wap_audit:true,wap_publish:true,wap_rollback:true});
 objects=[stable(),stable('other')];
+const wapArtifact=(kind,context,fields={})=>({
+ id:kind+'_id-record',operation_id:'op-'+kind,context:structuredClone(context),database_id:context.database_id,
+ model_id:'daily_orders',version:1,stage:{snapshot:'111',ref:ref('stage','sandbox')},
+ ...(kind==='build'?{destination:{database_id:'db',schema_id:'schema',physical_name:'daily_orders'}}:
+ kind==='audit'?{build_id:'build_id-record',count:3,null_counts:{code:0},passed:true}:
+ {kind:'publish',build_id:'build_id-record',audit_id:'audit_id-record',destination:{database_id:'db',schema_id:'schema',physical_name:'daily_orders'},target:{snapshot:'222'}}),
+ ...fields
+});
+const wapReceipt=(kind,context,fields={},operation={})=>{
+ const record=wapArtifact(kind,context,fields);
+ return accepted(context,{id:record.operation_id,state:'FINISHED',committed:kind!=='audit',result:{[kind+'_id']:record.id,[kind]:record},...operation});
+};
 const accepted=(context,operation={id:'operation',state:'FINISHED',committed:true,result:{},cleanup_error:null})=>({context:structuredClone(context),operation});
 let submissions=[],previewCount=0;
 route=async(path,options)=>{
@@ -200,6 +212,9 @@ if(action==='manual-ingest')record=await preview(p);
 else{
  dataopsLoadModel(p,{model_id:'saved',version:1,sql:'SELECT * FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'raw',physical_name:'target'},min_rows:1,not_null:[]});
  for(const name of ['build','audit','publication']){$(p.id+'-'+name).add(new Option(name,name));$(p.id+'-'+name).value=name;}
+ for(const kind of action==='manual-wap-publish'?['build','audit']:action==='manual-wap-audit'?['build']:[]){
+  dataopsCaptureWap(p,wapReceipt(kind,p.context,{id:kind,model_id:p.model.model_id,version:p.model.version,destination:p.model.target,build_id:'build'}).operation);
+ }
  $('p35-wap-metadata-id').value='unsaved input';
 }
 const old={id:'old-receipt',key:'old-key',principal:dbPrincipal,context:p.context,state:'FINISHED',ambiguous:false,protected:false};p.op=old;
@@ -409,6 +424,10 @@ if(action==='manual-ingest')await preview(p);
 else{
  dataopsLoadModel(p,{model_id:'private_model',version:2,sql:'SELECT private_literal FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'raw',physical_name:'private_target'},min_rows:1,not_null:[]});
  for(const name of ['build','audit','publication']){$(p.id+'-'+name).add(new Option('private-'+name,'private-'+name));$(p.id+'-'+name).value='private-'+name;}
+ for(const kind of action==='manual-wap-publish'?['build','audit']:action==='manual-wap-audit'?['build']:[]){
+  const id='private-'+kind,record=wapArtifact(kind,p.context,{id,model_id:p.model.model_id,version:p.model.version,destination:p.model.target,build_id:'private-build'});
+  dataopsCaptureWap(p,wapReceipt(kind,p.context,record).operation);
+ }
 }
 const original=route;let postCount=0;
 route=async(path,options)=>{
@@ -731,13 +750,14 @@ const before=calls.length;
 for(const lang of ['ja','en']){
  setLanguage(lang);dataopsInstall();dbControls();
  assert.equal($('run-dbt-build').disabled,true);assert.equal($('run-dbt-test').disabled,true);
- assert.match($('p35-wap-entry-help').textContent,lang==='ja'?/構築と監査にはデータ作成者または管理者、公開とロールバックには管理者/:/Build and audit require Data Engineer or Admin. Publish and rollback require Admin/);
+ assert.equal($('p35-wap-step-0').getAttribute('aria-current'),'step');
+ assert.match($('p35-wap-guide-context').textContent,/admin/);
 }
 assert.equal(calls.length,before);
 // A stale panel remains recoverable without claiming the Worksheet makes it ready.
 dataopsInvalidate(p);dataopsRender(p);
 assert.equal($('p35-wap-model-id').disabled,true);assert.equal($('p35-wap-refresh').disabled,false);
-assert.match($('p35-wap-entry-help').textContent,/Choose a database and schema/);
+assert.match($('p35-wap-guide-context').textContent,/Select an authorized database/);
 assert.equal(submissions.length,0);
 ''')
 
@@ -901,8 +921,8 @@ route=async(path,options)=>{
  const b=options?.body&&JSON.parse(options.body);if(!b)return original(path,options);
  submissions.push({path,body:b,headers:options.headers});
  if(path==='/api/v1/wap/models')return {context:b.context,model:{...b,version:++version}};
- const key=path.endsWith('/build')?'build_id':path.endsWith('/audit')?'audit_id':path.endsWith('/publish')?'publication_id':'id';
- return accepted(b.context,{id:'op-'+version,state:'FINISHED',committed:true,result:{[key]:key+'-record'},cleanup_error:null});
+ const kind=path.endsWith('/publish')?'publication':path.split('/').at(-1);
+ return wapReceipt(kind,b.context,{version});
 };
 await $('p35-wap-save').onclick();assert.equal(submissions[0].body.expected_version,null);
 assert.deepEqual(submissions[0].body.sources,{source:ref('orders'),other:ref('other')});assert.equal(p.model.version,1);
@@ -910,12 +930,74 @@ await $('p35-wap-build-action').onclick();assert.equal(submissions[1].body.versi
 assert.equal($('p35-wap-build').value,'build_id-record');await $('p35-wap-audit-action').onclick();assert.equal(submissions[2].body.build_id,'build_id-record');
 assert.equal($('p35-wap-publish').disabled,true);await $('p35-wap-publish').onclick();assert.equal(submissions.length,3);
 $('p35-wap-sql').oninput();assert.equal($('p35-wap-build-action').disabled,true);await $('p35-wap-save').onclick();assert.equal(submissions[3].body.expected_version,1);
-// Admin loads shared WAP identifiers into an independently resolved context.
+// Admin resolves both shared artifacts through authorized metadata GETs.
+const engineer={...p.context,grant_revision:17},model=p.model,submit=route;
 p.role='admin';schemas.forEach(s=>Object.assign(s.capabilities,{wap_publish:true,wap_rollback:true}));await dataopsRefresh(p);
+dataopsLoadModel(p,model);
 $('p35-wap-build').add(new Option('engineer build','build_id-record'));$('p35-wap-build').value='build_id-record';
-$('p35-wap-audit').add(new Option('engineer audit','audit_id-record'));$('p35-wap-audit').value='audit_id-record';dataopsRender(p);
+$('p35-wap-audit').add(new Option('engineer audit','audit_id-record'));$('p35-wap-audit').value='audit_id-record';
+await $('p35-wap-publish').onclick();assert.equal(submissions.length,4);
+route=async(path,options)=>{
+ const match=path.match(/\/(builds|audits)\//);
+ if(!match)return submit(path,options);
+ const kind=match[1].slice(0,-1);
+ return {context:p.context,[kind]:wapArtifact(kind,engineer,{version})};
+};
+for(const kind of ['build','audit']){
+ $('p35-wap-metadata-kind').value=kind;$('p35-wap-metadata-id').value=kind+'_id-record';await $('p35-wap-metadata-load').onclick();
+}
 await $('p35-wap-publish').onclick();const publish=submissions.at(-1);
 assert.equal(publish.body.context.selected_role,'admin');assert.equal(publish.headers['X-Shirokuma-Role'],'admin');assert.equal(publish.body.build_id,'build_id-record');
+''')
+
+    def test_guided_wap_requires_complete_matching_artifacts(self):
+        self.javascript(r'''
+const p=await ready('p35-wap'),id=key=>$('p35-wap-'+key);
+const stage=i=>assert.equal(id('step-'+i).getAttribute('aria-current'),'step');
+p.sources[0].table.value='0';id('model-id').value='daily_orders';id('name').value='raw.orders';id('min').value='0';
+const original=route;let build=0,audit=0,publish=0;
+route=async(path,options)=>{
+ if(!options?.body)return original(path,options);
+ const body=JSON.parse(options.body),context=body.context;submissions.push({path,body});
+ if(path.endsWith('/models'))return {context,model:{...body,version:1}};
+ if(path.endsWith('/build')){
+  build++;
+  if(build===1)return accepted(context,{id:'unknown-build',state:'UNKNOWN',committed:false,result:{build_id:'proposed'}});
+  return wapReceipt('build',context,{id:'built-'+build,operation_id:'op-build-'+build,destination:bodyTarget});
+ }
+ if(path.endsWith('/audit')){
+  audit++;
+  return wapReceipt('audit',context,{id:'audit-'+audit,operation_id:'op-audit-'+audit,build_id:body.build_id,version:audit===2?2:1,passed:audit!==1,null_counts:{code:audit===1?1:0}});
+ }
+ publish++;
+ return wapReceipt('publication',context,{...body,context,kind:publish===1?'rollback':'publish',operation_id:'op-publish-'+publish,destination:bodyTarget});
+};
+stage(0);await id('save').onclick();assert.equal(submissions.length,0);
+assert.equal(id('name').getAttribute('aria-invalid'),'true');assert.equal(id('min').getAttribute('aria-invalid'),'true');
+assert.equal(document.activeElement,id('name'));
+id('name').value='daily_orders';id('name').oninput();id('min').value='1';id('min').oninput();
+const bodyTarget={database_id:'db',schema_id:id('target-schema').value,physical_name:'daily_orders'};
+await id('save').onclick();stage(1);assert.equal(document.activeElement,id('build-action'));assert.match(id('action-target').textContent,/daily_orders/);
+await id('build-action').onclick();stage(1);assert.match(id('guide-next').textContent,/Outcome unknown/);
+await id('audit-action').onclick();assert.equal(audit,0);
+// Reconcile the original request as failed before submitting a fresh build.
+const mutations=route;
+route=async(path,options)=>path.startsWith('/api/v1/dataops/unknown-build?')?
+ accepted(p.context,{id:'unknown-build',state:'FAILED',committed:false}):mutations(path,options);
+await id('observe').onclick();route=mutations;
+await id('build-action').onclick();stage(2);await id('audit-action').onclick();stage(2);
+assert.match(id('quality-result').textContent,/Failed.*Rows: 3.*code: 1/);
+await id('publish').onclick();assert.equal(publish,0);
+await id('build-action').onclick();await id('audit-action').onclick();stage(2);
+assert.ok(id('quality-result').hidden);await id('publish').onclick();assert.equal(publish,0);
+await id('audit-action').onclick();stage(3);
+assert.match(id('publish-review').textContent,/daily_orders.*Build built-3 and Audit audit-3/);
+id('build').value='built-2';id('build').onchange();await id('publish').onclick();assert.equal(publish,0);
+id('build').value='built-3';id('build').onchange();
+await id('publish').onclick();stage(3);
+await id('publish').onclick();assert.match(id('step-3').textContent,/complete/);
+assert.equal(publish,2);
+dataopsInvalidate(p);stage(0);assert.ok(id('quality-result').hidden);assert.ok(id('publish-review').hidden);
 ''')
 
     def test_grant_revision_hides_cached_samples_models_and_operation_results(self):
@@ -1006,7 +1088,7 @@ assert.equal($('p35-ingest-confirm').disabled,true);assert.equal($('p35-ingest-o
 
     def test_model_version_conflict_preserves_edit_for_review(self):
         self.javascript(r'''
-const p=await ready('p35-wap');dataopsLoadModel(p,{model_id:'orders',version:2,sql:'SELECT * FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'schema',physical_name:'orders'},not_null:[],min_rows:0});
+const p=await ready('p35-wap');dataopsLoadModel(p,{model_id:'orders',version:2,sql:'SELECT * FROM source',sources:{source:ref('orders')},target:{database_id:'db',schema_id:'schema',physical_name:'orders'},not_null:[],min_rows:1});
 $('p35-wap-sql').value='SELECT code FROM source';$('p35-wap-sql').oninput();
 route=async()=>({http:409,body:{error:{code:'MODEL_VERSION_CONFLICT'}}});await $('p35-wap-save').onclick();
 assert.equal(p.invalid,false);assert.equal(p.model.version,2);assert.equal($('p35-wap-sql').value,'SELECT code FROM source');

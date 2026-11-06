@@ -31,6 +31,7 @@ class Node {
  prepend(...items){this.append(...items);this.children=[...items,...this.children.filter(c=>!items.includes(c))];} before(item){if(item.id)nodes[item.id]=item;const parent=this.parentElement;if(parent){parent.append(item);parent.children.splice(parent.children.indexOf(item),1);parent.children.splice(parent.children.indexOf(this),0,item);}}
  after(...items){for(const item of items)if(item.id)nodes[item.id]=item;const parent=this.parentElement;if(parent){parent.append(...items);parent.children=parent.children.filter(n=>!items.includes(n));parent.children.splice(parent.children.indexOf(this)+1,0,...items);}}
  replaceChildren(...items){this.children=[];delete this.rows;this.textContent='';this.append(...items);}
+ remove(){if(this.parentElement){this.parentElement.children=this.parentElement.children.filter(node=>node!==this);this.parentElement=null;}}
  add(item){this.append(item);} get options(){return this.children;}
  setAttribute(key,value){this[key]=value;} getAttribute(key){return this[key];} hasAttribute(key){return Object.hasOwn(this,key);} removeAttribute(key){delete this[key];}
  addEventListener(key,fn){(this.listeners[key]??=[]).push(fn);} focus(){document.activeElement=this;}
