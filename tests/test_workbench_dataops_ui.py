@@ -737,6 +737,42 @@ assert.match($('p35-wap-entry-help').textContent,/Choose a database and schema/)
 assert.equal(submissions.length,0);
 ''')
 
+    def test_file_drop_and_chooser_share_ingest_gates_and_field_feedback(self):
+        self.javascript(r'''
+const p=await ready(),zone=$('p35-ingest-dropzone'),chooser=$('p35-ingest-file'),status=$('p35-ingest-file-status');
+const drop=async file=>{
+ let prevented=false;
+ await zone.listeners.drop[0]({dataTransfer:{files:[file]},preventDefault:()=>{prevented=true;}});
+ assert.equal(prevented,true);
+};
+assert.equal(chooser.parentElement,zone);assert.equal(chooser.getAttribute('aria-describedby'),status.id);
+assert.equal(status.getAttribute('role'),'status');
+globalThis.DataTransfer=class{
+ constructor(){this.files=[];this.items={add:file=>this.files.push(file)};}
+};
+let reads=0;
+const file={name:'dropped.csv',arrayBuffer:async()=>{reads++;return Uint8Array.from([1]).buffer;}};
+p.inventoryReady=false;await drop(file);
+assert.equal(reads,0);assert.equal(chooser.disabled,true);assert.match(status.textContent,/authorized destination/);
+p.inventoryReady=true;dataopsRender(p);
+await preview(p);const before=previewCount;
+await drop(file);
+assert.equal(reads,1);assert.equal(p.file.filename,file.name);assert.equal(chooser.files[0],file);
+assert.equal(status.textContent,'Selected file: dropped.csv');
+assert.equal(p.preview,null);assert.equal($('p35-ingest-confirm').disabled,true);
+chooser.files=[{name:'chosen.csv',arrayBuffer:async()=>Uint8Array.from([3]).buffer}];
+await chooser.onchange();
+assert.equal(p.file.filename,'chosen.csv');assert.equal(status.textContent,'Selected file: chosen.csv');
+chooser.files=[{name:'unreadable.csv',arrayBuffer:async()=>{throw Error('read failed');}}];
+await chooser.onchange();
+assert.equal(p.file,null);assert.equal(chooser.value,'');assert.match(status.textContent,/Could not read unreadable.csv/);
+const pending=deferred();chooser.files=[{name:'stale.csv',arrayBuffer:()=>pending.promise}];
+const choosing=chooser.onchange();assert.equal(status.textContent,'Reading file…');
+dataopsInvalidate(p);await drop(file);pending.resolve(Uint8Array.from([2]).buffer);await choosing;
+assert.equal(reads,1);assert.equal(p.file,null);assert.match(status.textContent,/authorized destination/);
+assert.equal(previewCount,before);assert.equal(submissions.length,0);
+''')
+
     def test_bytes_once_immutable_preview_and_explicit_confirmation(self):
         self.javascript(r'''
 const p=await ready();let reads=0;

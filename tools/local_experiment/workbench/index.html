@@ -286,6 +286,11 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 #ingest-dropzone label{margin:0}
 #ingest-dropzone.dragging{border-color:var(--accent);background:var(--accent-soft);outline:2px solid var(--accent)}
 #ingest-dropzone .toolbar{justify-content:space-between}
+#p35-ingest-dropzone{display:grid;gap:6px;grid-column:1/-1;min-width:0;padding:10px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
+#p35-ingest-dropzone:focus-within{border-color:var(--focus)}
+#p35-ingest-dropzone label,#p35-ingest-file-status{margin:0}
+#p35-ingest-file{max-width:100%}
+#p35-ingest-file-status{overflow-wrap:anywhere}
 .or-divider{display:flex;align-items:center;gap:8px;margin:12px 0 0;color:var(--muted);font-size:12px}
 .or-divider::before,.or-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 #ingest-preview p,#stage-preview p{margin:12px 0 6px;font-weight:600}
@@ -485,17 +490,20 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #database-worksheet-pane>.panel{margin:0}
 #database-details{min-width:0;margin:12px;border:1px solid var(--line);box-shadow:none}
 /* Explorer: title, search and refresh first; the tree takes the remaining height; context last. */
-#database-workspace>.explorer{display:flex;flex-direction:column;padding:0;overflow:hidden;max-height:calc(100vh - 72px);top:60px}
+#database-workspace>.explorer{display:flex;flex-direction:column;padding:0;overflow:auto;max-height:calc(100vh - 72px);top:60px}
+@supports selector(details::details-content){
+ #database-workspace>.explorer[open]::details-content{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+}
 #database-workspace>.explorer>summary{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}
 #database-workspace>.explorer:not([open])>summary{border-bottom:0}
-#database-workspace .explorer-search{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
-#database-workspace .explorer-search label{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
-#database-workspace .explorer-search input{flex:1;min-width:0;min-height:28px;font-size:12px}
-#database-workspace .explorer-search .help{display:none}
+#database-workspace .explorer-search{display:grid;gap:6px;flex:none;padding:8px 10px;border-bottom:1px solid var(--line)}
+#database-workspace .explorer-search label,#database-workspace .explorer-search .help{margin:0}
+#database-workspace .explorer-search input{width:100%;min-width:0;min-height:28px;font-size:12px}
+#database-workspace #refresh-catalog{justify-self:start}
 #database-workspace #refresh-catalog{flex:none;min-height:28px;padding:2px 8px;font-size:12px}
 #database-workspace #catalog-tree{flex:1 1 auto;min-height:120px;max-height:none;margin:0;padding:6px 4px 10px;overflow:auto;text-align:left;color:var(--ink)}
 #database-workspace #catalog-error{margin:6px 10px}
-#database-workspace .explorer-foot{border-top:1px solid var(--line);padding:8px 10px 10px;font-size:12px;color:var(--muted)}
+#database-workspace .explorer-foot{flex:none;border-top:1px solid var(--line);padding:8px 10px 10px;font-size:12px;color:var(--muted)}
 #database-workspace .explorer-foot p{margin:0 0 6px}
 #database-workspace .explorer-foot details>summary{font-weight:500;color:var(--ink-2)}
 #database-workspace .explorer-foot .toolbar{display:grid;gap:6px;margin-top:6px;padding:0}
@@ -2859,7 +2867,14 @@ Object.assign(i18n.ja,{
  'No databases available.':'利用可能なデータベースはありません。',
  'No schemas available.':'利用可能なスキーマはありません。', 'No objects in this schema.':'このスキーマにオブジェクトはありません。',
  'No tables.':'テーブルはありません。', 'No views.':'ビューはありません。', 'No matching objects in this schema.':'このスキーマに一致するオブジェクトはありません。',
- 'Search loaded objects; the selected schema is refreshed.':'読み込み済みのオブジェクトを検索し、選択中のスキーマを更新します。',
+ 'Search tables and views in the selected schema':'選択中のスキーマ内のテーブルとビューを検索',
+ 'Search by name':'名前で検索',
+ 'Select a schema to search its tables and views.':'テーブルとビューを検索するには、スキーマを選択してください。',
+ 'No file selected.':'ファイルが選択されていません。',
+ 'Selected file: {name}':'選択したファイル: {name}',
+ 'Reading file…':'ファイルを読み込み中…',
+ 'Wait for the current ingestion request before choosing a file.':'実行中の取り込みリクエストが完了してからファイルを選択してください。',
+ 'Choose or refresh an authorized destination before choosing a file.':'ファイルを選択する前に、権限のある取り込み先を選択または更新してください。',
  'Expand to load metadata.':'展開してメタデータを読み込みます。', 'Choose a schema to open SQL.':'SQL を開くスキーマを選択してください。',
  'Insert SQL name into {worksheet}':'{worksheet} に SQL 名を挿入',
  'Saved execution role exceeds the current role ceiling.':'保存した実行ロールは現在のロール上限を超えています。',
@@ -7250,7 +7265,10 @@ function dbTreeSelectionCurrent(receipt){
  return receipt.generation===dbSelectionGeneration&&receipt.identity===dbIdentity()&&receipt.database_id===dbExplorer.database_id&&receipt.schema_id===dbExplorer.schema_id&&receipt.scope===dbCatalogScope()&&!dbExplorerReason();
 }
 function dbRenderTree(){
- const root=$('catalog-tree'),focus=document.activeElement?.dataset?.treeKey,term=$('catalog-filter').value.toLowerCase();root.replaceChildren();
+ const root=$('catalog-tree'),focus=document.activeElement?.dataset?.treeKey,search=$('catalog-filter'),reason=dbExplorerReason();
+ const hint=$('catalog-search-hint');search.disabled=!!reason;hint.hidden=!reason;
+ if(reason)search.setAttribute('aria-describedby',hint.id);else search.removeAttribute('aria-describedby');
+ root.replaceChildren();
  for(const d of dbDatabases){
   const key='database:'+d.id,group=document.createElement('details'),summary=dbTreeControl('summary',key,d.display_name,'select-database','database',d.sql_catalog);
   group.open=dbTreeExpanded.has(key);group.append(summary);
@@ -7263,8 +7281,10 @@ function dbRenderTree(){
     const skey='schema:'+d.id+':'+s.id,branch=document.createElement('details'),title=dbTreeControl('summary',skey,s.display_name,'select-schema','schema',s.sql_name);branch.open=dbTreeExpanded.has(skey);branch.append(title);
     title.onclick=event=>{event?.preventDefault();if(branch.open)dbTreeExpanded.delete(skey);else dbTreeExpanded.add(skey);return dbSelectTreeSchema(d,s,false);};
     if(branch.open){
-     const record=dbTreeObjects.get(dbTreeObjectKey(d.id,s.id))||dbTreeObjects.get(dbTreeObjectKey(d.id,s.id,''));
-     if(!record){const state=document.createElement('p');state.textContent=dbTreeErrors.get(dbTreeObjectKey(d.id,s.id))||t('Expand to load metadata.');branch.append(state);}
+     const scoped=!reason&&d.id===dbExplorer.database_id&&s.id===dbExplorer.schema_id;
+     const query=scoped?search.value:'',term=query.toLowerCase(),key=dbTreeObjectKey(d.id,s.id,query);
+     const exact=dbTreeObjects.get(key),record=exact||dbTreeObjects.get(dbTreeObjectKey(d.id,s.id,''));
+     if(!record){const state=document.createElement('p');state.textContent=dbTreeErrors.get(key)||t('Expand to load metadata.');branch.append(state);}
      else{
       const matches=record.items.filter(o=>!term||[o.display_name,o.physical_name,o.kind].join(' ').toLowerCase().includes(term));
       if(!matches.length){const empty=document.createElement('p');ui(empty,term?'No matching objects in this schema.':'No objects in this schema.');branch.append(empty);}
@@ -7276,7 +7296,15 @@ function dbRenderTree(){
         button.onclick=async()=>{const receipt=await dbTreeObjectContext(d,s);if(!dbTreeSelectionCurrent(receipt))return;dbTreeSelection={kind:'object',key:okey};dbShowWorkspace('details');return dbDescribe(object);};section.append(button);}
        if(!objects.length){const empty=document.createElement('p');ui(empty,kind==='TABLE'?'No tables.':'No views.');section.append(empty);}branch.append(section);
       }
-      if(record.next_cursor){const more=dbTreeControl('button','more:'+skey,t('More objects'),'more-objects');more.onclick=async()=>{const receipt=await dbTreeObjectContext(d,s);if(!dbTreeSelectionCurrent(receipt))return;return dbLoadObjects(record.next_cursor);};branch.append(more);}
+      if(exact?.next_cursor&&(scoped||!search.value)){
+       const more=dbTreeControl('button','more:'+skey,t('More objects'),'more-objects');
+       more.onclick=async()=>{
+        const receipt=await dbTreeObjectContext(d,s);
+        if(!dbTreeSelectionCurrent(receipt)||dbTreeObjectKey(d.id,s.id)!==key)return;
+        const cursor=dbTreeObjects.get(key)?.next_cursor;if(cursor)return dbLoadObjects(cursor);
+       };
+       branch.append(more);
+      }
      }
     }
     group.append(branch);
@@ -7443,7 +7471,11 @@ function dbInstallWorkspace(explorerTools){
  ui($('refresh-table-details'),'Reload selected detail');
  // Mock order: search and refresh, then the tree with the remaining height, then context.
  filter.className='explorer-search';if(filter.style)filter.style.cssText='';filter.append($('refresh-catalog'));
- const searchHint='Search loaded objects; the selected schema is refreshed.';$('catalog-filter').title=t(searchHint);uiAttributes.push({node:$('catalog-filter'),attribute:'title',key:searchHint});
+ const search=$('catalog-filter'),placeholder='Search by name';
+ ui(filter.querySelector('label'),'Search tables and views in the selected schema');
+ search.setAttribute('placeholder',t(placeholder));uiAttributes.push({node:search,attribute:'placeholder',key:placeholder});
+ const searchHint=filter.querySelector('p');searchHint.id='catalog-search-hint';
+ searchHint.setAttribute('role','status');ui(searchHint,'Select a schema to search its tables and views.');
  const foot=document.createElement('div'),pick=document.createElement('details'),pickTitle=document.createElement('summary');
  foot.className='explorer-foot';ui(pickTitle,'Choose from lists');pick.append(pickTitle,explorerTools);
  // Status and recovery stay visible; the list-based pickers are an alternative to the tree.
@@ -8856,6 +8888,7 @@ function dataopsRender(p,inventory=false){
  ui($(id+'-observe'),p.op&&!p.op.id?'Resend original request (may accept execution)':'Observe operation');
  dataopsRecoveryRender(p);
  if(id==='p35-ingest'){
+  $(id+'-file').disabled=waiting||!dataopsIngestFileAllowed(p);
   const create=$(id+'-mode').value==='create';$(id+'-name').disabled=!allowed||waiting||!create;$(id+'-target').disabled=!allowed||waiting||create;
   $(id+'-preview').disabled=waiting||!allowed||dataopsOwnedUnresolved(p);
   $(id+'-confirm').disabled=waiting||!allowed||!p.preview||!!p.preview.submitted||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p));
@@ -8945,12 +8978,29 @@ function dataopsCaptureWap(p,operation,preserveSelection=false){
  if(p.id!=='p35-wap'||!operation?.result)return;
  for(const [kind,key] of [['build','build_id'],['audit','audit_id'],['publication','publication_id']])if(operation.result[key]){const n=$(p.id+'-'+kind),value=operation.result[key],selected=n.value;if(![...n.options].some(o=>o.value===value))n.add(new Option(value,value));n.value=preserveSelection?selected:value;}
 }
-async function dataopsReadFile(p,file){
- dataopsChanged(p);p.file=null;const epoch=p.epoch;if(!file)return;
+function dataopsIngestFileAllowed(p){
+ return p.inventoryReady&&!p.inventoryLoading&&p.inventoryContext===p.context&&dataopsAllowed(p,'manual_ingest');
+}
+async function dataopsReadFile(p,file,dropped=false){
+ const input=$(p.id+'-file');
+ if(p.pending||p.trackingPending||!dataopsIngestFileAllowed(p)){dataopsRender(p);return;}
+ if(dropped||!file)input.value='';
+ p.file=null;const epoch=p.epoch+1;
+ p.fileFeedback=file?{epoch,key:'Reading file…',reading:true}:null;
+ dataopsChanged(p);if(!file)return;
  try{const bytes=new Uint8Array(await file.arrayBuffer());if(epoch!==p.epoch)return;
+  if(!dataopsIngestFileAllowed(p)){dataopsRender(p);return;}
   let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
-  p.file=dataopsFreeze({filename:file.name,content_base64:btoa(binary)});ui(p.status,'Ready');dataopsRender(p);
- }catch(error){if(epoch===p.epoch)ui(p.status,error.message);}
+  p.file=dataopsFreeze({filename:file.name,content_base64:btoa(binary)});p.fileFeedback=null;
+  if(dropped&&typeof DataTransfer==='function'){
+   try{const transfer=new DataTransfer();transfer.items.add(file);input.files=transfer.files;}
+   catch{/* The field status also identifies the selected file. */}
+  }
+ }catch{
+  if(epoch!==p.epoch)return;
+  input.value='';p.fileFeedback={epoch,key:'Could not read {name}',values:{name:file.name}};
+ }
+ dataopsRender(p);
 }
 function dataopsIngestPayload(p){
  const id=p.id,mode=$(id+'-mode').value;if(!p.file||!['create','replace','append','upsert'].includes(mode)||!dataopsAllowed(p,'manual_ingest'))throw Error(t('Choose a file, context, explicit mode and target.'));
@@ -8964,6 +9014,15 @@ function dataopsIngestPayload(p){
 }
 function dataopsIngestContext(p){
  const id=p.id,allowed=dataopsAllowed(p,'manual_ingest'),context=$(id+'-task-context');
+ const fileAllowed=dataopsIngestFileAllowed(p);
+ if(p.fileFeedback&&(p.fileFeedback.epoch!==p.epoch||!fileAllowed)){
+  if(p.fileFeedback.reading)$(id+'-file').value='';
+  p.fileFeedback=null;
+ }
+ const feedback=p.pending||p.trackingPending?{key:'Wait for the current ingestion request before choosing a file.'}:
+  !fileAllowed?{key:'Choose or refresh an authorized destination before choosing a file.'}:
+  p.fileFeedback||(p.file?{key:'Selected file: {name}',values:{name:p.file.filename}}:{key:'No file selected.'});
+ wbTaskText($(id+'-file-status'),feedback.key,feedback.values);
  const d=p.databases.find(d=>d.id===p.database),s=p.schemas.find(s=>s.id===p.schema);
  const selection=allowed?[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / '):
   [d?.display_name||t(p.database?'Unavailable':'No selection'),
@@ -8992,8 +9051,13 @@ function dataopsInstallIngest(){
  $(id+'-accepted-context').hidden=true;
  ui($(id+'-refresh'),'Refresh ingestion destination');
  ui($(id+'-reconnect'),'Reconnect to original ingestion');
- const file=dataopsField(p.fields,id+'-file','Choose a browser file or drop it here');file.type='file';file.accept='.csv,.json,.jsonl,.ndjson';file.onchange=()=>dataopsReadFile(p,file.files[0]);
- p.form.addEventListener('dragover',e=>e.preventDefault());p.form.addEventListener('drop',e=>{e.preventDefault();if(!file.disabled&&e.dataTransfer.files.length)dataopsReadFile(p,e.dataTransfer.files[0]);});
+ const file=dataopsField(p.fields,id+'-file','Choose a browser file or drop it here');
+ file.type='file';file.accept='.csv,.json,.jsonl,.ndjson';file.onchange=()=>dataopsReadFile(p,file.files[0]);
+ const dropzone=file.parentElement;dropzone.id=id+'-dropzone';
+ const fileStatus=dataopsNode('p',id+'-file-status',dropzone);fileStatus.setAttribute('role','status');
+ file.setAttribute('aria-describedby',fileStatus.id);
+ p.form.addEventListener('dragover',e=>e.preventDefault());p.form.addEventListener('drop',e=>e.preventDefault());
+ dropzone.addEventListener('drop',e=>{e.preventDefault();const dropped=e.dataTransfer?.files[0];if(dropped)return dataopsReadFile(p,dropped,true);});
  dataopsField(p.fields,id+'-mode','Mode','select',[['','Choose mode'],['create','create'],['replace','replace'],['append','append'],['upsert','upsert']]);
  dataopsField(p.fields,id+'-name','Create table name');dataopsField(p.fields,id+'-target','Existing table','select');
  dataopsField(p.fields,id+'-format','File format','select',[['auto','auto'],['csv','CSV'],['json','JSON'],['jsonl','JSONL (one object per line)']]);

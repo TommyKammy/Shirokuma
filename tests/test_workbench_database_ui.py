@@ -92,7 +92,8 @@ $('warehouse').append(layout);layout.append($('worksheet-explorer'),main);$('wor
 main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('copilot-result'));editor.append(strip,$('sql'),copilot);
 const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('add-worksheet-tab'));results.append($('query-results'));
 head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),...Object.values(inspectorTargets).map($),$('snapshot-preview'));actions.append($('open-table-sql'));
-filter.append($('catalog-filter'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
+const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
+filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
 ''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
@@ -417,8 +418,16 @@ await dualBoot();const draft=JSON.stringify(dbInput(dbCurrent()));
 assert.equal(calls.filter(c=>c.path==='/api/v1/databases/finance/schemas').length,0);
 await treeActions('select-database').find(n=>n.dataset.treeKey==='database:finance').onclick({preventDefault(){}});
 assert.equal(dbWorkspacePane,'details');assert.equal(dbExplorer.schema_id,'');assert.equal($('open-table-sql').disabled,true);
+const search=$('catalog-filter'),hint=$('catalog-search-hint');
+assert.equal(search.disabled,true);assert.equal(hint.hidden,false);
+assert.match(hint.textContent,/Select a schema/);
+assert.match(search.parentElement.querySelector('label').textContent,/tables and views in the selected schema/);
+assert.equal(search.getAttribute('aria-describedby'),hint.id);
+assert.equal($('refresh-catalog').parentElement,search.parentElement);
 assert.deepEqual($('table-columns').rows,[['Finance marts · marts','']]);assert.equal(calls.filter(c=>c.path.includes('/schemas/finance-marts/objects?')).length,0);
 await treeActions('select-schema').find(n=>n.dataset.treeKey==='schema:finance:finance-marts').onclick({preventDefault(){}});
+assert.equal(search.disabled,false);assert.equal(hint.hidden,true);
+assert.equal(search.hasAttribute('aria-describedby'),false);
 assert.equal(objectButtons().length,1);assert.equal(dbTreeSelection.kind,'schema');
 assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/objects/')).length,0);
 route=async()=>({columns:[{name:'n',type:'int',nullable:true}]});await objectButtons()[0].onclick();assert.equal(dbTreeSelection.kind,'object');
@@ -428,7 +437,14 @@ assert.equal(dbTreeSelection.key,selected);assert.deepEqual([...dbTreeExpanded],
 assert.equal(objectButtons()[0].getAttribute('aria-current'),'true');assert.match($('insert-table-sql').textContent,/Worksheet 1/);
 assert.equal(calls.filter(c=>c.path.includes('/schemas/raw/objects?')).length,rawReads);
 assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
-$('catalog-filter').value='missing';await $('catalog-filter').oninput();assert.ok($('catalog-tree').descendants().some(n=>n.textContent==='No matching objects in this schema.'));
+dbTreeExpanded.add('database:db');dbTreeExpanded.add('schema:db:raw');
+dbSchemaCache.set(dbSchemaKey(currentRole,'db'),schemas);
+dbTreeObjects.set(dbTreeObjectKey('db','raw',''),{items:[salesObject],next_cursor:'unfiltered-page'});
+$('catalog-filter').value='missing';await $('catalog-filter').oninput();
+assert.ok($('catalog-tree').descendants().some(n=>n.textContent==='No matching objects in this schema.'));
+assert.ok(treeActions('select-object').some(n=>n.dataset.treeKey==='object:db:raw:sales-object'));
+assert.equal(treeActions('more-objects').length,0);
+assert.equal(calls.filter(c=>c.path.includes('/schemas/raw/objects?')).length,rawReads);
 ''')
 
     def test_empty_schema_new_sql_is_separate_from_saved_role_target_action(self):
