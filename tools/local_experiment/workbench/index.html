@@ -286,11 +286,33 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 #ingest-dropzone label{margin:0}
 #ingest-dropzone.dragging{border-color:var(--accent);background:var(--accent-soft);outline:2px solid var(--accent)}
 #ingest-dropzone .toolbar{justify-content:space-between}
-#p35-ingest-dropzone{display:grid;gap:6px;grid-column:1/-1;min-width:0;padding:10px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
+#p35-ingest{container:manual-ingest / inline-size}
+#p35-ingest>.panel-body{max-width:56rem;min-width:0}
+#p35-ingest-form{display:grid;gap:16px;min-width:0}
+#p35-ingest-form .job-fields{grid-template-columns:minmax(0,1fr);align-items:end;gap:14px}
+#p35-ingest :is(label,p,button,summary){white-space:normal;overflow-wrap:anywhere}
+#p35-ingest label{margin:0 0 6px}
+#p35-ingest-form :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0;box-sizing:border-box}
+#p35-ingest :is(button,select){max-width:100%}
+#p35-ingest-dropzone{display:grid;justify-items:start;gap:12px;width:100%;max-width:28rem;box-sizing:border-box;padding:12px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
 #p35-ingest-dropzone:focus-within{border-color:var(--focus)}
-#p35-ingest-dropzone label,#p35-ingest-file-status{margin:0}
-#p35-ingest-file{max-width:100%}
-#p35-ingest-file-status{overflow-wrap:anywhere}
+#p35-ingest-file-status{margin:0}
+#p35-ingest .workflow-details{margin:0;min-width:0}
+#p35-ingest .workflow-details>.job-fields{margin-top:14px}
+#p35-ingest .toolbar{flex-wrap:wrap;gap:12px}
+#p35-ingest-sample{min-width:0;overflow-x:auto}
+#p35-ingest-sample:empty{display:none}
+#p35-ingest-recovery{margin-top:16px}
+#p35-ingest-recovery-notice:empty{display:none}
+#p35-ingest-recovery .toolbar{align-items:end;margin-top:12px}
+#p35-ingest-recovery .toolbar>*{min-width:0;max-width:100%}
+@container manual-ingest (min-width:34rem){
+ #p35-ingest-form .job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #p35-ingest-keys-field{grid-column:1/-1}
+}
+@container manual-ingest (min-width:51rem){
+ #p35-ingest-form #p35-ingest-context-controls{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+}
 .or-divider{display:flex;align-items:center;gap:8px;margin:12px 0 0;color:var(--muted);font-size:12px}
 .or-divider::before,.or-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 #ingest-preview p,#stage-preview p{margin:12px 0 6px;font-weight:600}
@@ -2870,6 +2892,10 @@ Object.assign(i18n.ja,{
  'Search tables and views in the selected schema':'選択中のスキーマ内のテーブルとビューを検索',
  'Search by name':'名前で検索',
  'Select a schema to search its tables and views.':'テーブルとビューを検索するには、スキーマを選択してください。',
+ 'Input file (or drop here)':'入力ファイル（ドロップ可）',
+ 'Choose file':'ファイルを選択',
+ 'File parsing and ingestion options':'ファイル形式と取り込み設定',
+ 'Saved ingestion operations':'保存済みの取り込み処理',
  'No file selected.':'ファイルが選択されていません。',
  'Selected file: {name}':'選択したファイル: {name}',
  'Reading file…':'ファイルを読み込み中…',
@@ -8726,11 +8752,16 @@ const dataopsRecoveryActionLabel=action=>t({'manual-ingest':'Ingest','manual-wap
 function dataopsRecoveryRender(p){
  if(!p.recovery)return;
  const store=dataopsRecoveryOwner(),items=store.ops.filter(op=>op.panel===p.id);
- if(p.recoveryOwner!==dbPrincipal||!items.some(op=>op.key===p.recoverySelection))p.recoverySelection='';
+ const ownerChanged=p.recoveryOwner!==dbPrincipal;
+ if(ownerChanged||!items.some(op=>op.key===p.recoverySelection))p.recoverySelection='';
  p.recoveryOwner=dbPrincipal;
  dataopsOptions($(p.id+'-recovery-select'),items.map(op=>[op.key,[dataopsRecoveryActionLabel(op.action),op.id||t('UNCONFIRMED'),t(dataopsState(op)),new Date(op.time).toLocaleString()].join(' · ')]),p.recoverySelection,'Saved original request');
  const op=dataopsRecoverySelected(p),held=items.some(item=>dataopsUnresolved(item));
- if(p.id==='p35-ingest')p.recovery.hidden=!items.length&&!store.error&&store.ops.length<25;
+ if(p.id==='p35-ingest'){
+  p.recovery.hidden=!items.length&&!store.error&&store.ops.length<25;
+  p.recoveryHistory.hidden=!items.length;
+  if(ownerChanged||held&&p.recoveryHeldHelp.hidden)p.recoveryHistory.open=held;
+ }
  p.recoveryHeldHelp.hidden=!held;ui(p.recoveryHeldHelp,held?'Select the saved operation and reconnect or cancel it before creating a fresh request.':'');
  p.recoveryContext.hidden=!op;
  if(op)ui(p.recoveryContext,'Saved request context: {context}. {guidance}',()=>({context:[op.context.sql_catalog,op.context.sql_schema,op.context.selected_role,op.context.warehouse_id].join(' / '),guidance:t(dataopsRecoveryAuthorized(p,op)?'Refresh panel context if access changed, then reconnect explicitly.':'Match the original database, schema and execution role manually, then refresh panel context.')}));
@@ -8741,20 +8772,27 @@ function dataopsRecoveryRender(p){
  if(store.error||store.ops.length>=25)dataopsRecoveryNotice(p);else ui(p.recoveryNotice,'');
 }
 function dataopsRecoveryInstall(p){
- p.recovery=dataopsNode('div',p.id+'-recovery',p.body);p.recovery.className='toolbar';
- dataopsField(p.recovery,p.id+'-recovery-select','Saved original request','select').onchange=()=>{p.recoverySelection=$(p.id+'-recovery-select').value;dataopsRecoveryBoundary();dataopsRecoveryRender(p);};
- dataopsButton(p.recovery,p.id+'-reconnect','Reconnect original operation',()=>dataopsReconnect(p));
- dataopsButton(p.recovery,p.id+'-recovery-cancel','Cancel selected saved operation',()=>dataopsRecoveryCancel(p));
- p.recoveryContext=dataopsNode('p',p.id+'-recovery-context',p.recovery);p.recoveryContext.className='help';p.recoveryContext.setAttribute('role','status');p.recoveryContext.setAttribute('aria-live','polite');
- dataopsButton(p.recovery,p.id+'-remove-handle','Remove terminal handle',()=>{
+ p.recovery=dataopsNode('div',p.id+'-recovery',p.body);
+ let controls=p.recovery;
+ if(p.id==='p35-ingest'){
+  p.recoveryHistory=workflowDetails(p.recovery,'Saved ingestion operations');
+  controls=dataopsNode('div','',p.recoveryHistory);
+ }
+ controls.className='toolbar';
+ dataopsField(controls,p.id+'-recovery-select','Saved original request','select').onchange=()=>{p.recoverySelection=$(p.id+'-recovery-select').value;dataopsRecoveryBoundary();dataopsRecoveryRender(p);};
+ dataopsButton(controls,p.id+'-reconnect','Reconnect original operation',()=>dataopsReconnect(p));
+ dataopsButton(controls,p.id+'-recovery-cancel','Cancel selected saved operation',()=>dataopsRecoveryCancel(p));
+ p.recoveryContext=dataopsNode('p',p.id+'-recovery-context',controls);p.recoveryContext.className='help';p.recoveryContext.setAttribute('role','status');p.recoveryContext.setAttribute('aria-live','polite');
+ dataopsButton(controls,p.id+'-remove-handle','Remove terminal handle',()=>{
   const op=dataopsRecoverySelected(p);if(p.pending||p.trackingPending||!op||!dataopsTerminal(op))return;
   const store=dataopsRecoveryOwner(),previous=store.ops;store.ops=previous.filter(item=>item!==op);
   if(!dataopsRecoveryWrite(store)){store.ops=previous;dataopsRecoveryNotice(p);return;}
   p.recoverySelection='';if(p.op===op)p.op=null;for(const panel of dataopsPanels.values())dataopsRender(panel);
  });
- dataopsNode('p','',p.recovery,'Choose the original account, role, database and schema, then refresh panel context and reconnect. Reconnect inspects the saved operation without resubmitting SQL; normal inspection may reconcile state or attempt cancellation after access loss. A missing key does not prove the request was unsent. Removing a terminal handle only removes this browser handle.').className='help';
+ dataopsNode('p','',controls,'Choose the original account, role, database and schema, then refresh panel context and reconnect. Reconnect inspects the saved operation without resubmitting SQL; normal inspection may reconcile state or attempt cancellation after access loss. A missing key does not prove the request was unsent. Removing a terminal handle only removes this browser handle.').className='help';
  p.recoveryHeldHelp=dataopsNode('p',p.id+'-recovery-held',p.recovery);p.recoveryHeldHelp.className='help';p.recoveryHeldHelp.setAttribute('role','status');
  p.recoveryNotice=dataopsNode('p',p.id+'-recovery-notice',p.recovery);p.recoveryNotice.setAttribute('role','status');p.recoveryNotice.setAttribute('aria-live','polite');
+ if(p.recoveryHistory)p.recovery.prepend(p.recoveryHeldHelp,p.recoveryNotice);
  for(const event of ['input','change'])p.form.addEventListener(event,dataopsRecoveryBoundary);
 }
 async function dataopsReconnect(p){
@@ -8888,8 +8926,13 @@ function dataopsRender(p,inventory=false){
  ui($(id+'-observe'),p.op&&!p.op.id?'Resend original request (may accept execution)':'Observe operation');
  dataopsRecoveryRender(p);
  if(id==='p35-ingest'){
-  $(id+'-file').disabled=waiting||!dataopsIngestFileAllowed(p);
-  const create=$(id+'-mode').value==='create';$(id+'-name').disabled=!allowed||waiting||!create;$(id+'-target').disabled=!allowed||waiting||create;
+  $(id+'-choose-file').disabled=$(id+'-file').disabled=waiting||!dataopsIngestFileAllowed(p);
+  const mode=$(id+'-mode').value,create=mode==='create';
+  $(id+'-name').parentElement.hidden=!create;
+  $(id+'-target').parentElement.hidden=!mode||create;
+  $(id+'-keys').parentElement.hidden=mode!=='upsert';
+  $(id+'-name').disabled=!allowed||waiting||!create;$(id+'-target').disabled=!allowed||waiting||!mode||create;
+  $(id+'-keys').disabled=!allowed||waiting||mode!=='upsert';
   $(id+'-preview').disabled=waiting||!allowed||dataopsOwnedUnresolved(p);
   $(id+'-confirm').disabled=waiting||!allowed||!p.preview||!!p.preview.submitted||(dataopsOwnedUnresolved(p)||dataopsRecoveryHeld(p));
   if(inventory)dataopsOptions($(id+'-target'),p.objects.map((o,i)=>[String(i),o.label]),'');
@@ -9021,8 +9064,9 @@ function dataopsIngestContext(p){
  }
  const feedback=p.pending||p.trackingPending?{key:'Wait for the current ingestion request before choosing a file.'}:
   !fileAllowed?{key:'Choose or refresh an authorized destination before choosing a file.'}:
-  p.fileFeedback||(p.file?{key:'Selected file: {name}',values:{name:p.file.filename}}:{key:'No file selected.'});
- wbTaskText($(id+'-file-status'),feedback.key,feedback.values);
+  p.fileFeedback||(p.file?{key:'Selected file: {name}',values:{name:p.file.filename}}:{key:''});
+ const fileStatus=$(id+'-file-status');
+ fileStatus.hidden=!feedback.key;wbTaskText(fileStatus,feedback.key,feedback.values);
  const d=p.databases.find(d=>d.id===p.database),s=p.schemas.find(s=>s.id===p.schema);
  const selection=allowed?[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / '):
   [d?.display_name||t(p.database?'Unavailable':'No selection'),
@@ -9051,32 +9095,45 @@ function dataopsInstallIngest(){
  $(id+'-accepted-context').hidden=true;
  ui($(id+'-refresh'),'Refresh ingestion destination');
  ui($(id+'-reconnect'),'Reconnect to original ingestion');
- const file=dataopsField(p.fields,id+'-file','Choose a browser file or drop it here');
+ p.fields.id=id+'-context-controls';
+ p.fields.append($(id+'-refresh'));
+ const dropzone=dataopsNode('div',id+'-dropzone',p.form);
+ dataopsNode('span','',dropzone,'Input file (or drop here)');
+ const file=dataopsNode('input',id+'-file',dropzone);file.hidden=true;
  file.type='file';file.accept='.csv,.json,.jsonl,.ndjson';file.onchange=()=>dataopsReadFile(p,file.files[0]);
- const dropzone=file.parentElement;dropzone.id=id+'-dropzone';
+ const choose=dataopsButton(dropzone,id+'-choose-file','Choose file',()=>{if(!file.disabled)file.click();});
  const fileStatus=dataopsNode('p',id+'-file-status',dropzone);fileStatus.setAttribute('role','status');
- file.setAttribute('aria-describedby',fileStatus.id);
+ choose.setAttribute('aria-describedby',fileStatus.id);
  p.form.addEventListener('dragover',e=>e.preventDefault());p.form.addEventListener('drop',e=>e.preventDefault());
  dropzone.addEventListener('drop',e=>{e.preventDefault();const dropped=e.dataTransfer?.files[0];if(dropped)return dataopsReadFile(p,dropped,true);});
- dataopsField(p.fields,id+'-mode','Mode','select',[['','Choose mode'],['create','create'],['replace','replace'],['append','append'],['upsert','upsert']]);
- dataopsField(p.fields,id+'-name','Create table name');dataopsField(p.fields,id+'-target','Existing table','select');
- dataopsField(p.fields,id+'-format','File format','select',[['auto','auto'],['csv','CSV'],['json','JSON'],['jsonl','JSONL (one object per line)']]);
- dataopsField(p.fields,id+'-encoding','Encoding').value='utf-8';dataopsField(p.fields,id+'-delimiter','Delimiter');
- dataopsField(p.fields,id+'-hints','Column types (name=type, one per line)','textarea');dataopsField(p.fields,id+'-keys','Upsert key columns (required for upsert)');
- const atomic=dataopsField(p.fields,id+'-atomic','Atomic append');atomic.type='checkbox';atomic.checked=true;
- const batch=dataopsField(p.fields,id+'-batch','Batch size');batch.type='number';batch.min='1';batch.value='500';
- const sample=dataopsNode('div',id+'-sample',p.body);sample.className='table-wrap';sample.setAttribute('aria-live','polite');
- dataopsNode('p','',p.body,'Input preview only. Existing target types are checked at execution.');
- dataopsButton(p.form,id+'-preview','Preview Schema & Sample Rows',()=>dataopsTask(p,async current=>{
+ const destination=dataopsNode('div',id+'-destination-fields',p.form);destination.className='job-fields';
+ dataopsField(destination,id+'-mode','Mode','select',[['','Choose mode'],['create','create'],['replace','replace'],['append','append'],['upsert','upsert']]);
+ dataopsField(destination,id+'-name','Create table name');dataopsField(destination,id+'-target','Existing table','select');
+ dataopsField(destination,id+'-keys','Upsert key columns (required for upsert)').parentElement.id=id+'-keys-field';
+ const options=workflowDetails(p.form,'File parsing and ingestion options');options.id=id+'-options';
+ const tuning=dataopsNode('div','',options);tuning.className='job-fields';
+ dataopsField(tuning,id+'-format','File format','select',[['auto','auto'],['csv','CSV'],['json','JSON'],['jsonl','JSONL (one object per line)']]);
+ dataopsField(tuning,id+'-encoding','Encoding').value='utf-8';dataopsField(tuning,id+'-delimiter','Delimiter');
+ dataopsField(tuning,id+'-hints','Column types (name=type, one per line)','textarea');
+ const atomic=dataopsField(tuning,id+'-atomic','Atomic append');atomic.type='checkbox';atomic.checked=true;
+ const batch=dataopsField(tuning,id+'-batch','Batch size');batch.type='number';batch.min='1';batch.value='500';
+ const previewActions=dataopsNode('div','',p.form);previewActions.className='toolbar';
+ const sample=dataopsNode('div',id+'-sample',p.form);sample.className='table-wrap';sample.setAttribute('aria-live','polite');
+ dataopsButton(previewActions,id+'-preview','Preview Schema & Sample Rows',()=>dataopsTask(p,async current=>{
   if(dataopsOwnedUnresolved(p))return;
   p.preview=null;const payload=dataopsIngestPayload(p),reply=await dataopsRequest('/api/v1/ingests/preview',payload.context,payload);if(!current())return;
   const preview=reply.preview;if(!preview?.request_fingerprint)throw Error(t('Preview required after every input change.'));
   const signature=JSON.stringify([dbPrincipal,payload.context,preview.request_fingerprint]);p.requests??=new Map();
   if(!p.requests.has(signature))p.requests.set(signature,{payload:dataopsFreeze({...dataopsClone(payload),expected_preview_fingerprint:preview.request_fingerprint}),fingerprint:preview.request_fingerprint,key:crypto.randomUUID(),submitted:false});
   p.preview=p.requests.get(signature);if(p.preview.operation)p.op=p.preview.operation;
-  sample.replaceChildren();const count=dataopsNode('p','',sample);ui(count,'Input rows: {count}',{count:preview.total_rows});const grid=dataopsNode('div','',sample);table(grid,preview.columns,preview.rows||[],false);ui(p.status,'Ready');
+  sample.replaceChildren();dataopsNode('p','',sample,'Input preview only. Existing target types are checked at execution.').className='help';const count=dataopsNode('p','',sample);ui(count,'Input rows: {count}',{count:preview.total_rows});const grid=dataopsNode('div','',sample);table(grid,preview.columns,preview.rows||[],false);ui(p.status,'Ready');
  }));
- const confirm=dataopsButton(p.form,id+'-confirm','Confirm preview and ingest',()=>{if(!p.preview||!dataopsAllowed(p,'manual_ingest'))return;return dataopsSubmit(p,'/api/v1/ingests',p.preview.payload,p.preview);});confirm.className='primary';
+ const confirmActions=dataopsNode('div','',p.form);confirmActions.className='toolbar';
+ const confirm=dataopsButton(confirmActions,id+'-confirm','Confirm preview and ingest',()=>{if(!p.preview||!dataopsAllowed(p,'manual_ingest'))return;return dataopsSubmit(p,'/api/v1/ingests',p.preview.payload,p.preview);});confirm.className='primary';
+ const operationActions=dataopsNode('div','',p.body);operationActions.className='toolbar';
+ p.recovery.before(operationActions);
+ operationActions.append($(id+'-observe'),$(id+'-cancel'));
+ operationActions.after($(id+'-observe-help'));
  p.form.onsubmit=e=>{e.preventDefault();};
  for(const key of ['mode','name','target','format','encoding','delimiter','hints','keys','atomic','batch']){const n=$(id+'-'+key);n.oninput=n.onchange=()=>dataopsChanged(p);}
  return p;

@@ -175,7 +175,10 @@ assert.equal(dataopsRecoveryText('x\x85'),true);for(const key of ['x\x00','x\x1f
 const op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'x\x85',context:{...p.context,sql_catalog:'original_catalog_'+ 'c'.repeat(80),sql_schema:'original_schema'},time:Date.now(),id:'o'.repeat(128),state:'ACTIVE',ambiguous:false,principal:dbPrincipal,restored:true};
 dataopsRecoveryOwner().ops.push(op);assert.equal(dataopsRecoveryWrite(dataopsRecoveryOwner()),true);p.recoverySelection=op.key;const before=calls.length;dataopsRecoveryRender(p);
 const help=$('p35-ingest-recovery-context'),cancel=$('p35-ingest-recovery-cancel');
-assert.equal(help.parentElement,p.recovery);assert.equal(cancel.parentElement,p.recovery);assert.equal($('p35-ingest-recovery-select').parentElement.parentElement,p.recovery);assert.equal(p.receipt.descendants().includes(help),false);assert.equal(p.receipt.descendants().includes(cancel),false);
+const controls=help.parentElement;
+assert.equal(controls.parentElement,p.recoveryHistory);assert.equal(p.recoveryHistory.parentElement,p.recovery);
+assert.equal(p.recoveryHistory.open,true);assert.equal(cancel.parentElement,controls);
+assert.equal($('p35-ingest-recovery-select').parentElement.parentElement,controls);assert.equal(p.receipt.descendants().includes(help),false);assert.equal(p.receipt.descendants().includes(cancel),false);
 assert.equal(help.hidden,false);assert.ok(help.textContent.includes(op.context.sql_catalog+' / original_schema / admin / LOCAL'));assert.match(help.textContent,/Match the original database, schema and execution role manually/);assert.equal($('p35-ingest-reconnect').disabled,true);assert.equal(cancel.disabled,false);
 assert.ok($('p35-ingest-recovery-select').options.some(o=>o.textContent.length>128));
 assert.ok([...$('p35-ingest-recovery-select').options].find(o=>o.value===op.key).textContent.startsWith(t('Ingest')+' Â· '));
@@ -503,6 +506,7 @@ if(failure==='readback')localStorage.setItem=(key,value)=>{};
 await $('p35-ingest-confirm').onclick();
 assert.equal(submissions.length,0);assert.equal(record.submitted,false);assert.equal(record.key,key);assert.equal(record.payload,payload);
 assert.equal($('p35-ingest-name').value,'chosen_table');assert.match(p.recoveryNotice.textContent,/storage unavailable or full/);
+assert.equal(p.recovery.hidden,false);assert.equal(p.recoveryNotice.parentElement,p.recovery);
 localStorage.getItem=get;localStorage.setItem=set;
 ''')
 
@@ -745,7 +749,11 @@ const drop=async file=>{
  await zone.listeners.drop[0]({dataTransfer:{files:[file]},preventDefault:()=>{prevented=true;}});
  assert.equal(prevented,true);
 };
-assert.equal(chooser.parentElement,zone);assert.equal(chooser.getAttribute('aria-describedby'),status.id);
+const choose=$('p35-ingest-choose-file');
+assert.equal(chooser.parentElement,zone);assert.equal(chooser.hidden,true);
+assert.equal(choose.tagName,'BUTTON');assert.equal(choose.getAttribute('aria-describedby'),status.id);
+let pickerOpens=0;chooser.click=()=>{pickerOpens++;};choose.click();assert.equal(pickerOpens,1);
+assert.equal(status.hidden,true);
 assert.equal(status.getAttribute('role'),'status');
 globalThis.DataTransfer=class{
  constructor(){this.files=[];this.items={add:file=>this.files.push(file)};}
@@ -753,7 +761,8 @@ globalThis.DataTransfer=class{
 let reads=0;
 const file={name:'dropped.csv',arrayBuffer:async()=>{reads++;return Uint8Array.from([1]).buffer;}};
 p.inventoryReady=false;await drop(file);
-assert.equal(reads,0);assert.equal(chooser.disabled,true);assert.match(status.textContent,/authorized destination/);
+assert.equal(reads,0);assert.equal(chooser.disabled,true);assert.equal(choose.disabled,true);
+choose.click();assert.equal(pickerOpens,1);assert.match(status.textContent,/authorized destination/);
 p.inventoryReady=true;dataopsRender(p);
 await preview(p);const before=previewCount;
 await drop(file);
@@ -771,6 +780,38 @@ const choosing=chooser.onchange();assert.equal(status.textContent,'Reading fileâ
 dataopsInvalidate(p);await drop(file);pending.resolve(Uint8Array.from([2]).buffer);await choosing;
 assert.equal(reads,1);assert.equal(p.file,null);assert.match(status.textContent,/authorized destination/);
 assert.equal(previewCount,before);assert.equal(submissions.length,0);
+''')
+
+    def test_manual_ingest_groups_controls_and_preserves_mode_drafts(self):
+        self.javascript(r'''
+const p=await ready(),node=key=>$('p35-ingest-'+key);
+const context=node('context-controls');
+assert.equal(context.parentElement,p.form);
+for(const key of ['role','database','schema'])assert.equal(node(key).parentElement.parentElement,context);
+assert.equal(node('refresh').parentElement,context);
+const options=node('options');
+assert.equal(options.tagName,'DETAILS');assert.ok(!options.open);
+for(const key of ['format','encoding','delimiter','hints','atomic','batch'])
+ assert.equal(node(key).parentElement.parentElement.parentElement,options);
+const mode=node('mode'),name=node('name'),target=node('target'),keys=node('keys');
+assert.equal(mode.parentElement.parentElement,node('destination-fields'));
+const visibility=(create,existing,upsert)=>{
+ assert.equal(name.parentElement.hidden,!create);assert.equal(target.parentElement.hidden,!existing);
+ assert.equal(keys.parentElement.hidden,!upsert);
+};
+visibility(false,false,false);
+mode.value='create';mode.onchange();visibility(true,false,false);name.value='new_table';
+mode.value='upsert';mode.onchange();visibility(false,true,true);target.value='1';keys.value='code';
+mode.value='append';mode.onchange();visibility(false,true,false);
+mode.value='create';mode.onchange();visibility(true,false,false);assert.equal(name.value,'new_table');
+mode.value='upsert';mode.onchange();visibility(false,true,true);
+assert.equal(target.value,'1');assert.equal(keys.value,'code');
+const order=p.form.children;
+assert.ok(order.indexOf(node('preview').parentElement)<order.indexOf(node('sample')));
+assert.ok(order.indexOf(node('sample'))<order.indexOf(node('confirm').parentElement));
+assert.equal(node('recovery-held').parentElement,p.recovery);
+assert.equal(node('recovery-notice').parentElement,p.recovery);
+assert.equal(p.recoveryHistory.tagName,'DETAILS');assert.ok(!p.recoveryHistory.open);
 ''')
 
     def test_bytes_once_immutable_preview_and_explicit_confirmation(self):
