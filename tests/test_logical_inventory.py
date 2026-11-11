@@ -41,6 +41,43 @@ class LogicalInventoryTests(unittest.TestCase):
         child.poll.return_value = None
         return socket_mock, child
 
+    def test_listing_reuses_connection_and_preserves_verified_roles(self):
+        with patch.object(store, 'connect', wraps=store.connect) as connect:
+            result = inventory.list_databases(self.alice, 'bi_viewer')
+        self.assertEqual(connect.call_count, 1)
+        self.assertEqual(result, {'items': [dict(id='db', sql_catalog='db', display_name='Database',
+            state='READY', revision=1, binding_revision=1, generation_id='foundation', grant_revision=1,
+            allowed_roles=['bi_viewer'], capabilities=dict(browse=True, query=True, manage=False,
+                job_sql=False, job_admin=False, stage_admin=False))]})
+        # A data-engineer grant alone does not supply a verified identity for that role.
+        self.assertEqual(inventory.list_databases(self.alice, 'data_engineer'), {'items': []})
+        self.assertEqual(inventory.list_databases(self.operator, 'admin'), {'items': []})
+
+    def test_listing_rechecks_logical_identity_binding_and_lifecycle_on_later_calls(self):
+        changes = (
+            ("UPDATE logical_bindings SET applied_policy_revision=0",
+             "UPDATE logical_bindings SET applied_policy_revision=1"),
+            ("UPDATE databases SET state='retiring'", "UPDATE databases SET state='READY'"),
+            ("UPDATE db_creations SET logical_state='STOPPED'", "UPDATE db_creations SET logical_state='READY'"),
+            ("UPDATE catalog_bindings SET applied_revision=0", "UPDATE catalog_bindings SET applied_revision=1"))
+        for change, restore in changes:
+            with self.subTest(change=change):
+                self.assertEqual(len(inventory.list_databases(self.alice, 'bi_viewer')['items']), 1)
+                with store.connect() as db:
+                    db.execute(change)
+                self.assertEqual(inventory.list_databases(self.alice, 'bi_viewer'), {'items': []})
+                self.assertEqual(inventory._allowed_roles(self.alice, 'db'), [])
+                with store.connect() as db:
+                    db.execute(restore)
+
+    def test_later_listing_honors_terminal_identity_revocation(self):
+        self.assertEqual(len(inventory.list_databases(self.alice, 'bi_viewer')['items']), 1)
+        with store.connect() as db:
+            db.execute("UPDATE logical_backend_identities SET state='REVOKED' WHERE principal_id='alice'")
+        self.assertEqual(inventory.list_databases(self.alice, 'bi_viewer'), {'items': []})
+        self.assertEqual(inventory._allowed_roles(self.alice, 'db'), [])
+        self.assertEqual(len(inventory.list_databases(self.bob, 'bi_viewer')['items']), 1)
+
     def test_logical_enrolled_transport_consumer_and_cleanup(self):
         sock, child = self.transport()
         with patch.object(inventory.socket, 'socket', sock), \

@@ -697,8 +697,9 @@ globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=Strin
 dbCreationClear();activeTab='warehouse';const held=deferred(),old=adminRoute;let initialized=false;
 adminRoute=(path,options)=>path===C+'/creation'?held.promise:old(path,options);
 const initializing=initializeDatabaseUI(session).then(()=>{initialized=true;});await tick();
-assert.equal(activeTab,'db-admin');assert.equal(initialized,false);
-held.resolve(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));await initializing;
+assert.equal(activeTab,'db-admin');assert.equal(initialized,true);
+assert.equal($('db-admin').getAttribute('aria-busy'),'true');
+held.resolve(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));await initializing;await dbPageHydration;
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(initialized,true);
 await $('db-creation-sql').onclick();assert.equal(activeTab,'warehouse');
 assert.equal(location.href,'http://localhost/workbench?view=sql#warehouse?panel=details');

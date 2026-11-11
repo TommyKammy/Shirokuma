@@ -4,7 +4,7 @@ Public entry points take (principal, selected_role, resource_id, ...).
 No function discovers or activates a runtime profile.
 """
 import base64
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import hashlib
 import hmac
 import json
@@ -36,20 +36,20 @@ def missing():
     raise InventoryError('NOT_FOUND', 404, 'Resource not found')
 
 
-def _database(principal, role, database_id):
-    with control_store.connect() as db:
+def _database(principal, role, database_id, db=None):
+    with (control_store.connect() if db is None else nullcontext(db)) as db:
         database = registry.get_database(db, database_id)
         binding = registry.get_binding(db, database_id)
-    if database is None or binding is None:
-        missing()
-    try:
-        auth = request_auth.authorize_database(principal, database_id, role,
-            expected_generation_id=binding.applied_generation_id)
-    except PermissionError:
-        missing()
-    if (database.state != 'READY' or binding.desired_revision <= 0 or
-            binding.desired_revision != binding.applied_revision or not binding.applied_generation_id):
-        missing()
+        if database is None or binding is None:
+            missing()
+        try:
+            auth = request_auth.authorize_database(principal, database_id, role,
+                expected_generation_id=binding.applied_generation_id, db=db)
+        except PermissionError:
+            missing()
+        if (database.state != 'READY' or binding.desired_revision <= 0 or
+                binding.desired_revision != binding.applied_revision or not binding.applied_generation_id):
+            missing()
     return database, binding, auth
 
 
@@ -84,33 +84,34 @@ def _schema(principal, role, schema_id, database_id=None):
 
 
 def list_databases(principal, selected_role):
+    items = []
     with control_store.connect() as db:
         ids = [row['id'] for row in db.execute('SELECT id FROM databases ORDER BY sql_catalog')]
-    items = []
-    for database_id in ids:
-        try:
-            database, binding, auth = _database(principal, selected_role, database_id)
-        except InventoryError:
-            continue
-        allowed = _allowed_roles(principal, database_id)
-        items.append(dict(id=database.id, sql_catalog=database.sql_catalog,
-            display_name=database.display_name, state=database.state, revision=database.revision,
-            binding_revision=binding.desired_revision, generation_id=binding.applied_generation_id,
-            grant_revision=auth.grant_revision, allowed_roles=allowed,
-            capabilities=dict(browse=True, query=True, manage=False,
-                job_sql=selected_role in ('admin', 'data_engineer'), job_admin=selected_role == 'admin',
-                stage_admin=selected_role == 'admin')))
+        for database_id in ids:
+            try:
+                database, binding, auth = _database(principal, selected_role, database_id, db=db)
+            except InventoryError:
+                continue
+            allowed = _allowed_roles(principal, database_id, db=db)
+            items.append(dict(id=database.id, sql_catalog=database.sql_catalog,
+                display_name=database.display_name, state=database.state, revision=database.revision,
+                binding_revision=binding.desired_revision, generation_id=binding.applied_generation_id,
+                grant_revision=auth.grant_revision, allowed_roles=allowed,
+                capabilities=dict(browse=True, query=True, manage=False,
+                    job_sql=selected_role in ('admin', 'data_engineer'), job_admin=selected_role == 'admin',
+                    stage_admin=selected_role == 'admin')))
     return {'items': items}
 
 
-def _allowed_roles(principal, database_id):
+def _allowed_roles(principal, database_id, db=None):
     result = []
-    for role in request_auth.ROLES:
-        try:
-            _database(principal, role, database_id)
-            result.append(role)
-        except InventoryError:
-            pass
+    with (control_store.connect() if db is None else nullcontext(db)) as db:
+        for role in request_auth.ROLES:
+            try:
+                _database(principal, role, database_id, db=db)
+                result.append(role)
+            except InventoryError:
+                pass
     return result
 
 

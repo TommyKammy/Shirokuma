@@ -8,7 +8,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 from urllib.parse import urlsplit, unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
@@ -21,6 +21,99 @@ import query_context
 import query_service
 
 CATALOG_API = inventory.catalog_api
+
+
+class DatabaseListingConnectionTests(unittest.TestCase):
+    """Exercise real account/grant authorization against a temporary control ledger."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.accounts = self.root / 'accounts.json'
+        self.users = {'alice': dict(role='admin', platform_admin=False,
+            salt='ab' * 16, password_hash='cd' * 32)}
+        self.accounts.write_text(json.dumps(self.users))
+        environment = patch.dict(os.environ, {'SHIROKUMA_AUTH_MODE': 'shared',
+            'SHIROKUMA_AUTH_FILE': str(self.accounts), 'SHIROKUMA_STATE_DIR': str(self.root)}, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
+        profile = patch.object(runtime_profile, '_current', None)
+        profile.start()
+        self.addCleanup(profile.stop)
+        self.principal = request_auth.AuthenticatedPrincipal('alice', 'admin', False)
+
+    def add_database(self, db, number, role='data_engineer'):
+        database = registry.create_database(db, f'catalog_{number:03}', f'Database {number}', '', 'test')
+        registry.create_binding(db, database.id, 'polaris', 'realm', database.sql_catalog,
+            'storage', 'credential', 's3://synthetic/')
+        generation = f'g-{number}'
+        registry.record_generation(db, registry.WarehouseConfigGeneration(
+            generation, 'LOCAL', f'apply-{number}', (), (), (), 'READY'))
+        registry.update_binding(db, database.id, 1, 1, generation)
+        db.execute("UPDATE databases SET state='READY' WHERE id=?", (database.id,))
+        registry.create_grant(db, 'alice', database.id, role)
+        db.execute('''UPDATE effective_grants SET maximum_role=?, applied_revision=1,
+            applied_generation_id=? WHERE principal_id='alice' AND database_id=?''',
+            (role, generation, database.id))
+        return database.id
+
+    def test_one_connection_independent_of_database_count_with_real_authorization(self):
+        for count in (0, 1, 12, 40):
+            with self.subTest(count=count):
+                with control_store.connect() as db:
+                    existing = db.execute('SELECT count(*) FROM databases').fetchone()[0]
+                    for number in range(existing, count):
+                        self.add_database(db, number)
+                with patch.object(control_store, 'connect', wraps=control_store.connect) as connect:
+                    items = inventory.list_databases(self.principal, 'bi_viewer')['items']
+                self.assertEqual(connect.call_count, 1)
+                self.assertEqual(len(items), count)
+                self.assertEqual([item['sql_catalog'] for item in items],
+                    [f'catalog_{number:03}' for number in range(count)])
+                for item in items:
+                    self.assertEqual(item['allowed_roles'], ['bi_viewer', 'data_engineer'])
+                    self.assertEqual(item['grant_revision'], 1)
+
+    def test_roles_lifecycle_and_public_output(self):
+        with control_store.connect() as db:
+            ids = [self.add_database(db, number, role) for number, role in
+                enumerate(('bi_viewer', 'data_engineer', 'admin'))]
+            for number, state in enumerate(('DRAFT', 'retiring', 'stopped', 'UNKNOWN'), 3):
+                database_id = self.add_database(db, number)
+                db.execute('UPDATE databases SET state=? WHERE id=?', (state, database_id))
+            pending = self.add_database(db, 7)
+            db.execute('UPDATE catalog_bindings SET applied_revision=0 WHERE database_id=?', (pending,))
+        for selected_role, visible in (('bi_viewer', ids), ('data_engineer', ids[1:]), ('admin', ids[2:])):
+            with self.subTest(role=selected_role):
+                expected = []
+                for database_id in visible:
+                    number = ids.index(database_id)
+                    expected.append(dict(id=database_id, sql_catalog=f'catalog_{number:03}',
+                        display_name=f'Database {number}', state='READY', revision=1,
+                        binding_revision=1, generation_id=f'g-{number}', grant_revision=1,
+                        allowed_roles=list(request_auth.ROLES)[:number + 1],
+                        capabilities=dict(browse=True, query=True, manage=False,
+                            job_sql=selected_role in ('admin', 'data_engineer'),
+                            job_admin=selected_role == 'admin', stage_admin=selected_role == 'admin')))
+                self.assertEqual(inventory.list_databases(self.principal, selected_role), {'items': expected})
+
+    def test_later_calls_recheck_account_and_grant_revocation(self):
+        with control_store.connect() as db:
+            database_id = self.add_database(db, 0)
+        self.assertEqual(len(inventory.list_databases(self.principal, 'data_engineer')['items']), 1)
+        self.users['alice']['disabled'] = True
+        self.accounts.write_text(json.dumps(self.users))
+        self.assertEqual(inventory.list_databases(self.principal, 'data_engineer'), {'items': []})
+        self.users['alice'].pop('disabled')
+        self.accounts.write_text(json.dumps(self.users))
+        self.assertEqual(len(inventory.list_databases(self.principal, 'data_engineer')['items']), 1)
+        with control_store.connect() as db:
+            db.execute("UPDATE grants SET maximum_role='revoked', revision=2 WHERE database_id=?", (database_id,))
+        self.assertEqual(inventory.list_databases(self.principal, 'data_engineer'), {'items': []})
+        with self.assertRaises(inventory.InventoryError) as error:
+            inventory._database(self.principal, 'data_engineer', database_id)
+        self.assertEqual((error.exception.code, error.exception.status), ('NOT_FOUND', 404))
 
 
 class DatabaseInventoryTests(unittest.TestCase):
@@ -196,7 +289,8 @@ class DatabaseInventoryTests(unittest.TestCase):
         result = inventory.resolve_object(self.principal, 'admin', self.database.id, self.schema.id, 'second_catalog.raw.a')
         self.assertEqual(result['ref']['database_id'], other.id)
         self.assertEqual(result['ref']['schema_id'], target.id)
-        self.authorization.assert_any_call(self.principal, other.id, 'admin', expected_generation_id='generation1')
+        self.authorization.assert_any_call(self.principal, other.id, 'admin',
+            expected_generation_id='generation1', db=ANY)
         self.calls.clear()
         self.allowed_database_ids.remove(other.id)
         with self.assertRaises(inventory.InventoryError):

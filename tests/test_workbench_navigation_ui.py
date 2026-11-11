@@ -59,6 +59,10 @@ for(const node of shell()){
  node.removeAttribute=key=>{if(key==='inert')released.push(selected());remove(key);};
 }
 
+boot=async(tabs=[input()])=>{
+ storage.set(dbWorksheetKey,JSON.stringify({active:tabs[0].id,tabs}));
+ await initializeDatabaseUI(session);await dbPageHydration;await dbRuntimeHydration;
+};
 globalThis.location={href:START_URL};
 const replacements=[];
 globalThis.history={replaceState:(_state,_title,url)=>{location.href=String(url);replacements.push(location.href);}};
@@ -98,26 +102,125 @@ class NavigationUI(unittest.TestCase):
         self.assertNotIn('tabindex', retry['attrs'])
         self.assertIn('hidden', retry['attrs'])
 
-    def test_held_production_session_and_initialization_release_only_final_route(self):
-        for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('db-admin', 'warehouse')]:
+    def test_held_production_reads_release_only_requested_shell(self):
+        for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('warehouse', 'warehouse'), ('db-admin', 'warehouse')]:
             with self.subTest(page=page):
                 self.run_url('http://local/#' + page, r"""
-loading();
-const sessionGate=deferred(),inventoryGate=deferred(),atRestore=deferred(),restoreGate=deferred();
+loading();storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
+const sessionGate=deferred(),inventoryGate=deferred(),runtimeGate=deferred();
 sessionRoute=()=>sessionGate.promise;inventoryRoute=()=>inventoryGate.promise;
-const restore=workbenchRestorePage;
-workbenchRestorePage=async auth=>{atRestore.resolve();await restoreGate.promise;await restore(auth);loading();};
+route=path=>path.includes('/runtime')?runtimeGate.promise:{};
 const pending=startWorkbench();await tick();loading();
 assert.equal(selected(),'warehouse');assert.deepEqual(calls.map(c=>c.path),['/api/session']);
 assert.equal(dbAdmin.installed,false);assert.deepEqual(released,[]);
-sessionGate.resolve(session);await tick();loading();
-assert.ok(calls.some(c=>c.path==='/api/v1/databases'));assert.deepEqual(released,[]);
-inventoryGate.resolve({items:inventory});await atRestore.promise;loading();assert.deepEqual(released,[]);
-restoreGate.resolve();await pending;
+sessionGate.resolve(session);await pending;await tick();
 assert.equal(selected(),FINAL);assert.deepEqual(released,[FINAL,FINAL,FINAL]);
 assert.ok(shell().every(node=>!node.hasAttribute('inert')));assert.equal($('workbench-boot').hidden,true);
+assert.equal($('run-query').disabled,true);assert.equal($('runtime-wake').disabled,true);
+assert.equal(calls.filter(c=>c.path==='/api/v1/databases').length,1);
+assert.equal(calls.some(c=>c.path.includes('/schemas')||c.path.startsWith('/api/v1/queries?')||c.path.includes('/objects?')),false);
 assert.equal(dbAdmin.installed,false);assert.equal(calls.some(c=>c.path.startsWith('/api/v1/admin/')),false);noPosts();
+inventoryGate.resolve({items:inventory});runtimeGate.resolve({});await dbPageHydration;await dbRuntimeHydration;
 """.replace('FINAL', json.dumps(final)))
+
+    def test_jobs_boot_defers_workspaces_and_first_visits_validate_live_context(self):
+        self.run_url('http://local/#jobs', r"""
+storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
+const inventoryGate=deferred(),runtimeGate=deferred();inventoryRoute=()=>inventoryGate.promise;
+route=path=>path.includes('/runtime')?runtimeGate.promise:{};
+await startWorkbench();await tick();
+assert.equal(selected(),'jobs');assert.equal($('jobs').getAttribute('aria-busy'),'true');
+assert.equal($('db-jobs-status').textContent,t('Loading…'));
+assert.equal($('db-jobs-next').textContent,t('Next action')+': '+t('Loading…'));
+for(const id of ['db-jobs-database','db-jobs-schema']){
+ assert.equal($(id).disabled,true);
+ assert.equal($(id).options.some(option=>option.textContent.includes(t('Unavailable'))),false);
+}
+assert.equal(dbWorkspaceHydrations.size,0);assert.equal(dbSchemas.length,0);assert.equal(dbExplorer.schemas.length,0);
+assert.equal(calls.filter(c=>c.path==='/api/v1/databases').length,1);
+// Navigation remains available even if both live services are still pending.
+await activate($('tab-compute'));assert.equal(selected(),'compute');
+inventoryGate.resolve({items:inventory});runtimeGate.resolve({});await dbPageHydration;await dbRuntimeHydration;
+assert.equal($('db-jobs-database').disabled,false);
+assert.notEqual($('db-jobs-status').textContent,t('Loading…'));
+assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries?')||c.path.includes('/objects?')),false);
+const schemaGate=deferred();schemasRoute=()=>schemaGate.promise;
+const worksheet=activate($('tab-warehouse'));await tick();
+assert.equal(selected(),'warehouse');assert.equal($('run-query').disabled,true);
+assert.equal($('database-worksheet-pane').getAttribute('aria-busy'),'true');
+assert.equal(dbWorkspaceHydrations.has('details'),false);
+schemaGate.resolve({items:schemas});await worksheet;
+assert.equal($('run-query').disabled,false);assert.equal(dbReason(dbCurrent()),'');
+assert.equal(calls.some(c=>c.path.includes('/objects?')),false);
+// Changing worksheets before the first Explorer visit cannot move its seed.
+dbCurrent().schema_id='raw';await dbRefreshContext();
+const objectGate=deferred();objectsRoute=()=>objectGate.promise;
+const catalog=activate($('tab-catalog'));await tick();
+assert.equal(selected(),'catalog');assert.equal(dbExplorer.schema_id,'schema');
+assert.equal($('database-details').getAttribute('aria-busy'),'true');
+objectGate.resolve({items:[],next_cursor:null});await catalog;
+assert.equal(dbExplorerReason(),'');assert.equal(dbCurrent().schema_id,'raw');
+assert.equal($('database-details').getAttribute('aria-busy'),'false');noPosts();
+""")
+
+    def test_admin_read_failure_is_local_after_shell_release(self):
+        self.run_url('http://local/#db-admin?creation=old', r"""
+session.platform_admin=true;
+const adminGate=deferred(),runtimeGate=deferred();
+route=path=>path==='/api/v1/admin/databases'?adminGate.promise:path.includes('/runtime')?runtimeGate.promise:{};
+await startWorkbench();await tick();
+assert.equal(selected(),'db-admin');assert.deepEqual(released,['db-admin','db-admin','db-admin']);
+assert.equal(dbAdmin.installed,true);assert.equal($('db-admin').getAttribute('aria-busy'),'true');
+assert.equal(calls.some(c=>c.path==='/api/v1/databases'||c.path.includes('/schemas')||c.path.startsWith('/api/v1/queries?')),false);
+assert.equal(dbWorkspaceHydrations.size,0);
+adminGate.reject(Error('Admin unavailable'));runtimeGate.resolve({});await dbPageHydration;await dbRuntimeHydration;
+assert.equal($('workbench-boot').hidden,true);assert.equal($('db-admin-error').hidden,false);
+await activate($('tab-compute'));assert.equal(selected(),'compute');noPosts();
+""")
+
+    def test_dbt_deep_link_projects_wait_does_not_hold_shell(self):
+        self.run_url('http://local/#transformation?dbt_db=db&dbt_plan=plan-1', DBT_SETUP + r"""
+storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
+const projectGate=deferred(),runtimeGate=deferred(),baseRoute=route;
+route=async(path,options)=>{
+ if(path.includes('/runtime'))return runtimeGate.promise;
+ if(path.includes('/dbt/projects'))await projectGate.promise;
+ if(path.includes('/plans/'))plan=makePlan(p.context);
+ return baseRoute(path,options);
+};
+await startWorkbench();await tick();
+assert.equal(selected(),'transformation');assert.deepEqual(released,['transformation','transformation','transformation']);
+assert.equal($('db-dbt-panel').getAttribute('aria-busy'),'true');assert.equal($('db-dbt-compile').disabled,true);
+assert.ok(calls.some(c=>c.path.includes('/dbt/projects')));
+assert.equal(dbWorkspaceHydrations.size,0);
+assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries?')||c.path.includes('/objects?')),false);
+projectGate.resolve();runtimeGate.resolve({});await dbPageHydration;await dbRuntimeHydration;
+assert.equal(p.plan.id,'plan-1');assert.equal($('db-dbt-panel').getAttribute('aria-busy'),'false');noPosts();
+clearTimeout(p.timer);
+""")
+
+    def test_leaving_pending_dbt_restore_cannot_fetch_detail_or_rewrite_route(self):
+        self.run_url('http://local/#transformation?dbt_db=db&dbt_plan=plan-1', DBT_SETUP + r"""
+const projects=deferred(),baseRoute=route;
+route=async(path,options)=>{if(path.includes('/dbt/projects'))await projects.promise;return baseRoute(path,options);};
+await startWorkbench();await tick();assert.ok(calls.some(c=>c.path.includes('/dbt/projects')));
+await activate($('tab-compute'));projects.resolve();await dbPageHydration;
+assert.equal(selected(),'compute');assert.equal(new URL(location.href).hash,'#compute');
+assert.equal(calls.some(c=>c.path.includes('/plans/plan-1')),false);noPosts();
+""")
+
+    def test_audit_inventory_wait_does_not_hold_shell(self):
+        self.run_url('http://local/#pawprints', r"""
+storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
+const inventoryGate=deferred();inventoryRoute=()=>inventoryGate.promise;
+await startWorkbench();await tick();
+assert.equal(selected(),'pawprints');assert.deepEqual(released,['pawprints','pawprints','pawprints']);
+assert.equal($('pawprints').getAttribute('aria-busy'),'true');assert.equal($('db-audit-submit').disabled,true);
+assert.equal(dbWorkspaceHydrations.size,0);
+inventoryGate.reject(Error('Inventory unavailable'));await dbPageHydration;
+assert.equal($('workbench-boot').hidden,true);assert.equal($('db-audit-submit').disabled,true);
+await activate($('tab-compute'));assert.equal(selected(),'compute');noPosts();
+""")
 
     def test_boot_failure_stays_unavailable_with_reload(self):
         for lang in ['ja', 'en']:

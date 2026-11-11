@@ -2887,6 +2887,22 @@ async function startWorkbench(){
 }
 // Shared by normal and legacy navigation; keep URL state separate from worksheet storage.
 let dbNavigationReady=false;
+let dbPageHydration=Promise.resolve(),dbRuntimeHydration=Promise.resolve();
+const dbWorkspaceHydrations=new Map();
+// These promises track reads only. Stored inputs never establish authorization.
+function dbEnsureWorkspace(pane){
+ if(!dbNavigationReady)return Promise.resolve();
+ const key=pane==='details'?'details':'worksheet';
+ if(!dbWorkspaceHydrations.has(key))dbWorkspaceHydrations.set(key,dbHydratePage(key==='details'?'database-details':'database-worksheet-pane',()=>key==='details'?dbRefreshExplorer():dbRefreshContext()));
+ return dbWorkspaceHydrations.get(key);
+}
+// Busy state is local to a page; navigation is never disabled by a data read.
+const dbPageReads=new WeakMap();
+function dbHydratePage(id,read){
+ const node=$(id),token={};dbPageReads.set(node,token);node.setAttribute('aria-busy','true');
+ let pending;try{pending=read();}catch(error){pending=Promise.reject(error);}
+ return Promise.resolve(pending).finally(()=>{if(dbPageReads.get(node)===token)node.setAttribute('aria-busy','false');});
+}
 function workbenchRoute(){
  if(!globalThis.location)return {};
  const url=new URL(globalThis.location.href),hash=url.hash.slice(1),split=hash.indexOf('?');
@@ -2909,8 +2925,9 @@ async function workbenchRestorePage(session){
  const legacy=!page||/^(?:workbench|sql|worksheet-[A-Za-z0-9_-]+)$/.test(page);
  const target=legacy?(databaseMode&&/^[A-Za-z0-9_-]{1,128}$/.test(creation.id||'')?'db-admin':dbt.database&&(dbt.plan||dbt.run||dbt.publication)?'transformation':'warehouse'):page;
  const button=tabs.find(tab=>tab.dataset.tab===target),available=button&&!button.hidden&&!button.disabled&&(target!=='db-admin'||(databaseMode&&dbAdminAllowed()));
- await activate(available?button:$('tab-warehouse'));
- if(databaseMode&&available&&target==='transformation'){showView('transformation-view-models');await dbDbtRestore();}
+ const hydration=activate(available?button:$('tab-warehouse'));
+ if(databaseMode&&available&&target==='transformation'){showView('transformation-view-models');await dbHydratePage('db-dbt-panel',dbDbtRestore);}
+ await hydration;
 }
 
 Object.assign(i18n.ja,{
@@ -2950,7 +2967,7 @@ function dbInvalidateReceipt(role,account=false){
 }
 let dbAuthorizationVersion=0;
 const dbExplorer={database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null,schemas:[],schemaScope:'',invalid:false};
-let dbExplorerRequest=0,dbWorksheetListRequest=0,dbWorksheetObjects=[];
+let dbExplorerRequest=0,dbWorksheetListRequest=0,dbWorksheetObjects=[],dbExplorerSeedPending=false;
 let dbPrincipal='',dbMaximumRole='admin',dbEpoch=0,dbInventoryVersion=0,dbRefreshRequest=0,dbListRequest=0,dbDatabases=[],dbSchemas=[],dbSchemaScope='',dbObjects=[],dbObject=null,dbObjectEpoch=0,dbHistory=[],dbHistoryRequest=0,dbHistoryScope='',dbContextFailure=null;
 Object.assign(i18n.ja,{
  'Details':'詳細', 'Worksheet':'ワークシート', 'Open new SQL':'新しい SQL を開く', 'Insert SQL name':'SQL 名を挿入',
@@ -6883,6 +6900,12 @@ function dbApplyInventory(items,role){
  if(read.request<(old?.request||0))return;
  const prior=old?.items||[],previous=new Map(prior.map(d=>[d.id,dbSignature(d)]));
  const explorerNext=items.find(d=>d.id===dbExplorer.database_id);
+ // Take the first live grant for the restored Explorer inputs, independently of
+ // whichever worksheet is active when Explorer is eventually opened.
+ if(role===currentRole&&dbExplorerSeedPending){
+  dbExplorerSeedPending=false;
+  if(explorerNext&&dbExplorer.binding_revision===explorerNext.binding_revision&&dbExplorer.generation_id===explorerNext.generation_id)dbExplorer.grant_revision=explorerNext.grant_revision??null;
+ }
  const explorerChanged=role===currentRole&&dbExplorer.database_id&&(previous.has(dbExplorer.database_id)?previous.get(dbExplorer.database_id)!==dbSignature(explorerNext):!explorerNext||dbExplorer.binding_revision!==explorerNext.binding_revision||dbExplorer.generation_id!==explorerNext.generation_id||dbExplorer.grant_revision!==(explorerNext.grant_revision??null));
  const worksheetChanged=previous.get(dbCurrent()?.database_id)!==dbSignature(items.find(d=>d.id===dbCurrent()?.database_id));
  const changed=prior.length!==items.length||items.some(d=>previous.get(d.id)!==dbSignature(d));
@@ -6967,6 +6990,7 @@ async function dbRefreshContext(){
  dbContextFailure=null;
  dbSchemaScope='';dbClearWorksheetObjects();dbClearHistory();dbControls();
  if(!dbRoleWithinHeader(role))return;
+ message('database-context-state',t('Loading…'));
  const current=()=>request===dbRefreshRequest&&identity===dbTabIdentity()&&id===worksheetId&&database===dbCurrent()?.database_id;
  try{
   const items=await dbReadInventory(role);if(!current()||!dbInventoryCurrent(items))return;
@@ -7456,7 +7480,7 @@ async function dbSelectTreeSchema(d,s,expand=true,generation=++dbSelectionGenera
 }
 async function dbRefreshExplorer(){
  const request=++dbExplorerRequest,identity=dbIdentity(),database=dbExplorer.database_id,role=currentRole,generation=dbSelectionGeneration;
- dbExplorer.schemaScope='';dbClearExplorer();
+ dbExplorer.schemaScope='';dbClearExplorer();message('catalog-context-state',t('Loading…'));
  const current=()=>request===dbExplorerRequest&&generation===dbSelectionGeneration&&identity===dbIdentity()&&database===dbExplorer.database_id;
  try{
   const items=await dbReadInventory(role);if(!current()||!dbInventoryCurrent(items))return;dbApplyInventory(items,role);
@@ -7508,6 +7532,7 @@ function dbShowWorkspace(pane){
  if($('worksheet-task-context'))$('worksheet-task-context').hidden=pane!=='worksheet';
  $('worksheet-tabs').querySelectorAll('[role=tab]').forEach(button=>{const selected=button.id==='workspace-details'?pane==='details':pane==='worksheet'&&button.dataset.worksheet===worksheetId;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;});
  $('database-worksheet-pane').setAttribute('aria-labelledby','worksheet-'+worksheetId);
+ if(dbNavigationReady&&activeTab==='warehouse')return dbEnsureWorkspace(pane);
 }
 function dbWireWorkspaceTabs(){
  const container=$('worksheet-tabs');container.prepend(dbDetailsTab);
@@ -7704,6 +7729,7 @@ function dbSelectInspector(button){
  if(dbObject)return dbDescribe(dbObject);
 }
 function dbApplyRole(){
+ dbWorkspaceHydrations.clear();
  dbRuntimePurge();
  if(dbAudit.installed)dbAuditPurge();
  dbAdminClear();
@@ -7811,8 +7837,14 @@ async function initializeDatabaseUI(session){
   if(next==='db-admin'&&!dbAdminAllowed())return;
   workbenchRememberPage(next);
   if(activeTab==='db-admin'&&next!=='db-admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
-  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
- $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
+  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)return dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbHydratePage('db-admin',dbAdminOpen);else if(target==='jobs')return dbHydratePage('jobs',dbJobsOpen);else if(target==='pawprints')return dbHydratePage('pawprints',dbAuditOpen);else dataopsOpen(target);};
+ $('role-selector').onchange=async()=>{
+  const auditUsed=!!dbAudit.proof||!!dbAudit.choiceItems;
+  dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();
+  if(activeTab==='warehouse')await dbEnsureWorkspace(dbWorkspacePane);else if(activeTab==='jobs')await dbJobsRefresh();else if(activeTab!=='pawprints')dataopsOpen(activeTab);
+  if(auditUsed||activeTab==='pawprints')await dbAuditRefreshAuthorization();
+  void refreshStatus();
+ };
  $('run-query').onclick=dbRunQuery;
  $('query-database').onchange=()=>{const w=dbCurrent();w.database_id=$('query-database').value;w.binding_revision=dbTabItems().find(d=>d.id===w.database_id)?.binding_revision;w.generation_id=dbTabItems().find(d=>d.id===w.database_id)?.generation_id;w._grantChanged=false;dbSave();dbRenderRun();dbRefreshContext();};
  $('query-schema').onchange=async()=>{dbCurrent().schema_id=$('query-schema').value;await dbReselect();dbSave();dbRenderRun();};
@@ -7826,13 +7858,13 @@ async function initializeDatabaseUI(session){
  $('refresh-catalog').onclick=dbRefreshExplorer;
  $('refresh-table-details').onclick=()=>{dbDetails.clear();if(dbObject)dbDescribe(dbObject);};
  dbExplanationInstall();dbProposalInstall();dbCuratorInstall();dbObservationsInstall();
- dbApplyRole();legacyRenderWorksheets();dbWireWorkspaceTabs();dbPersist();await dbRefreshContext();
- if(currentRole!==dbTabRole()){try{const items=await dbReadInventory(currentRole);dbApplyInventory(items,currentRole);}catch(error){if(error.code!=='AUTH_READ_STALE')message('catalog-error',error.message);}}
- // Seed once from explicit restored inputs. Worksheet switches never follow this.
- const w=dbCurrent(),d=dbDatabases.find(d=>d.id===w.database_id);
- Object.assign(dbExplorer,{database_id:w.database_id||'',schema_id:w.schema_id||'',binding_revision:w.binding_revision,generation_id:w.generation_id,grant_revision:d?.grant_revision??null,schemas:dbSchemas.slice(),schemaScope:dbSchemaScope,invalid:!!w._grantChanged});
- if(d){dbTreeExpanded.add('database:'+d.id);if(w.schema_id)dbTreeExpanded.add('schema:'+d.id+':'+w.schema_id);}
- await dbRefreshExplorer();dbExplorerControls();
+ dbApplyRole();legacyRenderWorksheets();dbWireWorkspaceTabs();dbPersist();
+ // Seed input identity synchronously; validate it only against a fresh live read.
+ const w=dbCurrent();
+ Object.assign(dbExplorer,{database_id:w.database_id||'',schema_id:w.schema_id||'',binding_revision:w.binding_revision,generation_id:w.generation_id,grant_revision:null,schemas:[],schemaScope:'',invalid:false});
+ dbExplorerSeedPending=true;
+ if(w.database_id){dbTreeExpanded.add('database:'+w.database_id);if(w.schema_id)dbTreeExpanded.add('schema:'+w.database_id+':'+w.schema_id);}
+ dbExplorerControls();
  dataopsInstall();
  dbJobsInstall();
  dbStagesInstall();
@@ -7840,9 +7872,13 @@ async function initializeDatabaseUI(session){
  dbDbtInstall();
  dbWorkflowInstall();
  dbAuditInstall();
- dbRuntimeInstall();await dbRuntimeRefresh();
+ dbRuntimeInstall();
  dbNavigationReady=true;
- await workbenchRestorePage(session);
+ // Route selection runs before the first await in restore. Network reads belong
+ // to the selected panel and cannot hold the authenticated shell behind boot.
+ const hydration=workbenchRestorePage(session),page=activeTab;
+ dbPageHydration=hydration.catch(error=>message(page==='warehouse'?'database-context-state':page==='db-admin'?'db-admin-error':page==='transformation'?'db-dbt-status':page==='pawprints'?'db-audit-status':'jobs-error',error.message));
+ dbRuntimeHydration=dbRuntimeRefresh();
 }
 
 // Administration owns neither Explorer selection nor worksheet execution context.
@@ -10536,7 +10572,7 @@ async function dbJobsRefreshAuthorization(){
 async function dbJobsRefresh(){
  const p=dbJobs;dbJobsCapture();const epoch=++p.epoch,request=++p.request,principal=dbPrincipal,role=p.role,database=p.database;
  const current=()=>epoch===p.epoch&&request===p.request&&principal===dbPrincipal;
- p.scheduleRefreshing=true;p.invalid=true;dbJobsRender();
+ p.scheduleRefreshing=true;p.invalid=true;ui(p.status,'Loading…');dbJobsRender();
  try{
   const items=await dbReadInventory(role);if(!current()||!dbInventoryCurrent(items))return;dbApplyInventory(items,role);p.databases=items;
   const result=database?await dbAPI('/api/v1/databases/'+encodeURIComponent(database)+'/schemas',role):{items:[]};
@@ -10647,11 +10683,11 @@ async function dbJobsObserve(action='observe',automatic=false){
  dbJobsSuspend();p.tracking=true;p.polling=automatic;dbJobsRender();try{const observed=await dbJobsSendRun(r,action);if(action==='observe'&&!observed)p.pollFailed=r;else if(observed)p.pollFailed=null;}finally{p.tracking=false;p.polling=false;dbJobsRender();}
 }
 function dbJobsRender(){
- const p=dbJobs;if(!p.installed)return;dbJobsSyncPolling();const allowed=!p.invalid&&dbJobsAllowed(),waiting=p.pending||(p.tracking&&!p.polling),own=dbJobsOwn();
+ const p=dbJobs;if(!p.installed)return;dbJobsSyncPolling();const allowed=!p.invalid&&dbJobsAllowed(),waiting=p.pending||p.scheduleRefreshing||(p.tracking&&!p.polling),own=dbJobsOwn();
  dbScheduleSync('job');
  dataopsOptions($('db-jobs-role'),['data_engineer','admin'].filter(dbRoleWithinHeader).map(r=>[r,r]),p.role,'Execution role');
- dataopsOptions($('db-jobs-database'),(p.databases||[]).map(d=>[d.id,d.display_name+' · '+d.sql_catalog+' · '+d.id]),p.database,'Choose database');
- dataopsOptions($('db-jobs-schema'),(p.schemas||[]).map(s=>[s.id,s.display_name+' · '+s.sql_name]),p.schema,'Choose schema');
+ dataopsOptions($('db-jobs-database'),p.scheduleRefreshing?(p.database?[[p.database,t('Loading…')]]:[]):(p.databases||[]).map(d=>[d.id,d.display_name+' · '+d.sql_catalog+' · '+d.id]),p.database,p.scheduleRefreshing?'Loading…':'Choose database');
+ dataopsOptions($('db-jobs-schema'),p.scheduleRefreshing?(p.schema?[[p.schema,t('Loading…')]]:[]):(p.schemas||[]).map(s=>[s.id,s.display_name+' · '+s.sql_name]),p.schema,p.scheduleRefreshing?'Loading…':'Choose schema');
  dataopsOptions($('db-jobs-list'),(allowed?p.jobs:[]).map(j=>[j.id,j.definition?.name+' · v'+j.revision]),allowed?(p.selection||''):'','Saved Jobs');
  for(const n of p.form.querySelectorAll('input,select,textarea,button'))n.disabled=waiting||!allowed||!own;
  for(const k of ['role','database','schema','refresh','list','load','reload','new'])$('db-jobs-'+k).disabled=waiting;
@@ -10674,7 +10710,7 @@ function dbJobsRender(){
  const line=(label,value,parent)=>{const row=dataopsNode('p','',parent);dataopsNode('strong','',row,label);dataopsNode('span','',row).textContent=': '+String(value??'');};
  $('db-jobs-current').textContent=t('Current Job')+': '+(allowed&&p.job?p.job.definition.name+' · '+t('Revision')+' '+p.job.revision:t('No Job loaded'));
  $('db-jobs-context').textContent=allowed?[p.context.sql_catalog,p.context.sql_schema,p.context.selected_role].join(' / '):'';
- let next=waiting?'Wait for the current Job request to finish.':!allowed?'Job access unavailable. Refresh an authorized context.':!own?'Job definition belongs to another owner or saved role.':!p.job?'Load a saved Job or fill in and save a new Job.':!dbJobsMatches()?'Save or load the definition before running.':'Review the saved Job and inputs, then run.';
+ let next=p.scheduleRefreshing?'Loading…':waiting?'Wait for the current Job request to finish.':!allowed?'Job access unavailable. Refresh an authorized context.':!own?'Job definition belongs to another owner or saved role.':!p.job?'Load a saved Job or fill in and save a new Job.':!dbJobsMatches()?'Save or load the definition before running.':'Review the saved Job and inputs, then run.';
  if(!waiting&&r&&!dbJobsTerminal(r))next=r.purged?'Run details cleared after access changed. Original cancellation handle retained.':r.id?r.status==='unknown'?'The saved run is UNKNOWN. Reconciliation checks backend evidence.':'Observe the saved run to check its status.':'Job acceptance is unconfirmed.';
  else if(!waiting&&authorizedRun&&dbJobsTerminal(r)&&allowed&&own&&p.job&&dbJobsMatches())next=r.status==='failed'?'Inspect the failed step before starting another run.':'Review the run result. Check the saved Job and inputs before running again.';
  $('db-jobs-next').textContent=t('Next action')+': '+t(next);
@@ -11913,10 +11949,10 @@ function dbDbtRender(){
 function dbDbtURL(write=false){
  if(!globalThis.location)return {};const url=new URL(globalThis.location.href),hash=url.hash.slice(1),split=hash.indexOf('?'),prefix=split>=0?hash.slice(0,split):hash.includes('=')?'':hash,params=new URLSearchParams(split>=0?hash.slice(split+1):prefix?'':hash);
  const selection={database:params.get('dbt_db'),plan:params.get('dbt_plan'),run:params.get('dbt_run'),publication:params.get('dbt_publication')};
- if(write&&globalThis.history?.replaceState){for(const k of ['dbt_db','dbt_plan','dbt_run','dbt_publication'])params.delete(k);params.set('dbt_db',dbDbt.database);if(dbDbt.plan)params.set('dbt_plan',dbDbt.plan.id);if(dbDbt.run)params.set('dbt_run',dbDbt.run.id);if(dbDbt.standalone)params.set('dbt_publication',dbDbt.standalone.id);url.hash=(prefix||'transformation')+'?'+params.toString();globalThis.history.replaceState(null,'',url);}
+ if(write&&(!prefix||prefix==='transformation')&&globalThis.history?.replaceState){for(const k of ['dbt_db','dbt_plan','dbt_run','dbt_publication'])params.delete(k);params.set('dbt_db',dbDbt.database);if(dbDbt.plan)params.set('dbt_plan',dbDbt.plan.id);if(dbDbt.run)params.set('dbt_run',dbDbt.run.id);if(dbDbt.standalone)params.set('dbt_publication',dbDbt.standalone.id);url.hash=(prefix||'transformation')+'?'+params.toString();globalThis.history.replaceState(null,'',url);}
  return selection;
 }
-async function dbDbtRestore(){const link=dbDbtURL();if(!link.database||![link.plan,link.run,link.publication].some(Boolean)||(link.publication?[link.database,link.publication]:[link.database,link.plan,link.run]).filter(Boolean).some(x=>! /^[a-zA-Z0-9_-]{1,160}$/.test(x)))return;dbDbt.database=link.database;await dbDbtRefresh();if(!dbDbtAllowed())return;await dbDbtObserve(link.publication?'publication':link.run?'run':'plan',link.publication||link.run||link.plan,link.publication?undefined:link.run?link.plan:undefined,!!link.publication);}
+async function dbDbtRestore(){const navigation=dataopsRecoveryRevision,link=dbDbtURL();if(!link.database||![link.plan,link.run,link.publication].some(Boolean)||(link.publication?[link.database,link.publication]:[link.database,link.plan,link.run]).filter(Boolean).some(x=>! /^[a-zA-Z0-9_-]{1,160}$/.test(x)))return;dbDbt.database=link.database;await dbDbtRefresh();if(navigation!==dataopsRecoveryRevision||!dbDbtAllowed())return;await dbDbtObserve(link.publication?'publication':link.run?'run':'plan',link.publication||link.run||link.plan,link.publication?undefined:link.run?link.plan:undefined,!!link.publication);}
 function dbDbtInstall(){
  Object.assign(i18n.ja,{'Saved plan details':'保存プランの詳細','Execution details':'実行方式の詳細','Compiled model details':'コンパイル済みモデルの詳細','Run effect':'実行対象と影響','Build-only: publication unavailable.':'構築のみ。公開はできません。','Creates SANDBOX candidates; publication requires separate review.':'SANDBOX に候補を作成します。公開には別途確認が必要です。'});
  const p=dbDbt;if(p.installed)return;p.installed=true;p.principal=dbPrincipal;p.header=currentRole;p.maximum=dbMaximumRole;p.role=currentRole;p.database=dbCurrent()?.database_id||'';p.schema='';p.schemas=[];p.databases=dbRoleItems(p.role);
@@ -13021,6 +13057,7 @@ function dbAuditValidate(){
 }
 const dbAuditBinding=d=>JSON.stringify([d?.id,d?.state,d?.binding_revision,d?.generation_id,d?.grant_revision??null,d?.allowed_roles]);
 function dbAuditPaging(){
+ $('db-audit-submit').disabled=!dbAudit.proof||!dbInventoryCurrent(dbAudit.proof.items)||!!dbAuditReason();
  $('db-audit-previous').disabled=!dbAudit.applied||!dbAudit.cursors.length;
  $('db-audit-next').disabled=!dbAudit.applied||!dbAudit.next;
  const telemetry=$('db-audit-telemetry');telemetry.hidden=dbAudit.scope!=='platform';

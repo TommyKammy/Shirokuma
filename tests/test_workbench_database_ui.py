@@ -103,6 +103,9 @@ const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',datab
 async function boot(tabs=[input()]){
  storage.set(dbWorksheetKey,JSON.stringify({active:tabs[0].id,tabs}));
  await initializeDatabaseUI(session);
+ await dbPageHydration;await dbRuntimeHydration;
+ // Component tests explicitly prepare both independent workspaces.
+ await dbEnsureWorkspace('worksheet');await dbEnsureWorkspace('details');
 }
 const envelope=(run,extra={})=>({id:'query-uuid',backend_query_id:'engine-id',request_id:run.origin.request_id,worksheet_id:run.origin.worksheet_id,context:{...run.origin.context},columns:[{name:'n',type:'bigint'}],data:[[1]],state:'FINISHED',next_uri:null,cancel_uri:'/api/v1/queries/query-uuid/cancel',...extra});
 const historyEntry=(extra={})=>({id:'past',backend_query_id:'engine-past',request_id:'past-request',worksheet_id:'past-worksheet',sql:'SELECT 99',mode:'sandbox-write',context:{...dbContext(dbCurrent()),schema_id:'raw',sql_schema:'raw'},state:'FINISHED',created_at:'2026-10-19T00:00:00Z',...extra});
