@@ -1,25 +1,172 @@
 """URL reload navigation through production handlers and fresh Node boots."""
 import json
+import re
+from html.parser import HTMLParser
 import unittest
 
 import test_workbench_database_ui as harness
 from test_workbench_dbt_database_ui import SETUP as DBT_SETUP
 
 
+class Markup(HTMLParser):
+    """Track the static ancestry that gates controls before any JavaScript runs."""
+    def __init__(self):
+        super().__init__()
+        self.stack, self.elements, self.ids = [], [], {}
+
+    def handle_starttag(self, tag, attrs):
+        node = dict(tag=tag, attrs=dict(attrs), parents=list(self.stack), text='')
+        self.elements.append(node)
+        if 'id' in node['attrs']:
+            self.ids[node['attrs']['id']] = node
+        if tag not in {'meta', 'input', 'link', 'br', 'hr', 'img', 'use', 'path', 'circle', 'rect', 'ellipse'}:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        for index in range(len(self.stack) - 1, -1, -1):
+            if self.stack[index]['tag'] == tag:
+                del self.stack[index:]
+                break
+
+    def handle_data(self, data):
+        for node in self.stack:
+            node['text'] += data
+
+
+MARKUP = Markup()
+MARKUP.feed(harness.HTML)
+SHELL_IDS = ['workbench-header', 'workbench-nav', 'workbench-main']
+BOOT_MARKUP = {key: node['attrs'] for key, node in MARKUP.ids.items() if key.startswith('workbench-')}
+
+
 URL_SETUP = r"""
+// Seed boot attributes from production markup, including the initially selected SQL nav.
+for(const [id,attrs] of Object.entries(BOOT_MARKUP)){
+ for(const [key,value] of Object.entries(attrs))$(id).setAttribute(key,value===null?true:value);
+}
+$('tab-warehouse').setAttribute('aria-selected','true');
+const shell=()=>SHELL_IDS.map($);
+const loading=()=>{
+ assert.ok(shell().every(node=>node.hasAttribute('inert')));
+ assert.equal($('workbench-boot').hidden,false);
+ assert.equal($('workbench-boot-loading').hidden,false);
+ assert.equal($('workbench-boot-error').hidden,true);
+ assert.equal($('workbench-boot-reload').hidden,true);
+};
+const released=[];
+for(const node of shell()){
+ const remove=node.removeAttribute.bind(node);
+ node.removeAttribute=key=>{if(key==='inert')released.push(selected());remove(key);};
+}
+
 globalThis.location={href:START_URL};
 const replacements=[];
 globalThis.history={replaceState:(_state,_title,url)=>{location.href=String(url);replacements.push(location.href);}};
 const selected=()=>tabs.find(tab=>tab.getAttribute('aria-selected')==='true')?.dataset.tab;
 const noPosts=()=>assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
-"""
+""".replace('BOOT_MARKUP', json.dumps(BOOT_MARKUP)).replace('SHELL_IDS', json.dumps(SHELL_IDS))
 
 
 class NavigationUI(unittest.TestCase):
     javascript = harness.DatabaseUI.javascript
 
     def run_url(self, url, body):
-        return self.javascript(URL_SETUP.replace('START_URL', json.dumps(url)) + body)
+        output = self.javascript(URL_SETUP.replace('START_URL', json.dumps(url)) + body + '\nconsole.log("NAVIGATION_COMPLETE");')
+        self.assertTrue(output.endswith('NAVIGATION_COMPLETE\n'), 'Initialization did not complete: ' + output)
+        return output.removesuffix('NAVIGATION_COMPLETE\n')
+
+    def test_static_shell_blocks_initial_sql_and_privileged_controls(self):
+        # The rule applies to actual static ancestors, before script execution.
+        css = re.search(r'<style>([\s\S]*?)</style>', harness.HTML)[1]
+        css = re.sub(r'/\*[\s\S]*?\*/', '', css)
+        rules = {selector.strip(): body for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)}
+        self.assertRegex(rules['[data-workbench-shell][inert]'], r'visibility\s*:\s*hidden')
+        for key, tag in zip(SHELL_IDS, ['header', 'nav', 'main']):
+            node = MARKUP.ids[key]
+            self.assertEqual(node['tag'], tag)
+            self.assertIn('inert', node['attrs'])
+            self.assertIn('data-workbench-shell', node['attrs'])
+        for key in ['tab-warehouse', 'quick-wake', 'quick-chill', 'role-selector', 'ai-settings-button', 'warehouse', 'jobs', 'catalog']:
+            self.assertTrue(any(parent['attrs'].get('id') in SHELL_IDS for parent in MARKUP.ids[key]['parents']), key)
+        self.assertEqual(MARKUP.ids['tab-warehouse']['attrs']['aria-selected'], 'true')
+        boot = MARKUP.ids['workbench-boot']
+        self.assertNotIn('hidden', boot['attrs'])
+        self.assertFalse(any('inert' in parent['attrs'] for parent in boot['parents']))
+        retry = MARKUP.ids['workbench-boot-reload']
+        self.assertEqual(retry['tag'], 'button')
+        self.assertEqual(retry['attrs']['type'], 'button')
+        self.assertNotIn('tabindex', retry['attrs'])
+        self.assertIn('hidden', retry['attrs'])
+
+    def test_held_production_session_and_initialization_release_only_final_route(self):
+        for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('db-admin', 'warehouse')]:
+            with self.subTest(page=page):
+                self.run_url('http://local/#' + page, r"""
+loading();
+const sessionGate=deferred(),inventoryGate=deferred(),atRestore=deferred(),restoreGate=deferred();
+sessionRoute=()=>sessionGate.promise;inventoryRoute=()=>inventoryGate.promise;
+const restore=workbenchRestorePage;
+workbenchRestorePage=async auth=>{atRestore.resolve();await restoreGate.promise;await restore(auth);loading();};
+const pending=startWorkbench();await tick();loading();
+assert.equal(selected(),'warehouse');assert.deepEqual(calls.map(c=>c.path),['/api/session']);
+assert.equal(dbAdmin.installed,false);assert.deepEqual(released,[]);
+sessionGate.resolve(session);await tick();loading();
+assert.ok(calls.some(c=>c.path==='/api/v1/databases'));assert.deepEqual(released,[]);
+inventoryGate.resolve({items:inventory});await atRestore.promise;loading();assert.deepEqual(released,[]);
+restoreGate.resolve();await pending;
+assert.equal(selected(),FINAL);assert.deepEqual(released,[FINAL,FINAL,FINAL]);
+assert.ok(shell().every(node=>!node.hasAttribute('inert')));assert.equal($('workbench-boot').hidden,true);
+assert.equal(dbAdmin.installed,false);assert.equal(calls.some(c=>c.path.startsWith('/api/v1/admin/')),false);noPosts();
+""".replace('FINAL', json.dumps(final)))
+
+    def test_boot_failure_stays_unavailable_with_reload(self):
+        for lang in ['ja', 'en']:
+            for failure in [
+                "sessionRoute=async()=>{throw Error('Network unavailable');};",
+                "sessionRoute=async()=>({http:401,body:{error:'Denied'}});",
+                "sessionRoute=async()=>({malformed:true});",
+                "session.authenticated=false;",
+                "dbJobsInstall=()=>{throw Error('Initialization failed');};",
+            ]:
+                with self.subTest(lang=lang, failure=failure):
+                    self.run_url('http://local/#jobs', "setLanguage(" + json.dumps(lang) + ");" + failure + r"""
+let reloads=0;location.reload=()=>reloads++;
+await startWorkbench();
+assert.deepEqual(released,[]);assert.ok(shell().every(node=>node.hasAttribute('inert')));
+assert.equal($('workbench-boot').hidden,false);assert.equal($('workbench-boot')['aria-busy'],'false');
+assert.equal($('workbench-boot-loading').hidden,true);assert.equal($('workbench-boot-error').hidden,false);
+assert.equal($('workbench-boot-reload').hidden,false);assert.equal($('workbench-boot-reload').disabled,false);
+$('workbench-boot-reload').focus();assert.equal(document.activeElement,$('workbench-boot-reload'));
+$('workbench-boot-reload').click();assert.equal(reloads,1);noPosts();
+""")
+
+    def test_legacy_anonymous_session_retains_existing_initialization(self):
+        self.run_url('http://local/', r"""
+databaseMode=false;session={username:null,maximum_role:'admin',authenticated:false};
+globalThis.loadJobAlerts=()=>{};
+await startWorkbench();
+assert.equal($('workbench-boot').hidden,true);
+assert.ok(shell().every(node=>!node.hasAttribute('inert')));
+assert.equal(calls.filter(c=>c.path==='/api/session').length,1);
+assert.equal(dbAdmin.installed,false);noPosts();
+""")
+
+    def test_boot_surface_localizes_before_app_initialization(self):
+        early = re.search(r'<script data-workbench-language>([\s\S]*?)</script>', harness.HTML)[1]
+        for lang in ['ja', 'en']:
+            for key in ['workbench-boot-loading', 'workbench-boot-error', 'workbench-boot-reload']:
+                copies = [node for node in MARKUP.elements if node['attrs'].get('data-boot-lang') == lang and MARKUP.ids[key] in node['parents']]
+                self.assertEqual(len(copies), 1)
+                self.assertTrue(copies[0]['text'].strip())
+            self.run_url('http://local/#jobs', r"""
+const localize=new Function('document','localStorage','navigator',EARLY);
+const doc={documentElement:{lang:'en'}};
+localize(doc,{getItem:()=>LANG},{language:LANG==='ja'?'en':'ja'});assert.equal(doc.documentElement.lang,LANG);
+localize(doc,{getItem:()=>null},{language:LANG+'-JP'});assert.equal(doc.documentElement.lang,LANG);
+localize(doc,{getItem:()=>{throw Error('Storage disabled');}},{language:LANG});assert.equal(doc.documentElement.lang,LANG);
+setLanguage(LANG);await startWorkbench();assert.equal(document.documentElement.lang,LANG);
+assert.equal($('workbench-boot').hidden,true);assert.deepEqual(released,['jobs','jobs','jobs']);noPosts();
+""".replace('EARLY', json.dumps(early)).replace('LANG', json.dumps(lang)))
 
     def test_all_pages_roundtrip_in_a_fresh_boot(self):
         for page in ['warehouse', 'catalog', 'jobs', 'ingestion', 'transformation',

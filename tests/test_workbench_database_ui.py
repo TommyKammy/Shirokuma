@@ -11,6 +11,7 @@ from test_catalog_ui import function
 HTML = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html').read_text()
 SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
 DATABASE = SCRIPT[SCRIPT.index("const dbWorksheetKey="):SCRIPT.index('let initialLanguage;')]
+INITIALIZATION = SCRIPT[SCRIPT.index('async function initializeSession()'):SCRIPT.index('\nstartWorkbench();')]
 NAVIGATION = SCRIPT[SCRIPT.index('const tabs='):SCRIPT.index('setInterval(async()=>')]
 NAVIGATION_HANDLERS = NAVIGATION[NAVIGATION.index('tabs.forEach'):]
 LEGACY_ACTIVATE = SCRIPT[SCRIPT.index('function activate('):SCRIPT.index('const tabs=')].replace('function activate(', 'function legacyActivate(')
@@ -56,7 +57,7 @@ const uiBindings=new Map(),uiAttributes=[],languageKey='language';
 let language='en';const renderChart=()=>{};
 const ui=(node,key,values={})=>{uiBindings.set(node,{key,values});node.isConnected=true;node.textContent=t(key,values);},message=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;};
 const table=(node,columns,rows)=>{node.rows=rows;node.columns=columns;};
-let currentRole='admin',databaseMode=true,worksheets=[],worksheetId='',queryResult=null,activeTab='warehouse',activeInspector='columns';
+let catalogSession='',currentRole='admin',databaseMode=true,worksheets=[],worksheetId='',queryResult=null,activeTab='warehouse',activeInspector='columns';
 const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshots:'table-snapshots',ddl:'table-ddl',profile:'inspect-profile',lineage:'table-lineage'};
 const inspectorTabs=['columns','preview','profile','ddl','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
 const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('button'),{id:'tab-'+tab,dataset:{tab},textContent:label});ui(node,label);return node;});
@@ -96,7 +97,7 @@ head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){

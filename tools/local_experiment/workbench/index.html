@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>Shirokuma · Workbench</title>
+<script data-workbench-language>
+// Localize the neutral boot surface before its first paint, even while the app script loads.
+try {
+ const lang=localStorage.getItem('shirokuma.lang.v1');
+ document.documentElement.lang=['en','ja'].includes(lang)?lang:navigator.language?.toLowerCase().startsWith('ja')?'ja':'en';
+} catch { document.documentElement.lang=navigator.language?.toLowerCase().startsWith('ja')?'ja':'en'; }
+</script>
 <style>
 /* Design tokens. Every colour, radius and type size below comes from this block. */
 :root{color-scheme:light;
@@ -41,6 +48,13 @@ code{font-size:12px;overflow-wrap:anywhere}
 [hidden]{display:none!important}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Keep the existing grid in place while authentication and route restoration run. */
+[data-workbench-shell][inert]{visibility:hidden}
+#workbench-boot{position:fixed;inset:0;background:var(--bg);display:grid;place-content:center;gap:12px;padding:24px;color:var(--ink)}
+#workbench-boot p{color:var(--muted)}
+[data-boot-lang]{display:none}
+:root:lang(en) [data-boot-lang=en],:root:lang(ja) [data-boot-lang=ja]{display:inline}
 
 /* Buttons: default (secondary), primary (commit), run (execute now), stop (pause automation), danger (destructive). */
 button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 12px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);font-weight:550;line-height:1.25;cursor:pointer;white-space:nowrap;max-width:100%}
@@ -910,7 +924,13 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <symbol id="i-audit" viewBox="0 0 16 16"><path d="M3.5 2.5h7l2 2v9h-9z"/><path d="M5.5 7h5M5.5 9.5h5M5.5 12h3"/></symbol>
 <symbol id="i-compute" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="4.5" rx="1"/><rect x="2" y="9" width="12" height="4.5" rx="1"/><path d="M4.5 4.75h.01M4.5 11.25h.01"/></symbol>
 </svg>
-<header class="app-header">
+<div id="workbench-boot" role="status" aria-live="polite" aria-busy="true">
+<h1>Workbench</h1>
+<p id="workbench-boot-loading"><span data-boot-lang="en">Loading Workbench…</span><span data-boot-lang="ja">Workbench を読み込んでいます…</span></p>
+<p id="workbench-boot-error" hidden><span data-boot-lang="en">Could not load Workbench. Reload to try again.</span><span data-boot-lang="ja">Workbench を読み込めませんでした。再読み込みしてお試しください。</span></p>
+<button id="workbench-boot-reload" type="button" hidden><span data-boot-lang="en">Reload</span><span data-boot-lang="ja">再読み込み</span></button>
+</div>
+<header id="workbench-header" class="app-header" data-workbench-shell inert>
 <span class="brand"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="5" r="2.6" fill="currentColor"/><circle cx="15" cy="5" r="2.6" fill="currentColor"/><circle cx="10" cy="11" r="7" fill="currentColor"/><circle cx="10" cy="13" r="2.4" fill="var(--surface)"/></svg>Shirokuma <span class="brand-product">Workbench</span></span>
 <span class="environment">Local lab · mac-studio-solo</span>
 <span class="header-spacer"></span>
@@ -922,7 +942,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div>
 </header>
 <div class="layout">
-<nav aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
+<nav id="workbench-nav" data-workbench-shell inert aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
 <h2 class="nav-category">Work with Data</h2>
 <button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog"><svg class="icon" aria-hidden="true"><use href="#i-catalog"/></svg>Data Explorer</button>
 <button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse"><svg class="icon" aria-hidden="true"><use href="#i-sql"/></svg>SQL Worksheets</button>
@@ -936,7 +956,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 <button id="tab-compute" role="tab" aria-controls="compute" aria-selected="false" tabindex="-1" data-tab="compute"><svg class="icon" aria-hidden="true"><use href="#i-compute"/></svg>Compute &amp; Governance</button>
 <p class="nav-note">Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.</p>
 </nav>
-<main>
+<main id="workbench-main" data-workbench-shell inert>
 <section id="db-admin" role="tabpanel" aria-labelledby="tab-db-admin" hidden>
 <div class="page-head"><div class="page-title"><h1 id="db-admin-title">DB management</h1></div><button id="db-admin-refresh" type="button">Refresh current revisions</button></div>
 <div id="db-admin-error" class="error" role="alert" hidden></div>
@@ -2852,6 +2872,19 @@ editJob(null);clearSelectedJob();
 // Database mode is deliberately installed only after /api/session selects it.
 // The legacy handlers and storage remain the default for older servers.
 const dbWorksheetKey='shirokuma.worksheets.v2';
+async function startWorkbench(){
+ $('workbench-boot-reload').onclick=()=>globalThis.location.reload();
+ try{
+  await initializeSession();
+  for(const id of ['workbench-header','workbench-nav','workbench-main'])$(id).removeAttribute('inert');
+  $('workbench-boot').hidden=true;
+ }catch{
+  $('workbench-boot').setAttribute('aria-busy','false');
+  $('workbench-boot-loading').hidden=true;
+  $('workbench-boot-error').hidden=false;
+  $('workbench-boot-reload').hidden=false;
+ }
+}
 // Shared by normal and legacy navigation; keep URL state separate from worksheet storage.
 let dbNavigationReady=false;
 function workbenchRoute(){
@@ -13736,6 +13769,7 @@ async function initializeSession() {
  const response=await fetch('/api/session');
  const session=await response.json();
  if(!response.ok)throw new Error(session.error||`HTTP ${response.status}`);
+ if(session.data_mode==='database'&&session.authenticated!==true)throw new Error('Authentication required');
  catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
  const ranks={bi_viewer:0,data_engineer:1,admin:2};
  currentRole=session.maximum_role;
@@ -13747,7 +13781,7 @@ async function initializeSession() {
  refreshStatus();loadCatalog();
  if(currentRole!=='bi_viewer')loadJobAlerts(false);
 }
-initializeSession().catch(error=>message('status-error',error.message));
+startWorkbench();
 </script>
 </body>
 </html>
