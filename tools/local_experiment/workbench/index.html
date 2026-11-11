@@ -1906,7 +1906,7 @@ function loadPawprints(){
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
-function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
+function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;workbenchRememberPage(activeTab);if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
 const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
 setInterval(async()=>{if(document.hidden)return;if(typeof databaseMode!=='undefined'&&databaseMode){await dbRefreshAccess();await refreshStatus();await dbExplanationPoll();return;}if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
@@ -2852,6 +2852,34 @@ editJob(null);clearSelectedJob();
 // Database mode is deliberately installed only after /api/session selects it.
 // The legacy handlers and storage remain the default for older servers.
 const dbWorksheetKey='shirokuma.worksheets.v2';
+// Shared by normal and legacy navigation; keep URL state separate from worksheet storage.
+let dbNavigationReady=false;
+function workbenchRoute(){
+ if(!globalThis.location)return {};
+ const url=new URL(globalThis.location.href),hash=url.hash.slice(1),split=hash.indexOf('?');
+ const page=split>=0?hash.slice(0,split):hash.includes('=')?'':hash;
+ return {url,page,params:new URLSearchParams(split>=0?hash.slice(split+1):page?'':hash)};
+}
+function workbenchRememberPage(page){
+ if(!globalThis.history?.replaceState||!tabs.some(tab=>tab.dataset.tab===page))return;
+ const {url,params}=workbenchRoute();if(!url)return;
+ for(const key of ['creation','creation_environment','dbt_db','dbt_plan','dbt_run','dbt_publication']){
+  if(key.startsWith('creation')?page!=='db-admin':page!=='transformation'){params.delete(key);url.searchParams.delete(key);}
+ }
+ const state=params.toString();url.hash=page+(state?'?'+state:'');
+ if(url.href!==globalThis.location.href)globalThis.history.replaceState(null,'',url);
+}
+async function workbenchRestorePage(session){
+ if(session.authenticated!==true)return;
+ const {page}=workbenchRoute(),dbt=databaseMode?dbDbtURL():{},creation=databaseMode?dbCreationURL():{};
+ // Older creation links used SQL/worksheet fragment names before top-page routes.
+ const legacy=!page||/^(?:workbench|sql|worksheet-[A-Za-z0-9_-]+)$/.test(page);
+ const target=legacy?(databaseMode&&/^[A-Za-z0-9_-]{1,128}$/.test(creation.id||'')?'db-admin':dbt.database&&(dbt.plan||dbt.run||dbt.publication)?'transformation':'warehouse'):page;
+ const button=tabs.find(tab=>tab.dataset.tab===target),available=button&&!button.hidden&&!button.disabled&&(target!=='db-admin'||(databaseMode&&dbAdminAllowed()));
+ await activate(available?button:$('tab-warehouse'));
+ if(databaseMode&&available&&target==='transformation'){showView('transformation-view-models');await dbDbtRestore();}
+}
+
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
  "Catalog Curator offers metadata explanations and description proposals with its own authorized context. SQL proposals are available in worksheet Copilot. Use Manual WAP for reviewed drafts and authorized publication. Legacy direct Bear/Copilot execution remains unavailable. Shared AI settings are available to platform administrators using global Admin.": "Catalog Curator は独立した許可済みコンテキストでメタデータの説明と説明文案を提供します。SQL 案はワークシートの Copilot で利用できます。確認済みの下書きと権限に基づく公開には Manual WAP を使用してください。旧 Bear/Copilot の直接実行は利用できません。共有 AI 設定は platform 管理者がグローバル Admin で利用できます。",
@@ -7438,6 +7466,7 @@ function dbShowWorkspace(pane){
  if(pane!==dbWorkspacePane){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}
  if(dbWorkspacePane!==pane)++dbExportRevision;
  dbWorkspacePane=pane;
+ if(dbNavigationReady&&activeTab==='warehouse')workbenchRememberPage(pane==='details'?'catalog':'warehouse');
  dbSyncWorkspaceNavigation();
  $('database-details').hidden=pane!=='details';
  $('database-worksheet-pane').hidden=pane!=='worksheet';
@@ -7651,6 +7680,7 @@ function dbApplyRole(){
  dbControls();dbRenderRun();
 }
 async function initializeDatabaseUI(session){
+ dbNavigationReady=false;
  dbAISettingsInstall();
  document.documentElement.dataset.dataMode='database';
  $('legacy-header-warehouse').hidden=true;
@@ -7745,7 +7775,8 @@ async function initializeDatabaseUI(session){
  activate=button=>{
   if(button.hidden||button.disabled)return;
   const next=button.dataset.tab;
-  if(activeTab==='db-admin'&&next!=='db-admin'&&dbAdminAllowed())dbCreationURL(null);
+  if(next==='db-admin'&&!dbAdminAllowed())return;
+  workbenchRememberPage(next);
   if(activeTab==='db-admin'&&next!=='db-admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
   if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)++dbExportRevision;stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbAdminOpen();else if(target==='jobs')dbJobsOpen();else if(target==='pawprints')return dbAuditOpen();else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();await dbRefreshExplorer();await dbRefreshContext();if(dbAudit.installed)await dbAuditRefreshAuthorization();await refreshStatus();};
@@ -7777,10 +7808,8 @@ async function initializeDatabaseUI(session){
  dbWorkflowInstall();
  dbAuditInstall();
  dbRuntimeInstall();await dbRuntimeRefresh();
- const dbtLink=dbDbtURL();
- if(dbtLink.database&&(dbtLink.plan||dbtLink.run||dbtLink.publication)){showView('transformation-view-models');await activate($('tab-transformation'));await dbDbtRestore();}
- const creationID=dbCreationURL().id;
- if(dbAdminAllowed()&&/^[A-Za-z0-9_-]{1,128}$/.test(creationID||''))await activate($('tab-db-admin'));
+ dbNavigationReady=true;
+ await workbenchRestorePage(session);
 }
 
 // Administration owns neither Explorer selection nor worksheet execution context.
@@ -13714,6 +13743,7 @@ async function initializeSession() {
  $('role-selector').value=currentRole;
  if(session.data_mode==='database'){databaseMode=true;await initializeDatabaseUI(session);return;}
  applyRole();
+ await workbenchRestorePage(session);
  refreshStatus();loadCatalog();
  if(currentRole!=='bi_viewer')loadJobAlerts(false);
 }

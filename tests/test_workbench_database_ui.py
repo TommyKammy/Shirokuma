@@ -123,6 +123,7 @@ const objectButtons=()=>treeActions('select-object').filter(node=>node.dataset.t
 ''' + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
         result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
 
     def test_async_finally_cannot_reenable_a_database_blocked_action(self):
         self.javascript(r'''

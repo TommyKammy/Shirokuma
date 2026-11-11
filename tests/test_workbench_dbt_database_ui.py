@@ -292,16 +292,15 @@ await dbDbtSubmit('build');assert.equal(posts().length,before);dbDbtPurge();asse
 """)
 
     def test_startup_restores_publication_only_link_readonly_without_source_run(self):
-        startup = harness.SCRIPT[harness.SCRIPT.index('const dbtLink=dbDbtURL();'):
-                                 harness.SCRIPT.index('const creationID=', harness.SCRIPT.index('const dbtLink=dbDbtURL();'))]
-        self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + '\nasync function startup(){\n' + startup + '\n}\n' + r"""
+        self.javascript(GRAPH_PUBLICATION + VIEW_PUBLICATION + r"""
+const startup=()=>workbenchRestorePage(session);
 await viewSource();plan.actor=dbDbtOwner();plan.context=structuredClone(p.context);run.actor=plan.actor;run.context=structuredClone(plan.context);
 const publication=publishedRecord();pubs[publication.id]=publication;
 const activated=[],baseRoute=route,saved=worksheets.map(w=>w.sql),before=posts().length;
 activate=async button=>activated.push(button.id);
 globalThis.location={href:'http://local/'};globalThis.history={replaceState:(_,__,url)=>location.href=String(url)};
 for(const hash of ['#catalog?keep=yes','#transformation?dbt_db=db','#transformation?dbt_publication=published-1']){
- location.href='http://local/'+hash;const start=calls.length;await startup();assert.equal(calls.length,start);assert.deepEqual(activated,[]);
+ location.href='http://local/'+hash;const start=calls.length;await startup();assert.equal(calls.length,start);assert.deepEqual(activated,[hash.startsWith('#catalog')?'tab-catalog':'tab-transformation']);activated.length=0;
 }
 route=async(path,options)=>{if(/\/runs\//.test(path))throw Error('source run unavailable');return baseRoute(path,options);};
 location.href='http://local/#transformation?keep=yes&dbt_db=db&dbt_publication=published-1';

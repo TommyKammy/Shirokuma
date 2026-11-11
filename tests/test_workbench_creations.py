@@ -675,7 +675,7 @@ for(let reload=0;reload<2;reload++){
  assert.equal(calls.slice(before).every(c=>!c.options?.method||c.options.method==='GET'),true);
  assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.equal($('sql').value,'SELECT 保存したドラフト');assert.equal(currentRole,role);assert.equal(language,'ja');
  assert.equal(new URL(location.href).searchParams.get('view'),'sql');assert.equal(new URL(location.href).searchParams.has('creation'),false);
- assert.equal(new URL(location.href).hash,'#worksheet-a?creation=creation&creation_environment=envA');
+ assert.equal(new URL(location.href).hash,'#db-admin?creation=creation&creation_environment=envA');
 }
 assert.equal(creationPosts.length,0);dbCreationStop();
 ''')
@@ -701,18 +701,18 @@ assert.equal(activeTab,'db-admin');assert.equal(initialized,false);
 held.resolve(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));await initializing;
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(initialized,true);
 await $('db-creation-sql').onclick();assert.equal(activeTab,'warehouse');
-assert.equal(location.href,unrelated);
+assert.equal(location.href,'http://localhost/workbench?view=sql#warehouse?panel=details');
 const afterSql=replacements;
 $('tab-ingestion').onclick();await tick();assert.equal(activeTab,'ingestion');
-assert.equal(replacements,afterSql);
+assert.equal(replacements,afterSql+1);
 dbCreationClear();activeTab='warehouse';const before=calls.length;
 await initializeDatabaseUI(session);await tick();
-assert.equal(activeTab,'warehouse');assert.equal(location.href,unrelated);
+assert.equal(activeTab,'ingestion');assert.equal(location.href,'http://localhost/workbench?view=sql#ingestion?panel=details');
 assert.equal(calls.slice(before).some(c=>c.path.startsWith(C)),false);
 assert.equal(writeCalls().length,0);dbCreationStop();
 ''')
 
-    def test_disabled_navigation_and_role_revocation_preserve_link_but_leaving_fences_late_detail(self):
+    def test_disabled_navigation_and_role_fallback_url_with_late_detail_fenced(self):
         self.javascript(SETUP + r'''
 const link='http://localhost/workbench#creation=creation&creation_environment=envA';
 globalThis.location={href:link,origin:'http://localhost'};
@@ -723,8 +723,8 @@ const ingest=$('tab-ingestion');ingest.disabled=true;
 const before=replacements;ingest.onclick();
 assert.equal(activeTab,'db-admin');assert.equal(replacements,before);
 currentRole='data_engineer';dbAdminGate();
-assert.equal(activeTab,'warehouse');assert.equal(location.href,link);assert.equal(replacements,before);
-currentRole='admin';dbAdminGate();await activate($('tab-db-admin'));
+assert.equal(activeTab,'warehouse');assert.equal(location.href,'http://localhost/workbench#warehouse');assert.equal(replacements,before+1);
+currentRole='admin';dbAdminGate();location.href=link;await activate($('tab-db-admin'));
 const held=deferred(),old=adminRoute;let detailStarted=false;
 adminRoute=(path,options)=>{
  if(path!==C+'/creation')return old(path,options);
@@ -733,7 +733,7 @@ adminRoute=(path,options)=>{
 const loading=dbCreationLoad();await tick();assert.equal(detailStarted,true);
 const saved=localStorage.getItem(dbCreation.storageKey),selected=dbCreation.process;
 ingest.disabled=false;ingest.onclick();assert.equal(activeTab,'ingestion');
-assert.equal(location.href,'http://localhost/workbench');
+assert.equal(location.href,'http://localhost/workbench#ingestion');
 const afterLeave=replacements;
 held.resolve(process({revision:4}));await loading;
 assert.equal(replacements,afterLeave);assert.equal(dbCreation.process,selected);
