@@ -1479,6 +1479,7 @@ function setLanguage(lang) {
   node.textContent = t(key, values);
  }
  for (const {node, attribute, key, values} of uiAttributes) node.setAttribute(attribute, t(key, values));
+ if (typeof dbScheduleRenderLanguage === 'function') dbScheduleRenderLanguage();
  if (typeof dbCreationRenderHistory === 'function' && $('db-creation-history-picker')?.tagName === 'SELECT') dbCreationRenderHistory();
  if (typeof worksheets !== 'undefined') updateWorksheetCloseLabels();
  if (typeof queryResult !== 'undefined') renderChart();
@@ -11896,13 +11897,14 @@ const dbSchedules=new Map();
 Object.assign(i18n.ja,{
  'Refresh when sources change':'ソース変更時に更新',
  'Database schedule':'データベーススケジュール','Schedule kind':'スケジュールの種類','Every minutes':'間隔（分）','Schedule time':'実行時刻','Schedule timezone':'タイムゾーン','Schedule date':'実行日','Schedule weekdays':'曜日','Day of month':'月の日付',
- 'Reload schedules':'スケジュールを再読込','Saved schedules':'保存済みスケジュール','Load schedule':'スケジュールを読込','New schedule':'新しいスケジュール','Save disabled schedule':'無効のまま保存','Enable schedule':'スケジュールを有効化','Stop schedule':'スケジュールを停止','Inspect ticks':'実行履歴を照会',
+ 'Reload schedules':'スケジュールを再読込','Saved schedules':'保存済みスケジュール','Load schedule':'スケジュールを読込','New schedule':'新しいスケジュール','Save scheduled Job':'スケジュールジョブを保存','Save schedule':'スケジュールを保存','Enable schedule':'スケジュールを有効化','Stop schedule':'スケジュールを停止','Inspect ticks':'実行履歴を照会',
  'Load a saved target definition.':'保存済みの対象定義を読み込んでください。','Schedules start disabled. Save changes before explicitly enabling.':'初期状態は無効です。変更を保存してから明示的に有効化してください。',
  'Schedule saved.':'スケジュールを保存しました。','Schedule request failed. Reload to inspect the current revision before enabling.':'要求が失敗しました。有効化する前に再読込して最新リビジョンを確認してください。',
  'Outcome unknown. Inspect schedules with the original context and key; do not resubmit.':'結果が不明です。元のコンテキストとキーで照会し、再送しないでください。',
  'Scheduled Jobs cannot upload files. Register a Stage scan for file ingress.':'定期 Job はファイルをアップロードできません。ファイル取込には Stage のスキャンを登録してください。',
  'Automatic Mart refresh requires watched sources.':'自動 Mart 更新には監視対象のソースが必要です。','Stage schedules require atomic append or upsert with keys.':'Stage の定期スキャンには atomic append またはキー付き upsert が必要です。','Schedule arguments JSON':'スケジュール引数 JSON','Refresh alerts':'アラートを更新','Acknowledge alert':'アラートを確認済みにする','Unacknowledged alerts':'未確認アラート','Schedule revision':'スケジュールのリビジョン','Target revision':'対象定義のリビジョン','Next run':'次回実行','Paused reason':'停止理由','Last status':'前回の状態',
  'Reload discards this schedule draft. Continue?':'再読込でスケジュールの下書きを破棄します。続けますか？','Choose weekdays using ISO numbers 1 (Monday) to 7 (Sunday).':'曜日は ISO の 1（月曜）から 7（日曜）を選択してください。',
+ 'Display timezone':'表示タイムゾーン','UTC fallback':'UTC で表示（間隔指定、または有効な保存済みタイムゾーンなし）','Times use the loaded schedule display timezone; older revisions may have used another timezone.':'日時は読込済みスケジュールの表示タイムゾーンです。旧リビジョンの実行時のタイムゾーンとは異なる場合があります。','No ticks recorded.':'実行履歴はありません。','Inspect ticks to load history.':'実行履歴を照会すると履歴を表示します。','Raw schedule JSON':'スケジュールの生 JSON','Raw tick JSON':'実行履歴の生 JSON','Scheduled datetime':'実行予定日時','Code':'コード','skipped':'スキップ','rejected':'拒否','reserved':'予約済み','accepted':'受付済み','paused':'一時停止',
  'Monday':'月曜','Tuesday':'火曜','Wednesday':'水曜','Thursday':'木曜','Friday':'金曜','Saturday':'土曜','Sunday':'日曜','Last day':'月末','Check source changes':'ソースの変更を確認'
 });
 for(const key of Object.keys(i18n.ja))i18n.en[key]=key;
@@ -11918,7 +11920,7 @@ function dbScheduleSync(kind){
  if(!s){const parent=$('db-'+(kind==='job'?'jobs':kind==='stage'?'stages':'marts')+'-panel');if(!parent)return;s={kind,scope:null,sequence:0,records:[],ticks:[],record:null,attempt:null,pending:false,blocked:false,dirty:false,alerts:[],alertScope:null,alertSequence:0};dbSchedules.set(kind,s);dbScheduleInstall(s,parent);}
  const scope=dbScheduleScope(kind);
  if(s.parentEpoch!==p.epoch){++s.sequence;s.parentEpoch=p.epoch;s.pending=false;if(s.attempt)s.blocked=true;if(kind==='job'){++s.alertSequence;s.alertPending=false;}}
- if(scope!==s.scope){++s.sequence;s.scope=scope;s.records=[];s.ticks=[];s.record=null;s.attempt=null;s.pending=false;s.blocked=false;s.dirty=false;dbScheduleDefaults(s);dataopsOptions(dbScheduleNode(s,'list'),[],'','Saved schedules');dbScheduleNode(s,'detail').textContent='';dbScheduleNode(s,'ticks-detail').textContent='';ui(dbScheduleNode(s,'status'),scope?'Schedules start disabled. Save changes before explicitly enabling.':'Load a saved target definition.');}
+ if(scope!==s.scope){++s.sequence;s.scope=scope;s.records=[];s.ticks=[];s.record=null;s.attempt=null;s.pending=false;s.blocked=false;s.dirty=false;dbScheduleDefaults(s);dataopsOptions(dbScheduleNode(s,'list'),[],'','Saved schedules');dbScheduleNode(s,'detail').textContent='';dbScheduleClearHistory(s);ui(dbScheduleNode(s,'status'),scope?'Schedules start disabled. Save changes before explicitly enabling.':'Load a saved target definition.');}
  if(kind==='job'){
   const alertScope=dbScheduleAllowed(kind)?JSON.stringify([dbPrincipal,p.context]):'';
   if(alertScope!==s.alertScope){s.alertScope=alertScope;++s.alertSequence;s.alerts=[];s.alertPending=false;s.ackAttempt=null;dbScheduleNode(s,'alerts-detail').replaceChildren();dbScheduleNode(s,'alerts-count').textContent='';}
@@ -11930,6 +11932,32 @@ function dbScheduleDefaults(s){
  for(let day=1;day<=7;day++)dbScheduleNode(s,'weekday-'+day).checked=day===1;
  dbScheduleNode(s,'check-changes').checked=true;
 }
+function dbScheduleDisplayZone(record){
+ const spec=record?.spec,zone=spec?.timezone;
+ if(['daily','once','weekly','monthly'].includes(spec?.kind)&&typeof zone==='string'&&zone&&!/^[+-]/.test(zone)){try{new Intl.DateTimeFormat('en',{timeZone:zone}).format();return {zone,fallback:false};}catch{}}
+ return {zone:'UTC',fallback:true};
+}
+function dbScheduleDate(value,record){
+ if(!value)return '—';const date=new Date(value);if(!Number.isFinite(date.getTime()))return String(value);
+ const {zone}=dbScheduleDisplayZone(record),parts=new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZoneName:'longOffset'}).formatToParts(date),part=type=>parts.find(p=>p.type===type)?.value;
+ const offset=(part('timeZoneName')||'GMT').replace(/^GMT/,'UTC');
+ return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')} ${zone} (${offset==='UTC'?'UTC+00:00':offset})`;
+}
+function dbScheduleClearHistory(s){s.ticks=[];s.ticksLoaded=false;s.tickRenderKey=null;dbScheduleNode(s,'ticks-main').replaceChildren();dbScheduleNode(s,'ticks-detail').textContent='';dbScheduleNode(s,'ticks-diagnostics').open=false;}
+function dbScheduleRender(s){
+ const raw=dbScheduleNode(s,'record-detail'),rawText=s.record?JSON.stringify(s.record,null,2):'';if(raw.textContent!==rawText)raw.textContent=rawText;dbScheduleNode(s,'record-diagnostics').hidden=!s.record;if(!s.record)dbScheduleNode(s,'record-diagnostics').open=false;
+ const key=JSON.stringify([language,s.record,s.ticksLoaded,s.ticks]);if(key===s.tickRenderKey)return;s.tickRenderKey=key;
+ const area=dbScheduleNode(s,'ticks-main');area.replaceChildren();
+ if(!s.record)return;
+ const display=dbScheduleDisplayZone(s.record);dataopsNode('p','',area).textContent=t('Display timezone')+': '+display.zone+(display.fallback?' · '+t('UTC fallback'):'');
+ if(!s.ticksLoaded){dataopsNode('p','',area,'Inspect ticks to load history.');return;}
+ dbScheduleNode(s,'ticks-detail').textContent=JSON.stringify(s.ticks,null,2);
+ if(!s.ticks.length){dataopsNode('p','',area,'No ticks recorded.');return;}
+ const wrap=dataopsNode('div','',area);wrap.className='table-wrap';const table=dataopsNode('table','',wrap),head=dataopsNode('tr','',dataopsNode('thead','',table));
+ for(const label of ['Scheduled datetime','Status','Code','Run ID'])dataopsNode('th','',head,label).scope='col';
+ const body=dataopsNode('tbody','',table);for(const tick of s.ticks){const row=dataopsNode('tr','',body);for(const value of [dbScheduleDate(tick.scheduled_for,s.record),t(tick.status),tick.code??'—',tick.run_id??'—'])dataopsNode('td','',row).textContent=value;}
+}
+function dbScheduleRenderLanguage(){for(const s of dbSchedules.values())dbScheduleControls(s);}
 function dbScheduleControls(s){
  const target=dbScheduleTarget(s.kind),ready=!!s.scope&&!!target&&!s.pending&&!dbSchedulePanel(s.kind).pending&&!dbSchedulePanel(s.kind).invalid,selected=!dbScheduleNode(s,'list').value||dbScheduleNode(s,'list').value===s.record?.id;
  for(const node of dbScheduleNode(s,'form').querySelectorAll('input,select,textarea,button'))node.disabled=!ready||s.blocked;
@@ -11945,7 +11973,8 @@ function dbScheduleControls(s){
  for(const [name,visible] of [['minutes',kind==='interval'],['time',kind!=='interval'],['timezone',kind!=='interval'],['date',kind==='once'],['day',kind==='monthly'],['weekdays',kind==='weekly'],['arguments',s.kind==='job'],['check-changes',s.kind==='mart']]){const node=dbScheduleNode(s,name);(name==='weekdays'?node:node.parentElement).hidden=!visible;}
  dbScheduleNode(s,'check-changes').disabled=true;
  if(s.kind==='job'){dbScheduleNode(s,'alerts-refresh').disabled=!dbScheduleAllowed('job')||dbJobs.invalid||s.alertPending;for(const button of dbScheduleNode(s,'alerts-detail').querySelectorAll('button'))button.disabled=!dbScheduleAllowed('job')||dbJobs.invalid||s.alertPending||!!s.ackAttempt||button.dataset.acknowledged==='true';}
- if(target)dbScheduleNode(s,'detail').textContent=[target.definition.name||target.id,target.id,dbSchedulePanel(s.kind).context.sql_catalog,dbSchedulePanel(s.kind).context.sql_schema,dbSchedulePanel(s.kind).context.selected_role,t('Target revision')+': '+target.revision,...(s.record?[t('Schedule revision')+': '+s.record.revision,t('Target revision')+': '+s.record.target_revision,t(s.record.enabled?'Enabled':'Disabled'),t('Next run')+': '+(s.record.next_run_at??'—'),t('Last status')+': '+(s.record.last_status??'—'),t('Paused reason')+': '+(s.record.paused_reason??'—')]:[])].join(' · ');
+ if(target)dbScheduleNode(s,'detail').textContent=[target.definition.name||target.id,target.id,dbSchedulePanel(s.kind).context.sql_catalog,dbSchedulePanel(s.kind).context.sql_schema,dbSchedulePanel(s.kind).context.selected_role,t('Target revision')+': '+target.revision,...(s.record?[t('Schedule revision')+': '+s.record.revision,t('Target revision')+': '+s.record.target_revision,t(s.record.enabled?'Enabled':'Disabled'),t('Next run')+': '+dbScheduleDate(s.record.next_run_at,s.record),t('Last status')+': '+(s.record.last_status?t(s.record.last_status):'—'),t('Paused reason')+': '+(s.record.paused_reason??'—')]:[])].join(' · ');
+ dbScheduleRender(s);
  if(s.blocked&&s.attempt)dbScheduleNode(s,'detail').textContent=JSON.stringify({context:s.attempt.context,key:s.attempt.key,observe:'/api/v1/schedules',target_id:s.attempt.body.target_id});
 }
 function dbScheduleInstall(s,parent){
@@ -11954,15 +11983,15 @@ function dbScheduleInstall(s,parent){
  if(s.kind==='stage')dataopsNode('p','',root,'Stage schedules require atomic append or upsert with keys.').className='help';
  if(s.kind==='mart')dataopsNode('p','',root,'Automatic Mart refresh requires watched sources.').className='help';
  const id=name=>'db-schedule-'+s.kind+'-'+name,toolbar=dataopsNode('div','',root);toolbar.className='toolbar';
- dataopsButton(toolbar,id('reload'),'Reload schedules',()=>dbScheduleReload(s));dataopsField(toolbar,id('list'),'Saved schedules','select').onchange=()=>dbScheduleControls(s);dataopsButton(toolbar,id('load'),'Load schedule',()=>dbScheduleLoad(s));dataopsButton(toolbar,id('new'),'New schedule',()=>{if(s.pending||s.blocked)return;if(s.dirty&&!confirm(t('Reload discards this schedule draft. Continue?')))return;++s.sequence;s.record=null;s.attempt=null;s.dirty=false;s.ticks=[];dbScheduleNode(s,'list').value='';dbScheduleDefaults(s);dbScheduleNode(s,'detail').textContent='';dbScheduleNode(s,'ticks-detail').textContent='';dbScheduleControls(s);});
+ dataopsButton(toolbar,id('reload'),'Reload schedules',()=>dbScheduleReload(s));dataopsField(toolbar,id('list'),'Saved schedules','select').onchange=()=>dbScheduleControls(s);dataopsButton(toolbar,id('load'),'Load schedule',()=>dbScheduleLoad(s));dataopsButton(toolbar,id('new'),'New schedule',()=>{if(s.pending||s.blocked)return;if(s.dirty&&!confirm(t('Reload discards this schedule draft. Continue?')))return;++s.sequence;s.record=null;s.attempt=null;s.dirty=false;s.ticks=[];dbScheduleNode(s,'list').value='';dbScheduleDefaults(s);dbScheduleNode(s,'detail').textContent='';dbScheduleClearHistory(s);dbScheduleControls(s);});
  const form=dataopsNode('form',id('form'),root);form.onsubmit=e=>e.preventDefault();const fields=dataopsNode('div','',form);fields.className='job-fields';
  for(const [name,label,tag,options] of [['kind','Schedule kind','select',['interval','daily','once','weekly','monthly'].map(v=>[v,v])],['minutes','Every minutes'],['time','Schedule time'],['timezone','Schedule timezone'],['date','Schedule date'],['day','Day of month','select',[...Array.from({length:31},(_,i)=>[String(i+1),String(i+1)]),['last','Last day']]],['arguments','Schedule arguments JSON','textarea']]){
   const node=dataopsField(fields,id(name),label,tag||'input',options||[]);if(name==='minutes'){node.type='number';node.min='1';node.max='10080';}if(name==='time')node.type='time';if(name==='date')node.type='date';if(tag==='textarea'){node.rows=4;node.spellcheck=false;}node.oninput=node.onchange=()=>{s.dirty=true;dbScheduleControls(s);};
  }
  const days=dataopsNode('fieldset',id('weekdays'),fields);dataopsNode('legend','',days,'Schedule weekdays');for(const [i,label] of ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].entries()){const node=dataopsField(days,id('weekday-'+(i+1)),label);node.type='checkbox';node.onchange=()=>{s.dirty=true;dbScheduleControls(s);};}
  const check=dataopsField(fields,id('check-changes'),'Refresh when sources change');check.type='checkbox';check.disabled=true;check.onchange=()=>{check.checked=true;};
- const actions=dataopsNode('div','',form);actions.className='toolbar';for(const [name,label,enabled] of [['save','Save disabled schedule',false],['enable','Enable schedule',true],['stop','Stop schedule',false]])dataopsButton(actions,id(name),label,()=>dbScheduleSave(s,name,enabled));
- dataopsButton(root,id('ticks'),'Inspect ticks',()=>dbScheduleTicks(s));dataopsNode('p',id('detail'),root);dataopsNode('p',id('status'),root).setAttribute('role','status');dataopsNode('pre',id('ticks-detail'),root).setAttribute('aria-live','polite');
+ const actions=dataopsNode('div','',form);actions.className='toolbar';for(const [name,label,enabled] of [['save',s.kind==='job'?'Save scheduled Job':'Save schedule',false],['enable','Enable schedule',true],['stop','Stop schedule',false]])dataopsButton(actions,id(name),label,()=>dbScheduleSave(s,name,enabled));
+ dataopsButton(root,id('ticks'),'Inspect ticks',()=>dbScheduleTicks(s));dataopsNode('p',id('detail'),root);dataopsNode('p',id('status'),root).setAttribute('role','status');dataopsNode('div',id('ticks-main'),root).setAttribute('aria-live','polite');const recordDetails=dataopsNode('details',id('record-diagnostics'),root);dataopsNode('summary','',recordDetails,'Raw schedule JSON');dataopsNode('pre',id('record-detail'),recordDetails);const tickDetails=dataopsNode('details',id('ticks-diagnostics'),root);dataopsNode('summary','',tickDetails,'Raw tick JSON');dataopsNode('p','',tickDetails,'Times use the loaded schedule display timezone; older revisions may have used another timezone.').className='help';dataopsNode('pre',id('ticks-detail'),tickDetails);
  if(s.kind==='job'){s.alertSequence=0;dataopsNode('h3','',root,'Unacknowledged alerts');dataopsButton(root,id('alerts-refresh'),'Refresh alerts',()=>dbScheduleAlerts(s));dataopsNode('p',id('alerts-count'),root);dataopsNode('div',id('alerts-detail'),root);}
 }
 async function dbScheduleRequest(path,context,body,key){
@@ -11979,14 +12008,14 @@ function dbScheduleError(s,error){if(dataopsAuthError(error)){const p=dbSchedule
 async function dbScheduleReload(s){
  if(!s.scope||s.pending)return;if(s.dirty&&!confirm(t('Reload discards this schedule draft. Continue?')))return;
  const context=dataopsClone(dbSchedulePanel(s.kind).context),target=dbScheduleTarget(s.kind),current=dbScheduleGuard(s);s.pending=true;dbScheduleControls(s);
- try{const reply=await dbScheduleRequest('/api/v1/schedules?target_kind='+s.kind+'&target_id='+encodeURIComponent(target.id),context);if(!current())return;if(!Array.isArray(reply.schedules)||!reply.schedules.every(r=>dbScheduleValid(r,s,context)))throw Error('schedule');s.records=reply.schedules;s.blocked=false;s.attempt=null;s.record=null;s.dirty=false;s.ticks=[];dbScheduleDefaults(s);dbScheduleNode(s,'detail').textContent='';dbScheduleNode(s,'ticks-detail').textContent='';dataopsOptions(dbScheduleNode(s,'list'),s.records.map(r=>[r.id,r.id+' · v'+r.revision]),'','Saved schedules');ui(dbScheduleNode(s,'status'),'Schedules start disabled. Save changes before explicitly enabling.');}
+ try{const reply=await dbScheduleRequest('/api/v1/schedules?target_kind='+s.kind+'&target_id='+encodeURIComponent(target.id),context);if(!current())return;if(!Array.isArray(reply.schedules)||!reply.schedules.every(r=>dbScheduleValid(r,s,context)))throw Error('schedule');s.records=reply.schedules;s.blocked=false;s.attempt=null;s.record=null;s.dirty=false;s.ticks=[];dbScheduleDefaults(s);dbScheduleNode(s,'detail').textContent='';dbScheduleClearHistory(s);dataopsOptions(dbScheduleNode(s,'list'),s.records.map(r=>[r.id,r.id+' · v'+r.revision]),'','Saved schedules');ui(dbScheduleNode(s,'status'),'Schedules start disabled. Save changes before explicitly enabling.');}
  catch(error){if(current())dbScheduleError(s,error);}finally{if(current()){s.pending=false;dbScheduleControls(s);}}
 }
-function dbSchedulePopulate(s,record){s.record=dataopsFreeze(dataopsClone(record));const spec=record.spec;for(const [name,value] of Object.entries({kind:spec.kind,minutes:spec.every_minutes??60,time:spec.time||'09:00',timezone:spec.timezone||'Asia/Tokyo',date:spec.date||'',day:spec.day_of_month??1,arguments:JSON.stringify(record.intent.arguments||{},null,2)}))dbScheduleNode(s,name).value=String(value);for(let day=1;day<=7;day++)dbScheduleNode(s,'weekday-'+day).checked=(spec.weekdays||[]).includes(day);dbScheduleNode(s,'check-changes').checked=record.intent.check_changes!==false;s.dirty=false;s.blocked=false;s.attempt=null;dbScheduleControls(s);}
+function dbSchedulePopulate(s,record){dbScheduleClearHistory(s);dbScheduleNode(s,'record-diagnostics').open=false;s.record=dataopsFreeze(dataopsClone(record));const spec=record.spec;for(const [name,value] of Object.entries({kind:spec.kind,minutes:spec.every_minutes??60,time:spec.time||'09:00',timezone:spec.timezone||'Asia/Tokyo',date:spec.date||'',day:spec.day_of_month??1,arguments:JSON.stringify(record.intent.arguments||{},null,2)}))dbScheduleNode(s,name).value=String(value);for(let day=1;day<=7;day++)dbScheduleNode(s,'weekday-'+day).checked=(spec.weekdays||[]).includes(day);dbScheduleNode(s,'check-changes').checked=record.intent.check_changes!==false;s.dirty=false;s.blocked=false;s.attempt=null;dbScheduleControls(s);}
 async function dbScheduleLoad(s){
  const id=dbScheduleNode(s,'list').value;if(!id||s.pending||!s.scope)return;if(s.dirty&&!confirm(t('Reload discards this schedule draft. Continue?')))return;
  const context=dataopsClone(dbSchedulePanel(s.kind).context),current=dbScheduleGuard(s);s.pending=true;dbScheduleControls(s);
- try{const reply=await dbScheduleRequest('/api/v1/schedules/'+encodeURIComponent(id),context);if(!current())return;if(!dbScheduleValid(reply.schedule,s,context)||reply.schedule.id!==id)throw Error('schedule');dbSchedulePopulate(s,reply.schedule);s.ticks=[];dbScheduleNode(s,'ticks-detail').textContent='';}
+ try{const reply=await dbScheduleRequest('/api/v1/schedules/'+encodeURIComponent(id),context);if(!current())return;if(!dbScheduleValid(reply.schedule,s,context)||reply.schedule.id!==id)throw Error('schedule');dbSchedulePopulate(s,reply.schedule);}
  catch(error){if(current())dbScheduleError(s,error);}finally{if(current()){s.pending=false;dbScheduleControls(s);}}
 }
 function dbScheduleSpec(s){const kind=dbScheduleNode(s,'kind').value,spec={kind};if(kind==='interval'){spec.every_minutes=Number(dbScheduleNode(s,'minutes').value);if(!Number.isInteger(spec.every_minutes)||spec.every_minutes<1||spec.every_minutes>10080)throw Error('interval');}else{spec.time=dbScheduleNode(s,'time').value;spec.timezone=dbScheduleNode(s,'timezone').value;if(!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(spec.time)||!spec.timezone)throw Error('calendar');if(kind==='once')spec.date=dbScheduleNode(s,'date').value;if(kind==='weekly'){spec.weekdays=Array.from({length:7},(_,i)=>i+1).filter(day=>dbScheduleNode(s,'weekday-'+day).checked);if(!spec.weekdays.length)throw Error('weekdays');}if(kind==='monthly'){const day=dbScheduleNode(s,'day').value;spec.day_of_month=day==='last'?day:Number(day);}}return spec;}
@@ -12003,7 +12032,7 @@ async function dbScheduleSave(s,action,enabled){
 }
 async function dbScheduleTicks(s){
  if(s.pending||!s.record||!s.scope)return;const context=dataopsClone(dbSchedulePanel(s.kind).context),id=s.record.id,current=dbScheduleGuard(s);s.pending=true;dbScheduleControls(s);
- try{const reply=await dbScheduleRequest('/api/v1/schedules/'+encodeURIComponent(id)+'/ticks',context);if(!current())return;if(!Array.isArray(reply.ticks)||!reply.ticks.every(r=>dbScheduleValidTick(r,context,id)))throw Error('ticks');s.ticks=reply.ticks;dbScheduleNode(s,'ticks-detail').textContent=JSON.stringify(s.ticks,null,2);}
+ try{const reply=await dbScheduleRequest('/api/v1/schedules/'+encodeURIComponent(id)+'/ticks',context);if(!current())return;if(!Array.isArray(reply.ticks)||!reply.ticks.every(r=>dbScheduleValidTick(r,context,id)))throw Error('ticks');s.ticks=reply.ticks;s.ticksLoaded=true;dbScheduleRender(s);}
  catch(error){if(current())dbScheduleError(s,error);}finally{if(current()){s.pending=false;dbScheduleControls(s);}}
 }
 async function dbScheduleAlerts(s,alert=null){

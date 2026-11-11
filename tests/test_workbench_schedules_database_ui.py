@@ -24,6 +24,10 @@ route=async(path,options)=>{
 const schedulePosts=()=>calls.filter(c=>c.path==='/api/v1/schedules'&&c.options?.method==='POST');
 const node=name=>$('db-schedule-job-'+name);
 async function ready(){await createJob();return dbSchedules.get('job');}
+const tickRow=(extra={})=>({id:'00000000-0000-0000-0000-000000000001',schedule_id:'schedule-1',schedule_revision:1,target_revision:1,scheduled_for:'2026-11-11T14:07:00+00:00',status:'succeeded',code:null,run_id:'00000000-0000-0000-0000-000000000002',...extra});
+const visibleTicks=()=>node('ticks-main').descendants().map(n=>n.textContent).join('\n');
+async function calendarReady(zone='Asia/Tokyo') {const s=await ready();node('kind').value='daily';node('timezone').value=zone;await dbScheduleSave(s,'save',false);return s;}
+
 '''
 
 
@@ -45,7 +49,7 @@ assert.equal(schedulePosts().every(c=>!!c.options.headers['X-Idempotency-Key']),
         self.javascript(r'''
 const s=await ready();await dbScheduleSave(s,'save',false);node('arguments').value='{"draft';node('arguments').oninput();node('arguments').focus();node('arguments').setSelectionRange(2,5);const editor=node('arguments');
 await periodicRefresh();await dbJobsListHistory();await dbJobsRefresh();assert.equal(node('arguments'),editor);assert.equal(editor.value,'{"draft');assert.equal(document.activeElement,editor);assert.equal(editor.selectionStart,2);assert.equal(editor.selectionEnd,5);assert.equal(node('enable').disabled,true);assert.equal(s.dirty,true);assert.equal(schedulePosts().length,1);assert.equal(node('minutes').parentElement.parentElement.hidden,false);
-setLanguage('ja');assert.equal(node('save').textContent,'無効のまま保存');assert.equal(node('status').getAttribute('role'),'status');
+setLanguage('ja');assert.equal(node('save').textContent,'スケジュールジョブを保存');assert.equal(node('status').getAttribute('role'),'status');
 ''')
 
     def test_lost_post_and_conflict_require_get_reload_no_retry(self):
@@ -88,7 +92,7 @@ inventory[0].capabilities.stage=true;for(const sc of schemas)sc.capabilities.sta
 // Use the public capability key exported by the Stage panel.
 inventory[0].capabilities[DB_STAGES_CAPABILITY]=true;for(const sc of schemas)sc.capabilities[DB_STAGES_CAPABILITY]=true;const items=await dbReadInventory('admin');dbApplyInventory(items,'admin');
 const originalStagesMatches=dbStagesMatches,originalMartsMatches=dbMartsMatches;dbStagesMatches=()=>true;dbMartsMatches=()=>true;
-for(const kind of ['stage','mart']){dbScheduleSync(kind);const state=dbSchedules.get(kind);assert.ok(dbScheduleTarget(kind),kind+' target '+JSON.stringify({invalid:dbSchedulePanel(kind).invalid,context:dbSchedulePanel(kind).context,target:dbSchedulePanel(kind)[kind],allowed:dbScheduleAllowed(kind)}));assert.equal(dbScheduleNode(state,'save').disabled,false,kind+' save disabled');await dbScheduleSave(state,'save',false);const body=JSON.parse(schedulePosts().at(-1).options.body);assert.equal(body.target_kind,kind);assert.equal(body.target_id,kind+'-1');assert.equal(body.target_revision,5);assert.deepEqual(body.intent,kind==='stage'?{action:'scan'}:{action:'refresh',check_changes:true});assert.equal(body.enabled,false);}
+for(const kind of ['stage','mart']){dbScheduleSync(kind);const state=dbSchedules.get(kind);assert.ok(dbScheduleTarget(kind),kind+' target '+JSON.stringify({invalid:dbSchedulePanel(kind).invalid,context:dbSchedulePanel(kind).context,target:dbSchedulePanel(kind)[kind],allowed:dbScheduleAllowed(kind)}));assert.equal(dbScheduleNode(state,'save').disabled,false,kind+' save disabled');await dbScheduleSave(state,'save',false);const body=JSON.parse(schedulePosts().at(-1).options.body);assert.equal(body.target_kind,kind);assert.equal(body.target_id,kind+'-1');assert.equal(body.target_revision,5);assert.deepEqual(body.intent,kind==='stage'?{action:'scan'}:{action:'refresh',check_changes:true});assert.equal(body.enabled,false);setLanguage('ja');assert.equal(dbScheduleNode(state,'save').textContent,'スケジュールを保存');}
 dbStagesMatches=originalStagesMatches;dbMartsMatches=originalMartsMatches;
 ''')
 
@@ -121,6 +125,47 @@ const s=await ready(),context=structuredClone(p.context);alerts=[{id:'alert-1',o
 route=async(path,options)=>{if(path==='/api/v1/alerts/alert-1/ack'&&lose)throw Error('response lost');if(path.startsWith('/api/v1/alerts?')&&gate)await gate.promise;return originalRoute(path,options);};
 await dbScheduleAlerts(s,s.alerts[0]);const attempt=s.ackAttempt;assert.ok(attempt);await dbScheduleAlerts(s,s.alerts[0]);assert.equal(calls.filter(c=>c.path==='/api/v1/alerts/alert-1/ack').length,1);assert.match(node('alerts-count').textContent,/alert-1/);assert.ok(node('alerts-count').textContent.includes(attempt.key));
 lose=false;await dbScheduleAlerts(s);assert.equal(s.ackAttempt,null);gate=deferred();const reading=dbScheduleAlerts(s);await tick();inventory=[];await dbRefreshAccess();gate.resolve();await reading;assert.equal(s.alerts.length,0);assert.equal(node('alerts-detail').children.length,0);assert.equal(node('alerts-refresh').disabled,true);
+''')
+
+
+    def test_loaded_jst_times_rollover_draft_locale_and_raw_diagnostics(self):
+        self.javascript(r'''
+const s=await calendarReady();scheduleRows[0].next_run_at='2026-11-11T14:07:00+00:00';await dbScheduleReload(s);node('list').value='schedule-1';await dbScheduleLoad(s);
+assert.match(node('detail').textContent,/2026-11-11 23:07:00 Asia\/Tokyo \(UTC\+09:00\)/);assert.match(node('detail').textContent,/Disabled/);
+scheduleTicks=[tickRow(),tickRow({id:'00000000-0000-0000-0000-000000000003',scheduled_for:'2026-11-11T18:07:00Z',schedule_revision:8,target_revision:7,status:'skipped',code:'<img src=x onerror=alert(1)>',results:[{triggered:false,extra:'retained'}]})];await dbScheduleTicks(s);
+assert.match(visibleTicks(),/2026-11-12 03:07:00 Asia\/Tokyo \(UTC\+09:00\)/);assert.match(node('ticks-diagnostics').descendants().map(n=>n.textContent).join('\n'),/older revisions may have used another timezone/);
+const cells=node('ticks-main').descendants().filter(n=>n.tagName==='TD');assert.equal(cells[3].textContent,scheduleTicks[0].run_id);assert.equal(cells[6].textContent,scheduleTicks[1].code);assert.equal(cells[6].children.length,0);assert.ok(node('ticks-main').descendants().some(n=>n.className==='table-wrap'));
+assert.ok(!node('ticks-diagnostics').open);assert.ok(!node('record-diagnostics').open);assert.deepEqual(JSON.parse(node('ticks-detail').textContent),scheduleTicks);assert.equal(JSON.parse(node('ticks-detail').textContent)[1].schedule_revision,8);assert.equal(JSON.parse(node('ticks-detail').textContent)[1].target_revision,7);assert.equal(JSON.parse(node('record-detail').textContent).next_run_at,'2026-11-11T14:07:00+00:00');
+node('timezone').value='America/New_York';node('timezone').oninput();node('arguments').value='{"draft';node('arguments').oninput();node('arguments').focus();node('arguments').setSelectionRange(2,5);node('ticks-diagnostics').open=true;node('record-diagnostics').open=true;
+const table=node('ticks-main').querySelector('table'),editor=node('arguments');await periodicRefresh();dbScheduleControls(s);assert.equal(node('ticks-main').querySelector('table'),table);assert.equal(node('ticks-diagnostics').open,true);assert.equal(node('record-diagnostics').open,true);const before=calls.length;setLanguage('ja');assert.equal(calls.length,before);assert.match(visibleTicks(),/表示タイムゾーン: Asia\/Tokyo/);assert.match(visibleTicks(),/スキップ/);assert.match(node('detail').textContent,/次回実行: 2026-11-11 23:07:00 Asia\/Tokyo/);assert.match(node('detail').textContent,/無効/);
+assert.equal(node('arguments'),editor);assert.equal(editor.value,'{"draft');assert.equal(document.activeElement,editor);assert.equal(editor.selectionStart,2);assert.equal(editor.selectionEnd,5);assert.equal(node('timezone').value,'America/New_York');assert.equal(node('ticks-diagnostics').open,true);assert.equal(node('record-diagnostics').open,true);
+setLanguage('en');assert.equal(calls.length,before);assert.match(visibleTicks(),/skipped/);assert.match(visibleTicks(),/Asia\/Tokyo/);
+scheduleTicks=[tickRow({status:'reserved'}),tickRow({id:'00000000-0000-0000-0000-000000000003',status:'accepted'}),tickRow({id:'00000000-0000-0000-0000-000000000004',status:'paused'})];await dbScheduleTicks(s);setLanguage('ja');assert.match(visibleTicks(),/予約済み/);assert.match(visibleTicks(),/受付済み/);assert.match(visibleTicks(),/一時停止/);
+''')
+
+    def test_non_jst_dst_and_explicit_utc_fallback(self):
+        self.javascript(r'''
+const s=await calendarReady('America/New_York');scheduleTicks=[tickRow({scheduled_for:'2026-01-11T14:07:00Z'}),tickRow({id:'00000000-0000-0000-0000-000000000003',scheduled_for:'2026-07-11T14:07:00Z'})];await dbScheduleTicks(s);
+assert.match(visibleTicks(),/2026-01-11 09:07:00 America\/New_York \(UTC-05:00\)/);assert.match(visibleTicks(),/2026-07-11 10:07:00 America\/New_York \(UTC-04:00\)/);
+for(const spec of [{kind:'interval',every_minutes:60,timezone:'Asia/Tokyo'},{kind:'daily',time:'09:00'},{kind:'daily',time:'09:00',timezone:'invalid/Zone'},{kind:'daily',time:'09:00',timezone:'+01:00'}]){dbSchedulePopulate(s,{...s.record,spec});await dbScheduleTicks(s);assert.match(visibleTicks(),/UTC fallback/);assert.match(visibleTicks(),/2026-01-11 14:07:00 UTC \(UTC\+00:00\)/);setLanguage('ja');assert.match(visibleTicks(),/UTC で表示/);setLanguage('en');}
+''')
+
+    def test_history_empty_new_load_save_revision_and_zone_transitions(self):
+        self.javascript(r'''
+const s=await calendarReady();await dbScheduleTicks(s);assert.match(visibleTicks(),/No ticks recorded/);assert.equal(node('ticks-detail').textContent,'[]');setLanguage('ja');assert.match(visibleTicks(),/実行履歴はありません/);setLanguage('en');
+scheduleTicks=[tickRow()];await dbScheduleTicks(s);node('timezone').value='America/New_York';node('timezone').oninput();await dbScheduleSave(s,'save',false);assert.equal(s.record.revision,2);assert.equal(s.ticks.length,0);assert.equal(node('ticks-detail').textContent,'');assert.doesNotMatch(visibleTicks(),/23:07/);assert.match(visibleTicks(),/Inspect ticks to load history/);
+await dbScheduleTicks(s);assert.match(visibleTicks(),/2026-11-11 09:07:00 America\/New_York/);assert.equal(JSON.parse(node('ticks-detail').textContent)[0].schedule_revision,1);
+node('list').value='schedule-1';await dbScheduleLoad(s);assert.equal(s.ticks.length,0);assert.equal(node('ticks-detail').textContent,'');await dbScheduleTicks(s);node('new').onclick();assert.equal(s.record,null);assert.equal(node('ticks-main').children.length,0);assert.equal(node('ticks-detail').textContent,'');assert.equal(node('record-detail').textContent,'');
+''')
+
+    def test_stale_tick_reply_and_denial_clear_all_rendered_protected_data(self):
+        self.javascript(r'''
+const s=await calendarReady();scheduleTicks=[tickRow()];await dbScheduleTicks(s);const original=route;let gate=deferred();route=async(path,options)=>{if(path.includes('/ticks')){await gate.promise;}return original(path,options);};
+const reading=dbScheduleTicks(s);await tick();$('db-jobs-new').onclick();assert.equal(s.scope,'');gate.resolve();await reading;assert.equal(s.ticks.length,0);assert.equal(node('ticks-main').children.length,0);assert.equal(node('ticks-detail').textContent,'');assert.equal(node('record-detail').textContent,'');
+''')
+        self.javascript(r'''
+const s=await calendarReady(),original=route;scheduleTicks=[tickRow()];await dbScheduleTicks(s);assert.ok(node('ticks-main').children.length);route=async(path,options)=>path.includes('/ticks')?{http:403,body:{code:'FORBIDDEN'}}:original(path,options);await dbScheduleTicks(s);
+assert.equal(s.record,null);assert.equal(s.ticks.length,0);assert.equal(node('ticks-main').children.length,0);assert.equal(node('ticks-detail').textContent,'');assert.equal(node('record-detail').textContent,'');const before=calls.length;setLanguage('ja');assert.equal(calls.length,before);assert.equal(node('ticks-main').children.length,0);
 ''')
 
 
