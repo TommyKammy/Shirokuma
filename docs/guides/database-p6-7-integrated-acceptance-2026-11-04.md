@@ -2,15 +2,25 @@
 project: Shirokuma
 doc_id: DB-P6-7
 title: Database Workbench integration acceptance
-status: in_progress
+status: accepted
 created: 2026-11-04
-updated: 2026-11-05
-version: "0.8"
+updated: 2026-11-12
+version: "1.0"
 area: guides
 tags: [database, workbench, integration, acceptance]
 ---
 
 # DB-P6-7 Workbench統合受入
+
+## M1本人受入の完了（2026-11-12 JST）
+
+所有者本人から「手順11も完了し、予定作業の人間確認作業が完了しました。受け入れ可能な品質になりました」と受入の表明を得た。通常Workbenchでの作成、投入、変換・監査・公開、SQL、AI、Job・一回限りの予定、監査ログ、休止復帰、任意の取消・権限制限の確認を完了し、合意済みの固定LOCALの範囲でM1を本人受入済みとする。受入対象の実装先頭は `7044f09c`。開発側の試験と本人の判定を区別し、本人確認の個別時刻・新たな実行IDは推定して補わない。
+
+起動失敗・実行中停止の残件は、2026-11-06の専用環境検証を照合した。Pod作成拒否によるWake失敗では、元SQLの失敗を保持して復帰後の値を確認した。実行中のCoordinator停止では元SQLとbackend IDを `UNKNOWN` に保持し、新規確認SQLで保存値を確認した。元SQLの再送は各0件。終端の証拠がない専用台帳の `UNKNOWN` 1件は保存し、M1受入を理由に成功や取消へ書き換えない。原資料はローカルの `var/shirokuma/m1-opus-review-2026-11-05/private/fault-verification/report.md` に保持し、認証材料・生ログ・台帳は公開しない。
+
+本人指摘を受けた導線・文言・予定時刻・画面復元を修正した。最後のリロード改善では、通常Workbenchのジョブ画面表示を2.6〜4.1秒から100〜135ms、一覧取得完了を427〜472msと計測し、全9画面・320px／390px・関連663テストを確認した。これは当該修正時の観測であり、DB作成から初回SQLまでの中央値2秒目標の達成を示すものではない。所有者は修正後の品質を受入可能と判定した。
+
+M1は下記の合意済み範囲に限る。実Compute伸縮はDB-P7、用途別WarehouseはDB-P8、外部S3・Routine／TaskはDB-P9、物理purge・資格情報／PVC削除とdbtの別拡張は後続のままとする。以下の過去日付の記録にある「本人受入を継続」「未実施」は当時の状態を表し、現在の判定はこの節による。
 
 2026-11-05 JST、[M1前の小規模負荷確認](database-p6-7-small-load-2026-11-05.md)で、固定LOCALのSQL・Ingest・Job混合負荷、起動待ちSQLの取消、処理中の休止拒否、休止復帰後のデータ保持を確認した。発見した共有起動時の競合2件を修正し、UNKNOWNの元履歴を保持した回復と最終再試験を記録した。M1本人受入の判定は継続する。
 

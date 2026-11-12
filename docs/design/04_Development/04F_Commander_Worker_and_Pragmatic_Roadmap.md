@@ -4,13 +4,15 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-04
-version: "1.73"
+updated: 2026-11-12
+version: "1.74"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、所有者本人が通常Workbenchで手順11までの確認完了と受入可能な品質を表明し、合意済みの固定LOCALの範囲でM1を本人受入済みとした。[受入記録](../../guides/database-p6-7-integrated-acceptance-2026-11-04.md#m1本人受入の完了2026-11-12-jst)。起動失敗・実行中停止の専用環境証拠を照合し、未確定履歴は保持する。DB-P7〜9と別拡張は後続のまま、以下の過去日付の進捗は当時の状態として保持する。
 
 2026-11-04 JST、[DB-P6-4C2M](../../guides/database-p6-4c2m-sre-foundation-logs-2026-11-04.md)でSRE PlatformのLoki重大度検索に登録済み基盤のOPAを加えた。固定の発行元を照合し、時刻・発行元・重大度だけを扱う。旧名前空間全体とSQL-09／ADM-09〜11の範囲を照合し、DB-P6-7の独立環境とM1本人受入を継続する。
 

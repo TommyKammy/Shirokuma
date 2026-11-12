@@ -1,5 +1,7 @@
 # Databaseモードの機能一覧と利用条件
 
+2026-11-12 JST、所有者本人が手順11までの確認を完了し、M1を受入可能と判定した。[DB-P6-7の受入記録](database-p6-7-integrated-acceptance-2026-11-04.md#m1本人受入の完了2026-11-12-jst)を現在の判定とする。89行のIDと合意済み範囲を保持し、別track・物理purge・dbt別拡張まで対応済みとはしない。以下の過去日付の記録は当時の状態を表す。
+
 2026-11-04 JST、[DB-P6-4C2M](database-p6-4c2m-sre-foundation-logs-2026-11-04.md)でSRE PlatformのLoki重大度検索に登録済み基盤のOPAを加えた。固定の発行元を照合し、時刻・発行元・重大度だけを扱う。旧名前空間全体とSQL-09／ADM-09〜11の範囲を照合し、DB-P6-7の独立環境とM1本人受入を継続する。
 
 2026-11-04 JST、[DB-P6-4C2L](database-p6-4c2l-sre-loki-severity-2026-11-04.md)で管理対象AgentHouse／Lokiのerror／fatalを、時刻・発行元・重大度に絞って手動でLokiへ取り込み、SRE Platformで検索できるようにした。対象は固定2コンテナ。旧名前空間別ログの投入範囲と、M1の統合・本人受入は継続する。
