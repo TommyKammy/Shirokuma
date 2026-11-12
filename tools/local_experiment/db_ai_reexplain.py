@@ -8,6 +8,7 @@ import uuid
 
 import control_store
 import db_ai as ai
+import db_ai_records as records
 import db_ai_plan as plan
 from query_context import QueryError
 
@@ -213,17 +214,11 @@ def _source(db, principal, context, ident):
 
 
 def _owned(db, principal, context, ident):
-    row = db.execute('SELECT * FROM ai_explanations WHERE id=?', (ident,)).fetchone()
-    if (row is None or row['actor'] != principal.principal_id
-            or json.loads(row['context']) != context.public_metadata()
-            or json.loads(row['record']).get('kind') != KIND):
-        ai._fail('AI_EXPLANATION_NOT_FOUND', 404)
-    return json.loads(row['record']), json.loads(row['pins'])
+    return records.owned(db, principal, context, ident, kind=KIND)
 
 
 def _save(db, record):
-    record['updated_at'] = ai._now()
-    db.execute('UPDATE ai_explanations SET record=? WHERE id=?', (ai._json(record), record['id']))
+    return records.save(db, record)
 
 
 def _settle(principal, context, ident, state, error=None, text=None):
@@ -265,45 +260,14 @@ def _run(principal, context, ident, config, prompt, owner):
 
 
 def get(principal, context, ident):
-    with control_store.connect() as db:
-        record, pins = _owned(db, principal, context, ident)
-    ai._authority(principal, context, pins)
-    if record['state'] in ai._ACTIVE:
-        try:
-            owner = ai._owner(ident)
-        except BlockingIOError:
-            pass
-        else:
-            try:
-                _settle(principal, context, ident, 'UNKNOWN', 'AI_OWNER_LOST')
-            finally:
-                owner.close()
-        with control_store.connect() as db:
-            record, pins = _owned(db, principal, context, ident)
-    ai._authority(principal, context, pins)
-    return deepcopy(record)
+    return records.get(principal, context, ident,
+                       owned=_owned, authority=ai._authority, settle=_settle)
 
 
 def history(principal, context):
-    ai._authority(principal, context)
-    with control_store.connect() as db:
-        ids = [r[0] for r in db.execute("""SELECT id FROM ai_explanations WHERE actor=? AND context=?
-            AND json_extract(record,'$.kind')=? ORDER BY json_extract(record,'$.created_at') DESC,id DESC""",
-            (principal.principal_id, ai._json(context.public_metadata()), KIND))]
-    records = []
-    for ident in ids:
-        try:
-            records.append(get(principal, context, ident))
-        except QueryError:
-            continue
-        if len(records) == 50:
-            break
-    for record in records:
-        with control_store.connect() as db:
-            _, pins = _owned(db, principal, context, record['id'])
-        ai._authority(principal, context, pins)
-    ai._authority(principal, context)
-    return records
+    return records.history(principal, context, kind=KIND, owned=_owned,
+                           authority=ai._authority,
+                           get_record=lambda p, c, ident: get(p, c, ident))
 
 
 def submit(principal, context, *, key, source_explanation_id, language):

@@ -5,12 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.76"
+version: "1.77"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、SQL提案・カタログ提案・保存済み計画の再説明の保存・所有者確認・取得・履歴を共通化した。機能別の権限・確定・取消処理は維持した。
+actor／全context／種別の照合、履歴の可視50件・日時とIDの降順・最終権限再確認、所有権消失時のUNKNOWNと呼出側transactionを追加13試験で固定した。
+AI領域308件、関連UI189件・セキュリティ11件、旧実装との比較13件、4通りのimportと設計整合を確認した。検証は一時SQLiteと模擬provider／catalogで行った。
 
 2026-11-12 JST、Platform観測・リソース設定・HTTP応答確認の3機能（4状態）で、要求のtoken／epoch／scope判定・解除と権限更新を共通化した。
 401／403・500・通信失敗時の機能別処理、応答サイズ制限、画面・言語による無効化条件を維持した。
