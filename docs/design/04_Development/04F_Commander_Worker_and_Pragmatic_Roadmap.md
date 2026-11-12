@@ -5,12 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.83"
+version: "1.84"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、native audit・公開のSQL準備、intent保存、receipt構築をdbt側APIへ集約し、DataOpsには送信・commit保持・観測を残した。
+pending保存・source検査、target claim・intent・送信、commit後の権限確認とquery ID参照の順序を維持し、生のpublication recordをDataOpsへ渡さない境界にした。
+一時SQLite・SDKと模擬SQL／catalogで新規5試験、旧実装比較5件が通過した。全推奨項目の変更を揃え、最終Make回帰と完了監査へ進む。
 
 2026-11-12 JST、同じPYTHON環境で二重選択されていたWorkbench管理試験の明示実行1行を除いた。異なる環境roleの重複23件は維持した。
 core／verify両targetのdry-runを同じtestfile集合へ展開し、環境role別の対象集合、他コマンドの内容・順序、非unittest確認が同一であることを確認した。

@@ -37,6 +37,22 @@ class ViewCreation:
     native_graph: bool
 
 
+@dataclass(frozen=True)
+class NativeAuditQuery:
+    sql: str
+    pending_json: str
+    publication_id: str
+    operation_id: str
+
+
+@dataclass(frozen=True)
+class NativePublicationQuery:
+    sql: str
+    locator: registry.DestinationLocator
+    commit_json: str
+    publication_id: str
+
+
 def _access(principal, context, *, admin=False):
     metadata = wap._access(principal, context, write=True, admin=admin)
     schema = metadata._schema(context.schema_id, write=True)
@@ -1689,6 +1705,68 @@ def _native_execution_intent(execution, phase):
             raise QueryError('AUDIT_MISMATCH', 409)
     _native_publication_live(execution, publication)
     return publication
+
+
+def prepare_native_audit(execution) -> NativeAuditQuery:
+    publication = _native_execution_intent(execution, 'audit')
+    intent = publication['_native_intent']
+    receipt_id = str(uuid.uuid4())
+    pending = dict(origin=publication['origin'], audit_id=receipt_id, intent=intent)
+    with control_store.connect() as db:
+        pending_json = ds._json(pending)
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (pending_json, execution.id))
+    candidate = intent['candidate']
+    source = execution._ref(registry.ResourceRef(**candidate['ref']))
+    snapshot = candidate['snapshot']
+    if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+        raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+    sql = 'SELECT COUNT(*) FROM ' + source + ' FOR VERSION AS OF ' + snapshot
+    return NativeAuditQuery(sql, pending_json, publication['id'], execution.id)
+
+
+def native_audit_result(query, page) -> dict:
+    rows = page['data']
+    if (len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0):
+        raise QueryError('INVALID_AUDIT_RESULT', 502)
+    pending = json.loads(query.pending_json)
+    intent = pending['intent']
+    receipt = dict(id=pending['audit_id'], origin=pending['origin'], publication_id=query.publication_id, intent=intent,
+        operation_id=query.operation_id, query_id=page['id'], count=rows[0][0], passed=rows[0][0] >= intent['audit_policy']['min_rows'])
+    return dict(audit_id=pending['audit_id'], audit=receipt)
+
+
+def prepare_native_publication(execution) -> NativePublicationQuery:
+    publication = _native_execution_intent(execution, 'publish')
+    intent = publication['_native_intent']
+    candidate = intent['candidate']
+    target = _native_target(intent['expected_target']['destination'])
+    locator = execution.wap_claim(target)
+    if type(target) is registry.ResourceRef:
+        name, prefix = execution._ref(target, write=True, admin=True), 'CREATE OR REPLACE TABLE '
+    else:
+        name, prefix = execution._locator(target, admin=True), 'CREATE TABLE '
+    source = execution._ref(registry.ResourceRef(**candidate['ref']))
+    snapshot = candidate['snapshot']
+    if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+        raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+    columns = ', '.join(ds._column(c['name']) for c in candidate['columns'])
+    result = _native_publish_intent(publication, execution.id)
+    with control_store.connect() as db:
+        commit_json = ds._json(result)
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (commit_json, execution.id))
+    sql = (prefix + name + " WITH (format='PARQUET') AS SELECT " + columns
+        + ' FROM ' + source + ' FOR VERSION AS OF ' + snapshot)
+    return NativePublicationQuery(sql, locator, commit_json, publication['id'])
+
+
+def record_native_publication(execution, query, page, measured_target) -> dict:
+    result = json.loads(query.commit_json)
+    receipt = dict(result, id=query.publication_id, actor=execution.principal.principal_id,
+        context=asdict(execution._context()), query_id=page['id'], target=measured_target)
+    result = dict(result, publication=receipt)
+    with control_store.connect() as db:
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(result), execution.id))
+    return result
 
 
 def _native_child_saved(db, publication, phase, *, settle=True):
