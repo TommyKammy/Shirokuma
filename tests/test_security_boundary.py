@@ -141,23 +141,36 @@ class SecurityBoundaryTests(unittest.TestCase):
 
     def test_viewer_frontend_bootstrap_uses_authenticated_role(self):
         html = wb.INDEX.read_text()
-        bootstrap = html.split('async function initializeSession() {', 1)[1].split('initializeSession().catch', 1)[0]
+        bootstrap = 'async function initializeSession() {' + html.split(
+            'async function initializeSession() {', 1)[1].split('\nstartWorkbench();', 1)[0]
         script = """
-let currentRole='admin';
+let currentRole='admin',catalogSession;
+const session={username:'vera',authenticated:true,maximum_role:'bi_viewer'};
 const options=['admin','data_engineer','bi_viewer'].map(value=>({value,disabled:false}));
 const select={options,value:'admin'};
 const calls=[];
 const $=()=>select;
-let applied;
-function applyRole(){applied=currentRole;}
-function refreshStatus(){calls.push('status:'+currentRole);}
-function loadCatalog(){calls.push('catalog:'+currentRole);}
-async function fetch(path){calls.push(path);return {ok:true,json:async()=>({maximum_role:'bi_viewer'})};}
-async function initializeSession(){""" + bootstrap + """
+function assertViewerRole(){
+ if(currentRole!=='bi_viewer'||select.value!=='bi_viewer'||!options[0].disabled||!options[1].disabled||options[2].disabled)throw Error('incorrect role menu');
+ if(catalogSession!==JSON.stringify(['vera',true,'bi_viewer']))throw Error('incorrect session identity');
+}
+function applyRole(){assertViewerRole();calls.push('apply');}
+async function workbenchRestorePage(restoredSession){
+ assertViewerRole();
+ if(restoredSession!==session)throw Error('incorrect restored session');
+ calls.push('restore');
+ await Promise.resolve();
+ calls.push('restored');
+}
+function refreshStatus(){assertViewerRole();calls.push('status:'+currentRole);}
+function loadCatalog(){assertViewerRole();calls.push('catalog:'+currentRole);}
+function loadJobAlerts(){throw Error('viewer loaded privileged alerts');}
+async function fetch(path){calls.push(path);return {ok:true,json:async()=>session};}
+""" + bootstrap + """
 initializeSession().then(()=>{
- if(applied!=='bi_viewer'||select.value!=='bi_viewer'||!options[0].disabled||!options[1].disabled||options[2].disabled)throw Error('incorrect role menu');
- if(JSON.stringify(calls)!==JSON.stringify(['/api/session','status:bi_viewer','catalog:bi_viewer']))throw Error('API called before identity');
-});
+ assertViewerRole();
+ if(JSON.stringify(calls)!==JSON.stringify(['/api/session','apply','restore','restored','status:bi_viewer','catalog:bi_viewer']))throw Error('API called before identity or restoration');
+}).catch(error=>{console.error(error);process.exit(1);});
 """
         result = subprocess.run(['node', '-e', script], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
