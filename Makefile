@@ -96,7 +96,6 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_provision.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_creation_routes.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_admin_management.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench_management.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_material.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_generation_tofu.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_control_store.py'
