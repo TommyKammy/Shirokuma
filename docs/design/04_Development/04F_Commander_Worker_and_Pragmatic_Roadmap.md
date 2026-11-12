@@ -5,12 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.77"
+version: "1.78"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、dbt／DataOps境界整理の第一歩として、保存済みVIEWの検証・コンパイル・定義digest保存をdbt側の明示APIへ集約した。
+DataOpsは固定の準備結果を受け取り、SANDBOX確認・SQL送信・commit receipt・UUID観測・所有登録を維持する。native graphの追加plan確認と取消保持を旧実装比較5件で固定した。
+dbt／DataOps・graph／公開／復旧の重点回帰449件、4通りのimportと設計整合を確認した。検証は一時SQLiteと模擬SQL transport／catalogで行った。
 
 2026-11-12 JST、SQL提案・カタログ提案・保存済み計画の再説明の保存・所有者確認・取得・履歴を共通化した。機能別の権限・確定・取消処理は維持した。
 actor／全context／種別の照合、履歴の可視50件・日時とIDの降順・最終権限再確認、所有権消失時のUNKNOWNと呼出側transactionを追加13試験で固定した。

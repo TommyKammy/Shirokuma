@@ -3,7 +3,7 @@
 No SQL or compile is launched by reads/reconciliation. Execution credentials and
 leases live only in the accepting process; records contain no reusable secrets.
 """
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 import hashlib
 import json
 import os
@@ -27,6 +27,13 @@ _ACTIVE = {'QUEUED', 'BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING', 'CANCELING
 _REPO = Path(__file__).resolve().parents[2]
 _UNREVIEWED = object()
 _ABSENT_NODE = object()
+
+
+@dataclass(frozen=True)
+class ViewCreation:
+    locator: registry.DestinationLocator
+    select_sql: str
+    native_graph: bool
 
 
 def _access(principal, context, *, admin=False):
@@ -725,6 +732,31 @@ def _view_node(execution):
     if selected['_view_locator'] != asdict(locator):
         raise QueryError('DBT_VIEW_CHANGED', 409)
     return run, nodes[0], locator
+
+
+def prepare_view_creation(execution):
+    """Validate/prepare a saved VIEW action, save its digest, and send no SQL."""
+    from manual_wap import _compile_model
+    run, node, locator = _view_node(execution)
+    native_graph = run.get('executor') == 'native_graph'
+    if native_graph:
+        import database_dbt_graph
+        with control_store.connect() as db:
+            plan = _check_plan(db, run)
+        _, normalized = database_dbt_graph.bindings_for(plan, run, node)
+    else:
+        normalized = _normalized(run, node)
+    inputs = _pinned(execution, normalized['sources'])
+    if any(m.get('kind') == 'VIEW' for m in inputs.values()):
+        raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
+    generated = _compile_model(normalized['sql'], normalized['sources'], execution=execution, measurements=inputs)
+    import database_dbt
+    canonical = database_dbt._sql_tree(generated).sql(dialect='trino')
+    with control_store.connect() as db:
+        _, saved_run = _row(db, run['id'])
+        next(m for m in saved_run['models'] if m['unique_id'] == node['unique_id'])['_view_definition_digest'] = hashlib.sha256(canonical.encode()).hexdigest()
+        _write(db, saved_run)
+    return ViewCreation(locator, generated, native_graph)
 
 
 def _view_saved(db, run, model):

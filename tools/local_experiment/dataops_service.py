@@ -691,32 +691,14 @@ class Execution:
     def _dbt_create_view(self):
         """One saved private action, no caller SQL, locator or security argument."""
         import db_dbt
-        from manual_wap import _compile_model
-        run, node, locator = db_dbt._view_node(self)
-        native_graph = run.get('executor') == 'native_graph'
-        if native_graph:
-            import database_dbt_graph
-            with control_store.connect() as db:
-                plan = db_dbt._check_plan(db, run)
-            _, normalized = database_dbt_graph.bindings_for(plan, run, node)
-        else:
-            normalized = db_dbt._normalized(run, node)
-        inputs = db_dbt._pinned(self, normalized['sources'])
-        if any(m.get('kind') == 'VIEW' for m in inputs.values()):
-            raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
-        generated = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
-        import database_dbt
-        canonical = database_dbt._sql_tree(generated).sql(dialect='trino')
-        with control_store.connect() as db:
-            _, saved_run = db_dbt._row(db, run['id'])
-            next(m for m in saved_run['models'] if m['unique_id'] == node['unique_id'])['_view_definition_digest'] = hashlib.sha256(canonical.encode()).hexdigest()
-            db_dbt._write(db, saved_run)
+        creation = db_dbt.prepare_view_creation(self)
+        locator, select_sql, native_graph = creation.locator, creation.select_sql, creation.native_graph
         name = self._locator(locator)
         if locator.schema_id != self._context().schema_id or self._schema(locator.schema_id).sql_name != 'sandbox':
             raise QueryError('SANDBOX_REQUIRED', 409)
         self._absent(locator)
         receipt = json.loads(self._row()['result'] or '{}') if native_graph else {}
-        self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + generated, 'view',
+        self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + select_sql, 'view',
             commit_result=dict(receipt, view_created=True, _view_locator=asdict(locator)))
         schema = self._schema(locator.schema_id, write=True)
         database, binding = self._catalog()
