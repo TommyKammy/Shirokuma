@@ -52,6 +52,13 @@ class WorkbenchHTML(HTMLParser):
     def by_id(self, identifier):
         return next(n for n in self.nodes if n.get('id') == identifier)
 
+    def main_script(self):
+        """Select the body application script, excluding head boot scripts."""
+        script, = (node for node in self.nodes
+                   if node['tag'] == 'script' and 'src' not in node
+                   and any(parent['tag'] == 'body' for parent in node['ancestors']))
+        return script['text']
+
 
 class HistoryHandlerTests(unittest.TestCase):
     """Run authorization and GET dispatch together without opening a socket."""
@@ -300,7 +307,7 @@ class WorkbenchTests(unittest.TestCase):
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_export_controls_revisions_and_stale_output_responses(self):
-        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
@@ -350,7 +357,7 @@ eval(HANDLERS+`
         for identifier in ('stage-export-table','stage-export-format','stage-export-file'):
             self.assertTrue(any(node.get('for')==identifier for node in doc.nodes))
         self.assertEqual(doc.by_id('stage-export-form')['tag'],'form')
-        script=next(node['text'] for node in doc.nodes if node['tag']=='script')
+        script=doc.main_script()
         for key in ('Manual export','Output folder','Source table (qualified name)','Export format','Output filename','Export table','Refresh outputs','Stage export','parquet export requires pyarrow','export filename already exists; choose a new filename'):
             self.assertIn(repr(key)+':',script)
         self.assertIn('100000 rows and 25 MiB',doc.by_id('stage-export-area')['text'])
@@ -490,7 +497,7 @@ eval(HANDLERS+`
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_calendar_schedule_controls_payloads_readback_and_async_permissions(self):
         doc = self.workbench_document()
-        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        script = doc.main_script()
         shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function stageCurrent(', 1)[0]
         jobs = 'function jobSchedulePayload(' + script.split('function jobSchedulePayload(', 1)[1].split("$('job-parameter-example')", 1)[0]
         for prefix in ('job-schedule', 'stage-schedule'):
@@ -579,14 +586,14 @@ eval(SHARED+JOBS+`
         self.assertIn('disabled', doc.by_id('stage-import'))
         for identifier in ('stage-name', 'stage-directory', 'stage-table', 'stage-mode', 'stage-format', 'stage-key', 'stage-file'):
             self.assertTrue(any(node.get('for') == identifier for node in doc.nodes))
-        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        script = doc.main_script()
         for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stageImportAllowed()", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
             self.assertIn(text, script)
 
     def test_stage_localized_display_and_contained_tables(self):
         html = wb.INDEX.read_text()
         doc = self.workbench_document()
-        script = next(node['text'] for node in doc.nodes if node['tag'] == 'script')
+        script = doc.main_script()
         for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '取込済みの内容はファイル名を変更しても除外します。'):
             self.assertIn(text, script)
         format_control = doc.by_id('stage-format')
@@ -597,7 +604,7 @@ eval(SHARED+JOBS+`
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_preview_invalidation_and_role_change_pending_guard(self):
-        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
         handlers = 'let stageEntries=' + handlers
         harness = r"""
@@ -627,7 +634,7 @@ eval(HANDLERS+`
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_preview_uses_current_server_settings_after_external_edit(self):
-        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
@@ -657,7 +664,7 @@ eval(HANDLERS+`
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_schedule_stop_retry_and_stale_async_behavior(self):
-        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
         handlers += '\nconst jobStatuses=' + script.split('const jobStatuses=', 1)[1].split(';', 1)[0] + ';'
         harness = r"""
@@ -751,7 +758,7 @@ eval(HANDLERS+`
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_refresh_reconciles_schedule_without_discarding_work(self):
-        script = next(node['text'] for node in self.workbench_document().nodes if node['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
@@ -1062,13 +1069,13 @@ eval(HANDLERS+`
         self.assertEqual([n['value'] for n in doc.nodes if n['tag'] == 'option' and selector in n['ancestors']],
                          ['admin', 'data_engineer', 'bi_viewer'])
         self.assertEqual(doc.by_id('role-indicator')['role'], 'status')
-        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        script = doc.main_script()
         for en, ja in [('Admin', '管理者'), ('Data Engineer', 'データ作成者'), ('BI Viewer', '閲覧者')]:
             self.assertIn(f"'{en}':'{ja}'", script)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_role_switch_and_api_headers(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = script.split("let currentRole = 'admin';", 1)[1].split('function message(', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
@@ -1112,7 +1119,7 @@ eval(HANDLERS+`
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_data_bear_completion_uses_current_action_and_role(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         dictionary = script[script.index('const i18n'):script.index('function ui(')]
         helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
         busy = script[script.index('async function busy('):script.index('function aiStatus(')]
@@ -1167,7 +1174,7 @@ for(const [key,value] of Object.entries({request:'draft',sql:'SELECT 1',stage_ta
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_worksheet_close_behaviors_and_reload(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         dictionary = script[script.index('const i18n'):script.index('function ui(')]
         source = script[script.index("const worksheetKey="):script.index("if(matchMedia('(max-width: 1024px)')")]
         wire = script[script.index('function wireTabs('):script.index('// Views inside a page')]
@@ -1228,7 +1235,7 @@ const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.closes()[0].click
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_copilot_generate_preserves_origin_and_intervening_edits(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         helpers = script[script.index('const worksheetKey='):script.index('function worksheetName(')]
         handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('let browserFile=null;')]
         harness = r'''
@@ -1277,7 +1284,7 @@ async function check(scenario){
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_data_bear_sends_only_the_current_action_inputs(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         dictionary = script[script.index('const i18n'):script.index('function ui(')]
         helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
         harness = r'''
@@ -1371,7 +1378,7 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
         select = doc.by_id('ai-provider')
         self.assertEqual([n['value'] for n in doc.nodes if n['tag'] == 'option' and select in n['ancestors']],
                          ['local-openai', 'openai', 'bedrock', 'custom'])
-        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        script = doc.main_script()
         dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
         translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
         for label in ('AI Model Settings', 'Provider', 'Model Name', 'API URL', 'API Key',
@@ -1383,7 +1390,7 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_ai_settings_javascript_handlers(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         handlers = script.split('function aiStatus(', 1)[1].split('function table(', 1)[0]
         harness = r"""
 const assert=require('node:assert/strict');
@@ -1467,7 +1474,7 @@ eval('function aiStatus('+HANDLERS);
 
     def test_phase8_translations_cover_static_and_dynamic_ui(self):
         doc = self.workbench_document()
-        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        script = doc.main_script()
         dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
         translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
         labels = '''Schema|Table View|Chart View|Chart type|Bar Chart|Line Chart|X column|Y column|
@@ -1487,7 +1494,7 @@ eval('function aiStatus('+HANDLERS);
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_phase8_javascript_execution_contracts(self):
         """Execute production handlers with a small DOM/API adapter; no lab writes."""
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         # Parse the entire script, then execute the query handler itself.
         handler = script.split("$('run-query').onclick=", 1)[1].split("$('sql').onkeydown", 1)[0]
         harness = r"""
@@ -1515,7 +1522,7 @@ const run=eval(HANDLER);
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_phase8_api_and_rendering_contracts(self):
-        script = next(n['text'] for n in self.workbench_document().nodes if n['tag'] == 'script')
+        script = self.workbench_document().main_script()
         for contract in (
             "createElementNS(ns,'svg')", "const points=visibleRows().filter",
             "for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart",
@@ -1742,7 +1749,7 @@ const run=eval(HANDLER);
                              ('button', lang, pressed, label))
         self.assertEqual(next(n for n in doc.nodes if n['tag'] == 'html')['lang'], 'en')
 
-        script = next(n['text'] for n in doc.nodes if n['tag'] == 'script')
+        script = doc.main_script()
         # Evaluate the pure translation declarations, including Database-mode additions.
         # No page handlers or browser APIs run in this isolated dictionary check.
         dictionary = script[script.index('const i18n = '):script.index("let language = 'en';")]
