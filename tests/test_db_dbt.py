@@ -21,13 +21,12 @@ import query_service as qs
 from query_context import QueryError
 import warehouse_admission as admission
 import test_manual_wap
+from fixture_lifecycle import setup_fixture
 
 
 class DbtTests(unittest.TestCase):
     def setUp(self):
-        self.w = test_manual_wap.ManualWapTests()
-        self.w.setUp()
-        self.addCleanup(self.w.doCleanups)
+        self.w = setup_fixture(self, test_manual_wap.ManualWapTests())
         self.b = self.w.b
         self.engineer = self.w.principal
         self.admin = self.w.owner

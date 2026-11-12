@@ -25,6 +25,7 @@ import query_service as qs
 from query_context import QueryError, resolve_context
 import request_auth
 import warehouse_admission as admission
+from fixture_lifecycle import setup_fixture
 
 
 class DataOpsTests(unittest.TestCase):
@@ -235,9 +236,7 @@ class DataOpsTests(unittest.TestCase):
         lifecycle_patch.start()
         self.addCleanup(lifecycle_patch.stop)
         from test_request_auth import PrincipalTests
-        self.fixture = PrincipalTests()
-        self.fixture.setUp()
-        self.addCleanup(self.fixture.doCleanups)
+        self.fixture = setup_fixture(self, PrincipalTests())
         self.addCleanup(self.clear_pins)
         self.clear_pins()
         self.principal = self.fixture.principal()
