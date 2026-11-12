@@ -113,6 +113,54 @@ $('tab-warehouse').click();$('tab-compute').click();const saved=dbTelemetryReadi
 for(const status of [401,403]){dbAdminSession(session);let parsed=0;sessionRoute=async()=>({telemetryResponse:{ok:false,status,json:async()=>{parsed++;throw Error('must not parse');}}});await dbTelemetryReadinessRefreshAuth('compute');assert.equal(parsed,0);telemetryEmpty();}
 """)
 
+    def test_stale_fetch_and_auth_finally_preserve_each_newer_pending_panel(self):
+        self.javascript(r"""
+await telemetryBoot();
+for(const kind of telemetryKinds)for(const action of ['fetch','auth'])for(const transition of ['locale','scope','principal','platform'])for(const mode of ['fetch-success','fetch-error','fetch-401','fetch-403','body-success','body-error','body-500']){
+ const peerKind=kind==='sre'?'compute':'sre';await telemetryFetch(peerKind);await telemetryFetch(kind);
+ const p=dbTelemetryReadiness[kind],saved=p.record,peer=dbTelemetryReadiness[peerKind].record,hold=deferred();let parsed=0;const auth=action==='auth';
+ const reply=()=>auth?{...session}:telemetryReply();
+ const oldRoute=mode.startsWith('body-')?async()=>({telemetryResponse:{ok:mode!=='body-500',status:mode==='body-500'?500:200,[auth?'json':'text']:()=>{parsed++;return hold.promise;}}}):()=>hold.promise;
+ if(auth)sessionRoute=oldRoute;else route=oldRoute;
+ const button=$(telemetryID(kind)+action),old=button.onclick();await tick();if(mode.startsWith('body-'))assert.equal(parsed,1);
+ if(transition==='principal'){
+  const owner=dbPrincipal;dbPrincipal=JSON.stringify(['other',true]);dbAdminSession({...session,username:'other'});dbControls();dbPrincipal=owner;dbAdminSession(session);dbControls();
+ }else if(transition==='platform'){dbAdminSession({...session,platform_admin:false});dbAdminSession(session);dbControls();}
+ else if(transition==='locale'){setLanguage('ja');setLanguage('en');}else{const before=dbObservations.sre.scope;scope('sre',before==='platform'?'database':'platform');scope('sre',before);}
+ assert.equal(p.busy,null);const purged=['principal','platform'].includes(transition),expected=p.record,expectedPeer=dbTelemetryReadiness[peerKind].record;
+ assert.equal(expected,purged?null:saved);assert.equal(expectedPeer,purged?null:peer);
+ const newer=deferred();if(auth)sessionRoute=()=>newer.promise;else route=()=>newer.promise;
+ const pending=button.onclick();await tick();const token=p.busy,notice=p.notice,count=calls.length;
+ assert.ok(token);assert.equal($(telemetryID(kind)+'auth').disabled,true);assert.equal($(telemetryID(kind)+'fetch').disabled,true);
+ if(mode.endsWith('error'))hold.reject(Error('stale secret'));
+ else if(mode==='fetch-401'||mode==='fetch-403')hold.resolve({telemetryResponse:{ok:false,status:Number(mode.slice(-3)),json:async()=>{parsed++;throw Error('must not parse');},text:async()=>{parsed++;throw Error('must not parse');}}});
+ else hold.resolve(mode.startsWith('body-')&&!auth?JSON.stringify(reply()):reply());
+ await old;assert.equal(p.busy,token);assert.equal(p.record,expected);assert.equal(p.notice,notice);assert.equal(dbTelemetryReadiness[peerKind].record,expectedPeer);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');
+ if(mode.startsWith('fetch-'))assert.equal(parsed,0);
+ assert.equal($(telemetryID(kind)+'auth').disabled,true);assert.equal($(telemetryID(kind)+'fetch').disabled,true);
+ await $(telemetryID(kind)+'auth').onclick();await $(telemetryID(kind)+'fetch').onclick();assert.equal(calls.length,count);
+ const value=reply();if(!auth)value.loki.status='ready';newer.resolve(value);await pending;
+ assert.equal(p.busy,null);assert.equal($(telemetryID(kind)+'fetch').disabled,false);assert.equal(dbTelemetryReadiness[peerKind].record,expectedPeer);
+ if(auth){assert.equal(p.record,expected);assert.equal(p.notice,'verified');}else assert.equal(p.record.loki.status,'ready');sessionRoute=null;
+}
+""")
+
+    def test_session_failure_clears_only_calling_panel_without_revoking_authority(self):
+        self.javascript(r"""
+await telemetryBoot();await resourceFetch();await computeFetch();const resources=dbResources.record,platform=dbPlatform.record;
+for(const kind of telemetryKinds)for(const failure of ['500','network','malformed']){
+ for(const k of telemetryKinds)await telemetryFetch(k);const peerKind=kind==='sre'?'compute':'sre',peer=dbTelemetryReadiness[peerKind].record,version=dbAuthorizationVersion;
+ let parsed=0;sessionRoute=async()=>{if(failure==='network')throw Error('secret');if(failure==='malformed')return {malformed:true};return {http:500,get body(){parsed++;return {...session};}};};
+ await $(telemetryID(kind)+'auth').onclick();assert.equal(parsed,failure==='500'?1:0);
+ assert.equal(dbTelemetryReadiness[kind].record,null);assert.equal(dbTelemetryReadiness[kind].notice,'failed');assert.equal(dbTelemetryReadiness[kind].busy,null);
+ assert.equal(dbTelemetryReadiness[peerKind].record,peer);assert.equal(dbResources.record,resources);assert.equal(dbPlatform.record,platform);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');assert.equal(dbAuthorizationVersion,version);sessionRoute=null;
+}
+for(const kind of telemetryKinds){
+ dbAdminSession(session);sessionRoute=async()=>({...session,platform_admin:false});await $(telemetryID(kind)+'auth').onclick();
+ assert.equal(dbAdmin.platform,false);assert.equal(dbTelemetryReadiness[kind].notice,'denied');telemetryEmpty();sessionRoute=null;
+}
+""")
+
     def test_real_sre_platform_visibility_navigation_preserves_receipts_options_no_fetch(self):
         self.navigation_javascript(r"""
 await telemetryBoot();$('tab-compute').click();await telemetryFetch();const held=dbTelemetryReadiness.compute.record,count=calls.length;

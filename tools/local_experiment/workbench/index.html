@@ -4349,6 +4349,20 @@ Object.assign(i18n.ja,{
  'Auto-chill policy source unavailable.':'自動休止設定の参照元を取得できません。','Saved admissions source unavailable.':'保存済み受付の参照元を取得できません。'
 });
 function dbPlatformAuth(){return JSON.stringify([dbPrincipal,currentRole,dbMaximumRole,dbAdmin.platform]);}
+function dbCaptureObservationRead(panel,...scopeGetters){
+ const token={},epoch=++panel.epoch,scopes=scopeGetters.map(get=>get());panel.busy=token;
+ return {token,current:()=>panel.busy===token&&panel.epoch===epoch&&scopeGetters.every((get,i)=>get()===scopes[i]),release:()=>{if(panel.busy===token)panel.busy=null;}};
+}
+async function dbRefreshPlatformAuthority(read,{nonOk,onDenied,onApplied}){
+ const response=await fetch('/api/session');if(!read.current())return;
+ if([401,403].includes(response.status)){dbAdminSession({});onDenied();return;}
+ const session=await response.json();if(!read.current())return;
+ if(!response.ok&&nonOk==='fail')throw Error('UNAVAILABLE');
+ // Auth only: never load Database inventory, schemas, grants, or worksheet context.
+ dbAdminSession(response.ok?session:{});
+ if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
+ onApplied();
+}
 function dbPlatformLeave(){++dbPlatform.epoch;dbPlatform.busy=null;dbPlatform.notice='';}
 function dbPlatformSync(){
  const p=dbPlatform,auth=dbPlatformAuth();
@@ -4390,22 +4404,15 @@ function dbPlatformComputeInstall(){
 }
 function dbPlatformCanRefresh(){let actor;try{actor=JSON.parse(dbPrincipal);}catch{return false;}return databaseMode&&actor?.[1]===true&&currentRole==='admin'&&dbMaximumRole==='admin';}
 function dbPlatformCapture(){
- const p=dbPlatform,token={},epoch=++p.epoch,auth=dbPlatformAuth();p.busy=token;
- return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbPlatformAuth()};
+ return dbCaptureObservationRead(dbPlatform,dbPlatformAuth);
 }
 async function dbPlatformRefreshAuth(){
  dbPlatformSync();if(dbPlatform.busy||!dbPlatformCanRefresh())return;
  const read=dbPlatformCapture();dbPlatform.notice='Refreshing platform authority.';dbPlatformSync();
  try{
-  const response=await fetch('/api/session');if(!read.current())return;
-  if([401,403].includes(response.status)){dbAdminSession({});dbPlatform.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
-  const session=await response.json();if(!read.current())return;
-  // Auth only: never load Database inventory, schemas, grants, or worksheet context.
-  dbAdminSession(response.ok?session:{});
-  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
-  dbPlatform.notice=dbObservationPlatform('admin')?'Platform authority verified. Select Fetch platform observation.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+  await dbRefreshPlatformAuthority(read,{nonOk:'revoke',onDenied:()=>{dbPlatform.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';},onApplied:()=>{dbPlatform.notice=dbObservationPlatform('admin')?'Platform authority verified. Select Fetch platform observation.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';}});
  }catch{if(read.current())dbPlatform.notice='Platform observation unavailable. Explicitly refresh authority or fetch again.';}
- finally{if(dbPlatform.busy===read.token)dbPlatform.busy=null;dbPlatformSync();}
+ finally{read.release();dbPlatformSync();}
 }
 async function dbPlatformFetch(){
  dbPlatformSync();if(dbPlatform.busy||!dbObservationPlatform('admin'))return;
@@ -4417,7 +4424,7 @@ async function dbPlatformFetch(){
   const data=await response.json();if(!read.current())return;
   if(!response.ok)throw Error('UNAVAILABLE');dbPlatform.record=dbPlatformRecord(data);dbPlatform.notice='';
  }catch{if(read.current()){dbPlatform.record=null;dbPlatform.notice='Platform observation unavailable. Explicitly refresh authority or fetch again.';}}
- finally{if(dbPlatform.busy===read.token)dbPlatform.busy=null;dbPlatformSync();}
+ finally{read.release();dbPlatformSync();}
 }
 function dbPlatformRecord(d){
  const exact=dbSavedExact,time=dbObservationTime,int=v=>Number.isSafeInteger(v)&&v>=0,fail=()=>{throw Error('INVALID_RESPONSE');};
@@ -4922,22 +4929,15 @@ function dbTelemetryReadinessInstall(){
  dbTelemetryReadinessSync();
 }
 function dbTelemetryReadinessCapture(kind){
- const p=dbTelemetryReadiness[kind],token={},epoch=++p.epoch,auth=dbTelemetryReadinessAuth(),view=dbTelemetryReadinessView();p.busy=token;
- return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbTelemetryReadinessAuth()&&view===dbTelemetryReadinessView()};
+ return dbCaptureObservationRead(dbTelemetryReadiness[kind],dbTelemetryReadinessAuth,dbTelemetryReadinessView);
 }
 async function dbTelemetryReadinessRefreshAuth(kind){
  dbTelemetryReadinessSync();const p=dbTelemetryReadiness[kind];if(!p||p.busy||!dbPlatformCanRefresh())return;
  const read=dbTelemetryReadinessCapture(kind);p.notice='refreshing';dbTelemetryReadinessSync();
  try{
-  const response=await fetch('/api/session');if(!read.current())return;
-  if([401,403].includes(response.status)){dbAdminSession({});return;}
-  const session=await response.json();if(!read.current())return;
-  if(!response.ok)throw Error('UNAVAILABLE');
-  dbAdminSession(session);
-  if(JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
-  p.notice=dbTelemetryReadinessAllowed()?'verified':'denied';
+  await dbRefreshPlatformAuthority(read,{nonOk:'fail',onDenied:()=>{},onApplied:()=>{p.notice=dbTelemetryReadinessAllowed()?'verified':'denied';}});
  }catch{if(read.current()){p.record=null;p.notice='failed';}}
- finally{if(p.busy===read.token)p.busy=null;dbTelemetryReadinessSync();}
+ finally{read.release();dbTelemetryReadinessSync();}
 }
 async function dbTelemetryReadinessFetch(kind){
  dbTelemetryReadinessSync();const p=dbTelemetryReadiness[kind];if(!p||p.busy||!dbTelemetryReadinessAllowed())return;
@@ -4950,7 +4950,7 @@ async function dbTelemetryReadinessFetch(kind){
   const data=JSON.parse(text);if(!read.current())return;
   p.record=dbTelemetryReadinessRecord(data);p.notice='';
  }catch{if(read.current()){p.record=null;p.notice='failed';}}
- finally{if(p.busy===read.token)p.busy=null;dbTelemetryReadinessSync();}
+ finally{read.release();dbTelemetryReadinessSync();}
 }
 
 function dbTelemetryReadinessRecord(data){
@@ -5977,21 +5977,15 @@ function dbResourcesInstall(){
  const output=dbAdminNode('div','observation-resources-output',body);output.className='table-wrap';output.setAttribute('aria-live','polite');dbResourcesSync();
 }
 function dbResourcesCapture(){
- const p=dbResources,token={},epoch=++p.epoch,auth=dbPlatformAuth();p.busy=token;
- return {token,current:()=>p.busy===token&&p.epoch===epoch&&auth===dbPlatformAuth()};
+ return dbCaptureObservationRead(dbResources,dbPlatformAuth);
 }
 async function dbResourcesRefreshAuth(){
  dbResourcesSync();if(dbResources.busy||!dbPlatformCanRefresh())return;
  const read=dbResourcesCapture();dbResources.notice='Refreshing platform authority.';dbResourcesSync();
  try{
-  const response=await fetch('/api/session');if(!read.current())return;
-  if([401,403].includes(response.status)){dbAdminSession({});dbResources.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';return;}
-  const session=await response.json();if(!read.current())return;
-  dbAdminSession(response.ok?session:{});
-  if(response.ok&&JSON.stringify([session.username,session.authenticated])===dbPrincipal&&session.data_mode==='database')dbUpdateMaximumRole(session.maximum_role);
-  dbResources.notice=dbObservationPlatform('admin')?'Resource authority verified. Select Fetch resource settings.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';
+  await dbRefreshPlatformAuthority(read,{nonOk:'revoke',onDenied:()=>{dbResources.notice='Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';},onApplied:()=>{dbResources.notice=dbObservationPlatform('admin')?'Resource authority verified. Select Fetch resource settings.':'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.';}});
  }catch{if(read.current())dbResources.notice='Resource settings unavailable. Explicitly refresh authority or fetch again.';}
- finally{if(dbResources.busy===read.token)dbResources.busy=null;dbResourcesSync();}
+ finally{read.release();dbResourcesSync();}
 }
 async function dbResourcesFetch(){
  dbResourcesSync();if(dbResources.busy||!dbObservationPlatform('admin'))return;
@@ -6003,7 +5997,7 @@ async function dbResourcesFetch(){
   if(new TextEncoder().encode(body).length>65536)throw Error('INVALID_RESPONSE');const data=JSON.parse(body);
   if(!response.ok)throw Error('UNAVAILABLE');dbResources.record=dbResourcesRecord(data);dbResources.notice='';
  }catch{if(read.current()){dbResources.record=null;dbResources.notice='Resource settings unavailable. Explicitly refresh authority or fetch again.';}}
- finally{if(dbResources.busy===read.token)dbResources.busy=null;dbResourcesSync();}
+ finally{read.release();dbResourcesSync();}
 }
 function dbResourcesRecord(d){
  const exact=dbSavedExact,time=dbObservationTime,fail=()=>{throw Error('INVALID_RESPONSE');};
