@@ -5,12 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.85"
+version: "1.86"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、追加調査の最優先として、Dbt／Manual WAP／DataOpsの入れ子fixtureのcleanup所有権を小さな共通helperへ集約した。
+設定失敗時の即時解放と成功時の親への移譲を明示し、既存の属性・補助処理・LIFO順序を維持した。
+新規5試験・旧版比較3段階・Python 3.9でのhelper4試験、最終Make137群（5,335成功・既定34 skip）と設計整合を確認し、この作業単位を完了した。[追加改善の記録](../../guides/refactoring-2026-11-12.md#追加改善-入れ子fixtureの寿命管理2026-11-12-jst)。
 
 2026-11-12 JST、[推奨リファクタリングの完了確認](../../guides/refactoring-2026-11-12.md)で全項目の実装・証拠を照合し、今回の整理を完了した。
 最終Makeはソース`8a6c1668`を固定し、DataOps venvで136群を完走（5,330件成功・既定34件skip）。別環境roleの対象集合と23重複を維持し、不要な同一環境実行1件を除いた。

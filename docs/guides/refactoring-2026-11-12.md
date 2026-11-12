@@ -44,3 +44,18 @@ Go全体の再設計、frontend framework移行、全global変数・全private�
 - 通常Workbenchで日英・320/390px・深い経路からの再読込、最終コードでの再読込・キーボードfocusを確認した。runtime profileと起動環境は維持した。
 
 全体試験の対象ソースは`8a6c1668`で固定し、最終記録との差分が文書だけであることを確認した。上表の全項目に残件はなく、今回の推奨リファクタリングを完了とする。
+
+## 追加改善: 入れ子fixtureの寿命管理（2026-11-12 JST）
+
+後続調査の最優先項目として、`DbtTests → ManualWapTests → DataOpsTests → PrincipalTests`の3か所の設定・解放を整理した。
+`tests/fixture_lifecycle.py`の小さな共通helperが、設定前から`ExitStack`で子のcleanupを所有する。
+設定失敗時は直ちに解放し、成功時だけ親へ責任を渡す。既存のTestCase・属性・補助メソッドとLIFOの解放順序を維持する。
+
+- 新規5試験で、成功時の遅延解放・一度だけのcleanup、設定例外とSkipTest、cleanup失敗時の残りの解放と親への失敗通知を確認した。
+- 実際の連鎖の3段階に例外を注入し、環境・一時ディレクトリ・module／関数patchの復元、storage削除前のpin解放を確認した。
+- 旧版の3つの`setUp`に差し戻した別プロセスでは、3段階すべてで復元確認が失敗し、元の不具合を検出することを確認した。
+- 新規試験は既存Make targetから1回だけ選択し、既存の対象と環境区分を維持した。共通helperの4試験はPython 3.9でも通過した。
+- 重点196件はワーカーで195件成功し、loopback bindをsandboxが制限した1件は通常環境で再実行して成功した。最終Makeでも当該HTTP試験を含めて通過した。
+- 実装`b1dcf58c`を固定した`make verify-local-experiment PYTHON=tools/local_experiment/dataops/.venv/bin/python3`は137群を完走し、5,335件成功・既定34件skip。backend試験は一時SQLite・SDKと模擬SQL／catalogで実施した。
+
+設計整合と差分レビューを含む最終確認を完了した。今回の変更はテストと実行定義に限定し、Platformルートなどの後続候補は別の作業単位で扱う。
