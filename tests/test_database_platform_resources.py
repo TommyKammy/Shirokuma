@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'tools/local_experiment'))
 with tempfile.TemporaryDirectory() as _bootstrap:
     with patch.dict(os.environ, {'SHIROKUMA_STATE_DIR': _bootstrap}):
         import db_platform_resources as resources
+        import db_platform_collect as collect
         import ai_routes
         import audit_service as audit
         import control_store as store
@@ -74,8 +75,8 @@ class ResourcesTests(unittest.TestCase):
                      '--context', 'context-secret', '--namespace', 'fixed-ns', '--request-timeout=15s']
         self.kube = self.patch(patch.object(resources.logical_foundation, 'kube_argv', return_value=self.argv))
         self.process = Process()
-        self.runner = self.patch(patch.object(resources.subprocess, 'Popen', side_effect=lambda *a, **k: self.process))
-        self.patch(patch.object(resources.selectors, 'DefaultSelector', Selector))
+        self.runner = self.patch(patch.object(collect.subprocess, 'Popen', side_effect=lambda *a, **k: self.process))
+        self.patch(patch.object(collect.selectors, 'DefaultSelector', Selector))
         with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
             db.execute(f'PRAGMA user_version={store.VERSION}')
         self.forbidden = []
@@ -188,7 +189,7 @@ class ResourcesTests(unittest.TestCase):
         def run(*args, **kwargs):
             order.append('source')
             return self.process
-        with patch.object(audit, '_authority', authority), patch.object(resources.subprocess, 'Popen', run):
+        with patch.object(audit, '_authority', authority), patch.object(collect.subprocess, 'Popen', run):
             self.closed(self.observe())
         self.assertEqual(order, ['auth', 'source', 'auth'])
 
@@ -354,7 +355,7 @@ class ResourcesTests(unittest.TestCase):
                 if mode == 'select_timeout':
                     stack.enter_context(patch.object(Selector, 'select', return_value=[]))
                 if mode == 'deadline':
-                    stack.enter_context(patch.object(resources.time, 'monotonic', side_effect=[0, 9]))
+                    stack.enter_context(patch.object(collect.time, 'monotonic', side_effect=[0, 9]))
                 if mode == 'wait_timeout':
                     original = self.process.wait
                     def wait(timeout=None):
@@ -372,7 +373,7 @@ class ResourcesTests(unittest.TestCase):
                     self.assertEqual(self.process.killed, mode != 'exit')
                     if mode != 'exit':
                         self.assertIsNone(self.process.timeouts[-1])
-        with patch.object(resources.subprocess, 'Popen', side_effect=OSError('error-secret')) as run:
+        with patch.object(collect.subprocess, 'Popen', side_effect=OSError('error-secret')) as run:
             self.closed(self.observe(), False)
             run.assert_called_once()
 
