@@ -11,11 +11,11 @@
 | UI非同期処理 | Platform・Readiness・Resourcesで要求の権限・世代・解除判定を共通化する | 完了: `803ab8e9` |
 | AI保存・所有者・履歴 | SQL提案・カタログ提案・保存済み計画説明の同一処理を共通化する | 完了: `d0092e65` |
 | dbt VIEW・品質テスト | 保存runの準備と品質テスト前後の確認をdbtが所有し、DataOpsが送信・観測を担当する | 完了: `0642a4da`, `60416c0d` |
-| dbt継続scope | 名前付きの不変recordと読取・bind APIを使い、DataOps外からraw ContextVarや位置番号を参照しない | 完了: 新規4契約試験・関連回帰459件 |
-| native audit・公開 | DataOpsがpublicationの内部recordやdbt固有receiptを解釈せず、送信・commit保持・観測を担当する | 実装済: 新規5試験・旧実装比較5件成功、最終全体回帰待ち |
-| CSS・基本翻訳辞書 | 固定assetへ分離し、共通テスト読込・両サーバーモードの認証・MIME・表示を維持する | 完了: Workbench回帰1,379件・認証11件、日英・再読込・320/390px |
-| Platform収集 | ResourcesとWorkload Baselineで完全に同じbounded subprocess収集を1実装にする | 完了: backend42件・関連UI36件、process blockのAST一致 |
-| テスト実行定義 | 同じPython環境での不要な重複選択を除き、環境別の検証意図と対象集合を明示する | 完了: 環境別対象集合・順序を維持し、同一環境の重複1件だけ削除 |
+| dbt継続scope | 名前付きの不変recordと読取・bind APIを使い、DataOps外からraw ContextVarや位置番号を参照しない | 完了: `567333e`、新規4契約試験・関連回帰459件 |
+| native audit・公開 | DataOpsがpublicationの内部recordやdbt固有receiptを解釈せず、送信・commit保持・観測を担当する | 完了: `8a6c1668`、新規5試験・旧実装比較5件、最終全体回帰 |
+| CSS・基本翻訳辞書 | 固定assetへ分離し、共通テスト読込・両サーバーモードの認証・MIME・表示を維持する | 完了: `f794d94`、Workbench回帰1,379件・認証11件、日英・再読込・320/390px |
+| Platform収集 | ResourcesとWorkload Baselineで完全に同じbounded subprocess収集を1実装にする | 完了: `ed72645`、backend42件・関連UI36件、process blockのAST一致 |
+| テスト実行定義 | 同じPython環境での不要な重複選択を除き、環境別の検証意図と対象集合を明示する | 完了: `41cb939`、環境別対象集合・順序を維持し、同一環境の重複1件だけ削除 |
 
 ## 維持する契約
 
@@ -35,3 +35,12 @@
 
 Go全体の再設計、frontend framework移行、全global変数・全private呼出しの排除、過去資料の大掃除は当初分析で推奨していない。
 実行復旧や権限確認の必要な複雑さを機械的に共通化せず、上の完了条件を満たした時点で今回の整理を完了する。
+
+## 最終結果（2026-11-12 JST）
+
+- `make verify-local-experiment PYTHON=tools/local_experiment/dataops/.venv/bin/python3`は、136コマンドすべて成功。5,364件中5,330件成功・34件スキップで完走した。
+- スキップは既定のopt-in受入・統合試験30件、OPA未導入3件、任意pyarrow依存1件。backendの検証は一時SQLite・SDKと模擬SQL／catalogを用いた。
+- `make verify-design-context`と差分レビューを通過。223 testfileに対する環境role別の対象集合を維持し、新規の境界試験も選択されることを確認した。
+- 通常Workbenchで日英・320/390px・深い経路からの再読込、最終コードでの再読込・キーボードfocusを確認した。runtime profileと起動環境は維持した。
+
+全体試験の対象ソースは`8a6c1668`で固定し、最終記録との差分が文書だけであることを確認した。上表の全項目に残件はなく、今回の推奨リファクタリングを完了とする。
