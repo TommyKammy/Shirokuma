@@ -3,6 +3,7 @@
 No SQL or compile is launched by reads/reconciliation. Execution credentials and
 leases live only in the accepting process; records contain no reusable secrets.
 """
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 import hashlib
 import json
@@ -946,6 +947,22 @@ def _table_properties(execution, *, build=None):
         if len(matches) != 1 or matches[0].get('table_properties') not in ({}, {'format': 'PARQUET'}):
             raise QueryError('DBT_PLAN_CHANGED', 409)
         return dict(matches[0]['table_properties'])
+
+
+@contextmanager
+def saved_test_query(execution):
+    """Prepare saved SQL for use by the caller, then post-check VIEW bindings.
+
+    No connection scope spans use; post-checks run only after a successful query.
+    """
+    from manual_wap import _compile_model
+    normalized = _test_select(execution)
+    inputs = _pinned(execution, normalized['sources'])
+    sql = _compile_model(normalized['sql'], normalized['sources'], execution=execution, measurements=inputs)
+    yield 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures'
+    for alias, ref in normalized['sources'].items():
+        if inputs[alias].get('kind') == 'VIEW':
+            _view_binding(execution, ref, expected=inputs[alias])
 
 
 def _test_select(execution):

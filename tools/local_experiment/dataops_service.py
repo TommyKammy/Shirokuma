@@ -786,14 +786,8 @@ class Execution:
     def _dbt_test(self):
         """Execute only the saved test node of this durable private child."""
         import db_dbt
-        from manual_wap import _compile_model
-        normalized = db_dbt._test_select(self)
-        inputs = db_dbt._pinned(self, normalized['sources'])
-        sql = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
-        rows = self._execute('dbt_test', 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures', 'test')['data']
-        for alias, ref in normalized['sources'].items():
-            if inputs[alias].get('kind') == 'VIEW':
-                db_dbt._view_binding(self, ref, expected=inputs[alias])
+        with db_dbt.saved_test_query(self) as sql:
+            rows = self._execute('dbt_test', sql, 'test')['data']
         if len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0:
             raise QueryError('INVALID_DBT_TEST_RESULT', 502)
         return rows[0][0]
