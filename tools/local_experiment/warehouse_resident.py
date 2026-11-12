@@ -7,6 +7,7 @@ import warehouse_admission as admission
 import http.client
 import http.server
 import json
+import database_http_json
 import logging
 import os
 from pathlib import Path
@@ -1508,13 +1509,10 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             self.wfile.write(data)
 
         def database_body(self):
-            # Share normal JSON framing without routing native SQL via Workbench.
-            from workbench_server import WorkbenchHandler
-            return WorkbenchHandler.database_body(self)
+            return database_http_json.database_body(self)
 
         def respond(self, value, status=200):
-            from workbench_server import WorkbenchHandler
-            return WorkbenchHandler.respond(self, value, status)
+            return database_http_json.respond(self, value, status)
 
         def stage_request(self):
             import ai_routes

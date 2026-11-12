@@ -786,5 +786,152 @@ class CoreHTTPTests(unittest.TestCase):
             self.assertEqual(item['capabilities']['export'], kind == 'TABLE')
 
 
+class DatabaseHTTPJSONCodecTests(unittest.TestCase):
+    """Inherited codec contracts on both actual handler classes, without routing."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.native = HTTPRoutesTests.native_handler(cls)
+        cls.handlers = (wb.WorkbenchHandler, cls.native)
+
+    def body_handler(self, raw=b'{}', length=None, content_type='application/json', extra=()):
+        from email.message import Message
+        headers = Message()
+        if content_type is not None:
+            headers['Content-Type'] = content_type
+        if length is not None:
+            headers['Content-Length'] = length
+        for name, value in extra:
+            headers[name] = value
+        return SimpleNamespace(headers=headers, rfile=Mock(read=Mock(return_value=raw)))
+
+    def test_utf8_utf16_utf32_autodetection_and_short_reads(self):
+        value = {'nested': {'name': '雪'}, 'items': [1, True, None]}
+        for handler in self.handlers:
+            for encoding in ('utf-8', 'utf-8-sig', 'utf-16', 'utf-16-le', 'utf-16-be',
+                             'utf-32', 'utf-32-le', 'utf-32-be'):
+                raw = json.dumps(value, ensure_ascii=False).encode(encoding)
+                for length in (str(len(raw)), str(len(raw) + 20), str(10 * 1024 * 1024)):
+                    with self.subTest(handler=handler, encoding=encoding, length=length):
+                        request = self.body_handler(raw, length)
+                        self.assertEqual(handler.database_body(request), value)
+                        request.rfile.read.assert_called_once_with(int(length))
+
+    def test_content_type_and_exactly_one_length_before_read(self):
+        for handler in self.handlers:
+            for content_type, length, extra in (
+                    (None, '2', ()), ('text/plain', '2', ()),
+                    ('application/problem+json', '2', ()), ('application/json', None, ()),
+                    ('application/json', '2', (('Content-Length', '2'),)),
+                    ('application/json', '2', (('Content-Length', '3'),))):
+                with self.subTest(handler=handler, content_type=content_type, length=length, extra=extra):
+                    request = self.body_handler(length=length, content_type=content_type, extra=extra)
+                    with self.assertRaisesRegex(ValueError, '^JSON body required$'):
+                        handler.database_body(request)
+                    request.rfile.read.assert_not_called()
+            request = self.body_handler(length='2', content_type='application/json; charset=utf-16')
+            self.assertEqual(handler.database_body(request), {})
+
+    def test_int_length_bounds_and_truthy_transfer_encoding(self):
+        for handler in self.handlers:
+            for length in ('0', '-1', str(10 * 1024 * 1024 + 1), '', 'two', '2.0', '2,2'):
+                with self.subTest(handler=handler, length=length):
+                    request = self.body_handler(length=length)
+                    with self.assertRaises(ValueError):
+                        handler.database_body(request)
+                    request.rfile.read.assert_not_called()
+            for length in ('2', ' +2 ', '0002', '٢'):
+                for extra in ((), (('Transfer-Encoding', ''),),
+                              (('Transfer-Encoding', ''), ('Transfer-Encoding', 'chunked'))):
+                    request = self.body_handler(length=length, extra=extra)
+                    self.assertEqual(handler.database_body(request), {})
+                    request.rfile.read.assert_called_once_with(2)
+            for transfer in ('chunked', 'identity', ' '):
+                request = self.body_handler(length='2', extra=(('Transfer-Encoding', transfer),))
+                with self.assertRaisesRegex(ValueError, '^Invalid body length$'):
+                    handler.database_body(request)
+                request.rfile.read.assert_not_called()
+
+    def test_nested_duplicates_nonfinite_and_nonobject_rejected(self):
+        invalid = (
+            (b'{"x":1,"x":2}', 'Duplicate JSON field'),
+            (b'{"outer":{"x":1,"x":2}}', 'Duplicate JSON field'),
+            (b'{"outer":[{"x":1,"x":2}]}', 'Duplicate JSON field'),
+            (b'{"outer":[NaN]}', 'Invalid JSON number'),
+            (b'{"outer":{"x":Infinity}}', 'Invalid JSON number'),
+            (b'{"x":-Infinity}', 'Invalid JSON number'),
+            (b'[]', 'Body must be an object'), (b'null', 'Body must be an object'),
+            (b'"text"', 'Body must be an object'), (b'1', 'Body must be an object'),
+            (b'true', 'Body must be an object'),
+        )
+        for handler in self.handlers:
+            for raw, message in invalid:
+                with self.subTest(handler=handler, raw=raw):
+                    with self.assertRaisesRegex(ValueError, '^' + message + '$'):
+                        handler.database_body(self.body_handler(raw, str(len(raw))))
+            for raw in (b'', b'{', b'{} trailing', b'\xff'):
+                with self.assertRaises((ValueError, UnicodeError)):
+                    handler.database_body(self.body_handler(raw, '100'))
+            raw = b'{"a":{"x":1},"b":{"x":2}}'
+            self.assertEqual(handler.database_body(self.body_handler(raw, str(len(raw)))),
+                             {'a': {'x': 1}, 'b': {'x': 2}})
+
+    def response_handler(self):
+        events = []
+        handler = SimpleNamespace(
+            send_response=lambda status: events.append(('status', status)),
+            send_header=lambda name, value: events.append(('header', name, value)),
+            wfile=SimpleNamespace(write=lambda data: events.append(('write', data))))
+
+        def end_headers():
+            # Dynamic dispatch must retain each server's own header policy.
+            handler.send_header('Server-Policy', 'dynamic')
+            events.append(('end_headers',))
+        handler.end_headers = end_headers
+        return handler, events
+
+    def test_serialization_bytes_default_str_and_exact_response_order(self):
+        value = {'bytes': b'raw', 'unicode': '雪'}
+        expected = b'{"bytes": "b\'raw\'", "unicode": "\\u96ea"}'
+        for handler in self.handlers:
+            response, events = self.response_handler()
+            response._creation_location = '/api/v1/objects/new'
+            self.assertIsNone(handler.respond(response, value, 401))
+            self.assertEqual(events, [
+                ('status', 401), ('header', 'Location', '/api/v1/objects/new'),
+                ('header', 'WWW-Authenticate', 'Basic realm="Shirokuma", charset="UTF-8"'),
+                ('header', 'Content-Type', 'application/json; charset=utf-8'),
+                ('header', 'Content-Length', str(len(expected))),
+                ('header', 'Server-Policy', 'dynamic'), ('end_headers',), ('write', expected)])
+            self.assertFalse(hasattr(response, '_creation_location'))
+            events.clear()
+            handler.respond(response, {})
+            self.assertEqual(events, [
+                ('status', 200), ('header', 'Content-Type', 'application/json; charset=utf-8'),
+                ('header', 'Content-Length', '2'), ('header', 'Server-Policy', 'dynamic'),
+                ('end_headers',), ('write', b'{}')])
+
+    def test_falsy_location_is_retained_and_only_truthy_location_is_deleted(self):
+        for handler in self.handlers:
+            for location in (None, '', False, 0):
+                response, events = self.response_handler()
+                response._creation_location = location
+                handler.respond(response, {}, 201)
+                self.assertIs(response._creation_location, location)
+                self.assertEqual(events, [
+                    ('status', 201), ('header', 'Content-Type', 'application/json; charset=utf-8'),
+                    ('header', 'Content-Length', '2'), ('header', 'Server-Policy', 'dynamic'),
+                    ('end_headers',), ('write', b'{}')])
+
+    def test_native_codec_is_independent_of_workbench_methods(self):
+        database_body, respond = self.native.database_body, self.native.respond
+        with patch.object(wb.WorkbenchHandler, 'database_body', side_effect=AssertionError('Workbench body called')), \
+                patch.object(wb.WorkbenchHandler, 'respond', side_effect=AssertionError('Workbench response called')):
+            self.assertEqual(database_body(self.body_handler(b'{"native":true}', '15')), {'native': True})
+            response, events = self.response_handler()
+            respond(response, {'native': True})
+            self.assertEqual(events[-1], ('write', b'{"native": true}'))
+
+
 if __name__ == '__main__':
     unittest.main()

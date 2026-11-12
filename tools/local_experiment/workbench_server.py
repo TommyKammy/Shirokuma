@@ -5,6 +5,7 @@ import base64
 import contextlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 import json
+import database_http_json
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -411,23 +412,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         return True
 
     def database_body(self):
-        def pairs(items):
-            result = {}
-            for key, value in items:
-                if key in result:
-                    raise ValueError('Duplicate JSON field')
-                result[key] = value
-            return result
-        if self.headers.get_content_type() != 'application/json' or len(self.headers.get_all('Content-Length', [])) != 1:
-            raise ValueError('JSON body required')
-        length = int(self.headers['Content-Length'])
-        if not 0 < length <= 10 * 1024 * 1024 or self.headers.get('Transfer-Encoding'):
-            raise ValueError('Invalid body length')
-        value = json.loads(self.rfile.read(length), object_pairs_hook=pairs,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid JSON number')))
-        if not isinstance(value, dict):
-            raise ValueError('Body must be an object')
-        return value
+        return database_http_json.database_body(self)
 
     def end_headers(self):
         # Only the Workbench's own origin may control this local lab.
@@ -441,18 +426,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def respond(self, value, status=200):
-        data = json.dumps(value, default=str).encode("utf-8")
-        self.send_response(status)
-        creation_location = getattr(self, '_creation_location', None)
-        if creation_location:
-            self.send_header('Location', creation_location)
-            del self._creation_location
-        if status == 401:
-            self.send_header('WWW-Authenticate', 'Basic realm="Shirokuma", charset="UTF-8"')
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        return database_http_json.respond(self, value, status)
 
     def do_OPTIONS(self):
         self.send_response(204)
