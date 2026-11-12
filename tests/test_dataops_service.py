@@ -75,7 +75,7 @@ class DataOpsTests(unittest.TestCase):
     def test_standalone_execution_has_no_dbt_property_contract(self):
         import db_dbt
         execution = self.begin()
-        self.assertIsNone(ds._dbt.get())
+        self.assertIsNone(ds.current_dbt_continuation())
         self.assertEqual(db_dbt._table_properties(execution), {})
         self.assertEqual(db_dbt._table_properties(execution, build={'id': 'manual'}), {})
         execution.cancel()

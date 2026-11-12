@@ -188,7 +188,7 @@ def save_model(principal, context, *, model_id, sql, sources, target,
         ds._column(column)
     _compile_model(sql, sources)
     for ref in sources.values():
-        if ds._dbt.get() is not None:
+        if ds.current_dbt_continuation() is not None:
             metadata._dbt_read_ref(ref)
         else:
             metadata._ref(ref)

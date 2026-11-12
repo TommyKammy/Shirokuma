@@ -746,19 +746,17 @@ class DbtTests(unittest.TestCase):
         original = dbt._table_properties
         called = []
         def check(execution, **kwargs):
-            scope = ds._dbt.get()
-            if not called and scope and scope[6] == 'build':
+            scope = ds.current_dbt_continuation()
+            if not called and scope and scope.phase == 'build':
                 called.append(True)
                 with control_store.connect() as db:
                     db.execute("UPDATE dbt_run_operations SET node_id='model.second' WHERE operation_id=?", (execution.id,))
                 self.code('DBT_CONTINUATION_REQUIRED', original, execution, **kwargs)
                 with control_store.connect() as db:
-                    db.execute('UPDATE dbt_run_operations SET node_id=? WHERE operation_id=?', (scope[7], execution.id))
-                token = ds._dbt.set(scope[:6] + ('publish',) + scope[7:])
-                try:
+                    db.execute('UPDATE dbt_run_operations SET node_id=? WHERE operation_id=?', (scope.node_id, execution.id))
+                with ds.dbt_child_scope(scope.principal, scope.context, scope.parent, scope.frozen,
+                                        scope.credential_ref, scope.run_id, 'publish', scope.node_id):
                     self.code('DBT_CONTINUATION_REQUIRED', original, execution, **kwargs)
-                finally:
-                    ds._dbt.reset(token)
             return original(execution, **kwargs)
         with patch.object(dbt, '_table_properties', side_effect=check):
             self.assertEqual(self.build_run()['state'], 'READY')

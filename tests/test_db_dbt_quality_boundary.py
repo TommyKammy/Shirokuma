@@ -1,5 +1,5 @@
 """Saved quality-test behavior through existing admitted DataOps entrypoints."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import unittest
 from unittest.mock import patch
 
@@ -51,18 +51,20 @@ class SavedQualityBoundaryTests(unittest.TestCase):
             def check(execution, original):
                 for invalid in ('phase', 'saved_phase', 'child_link'):
                     with self.subTest(invalid=invalid):
-                        scope = ds._dbt.get()
-                        token = None
-                        if invalid == 'phase':
-                            token = ds._dbt.set(scope[:6] + ('build',) + scope[7:])
-                        elif invalid == 'saved_phase':
-                            fixture.mutate(scope[5], lambda run: run.update(_phase='build'))
-                        else:
+                        scope = ds.current_dbt_continuation()
+                        if invalid == 'saved_phase':
+                            fixture.mutate(scope.run_id, lambda run: run.update(_phase='build'))
+                        elif invalid == 'child_link':
                             with control_store.connect() as db:
                                 db.execute("UPDATE dbt_run_operations SET node_id='test.other' WHERE operation_id=?",
                                            (execution.id,))
+                        phase_scope = (ds.dbt_child_scope(
+                            scope.principal, scope.context, scope.parent, scope.frozen,
+                            scope.credential_ref, scope.run_id, 'build', scope.node_id)
+                            if invalid == 'phase' else nullcontext())
                         try:
-                            with (patch.object(dbt, '_test_select', wraps=dbt._test_select) as select,
+                            with (phase_scope,
+                                  patch.object(dbt, '_test_select', wraps=dbt._test_select) as select,
                                   patch.object(dbt, '_pinned', wraps=dbt._pinned) as pinned,
                                   patch.object(wap, '_compile_model', wraps=wap._compile_model) as compile,
                                   patch.object(execution, '_execute', wraps=execution._execute) as send):
@@ -78,14 +80,12 @@ class SavedQualityBoundaryTests(unittest.TestCase):
                                 compile.assert_not_called()
                                 send.assert_not_called()
                         finally:
-                            if token is not None:
-                                ds._dbt.reset(token)
-                            elif invalid == 'saved_phase':
-                                fixture.mutate(scope[5], lambda run: run.update(_phase=scope[6]))
-                            else:
+                            if invalid == 'saved_phase':
+                                fixture.mutate(scope.run_id, lambda run: run.update(_phase=scope.phase))
+                            elif invalid == 'child_link':
                                 with control_store.connect() as db:
                                     db.execute('UPDATE dbt_run_operations SET node_id=? WHERE operation_id=?',
-                                               (scope[7], execution.id))
+                                               (scope.node_id, execution.id))
                 return original(execution)
             self.at_first_test(fixture, check)
 

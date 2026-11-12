@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.79"
+version: "1.80"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、dbt継続scopeを名前付き不変recordと読取・bind APIへ移行し、DataOps外のraw ContextVar・位置番号参照を除いた。
+owner pinの先頭5項目・子操作の3項目、actor／context照合、継承優先順、例外・thread分離を新規4試験で固定し、認可・受付・送信guardを維持した。
+SQL/WAP・native・graph・公開・復旧の関連回帰459件が通過した。検証は一時SQLiteと模擬SQL transport／catalogで行った。
+[今回の実装順と完了条件](../../guides/refactoring-2026-11-12.md)を固定し、残る境界・asset・収集・テスト定義の整理と最終全体回帰を続ける。
 
 2026-11-12 JST、SQL/WAPの保存済み品質テストのSQL準備と実行後VIEW確認をdbt側の専用APIへ集約し、入力pinを内部に閉じた。
 DataOpsはSQL送信とCOUNTの形式・型・非負確認を担当する。SQL失敗時は実行後確認を省略し、成功時はVIEW確認をCOUNT確認より先に行う順序を維持した。

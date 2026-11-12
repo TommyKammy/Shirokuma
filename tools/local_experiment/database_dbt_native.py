@@ -244,7 +244,7 @@ def _check_inputs(execution, inputs, sources):
         current = execution.wap_measure(ref)
         if any(current[k] != inputs[alias][k] for k in ('ref', 'schema_id', 'schema_fingerprint')):
             _reject('SOURCE_SCHEMA_CHANGED')
-        if ds._dbt.get() and ref.schema_id == execution._context().schema_id and current != inputs[alias]:
+        if ds.current_dbt_continuation() and ref.schema_id == execution._context().schema_id and current != inputs[alias]:
             _reject('STAGE_CHANGED')
 
 
@@ -291,7 +291,7 @@ class _Bridge:
         self.candidate_ref = None
         context = execution._context()
         self.target = (context.sql_catalog, execution._schema(locator.schema_id, write=True).sql_name, locator.physical_name)
-        self.inputs = (db_dbt._pinned(execution, approved['sources']) if ds._dbt.get() else
+        self.inputs = (db_dbt._pinned(execution, approved['sources']) if ds.current_dbt_continuation() else
                        {alias: execution.wap_measure(ref) for alias, ref in approved['sources'].items()})
         self.receipt.update(candidate_locator=asdict(locator), pins=self.inputs)
 
@@ -453,12 +453,12 @@ class _TestBridge(_Bridge):
                 _reject('DBT_NATIVE_TEST_RESULT_INVALID')
             self.failures = count
             self.receipt['query_id'] = page['id']
-            scope = ds._dbt.get()
+            scope = ds.current_dbt_continuation()
             if scope is None:
                 _reject('DBT_CONTINUATION_REQUIRED')
             with control_store.connect() as db:
-                db_dbt._check_child(db, self.execution.principal, context, *scope[5:])
-                _, run = db_dbt._row(db, scope[5])
+                db_dbt._check_child(db, self.execution.principal, context, *scope.child_key)
+                _, run = db_dbt._row(db, scope.run_id)
                 results = run.setdefault('_native_test_results', {})
                 if self.test['unique_id'] in results:
                     _reject('DBT_NATIVE_TEST_CALLBACK_REUSED')

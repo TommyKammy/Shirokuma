@@ -16,7 +16,7 @@ import math
 import re
 import secrets
 import threading
-from typing import Optional
+from typing import NamedTuple, Optional
 import uuid
 
 import control_store
@@ -43,10 +43,34 @@ _mart = ContextVar('dataops_mart', default=None)
 _dbt = ContextVar('dataops_dbt', default=None)
 
 
+class DbtContinuation(NamedTuple):
+    principal: request_auth.AuthenticatedPrincipal
+    context: ResolvedQueryContext
+    parent: object
+    frozen: object
+    credential_ref: str
+    run_id: str
+    phase: str
+    node_id: str
+
+    @property
+    def owner_pin(self):
+        return self[:5]
+
+    @property
+    def child_key(self):
+        return self.run_id, self.phase, self.node_id
+
+
+def current_dbt_continuation() -> Optional[DbtContinuation]:
+    """Return the current server-owned dbt continuation, if any."""
+    return _dbt.get()
+
+
 @contextmanager
-def _dbt_scope(principal, context, parent, frozen, credential_ref, run_id, phase, node_id):
+def dbt_child_scope(principal, context, parent, frozen, credential_ref, run_id, phase, node_id):
     """Private continuation of one durable dbt node, never request supplied."""
-    token = _dbt.set((principal, context, parent, frozen, credential_ref, run_id, phase, node_id))
+    token = _dbt.set(DbtContinuation(principal, context, parent, frozen, credential_ref, run_id, phase, node_id))
     try:
         yield
     finally:
