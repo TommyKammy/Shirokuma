@@ -5,6 +5,7 @@ Authored for ROOT host Node execution; this worker does not execute tests.
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_foundation_baseline_database_ui as foundation_ui
+from workbench_source import WorkbenchSource
 
 resources_ui = foundation_ui.resources_ui
 RECENT = r"""
@@ -166,9 +167,10 @@ for(const locale of ['ja','en']){setLanguage(locale);dbControls();for(const kind
 assert.equal(JSON.stringify(i18n.ja),globalJA);
 """)
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn('#observation-recent-failures-panel,#observation-sre-recent-failures',html)
-        self.assertIn('table-layout:fixed;width:100%;min-width:0',html)
-        self.assertIn('white-space:normal;overflow-wrap:anywhere',html)
+        css = WorkbenchSource(html).css
+        self.assertIn('#observation-recent-failures-panel,#observation-sre-recent-failures',css)
+        self.assertIn('table-layout:fixed;width:100%;min-width:0',css)
+        self.assertIn('white-space:normal;overflow-wrap:anywhere',css)
 
     def test_duplicate_record_disclosures_keep_position_focus_and_same_language_dom(self):
         self.javascript(r"""

@@ -3,6 +3,7 @@ import json
 import unittest
 
 import test_workbench_database_ui as database_ui
+from workbench_source import WorkbenchSource
 
 
 SETUP = r'''
@@ -173,14 +174,14 @@ assert.equal($('p35-ingest-confirm').disabled,true);assert.equal(p.file,file);as
 ''')
 
     def test_recovery_context_help_controls_and_scoped_long_label_constraints(self):
-        html = database_ui.HTML
+        css = WorkbenchSource(database_ui.HTML).css
         for rule in (
             '#p35-ingest-recovery,#p35-wap-recovery{min-width:0;max-width:100%;flex-wrap:wrap}',
             '#p35-ingest-recovery>*,#p35-wap-recovery>*{min-width:0;max-width:100%}',
             '#p35-ingest-recovery select,#p35-wap-recovery select{min-width:0;max-width:100%}',
             '#p35-ingest-recovery .help,#p35-wap-recovery .help{flex-basis:100%;overflow-wrap:anywhere;white-space:normal}',
         ):
-            self.assertIn(rule, html)
+            self.assertIn(rule, css)
         self.javascript(r'''
 const p=await ready();
 assert.equal(dataopsRecoveryText('x\x85'),true);for(const key of ['x\x00','x\x1f','x\x7f'])assert.equal(dataopsRecoveryText(key),false);

@@ -1,4 +1,5 @@
 """Execute saved-lineage actions in the mounted Database workspace."""
+from workbench_source import WorkbenchSource
 from html.parser import HTMLParser
 import json
 import re
@@ -122,7 +123,7 @@ const deniedCount=submissions.length;await action.onclick();assert.equal(submiss
 ''')
 
     def test_database_lineage_wraps_root_direct_children_and_long_text(self):
-        css = database_ui.HTML.split('</style>', 1)[0]
+        css = WorkbenchSource(database_ui.HTML).css
         root = re.search(r'html\[data-data-mode="database"\] #table-lineage\{([^}]+)\}', css)[1]
         children = re.search(r'html\[data-data-mode="database"\] #table-lineage>\*\{([^}]+)\}', css)[1]
         self.assertIn('grid-template-columns:minmax(0,1fr)', root)

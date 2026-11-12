@@ -6,6 +6,7 @@ import json
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_foundation_baseline_database_ui as foundation_ui
+from workbench_source import WorkbenchSource
 
 resources_ui = foundation_ui.resources_ui
 CONTROLLERS = r"""
@@ -224,8 +225,9 @@ await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length
 await controllerBoot();await baselineFetch();const saved=dbFoundationBaseline.record,busy={};dbFoundationBaseline.busy=busy;await controllerFetch();await dbFoundationControllersRefreshAuth();assert.equal(dbFoundationBaseline.record,saved);assert.equal(dbFoundationBaseline.busy,busy);
 """)
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn('#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel',html)
-        self.assertIn('repeat(auto-fit,minmax(min(100%,12rem),1fr))',html)
+        css = WorkbenchSource(html).css
+        self.assertIn('#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel',css)
+        self.assertIn('repeat(auto-fit,minmax(min(100%,12rem),1fr))',css)
         self.assertIn('未報告（0省略の場合あり）',html)
 
 

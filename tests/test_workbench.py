@@ -598,8 +598,9 @@ eval(SHARED+JOBS+`
         format_control = doc.by_id('stage-format')
         automatic = next(node for node in doc.nodes if node.get('value') == 'auto' and format_control in node['ancestors'])
         self.assertEqual(automatic['text'], 'Automatic')
-        self.assertIn('#stages-area .table-wrap{max-width:100%;overflow:auto}', html)
-        self.assertIn('#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}', html)
+        css = WorkbenchSource(html).css
+        self.assertIn('#stages-area .table-wrap{max-width:100%;overflow:auto}', css)
+        self.assertIn('#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}', css)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_stage_preview_invalidation_and_role_change_pending_guard(self):
@@ -1950,12 +1951,20 @@ const run=eval(HANDLER);
                 self.assertIn(b"AgentHouse Pawprints", body)
 
     def test_chart_static_asset(self):
-        status, headers, body = self.request('/assets/result_chart.js')
-        self.assertEqual(status, 200)
-        self.assertEqual(headers['Content-Type'], 'application/javascript; charset=utf-8')
-        self.assertEqual(headers['Cache-Control'], 'no-store')
-        self.assertEqual(int(headers['Content-Length']), len(body))
-        self.assertEqual(body, wb.RESULT_CHART.read_bytes())
+        for name, mime in (('result_chart.js', 'application/javascript; charset=utf-8'),
+                           ('base_i18n.js', 'application/javascript; charset=utf-8'),
+                           ('workbench.css', 'text/css; charset=utf-8')):
+            path, asset = '/assets/' + name, wb.INDEX.with_name(name)
+            with self.subTest(path=path):
+                status, headers, body = self.request(path)
+                self.assertEqual(status, 200)
+                self.assertEqual(headers['Content-Type'], mime)
+                self.assertEqual(headers['Cache-Control'], 'no-store')
+                self.assertEqual(int(headers['Content-Length']), len(body))
+                self.assertEqual(body, asset.read_bytes())
+            for suffix in ('?v=1', '?x=1&x=2'):
+                with self.subTest(path=path, suffix=suffix):
+                    self.assertEqual(self.request(path + suffix)[0], 403)
         for path in ('/assets/unknown.js', '/assets/../index.html',
                      '/assets/%2e%2e/index.html', '/assets/result_chart.js/extra'):
             self.assertEqual(self.request(path)[0], 404)

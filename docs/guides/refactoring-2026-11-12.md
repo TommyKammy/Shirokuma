@@ -13,7 +13,7 @@
 | dbt VIEW・品質テスト | 保存runの準備と品質テスト前後の確認をdbtが所有し、DataOpsが送信・観測を担当する | 完了: `0642a4da`, `60416c0d` |
 | dbt継続scope | 名前付きの不変recordと読取・bind APIを使い、DataOps外からraw ContextVarや位置番号を参照しない | 完了: 新規4契約試験・関連回帰459件 |
 | native audit・公開 | DataOpsがpublicationの内部recordやdbt固有receiptを解釈せず、送信・commit保持・観測を担当する | 未完了 |
-| CSS・基本翻訳辞書 | 固定assetへ分離し、共通テスト読込・両サーバーモードの認証・MIME・表示を維持する | 未完了 |
+| CSS・基本翻訳辞書 | 固定assetへ分離し、共通テスト読込・両サーバーモードの認証・MIME・表示を維持する | 完了: Workbench回帰1,379件・認証11件、日英・再読込・320/390px |
 | Platform収集 | ResourcesとWorkload Baselineで完全に同じbounded subprocess収集を1実装にする | 未完了 |
 | テスト実行定義 | 同じPython環境での不要な重複選択を除き、環境別の検証意図と対象集合を明示する | 未完了 |
 

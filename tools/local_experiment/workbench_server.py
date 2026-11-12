@@ -24,10 +24,15 @@ from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
 RESULT_CHART = INDEX.with_name("result_chart.js")
+STATIC_ASSETS = {
+    '/assets/result_chart.js': (RESULT_CHART, 'application/javascript; charset=utf-8'),
+    '/assets/base_i18n.js': (INDEX.with_name('base_i18n.js'), 'application/javascript; charset=utf-8'),
+    '/assets/workbench.css': (INDEX.with_name('workbench.css'), 'text/css; charset=utf-8'),
+}
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
 EDIT_ROLES = {'admin', 'data_engineer'}
 GET_ROUTES = {path: ALL_ROLES for path in (
-    '/', '/index.html', '/assets/result_chart.js', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
+    '/', '/index.html', *STATIC_ASSETS, '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
 GET_ROUTES['/api/stages'] = {'admin'}
@@ -150,11 +155,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     maximum_role=principal.maximum_role, authenticated=True,
                     data_mode='database', platform_admin=principal.platform_admin))
                 return
-            if method == 'GET' and url.path in ('/', '/index.html', '/assets/result_chart.js'):
+            if method == 'GET' and url.path in ('/', '/index.html', *STATIC_ASSETS):
                 parameters(())
-                data = RESULT_CHART.read_bytes() if url.path == '/assets/result_chart.js' else INDEX.read_bytes()
+                asset, content_type = STATIC_ASSETS.get(url.path, (INDEX, 'text/html; charset=utf-8'))
+                data = asset.read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', 'application/javascript; charset=utf-8' if url.path == '/assets/result_chart.js' else 'text/html; charset=utf-8')
+                self.send_header('Content-Type', content_type)
                 self.send_header('Content-Length', str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -504,10 +510,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                               'maximum_role': self.maximum_role,
                               'authenticated': self.authenticated_user is not None})
                 return
-            elif url.path in ("/", "/index.html", "/assets/result_chart.js"):
-                data = RESULT_CHART.read_bytes() if url.path == '/assets/result_chart.js' else INDEX.read_bytes()
+            elif url.path in ('/', '/index.html', *STATIC_ASSETS):
+                asset, content_type = STATIC_ASSETS.get(url.path, (INDEX, 'text/html; charset=utf-8'))
+                data = asset.read_bytes()
                 self.send_response(200)
-                self.send_header("Content-Type", "application/javascript; charset=utf-8" if url.path == "/assets/result_chart.js" else "text/html; charset=utf-8")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)

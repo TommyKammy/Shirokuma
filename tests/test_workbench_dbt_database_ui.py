@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 import test_workbench_database_ui as harness
+from workbench_source import WorkbenchSource
 
 SETUP = r"""
 const p=dbDbt;
@@ -1710,8 +1711,9 @@ await dbDbtObserve('plan',plan.id);assert.match(text(dbDbtNode('compatibility'))
 inventory[0].generation_id='changed';await dbDbtRefreshAuthorization();assert.equal(p.plan,null);assert.equal(dbDbtNode('plan-detail').children.length,0);
 assert.equal(posts().length,1);
 """)
-        self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', harness.HTML)
-        self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', css)
+        self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', css)
 
     def test_native_saved_history_detail_localization_and_publication_block(self):
         self.javascript(r"""
@@ -1750,9 +1752,10 @@ assert.equal(dbDbtNode('compile').textContent,'プロジェクトをコンパイ
 setLanguage('en');assert.match(text(dbDbtNode('run-detail')),/Tests passed, awaiting publication/);assert.equal(dbDbtNode('compile').textContent,'Compile project');
 assert.equal(dbDbtNode('role').tagName,'SELECT');assert.equal(dbDbtNode('models').className,'table-wrap');assert.equal(dbDbtNode('panel').getAttribute('aria-labelledby'),'db-dbt-title');
 """)
-        self.assertIn('@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}', harness.HTML)
-        self.assertIn('#db-dbt-panel{min-width:0;max-width:100%}', harness.HTML)
-        self.assertIn('overflow-wrap:anywhere', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}', css)
+        self.assertIn('#db-dbt-panel{min-width:0;max-width:100%}', css)
+        self.assertIn('overflow-wrap:anywhere', css)
         dbt = harness.DATABASE.split('// Database dbt:')[1].split('// Database schedules')[0]
         self.assertNotIn('innerHTML', dbt)
         self.assertNotIn('/api/dbt', dbt)

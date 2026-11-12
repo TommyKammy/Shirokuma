@@ -3,6 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_resources_database_ui as resources_ui
+from workbench_source import WorkbenchSource
 
 BASELINE = r"""
 const baselineIDs=['observation-sre-foundation-baseline-','observation-policy-foundation-baseline-','observation-foundation-baseline-'];
@@ -185,8 +186,9 @@ sessionRoute=null;dbAdminSession(session);const body=deferred(),entered=deferred
 
     def test_scope_specific_css_and_human_labels(self):
         harness = resources_ui.compute_ui.platform_ui.observations.harness
-        self.assertIn('#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel', harness.HTML)
-        self.assertIn('white-space:normal;overflow-wrap:anywhere', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel', css)
+        self.assertIn('white-space:normal;overflow-wrap:anywhere', css)
         for label in ['基盤宣言に一致', '基盤宣言不足・不一致', '基盤宣言は確認不可']:
             self.assertIn(label, harness.HTML)
 

@@ -1,4 +1,5 @@
 """URL reload navigation through production handlers and fresh Node boots."""
+from workbench_source import WorkbenchSource
 import json
 import re
 from html.parser import HTMLParser
@@ -81,7 +82,7 @@ class NavigationUI(unittest.TestCase):
 
     def test_static_shell_blocks_initial_sql_and_privileged_controls(self):
         # The rule applies to actual static ancestors, before script execution.
-        css = re.search(r'<style>([\s\S]*?)</style>', harness.HTML)[1]
+        css = WorkbenchSource(harness.HTML).css
         css = re.sub(r'/\*[\s\S]*?\*/', '', css)
         rules = {selector.strip(): body for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)}
         self.assertRegex(rules['[data-workbench-shell][inert]'], r'visibility\s*:\s*hidden')

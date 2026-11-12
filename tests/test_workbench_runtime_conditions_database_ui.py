@@ -1,4 +1,5 @@
 """Cached runtime condition explanations through the production UI handlers."""
+from workbench_source import WorkbenchSource
 import unittest
 
 import test_workbench_database_ui as database_ui
@@ -115,7 +116,7 @@ for(const id of ['runtime-minutes-help','runtime-policy','runtime-draft'])assert
 
     def test_scoped_wrapping_rules_and_no_new_fetch_or_store(self):
         html=database_ui.HTML
-        self.assertIn('#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}', html)
+        self.assertIn('#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}', WorkbenchSource(html).css)
         helper=html[html.index('function dbRuntimeDraftMinutes()'):html.index('async function dbRuntimeRequest')]
         for forbidden in ['fetch(', 'setTimeout(', 'setInterval(', 'localStorage', 'dbRuntimeRequest(', 'dbRuntimeObserve(', 'dbRuntimeReceipt(']:
             self.assertNotIn(forbidden, helper)

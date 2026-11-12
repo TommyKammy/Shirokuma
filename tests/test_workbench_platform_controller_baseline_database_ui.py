@@ -2,6 +2,7 @@
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_foundation_baseline_database_ui as foundation_ui
+from workbench_source import WorkbenchSource
 
 resources_ui = foundation_ui.resources_ui
 CONTROLLERS = r"""
@@ -170,9 +171,10 @@ for(const locale of ['ja','en']){setLanguage(locale);dbControls();for(const kind
 assert.equal(calls.length,n);assert.equal(JSON.stringify(i18n.ja),ja);
 """)
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn(':is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}',html)
-        self.assertIn('table-layout:fixed;width:100%;min-width:0',html)
-        self.assertIn('white-space:normal;overflow-wrap:anywhere',html)
+        css = WorkbenchSource(html).css
+        self.assertIn(':is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}',css)
+        self.assertIn('table-layout:fixed;width:100%;min-width:0',css)
+        self.assertIn('white-space:normal;overflow-wrap:anywhere',css)
 
     def test_wire_and_dto_caps_no_partial_list(self):
         self.javascript(r"""

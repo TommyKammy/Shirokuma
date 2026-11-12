@@ -2,6 +2,7 @@
 import unittest
 import json
 import test_workbench_database_ui as database_ui
+from workbench_source import WorkbenchSource
 from test_workbench_dataops_ui import SETUP as DATAOPS_SETUP
 from test_workbench_lineage_database_ui import catalog_markup
 
@@ -236,7 +237,8 @@ dropConfirm(name.toLowerCase());assert.equal($('db-drop-submit').disabled,true);
 dropConfirm(name);assert.equal($('db-drop-submit').disabled,false);
 $('db-drop-ack').checked=false;dbDropControls();assert.equal($('db-drop-submit').disabled,true);
 ''')
-        self.assertIn('#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;', database_ui.HTML)
+        css = WorkbenchSource(database_ui.HTML).css
+        self.assertIn('#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;', css)
 
     def test_verified_platform_bootstrap_null_context_and_source_gone_recovery(self):
         self.javascript(r'''
