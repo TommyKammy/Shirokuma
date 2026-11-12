@@ -1,15 +1,14 @@
 """Database UI production handlers, using a small Node DOM/fetch adapter."""
-from pathlib import Path
 import json
 import re
 import subprocess
 import unittest
 
 from test_catalog_ui import function
+from workbench_source import INDEX, WorkbenchSource
 
-
-HTML = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html').read_text()
-SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
+HTML = INDEX.read_text()
+SCRIPT = WorkbenchSource(HTML).source
 DATABASE = SCRIPT[SCRIPT.index("const dbWorksheetKey="):SCRIPT.index('let initialLanguage;')]
 INITIALIZATION = SCRIPT[SCRIPT.index('async function initializeSession()'):SCRIPT.index('\nstartWorkbench();')]
 NAVIGATION = SCRIPT[SCRIPT.index('const tabs='):SCRIPT.index('setInterval(async()=>')]

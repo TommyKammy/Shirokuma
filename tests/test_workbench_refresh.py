@@ -1,9 +1,10 @@
 """Focused refresh request contracts, executed in Node without browser/services."""
 import json
 from pathlib import Path
-import re
 import subprocess
 import unittest
+
+from workbench_source import WorkbenchSource
 
 from test_jobs_ui import SCRIPT, function
 
@@ -399,7 +400,7 @@ HANDLERS
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_audit_loaders_share_only_inflight_and_ignore_old_identity(self):
-        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        script = WorkbenchSource(HTML.read_text()).source
         loaders = 'let auditEpoch=' + script.split('let auditEpoch=', 1)[1].split("$('refresh-pawprints').onclick", 1)[0]
         loaders += 'function renderLoadHistory' + script.split('function renderLoadHistory', 1)[1].split('// Jobs are manually', 1)[0]
         harness = r'''
@@ -444,7 +445,7 @@ LOADERS
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_no_browser_auto_chill_checks_and_full_script_syntax(self):
-        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        script = WorkbenchSource(HTML.read_text()).source
         self.assertNotIn("api('/api/warehouse/autochill',{check:true})", script)
         self.assertIn("api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})", script)
         self.assertIn('if(data.auto_chill)updateAutoChill(data.auto_chill)', script)
@@ -452,7 +453,7 @@ LOADERS
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_enabled_browser_timer_does_not_check_auto_chill(self):
-        script = re.search(r'<script>(.*?)</script>', HTML.read_text(), re.S)[1]
+        script = WorkbenchSource(HTML.read_text()).source
         timer = next(line for line in script.splitlines() if line.startswith('setInterval(async()=>'))
         harness = r'''
 const assert=require('node:assert/strict');let callback,calls=[];

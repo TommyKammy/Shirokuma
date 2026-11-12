@@ -21,6 +21,7 @@ from unittest.mock import patch, Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
 import workbench_server as wb
 import runtime_profile
+from workbench_source import WorkbenchSource
 
 
 class WorkbenchHTML(HTMLParser):
@@ -28,6 +29,7 @@ class WorkbenchHTML(HTMLParser):
 
     def __init__(self, html):
         super().__init__()
+        self.html = html
         self.nodes = []
         self.stack = []
         self.feed(html)
@@ -53,11 +55,8 @@ class WorkbenchHTML(HTMLParser):
         return next(n for n in self.nodes if n.get('id') == identifier)
 
     def main_script(self):
-        """Select the body application script, excluding head boot scripts."""
-        script, = (node for node in self.nodes
-                   if node['tag'] == 'script' and 'src' not in node
-                   and any(parent['tag'] == 'body' for parent in node['ancestors']))
-        return script['text']
+        """Read body classic scripts from this already-parsed document."""
+        return WorkbenchSource(self.html).source
 
 
 class HistoryHandlerTests(unittest.TestCase):
@@ -1949,6 +1948,17 @@ const run=eval(HANDLER);
                 self.assertIn("text/html", headers["Content-Type"])
                 self.assertIn(b"SQL Worksheets", body)
                 self.assertIn(b"AgentHouse Pawprints", body)
+
+    def test_chart_static_asset(self):
+        status, headers, body = self.request('/assets/result_chart.js')
+        self.assertEqual(status, 200)
+        self.assertEqual(headers['Content-Type'], 'application/javascript; charset=utf-8')
+        self.assertEqual(headers['Cache-Control'], 'no-store')
+        self.assertEqual(int(headers['Content-Length']), len(body))
+        self.assertEqual(body, wb.RESULT_CHART.read_bytes())
+        for path in ('/assets/unknown.js', '/assets/../index.html',
+                     '/assets/%2e%2e/index.html', '/assets/result_chart.js/extra'):
+            self.assertEqual(self.request(path)[0], 404)
 
     @patch.object(wb.warehouse_resident, "kubectl")
     def test_status(self, kubectl):

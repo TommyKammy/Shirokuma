@@ -1,12 +1,13 @@
 """Behavior checks for saved refresh targets in the existing Transformation panel."""
 import json
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 from html.parser import HTMLParser
+
+from workbench_source import WorkbenchSource
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "tools/local_experiment/workbench/index.html"
@@ -32,7 +33,7 @@ class MartsUITests(unittest.TestCase):
         for identifier in ["mart-name", "mart-sql", "mart-min-rows", "mart-not-null", "mart-watch-tables"]:
             self.assertTrue(any(node.get("for") == identifier for node in document.nodes))
         self.assertIn('id="marts-admin" hidden', source)
-        script = re.search(r"<script>(.*?)</script>", source, re.S)[1]
+        script = WorkbenchSource(source).source
         dictionary = "const i18n = " + script.split("const i18n = ", 1)[1].split("function t(", 1)[0]
         # Parse the entire script and verify both languages for the new controls.
         harness = "new Function(" + json.dumps(script) + ");" + dictionary + "console.log(JSON.stringify(i18n))"
@@ -48,7 +49,7 @@ class MartsUITests(unittest.TestCase):
             self.assertNotEqual(translations["ja"][key], key)
 
     def test_registered_targets_hide_legacy_refresh(self):
-        script = re.search(r"<script>(.*?)</script>", HTML.read_text(), re.S)[1]
+        script = WorkbenchSource(HTML.read_text()).source
         helpers = "function managedMartModel" + script.split("function managedMartModel", 1)[1].split("function selectModel", 1)[0]
         source = """
 const assert=require('node:assert/strict');const button={hidden:false};const $=()=>button;
@@ -63,7 +64,7 @@ selectedModel={name:'legacy_sales',layer:'dbt'};updateLegacyRefresh();assert.equ
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_actual_handlers_preserve_drafts_and_gate_execution(self):
-        script = re.search(r"<script>(.*?)</script>", HTML.read_text(), re.S)[1]
+        script = WorkbenchSource(HTML.read_text()).source
         common = "const scheduleFields=" + script.split("const scheduleFields=", 1)[1].split("function stageCurrent", 1)[0]
         handlers = common + "let martEntries=" + script.split("let martEntries=", 1)[1].split("let selectedModel=null;", 1)[0]
         harness = r'''

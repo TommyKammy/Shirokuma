@@ -1,22 +1,18 @@
 """Jobs UI contracts without a live warehouse or browser."""
 import json
 from html.parser import HTMLParser
-from pathlib import Path
-import re
 import subprocess
 import unittest
 
-HTML = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html').read_text()
-SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
+from workbench_source import INDEX, WorkbenchSource, function as source_function
+
+HTML = INDEX.read_text()
+SOURCE = WorkbenchSource(HTML)
+SCRIPT = SOURCE.source
 
 
 def function(name):
-    start = SCRIPT.index('function ' + name + '(')
-    if SCRIPT[max(0, start - 6):start] == 'async ':
-        start -= 6
-    match = re.search(r'\n(?:async )?function ', SCRIPT[start + 1:])
-    source = SCRIPT[start:start + 1 + match.start()] if match else SCRIPT[start:]
-    return source.split("\n$('", 1)[0]
+    return source_function(name, SOURCE.sources)
 
 
 class Elements(HTMLParser):

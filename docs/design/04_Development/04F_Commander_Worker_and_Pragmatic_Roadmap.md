@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-12
-version: "1.74"
+version: "1.75"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-12 JST、WorkbenchのUIテスト読込を共通化し、body内のinline／外部classic scriptを文書順に扱えるようにした。
+チャート描画2関数を独立JSへ移し、既存認証を通る固定経路で配信する。起動順・イベント登録・API・権限判断は維持した。
+通常Workbenchで3行の描画が分割前と同一であること、日英・キーボード・320／390px・画面復元を確認した。
+既定回帰136コマンド分（5,301件成功・34件スキップ）と設計整合を確認した。標準PythonのPyYAML不足は既存DataOps環境で継続検証した。
 
 2026-11-12 JST、所有者本人が通常Workbenchで手順11までの確認完了と受入可能な品質を表明し、合意済みの固定LOCALの範囲でM1を本人受入済みとした。[受入記録](../../guides/database-p6-7-integrated-acceptance-2026-11-04.md#m1本人受入の完了2026-11-12-jst)。起動失敗・実行中停止の専用環境証拠を照合し、未確定履歴は保持する。DB-P7〜9と別拡張は後続のまま、以下の過去日付の進捗は当時の状態として保持する。
 
