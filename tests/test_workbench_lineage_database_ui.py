@@ -3,6 +3,7 @@ from workbench_source import WorkbenchSource
 from html.parser import HTMLParser
 import json
 import re
+import subprocess
 import unittest
 import test_workbench_database_ui as database_ui
 from test_workbench_dataops_ui import SETUP as DATAOPS_SETUP
@@ -67,6 +68,39 @@ async function lineageReady(){
 class LineageUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP + '\n' + body)
+
+    def test_factory_load_and_construction_have_no_io_and_private_state(self):
+        asset = WorkbenchSource().asset_sources['/assets/saved_lineage.js']
+        harness = "const asset=" + json.dumps(asset) + r""";
+const assert=require('node:assert/strict'),vm=require('node:vm');
+const unexpected=()=>{throw Error('unexpected ambient IO');};
+const context=vm.createContext({fetch:unexpected,document:new Proxy({},{get:unexpected}),localStorage:new Proxy({},{get:unexpected})});
+vm.runInContext(asset,context);
+assert.equal(typeof context.createSavedLineagePanel,'function');
+assert.equal(context.dbLineage,undefined);
+const create=new Function(asset+'\nreturn createSavedLineagePanel;')();
+let role='bi_viewer',reads=0;
+const panel=create({
+ explorer:{canOpen:()=>false},
+ authority:{get role(){reads++;return role;}},
+ request:new Proxy({},{get:unexpected}),
+ view:{databaseMode:false,$:()=>null}
+});
+assert.equal(reads,0);
+assert.equal(panel.result,null);assert.equal(panel.busy,null);
+assert.ok(Object.isFrozen(panel));
+assert.equal(Object.getOwnPropertyDescriptor(panel,'result').set,undefined);
+assert.equal(Object.getOwnPropertyDescriptor(panel,'busy').set,undefined);
+assert.equal(Reflect.set(panel,'result',{forged:true}),false);
+assert.equal(Reflect.set(panel,'busy',{}),false);
+assert.equal(panel.revision,undefined);assert.equal(panel.scope,undefined);assert.equal(panel.notice,undefined);
+assert.equal(panel.reason(),'Lineage requires data_engineer or admin.');
+role='admin';assert.equal(panel.reason(),'Select a readable TABLE or VIEW in Explorer.');
+panel.invalidate();assert.equal(panel.result,null);assert.equal(panel.busy,null);
+role='bi_viewer';panel.refresh().then(()=>assert.equal(panel.result,null)).catch(error=>{console.error(error);process.exitCode=1;});
+"""
+        result = subprocess.run(['node', '-'], input=harness, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_same_focus_get_only_categories_versions_locale_and_drafts(self):
         self.javascript(r'''

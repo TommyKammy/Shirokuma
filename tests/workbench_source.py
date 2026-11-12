@@ -6,7 +6,7 @@ import re
 
 WORKBENCH = Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench'
 INDEX = WORKBENCH / 'index.html'
-SCRIPT_ASSETS = {'/assets/result_chart.js': 'result_chart.js', '/assets/base_i18n.js': 'base_i18n.js'}
+SCRIPT_ASSETS = {'/assets/result_chart.js': 'result_chart.js', '/assets/base_i18n.js': 'base_i18n.js', '/assets/saved_lineage.js': 'saved_lineage.js', '/assets/result_export.js': 'result_export.js'}
 STYLE_ASSETS = {'/assets/workbench.css': 'workbench.css'}
 SCRIPT_BOUNDARY = '\n// --- Workbench script boundary ---\n'
 
@@ -18,6 +18,7 @@ class WorkbenchSource(HTMLParser):
         super().__init__()
         self.asset_root = Path(asset_root)
         self.sources = []
+        self.asset_sources = {}
         self.style_sources = []
         self.style = None
         self.in_body = False
@@ -53,7 +54,9 @@ class WorkbenchSource(HTMLParser):
         if 'src' in attrs:
             if attrs['src'] not in SCRIPT_ASSETS:
                 raise ValueError('Unsupported Workbench script reference: ' + attrs['src'])
-            self.sources.append((self.asset_root / SCRIPT_ASSETS[attrs['src']]).read_text())
+            source = (self.asset_root / SCRIPT_ASSETS[attrs['src']]).read_text()
+            self.asset_sources[attrs['src']] = source
+            self.sources.append(source)
         else:
             self.script = []
 

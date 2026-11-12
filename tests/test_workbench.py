@@ -1953,6 +1953,8 @@ const run=eval(HANDLER);
     def test_chart_static_asset(self):
         for name, mime in (('result_chart.js', 'application/javascript; charset=utf-8'),
                            ('base_i18n.js', 'application/javascript; charset=utf-8'),
+                           ('saved_lineage.js', 'application/javascript; charset=utf-8'),
+                           ('result_export.js', 'application/javascript; charset=utf-8'),
                            ('workbench.css', 'text/css; charset=utf-8')):
             path, asset = '/assets/' + name, wb.INDEX.with_name(name)
             with self.subTest(path=path):

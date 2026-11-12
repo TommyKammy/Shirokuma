@@ -5,10 +5,19 @@ import subprocess
 import unittest
 
 from test_catalog_ui import function
-from workbench_source import INDEX, WorkbenchSource
+from workbench_source import INDEX, SCRIPT_BOUNDARY, WorkbenchSource
 
 HTML = INDEX.read_text()
-SCRIPT = WorkbenchSource(HTML).source
+WORKBENCH_SOURCE = WorkbenchSource(HTML)
+SCRIPT = SCRIPT_BOUNDARY.join(source for source in WORKBENCH_SOURCE.sources
+                   if source not in [WORKBENCH_SOURCE.asset_sources.get(asset)
+                                     for asset in ('/assets/saved_lineage.js', '/assets/result_export.js')])
+FACTORIES = '\n'.join(
+    'const ' + name + '=new Function(' + json.dumps(source + '\nreturn ' + name + ';') + ')();'
+    for asset, name in [('/assets/saved_lineage.js', 'createSavedLineagePanel'),
+                        ('/assets/result_export.js', 'createResultExportController')]
+    if (source := WORKBENCH_SOURCE.asset_sources.get(asset)) is not None
+)
 DATABASE = SCRIPT[SCRIPT.index("const dbWorksheetKey="):SCRIPT.index('let initialLanguage;')]
 INITIALIZATION = SCRIPT[SCRIPT.index('async function initializeSession()'):SCRIPT.index('\nstartWorkbench();')]
 NAVIGATION = SCRIPT[SCRIPT.index('const tabs='):SCRIPT.index('setInterval(async()=>')]
@@ -96,7 +105,7 @@ head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
@@ -124,9 +133,22 @@ async function exploreFinance(){
 const treeActions=action=>$('catalog-tree').descendants().filter(node=>node.dataset.action===action);
 const objectButtons=()=>treeActions('select-object').filter(node=>node.dataset.treeKey.startsWith('object:'+dbExplorer.database_id+':'+dbExplorer.schema_id+':'));
 ''' + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
+        # Keep app bindings function-local while asset factories use the same realm.
+        source = '(function(){\n' + source + '\n})();\n'
         result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout
+
+    def test_factory_scope_cannot_read_application_bindings(self):
+        self.javascript(r'''
+await boot();
+assert.equal(dbPrincipal,JSON.stringify([session.username,session.authenticated]));
+assert.equal(dbRuns.constructor,Map);
+assert.equal(dbRuns.size,0);
+assert.equal(currentRole,'admin');
+assert.deepEqual(new Function('return [typeof dbPrincipal,typeof dbRuns,typeof currentRole];')(),
+ ['undefined','undefined','undefined']);
+''')
 
     def test_async_finally_cannot_reenable_a_database_blocked_action(self):
         self.javascript(r'''
