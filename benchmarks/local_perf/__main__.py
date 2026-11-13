@@ -48,11 +48,33 @@ def main():
     p.add_argument("dataset")
     p.add_argument("reference")
     p.add_argument("name")
+    for command in ("prepare-ingest", "load-public", "freeze-snapshots", "prepare-tpch"):
+        p = commands.add_parser(command)
+        p.add_argument("campaign")
+        p.add_argument("input")
+        p.add_argument("name")
+        if command == "prepare-ingest":
+            p.add_argument("--prefix", required=True)
+        elif command in ("load-public", "freeze-snapshots"):
+            add_adapter(p, public_only=True)
+    p = commands.add_parser("verify-snapshots")
+    p.add_argument("campaign")
+    p.add_argument("pins")
+    add_adapter(p, public_only=True)
+    p = commands.add_parser("table-manifest")
+    p.add_argument("pins")
+    p.add_argument("output")
+    p = commands.add_parser("bind-tpch")
+    p.add_argument("plan_manifest")
+    p.add_argument("pins")
+    p.add_argument("output")
     p = commands.add_parser("run")
     p.add_argument("campaign")
     p.add_argument("name")
     p.add_argument("manifest")
-    p.add_argument("--references", required=True)
+    p.add_argument("--references")
+    p.add_argument("--reference-label")
+    p.add_argument("--sql-variant", choices=["sql", "reference_sql"], default="sql")
     p.add_argument("--allow-arbitrary", action="store_true")
     p.add_argument("--abs-tol", type=float, default=0)
     p.add_argument("--rel-tol", type=float, default=0)
@@ -68,7 +90,8 @@ def main():
     p = commands.add_parser("inspect")
     p.add_argument("path", help="campaign/run/attempt JSON")
     p = commands.add_parser("reconcile")
-    p.add_argument("attempt", help="existing attempt.json, cancellation only; never redispatch")
+    p.add_argument("attempt", help="existing owned attempt.json; never redispatch")
+    p.add_argument("--rejection-evidence", help="explicit scoped local-operator audit JSON")
     add_adapter(p, trino_only=True)
     p = commands.add_parser("cleanup")
     p.add_argument("campaign")
@@ -107,10 +130,40 @@ def main():
             write_json(target, result)
         elif cmd == "qualify-packaged-tpch":
             result = str(qualify_packaged_tpch(Campaign(args.campaign), args.dataset, args.reference, args.name))
+        elif cmd == "prepare-ingest":
+            from .ingest import prepare_ingest
+            result = str(prepare_ingest(Campaign(args.campaign), args.input, args.name, args.prefix))
+        elif cmd == "load-public":
+            from .ingest import load_public
+            result = str(load_public(Campaign(args.campaign), args.input, args.name, adapter(args)))
+        elif cmd == "freeze-snapshots":
+            from .snapshots import freeze_snapshots
+            result = str(freeze_snapshots(Campaign(args.campaign), args.input, args.name, adapter(args)))
+        elif cmd == "verify-snapshots":
+            from .snapshots import verify_snapshots
+            result = str(verify_snapshots(Campaign(args.campaign), args.pins, adapter(args)))
+        elif cmd == "prepare-tpch":
+            from .tpch_sql import prepare_tpch
+            result = str(prepare_tpch(Campaign(args.campaign), args.input, args.name))
+        elif cmd in ("bind-tpch", "table-manifest"):
+            from .snapshots import table_manifest
+            target = Path(args.output).resolve()
+            repo = Path(__file__).resolve().parents[2]
+            if target == repo or repo in target.parents or target.exists():
+                raise ValueError("fresh manifest output outside Git required")
+            if cmd == "bind-tpch":
+                from .tpch_sql import bind_snapshots
+                result = bind_snapshots(json.loads(Path(args.plan_manifest).read_text()), json.loads(Path(args.pins).read_text()))
+            else:
+                result = table_manifest(json.loads(Path(args.pins).read_text()))
+            # Exclusive creation; never overwrite another binding.
+            with target.open("x", encoding="utf8") as f:
+                json.dump(result, f, ensure_ascii=False, indent=2, allow_nan=False)
+                f.write("\n")
         elif cmd == "run":
             manifest = json.loads(Path(args.manifest).read_text())
             result = str(run(Campaign(args.campaign), args.name, manifest, adapter(args),
-                             references=args.references, allow_arbitrary=args.allow_arbitrary,
+                             references=args.references, reference_label=args.reference_label, sql_variant=args.sql_variant, allow_arbitrary=args.allow_arbitrary,
                              abs_tol=args.abs_tol, rel_tol=args.rel_tol, **config(args)))
         elif cmd == "compare":
             campaign = Campaign(args.campaign)
@@ -125,7 +178,7 @@ def main():
         elif cmd == "inspect":
             result = json.loads(Path(args.path).read_text())
         elif cmd == "reconcile":
-            result = reconcile(args.attempt, adapter(args))
+            result = reconcile(args.attempt, adapter(args), rejection_evidence=args.rejection_evidence)
         elif cmd == "cleanup":
             Campaign(args.campaign).cleanup(args.name)
             result = {"cleaned": args.name, "baseline_preserved": True}

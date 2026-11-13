@@ -37,10 +37,12 @@ the printed artifact directory, including FAILED metadata on exceptions.
 References are same-engine Parquet roundtrips, **not independent verification**.
 
 The stdlib suite keeps scripted transport/lifecycle tests separate from real
-loopback fake-server tests. The Commander host runs on 2026-11-13 passed all 70
-tests on both Python 3.9.6 and 3.12.12, including 9 real loopback cases for public
-context/auth/pages, slow-drip status/headers, incomplete Content-Length and query
-lifecycle. Fresh-cache/install failures are also mocked
+loopback fake-server tests. The Commander host runs on 2026-11-14 passed 123 of
+126 discovered tests on both Python 3.9.6 and 3.12.12, with three explicit real-data
+tests skipped. Ten real loopback cases cover public context/auth/pages, safe HTTP
+rejection receipts, slow-drip status/headers, incomplete Content-Length and query
+lifecycle. Dedicated Parquet export and TPC-H parity checks separately passed all
+23 tests. Fresh-cache/install failures are also mocked
 without network in the ordinary suite. Real generation remains an explicit step.
 
 Focused review regressions (stdlib, no downloads):
@@ -339,23 +341,110 @@ Public recovery uses the original frozen connection:
 rtk proxy python3 -m benchmarks.local_perf reconcile /tmp/local-perf-connections-unique/public/types-0/attempt.json --adapter public --connection-file /tmp/local-perf-connections-unique/public.json
 ```
 
+## Persisted TPC-H qualification
+
+`prepare-ingest` streams a successful dataset owned by the same campaign into
+UTF8 JSONL chunks of at most 4MiB. Decimal values use exact strings; NULL, empty
+strings, dates, REAL and naive UTC timestamps retain their declared types.
+`load-public` uses ordinary ingest preview/create and atomic append APIs, with
+explicit schema hints and a fresh target prefix. The full encoded body must fit
+the public 10MiB ceiling. All parts are checked before mutation. Empty JSONL
+tables and unsupported types fail before submission.
+
+Each chunk freezes its input digest, context, preview and idempotency key before
+POST. A lost response is inspected by the existing public operation/key endpoints;
+it is never blindly submitted again. Unresolved work blocks another load in the
+campaign. Committed counts and cleanup evidence survive failures. Publication is
+atomic **per chunk**, not across all chunks/tables. Partial data remains owned
+and unmet; there is no implicit replace, deletion or adoption of an existing table.
+
+The following uses a fresh, small campaign. Replace private paths, DB/schema IDs
+and the unique prefix with verified local values. Include VM images, host state
+and retained logs in disjoint same-filesystem accounting paths at `init`.
+
+```sh
+rtk proxy python3 -m benchmarks.local_perf init /tmp/local-tpch-unique --image /absolute/path/vm-root-image --image /absolute/path/vm-data-image --host-path /absolute/path/shirokuma-state --drain-bytes 268435456
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf generate /tmp/local-tpch-unique tpch --scale 0.01
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-reference /tmp/local-tpch-unique /tmp/local-tpch-unique/tpch canonical
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf qualify-packaged-tpch /tmp/local-tpch-unique /tmp/local-tpch-unique/tpch /tmp/local-tpch-unique/canonical known-answers
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-tpch /tmp/local-tpch-unique /tmp/local-tpch-unique/tpch portable
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-ingest /tmp/local-tpch-unique /tmp/local-tpch-unique/tpch inputs --prefix bench_unique
+rtk proxy python3 -m benchmarks.local_perf freeze-public-connection /tmp/local-tpch-unique/public.json --adapter public --auth-file /absolute/private/client-auth.json --database YOUR_DATABASE_ID --schema YOUR_SCHEMA_ID
+rtk proxy python3 -m benchmarks.local_perf load-public /tmp/local-tpch-unique /tmp/local-tpch-unique/inputs load --adapter public --connection-file /tmp/local-tpch-unique/public.json
+rtk proxy python3 -m benchmarks.local_perf freeze-snapshots /tmp/local-tpch-unique /tmp/local-tpch-unique/load pins --adapter public --connection-file /tmp/local-tpch-unique/public.json
+rtk proxy python3 -m benchmarks.local_perf bind-tpch /tmp/local-tpch-unique/portable/queries.json /tmp/local-tpch-unique/pins/snapshots.json /tmp/local-tpch-unique/tpch-bound.json
+rtk proxy python3 -m benchmarks.local_perf table-manifest /tmp/local-tpch-unique/pins/snapshots.json /tmp/local-tpch-unique/tables-bound.json
+```
+
+Snapshot capture uses public ResourceRefs, table profiles and normal SQL metadata
+queries. It records the real Iceberg UUID, snapshot schema, current schema,
+`main` snapshot, metadata pointer and complete metadata log. An ambiguous head
+fails. Every target relation is bound with `FOR VERSION AS OF`. The TPC-H binder
+uses eight canonical CTEs, preserving scalar aliases and Q15's nested CTE.
+
+The original DuckDB 1.4.3 SQL/hashes and packaged answers remain unchanged.
+`tpch_contracts.json` declares all 22 output schemas, ordering keys and reviewed
+rewrites. Decimal SUM stays exact; AVG and ratio operands explicitly use DOUBLE
+where needed for equivalent arithmetic. Source, cast and portable results are
+fully compared before binding. LIMIT queries audit N+1 rows and reject a cutoff
+tie; a new dataset/scale needs its own audit. ORDER validation permits ties and
+checks all rows independently of duplicate-preserving multiset comparison.
+Capacity/deadline callbacks run in batches; all rows and terminal footers are
+still validated.
+
+Prepare full-table and query references with explicit execution variants:
+
+```sh
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf run /tmp/local-tpch-unique tables-reference /tmp/local-tpch-unique/tables-bound.json --adapter duckdb --dataset /tmp/local-tpch-unique/tpch --sql-variant reference_sql --reference-label "source Parquet full tables"
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf run /tmp/local-tpch-unique query-reference /tmp/local-tpch-unique/tpch-bound.json --adapter duckdb --dataset /tmp/local-tpch-unique/tpch --sql-variant reference_sql --reference-label "source Parquet portable queries"
+rtk proxy python3 -m benchmarks.local_perf verify-snapshots /tmp/local-tpch-unique /tmp/local-tpch-unique/pins --adapter public --connection-file /tmp/local-tpch-unique/public.json
+rtk proxy python3 -m benchmarks.local_perf run /tmp/local-tpch-unique public /tmp/local-tpch-unique/tpch-bound.json --adapter public --connection-file /tmp/local-tpch-unique/public.json --references /tmp/local-tpch-unique/query-reference --abs-tol 1e-8 --rel-tol 1e-8
+rtk proxy python3 -m benchmarks.local_perf verify-snapshots /tmp/local-tpch-unique /tmp/local-tpch-unique/pins --adapter public --connection-file /tmp/local-tpch-unique/public.json
+```
+
+Use the direct Trino TLS/auth options above to run `tables-bound.json` against
+`tables-reference`, and `tpch-bound.json` against `query-reference`. Keep the
+same selected DB/schema and verify pins before/after each target run. Full-table
+validation uses the permitted direct stream; public SQL retains its 10,000-row
+ceiling. COUNT or profile statistics alone do not establish content equality.
+
+For bound manifests, result metadata explicitly lists logical, target and
+reference SQL hashes plus the snapshot set. Each attempt retains the actual
+executed variant/SQL/hash; different execution texts are not labelled as one
+SQL. `reference_sql` is DuckDB-only. Independent comparison is claimed only when
+both engine families are known and different; direct/public Trino share a family.
+
+An initial public SQL POST with a complete 403 `SQL_PERMISSION_DENIED` response
+is recorded as FAILED/REJECTED with a scoped receipt. Other errors and incomplete
+responses retain conservative recovery. An old attempt whose rejection details
+were lost can use `reconcile --rejection-evidence /absolute/audit.json` only with
+an explicit local operator audit tied to the immutable attempt/manifest, exact
+request/context/SQL and linked historical evidence. Observed status and a
+source-derived code stay distinct. This creates a supplemental record, sends no
+HTTP and never changes the original failure into a result success.
+
 ## Ownership, cleanup and remaining gates
 
-`cleanup campaign name` only removes successful owned dataset/comparison output;
-it refuses unowned paths, failed/incomplete artifacts and runs/attempt evidence.
+`cleanup campaign name` only removes successful owned dataset/comparison/ingest
+preparation output. It refuses unowned paths, failed/incomplete artifacts and
+run/attempt/load/snapshot/known-answer/parity evidence.
 Ownership names cannot be reused even after cleanup. Deleting host files does not
 reset the baseline or assume VM image blocks were released. There is no broad
 cleanup, supervisor or implicit deletion of previous campaigns. Keep campaign
 JSON, raw attempts and results outside Git; they may contain SQL/data and runtime
 paths. Never put secrets in SQL/manifests.
 
-Remaining P1/G1 work: verify persisted Trino snapshot/dialect and the full TPC
-query suite, TPC-DS query execution/variants,
-query ordering/tie contracts, load registration and telemetry. Generated initial
-TPC manifests select duplicate-preserving unordered comparison; ordered comparison
-is available explicitly, but SQL ORDER BY/tie semantics are not inferred here.
-Portable connection qualification, fake HTTP transport and packaged TPC-H
-answers do not replace those full dataset checks. Public results beyond the
+Commander qualification now covers persisted TPC-H SF0.01: all eight tables and
+86,805 rows match Parquet, all 22 queries/932 output rows match through both
+Trino and the public API, and an independent owned-table append demonstrates
+AS OF reads plus drift rejection. See the
+[TPC-H verification record](../../docs/guides/performance-tpch-2026-11-14.md).
+
+Remaining P1/G1 work includes other-scale qualification, TPC-DS query execution
+and all variants, transfer/queue/engine/validation telemetry, and cold/concurrent
+failure conditions. Initial generated manifests remain unordered; the reviewed
+TPC-H plan adds explicit ordering/tie contracts without inferring them for arbitrary
+SQL. Public results beyond the
 10,000-row ceiling require a separate reviewed product change. No private
 bypass or `max_rows=None` is used. P2 resource/profile application, guest expansion, concurrent
 load, arrival-rate tests, SLO freezing and long runs are not implemented here.

@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.93"
+version: "1.94"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[TPC-H実データの隔離登録・snapshot固定・22 SQL照合](../../guides/performance-tpch-2026-11-14.md)を整備した。SF0.01の8表・86,805行を通常公開APIで登録し、固定snapshotの全値がParquet参照と一致した。
+直接Trinoと公開APIで全22本・各932行を照合し、ORDER／LIMIT tieと前後の不変性を検証した。別表のhead変更では旧snapshotの読取とdrift拒否を実証した。
+実機で見つかった検証callbackの負荷とscalar FROMの権限検査を修正し、元の失敗・補足拒否証拠を保持した。G1のTPC-DS／全結果API／計測と、P2以降の資源適用・大規模負荷を後続に残す。
+最終Makeは149群・5,514件成功・既定36 skip・失敗0件。両Pythonの重点126件、実データ23件、関連権限130件、設計整合・doctor healthyを確認した。
 
 2026-11-14 JST、[性能試験P1の実Trino・公開API接続と照合](../../guides/performance-connections-2026-11-13.md)を整備した。9 SQL・各4,111行がDuckDB参照と一致し、公開打切り・応答喪失後の取消・ロール分離を実機確認した。
 全pageでcontext・schema・状態を確認し、POSTの再送を避けて未確定を保持する。実機で検出したtimestamp精度低下をcapability指定で修正し、両Pythonの重点70件を確認した。

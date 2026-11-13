@@ -754,6 +754,45 @@ class QueryExecutionTests(unittest.TestCase):
                 wr.check_sql_policy(sql, 'admin-write', 'admin', context=ctx,
                     _platform_authorized=decision.platform_admin)
 
+    def test_scalar_from_keeps_context_catalog_and_role_boundaries(self):
+        from dataclasses import replace
+        import warehouse_resident as wr
+        for role, mode in (('bi_viewer', 'read-only'), ('data_engineer', 'read-only'),
+                           ('admin', 'read-only'), ('admin', 'admin-write')):
+            ctx = replace(self.context('marts', 'data_engineer'), selected_role=role)
+            sql = 'SELECT substring(phone FROM 1 FOR 2), extract(YEAR FROM stamp) FROM sales.marts.events'
+            with self.subTest(role=role, mode=mode):
+                self.assertEqual(wr.check_sql_policy(sql, mode, role, context=ctx), sql)
+            for target in ('finance.marts.events', 'sales.missing.events', 'system.runtime.queries'):
+                for sql in (f'SELECT substring(phone FROM 1) FROM {target}',
+                            f'SELECT substring((SELECT phone FROM {target}) FROM 1)'):
+                    with self.subTest(role=role, mode=mode, sql=sql), self.assertRaises(ValueError):
+                        wr.check_sql_policy(sql, mode, role, context=ctx)
+        ctx = self.context()
+        for sql in ('SELECT substring(phone FROM 1) FROM sales.raw.events',
+                    "INSERT INTO sales.marts.events SELECT substring('abc' FROM 1)"):
+            with self.assertRaises(ValueError):
+                wr.check_sql_policy(sql, role='bi_viewer', context=ctx)
+
+    def test_nested_scalar_source_rejected_before_query_id_and_admission(self):
+        import query_service as qs
+        import request_auth
+        ctx = self.context()
+        decision = request_auth.authorize_database(self.principal, ctx.database_id, 'bi_viewer',
+            expected_generation_id=ctx.generation_id)
+        with patch.object(qs.trino_auth, 'prepare_backend_v2', return_value=(decision, {})), \
+             patch.object(qs.uuid, 'uuid4') as query_id, \
+             patch.object(qs.admission, 'admit') as admit, \
+             patch.object(qs, '_transport') as transport:
+            with self.assertRaises(qs.QueryError) as error:
+                qs.submit(self.principal, ctx,
+                    'SELECT substring((SELECT phone FROM finance.marts.events) FROM 1 FOR 2)',
+                    mode='read-only', max_rows=10, request_id=None, worksheet_id=None)
+            self.assertEqual(error.exception.code, 'SQL_PERMISSION_DENIED')
+            query_id.assert_not_called()
+            admit.assert_not_called()
+            transport.assert_not_called()
+
     def test_cli_uses_authenticated_endpoint_and_refuses_redirects(self):
         import json
         import io

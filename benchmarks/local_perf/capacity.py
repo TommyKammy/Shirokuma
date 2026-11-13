@@ -105,8 +105,8 @@ class Campaign:
         if name not in self.state["owned"]:
             raise ValueError("refusing unowned cleanup")
         entry = self.state["owned"][name]
-        if entry["kind"] in ("attempt", "run") or entry["status"] != "SUCCESS":
-            raise ValueError("retain attempts and incomplete/failed evidence")
+        if entry["kind"] not in ("dataset", "comparison", "ingest-preparation") or entry["status"] != "SUCCESS":
+            raise ValueError("retain receipt/proof kinds and incomplete/failed evidence")
         shutil.rmtree(self.root / name)
         self.mark(self.root / name, "CLEANED")
 

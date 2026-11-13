@@ -47,6 +47,17 @@ class Server:
                 self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 outer.posts += 1
                 outer.before_post()
+                if outer.case in ("forbidden", "forbidden-truncated"):
+                    value = dict(code="SQL_PERMISSION_DENIED", request_id="a9ee0597-9d68-49fb-bb2a-1408a6d774b3", message="never-record-password", details={"secret": "never-record-password"})
+                    if outer.case == "forbidden":
+                        self.send(value, 403)
+                    else:
+                        self.send_response(403)
+                        self.send_header("Content-Length", "999")
+                        self.end_headers()
+                        self.wfile.write(json.dumps(value).encode())
+                        self.close_connection = True
+                    return
                 if outer.case == "lost":
                     self.connection.shutdown(socket.SHUT_RDWR)
                     self.connection.close()
@@ -230,6 +241,71 @@ class HTTPTests(unittest.TestCase):
         a = TrinoAdapter("http://127.0.0.1:1234")
         with self.assertRaises(ValueError):
             a.safe("http://127.0.0.1:4321/page")
+
+
+    def test_complete_and_truncated_real_http_rejection(self):
+        from benchmarks.local_perf.runner import HTTPFailure
+        with Server("forbidden") as server:
+            with self.assertRaises(HTTPFailure) as caught:
+                TrinoAdapter(server.url).request("POST", server.url + "/api/v1/queries", time.monotonic() + 1, b"{}")
+            self.assertEqual(caught.exception.api_code, "SQL_PERMISSION_DENIED")
+            self.assertNotIn("never-record-password", repr(vars(caught.exception)))
+        with Server("forbidden-truncated") as server:
+            with self.assertRaises(ValueError):
+                TrinoAdapter(server.url).request("POST", server.url + "/api/v1/queries", time.monotonic() + 1, b"{}")
+
+
+def http_failure(status=403, code="SQL_PERMISSION_DENIED", method="POST", path="/api/v1/queries", framing="complete", request_id="a9ee0597-9d68-49fb-bb2a-1408a6d774b3", raw_body=None):
+    """Exercise the real transport parser without requiring a loopback socket."""
+    from unittest.mock import MagicMock
+    raw = json.dumps(dict(code=code, request_id=request_id, message="never-record-password", details={"password": "never-record-password"})).encode()
+    if raw_body is not None:
+        raw = raw_body
+    class Response:
+        def __init__(self):
+            self.status, self.closed = status, False
+            self.length = 16 * 1024**2 + 1 if framing == 'oversize' else len(raw) + (5 if framing == 'partial' else 0)
+        def isclosed(self):
+            return self.closed
+        def read1(self, size):
+            if framing == 'deadline':
+                time.sleep(.03)
+            self.length -= len(raw)
+            self.closed = True
+            return raw
+    conn = MagicMock()
+    conn.getresponse.return_value = Response()
+    with patch('benchmarks.local_perf.runner.http.client.HTTPConnection', return_value=conn):
+        try:
+            TrinoAdapter('http://127.0.0.1:8123', password='never-record-password').request(
+                method, 'http://127.0.0.1:8123' + path, time.monotonic() + (.01 if framing == 'deadline' else 1), b'{}')
+        except Exception as exc:
+            return exc
+    raise AssertionError('expected HTTP failure')
+
+
+class HTTPFailureTests(unittest.TestCase):
+    def test_only_complete_bounded_allowlisted_body_has_safe_api_code(self):
+        from benchmarks.local_perf.runner import HTTPFailure
+        error = http_failure()
+        self.assertIsInstance(error, RuntimeError)
+        self.assertIsInstance(error, HTTPFailure)
+        self.assertEqual(error.http_status, 403)
+        self.assertEqual(error.api_code, 'SQL_PERMISSION_DENIED')
+        self.assertEqual(error.server_request_id, 'a9ee0597-9d68-49fb-bb2a-1408a6d774b3')
+        self.assertEqual(error.path, '/api/v1/queries')
+        self.assertNotIn('never-record-password', repr(vars(error)) + str(error))
+        self.assertIsNone(http_failure(code='SECRET_OTHER_CODE', request_id='bad\nheader').api_code)
+        self.assertIsNone(http_failure(request_id='bad\nheader').server_request_id)
+        for reflected in ('never-record-password', 'server-event-1', 'A9EE0597-9D68-49FB-BB2A-1408A6D774B3'):
+            error = http_failure(request_id=reflected)
+            self.assertIsNone(error.server_request_id)
+            self.assertNotIn(reflected, repr(vars(error)) + str(error))
+        for raw in (b'not JSON', b'{"code":"OTHER","code":"SQL_PERMISSION_DENIED"}'):
+            self.assertIsNone(http_failure(raw_body=raw).api_code)
+        for framing in ('partial', 'oversize', 'deadline'):
+            with self.subTest(framing=framing):
+                self.assertNotIsInstance(http_failure(framing=framing), HTTPFailure)
 
 
 if __name__ == "__main__":

@@ -1221,6 +1221,7 @@ def _check_bi_schemas(sql, *, context=None, database_only=False, _platform_autho
     # words. Trino permits non-reserved names such as `limit` in both positions.
     depth, from_depths = 0, set()
     consumed, relation_groups = set(), set()
+    scalar_from_depths = set()
     clauses = {'where', 'group', 'order', 'having', 'union', 'except', 'intersect',
                'window', 'join', 'left', 'right', 'full', 'inner', 'cross', 'on',
                'using', 'natural', 'tablesample', 'for'}
@@ -1264,7 +1265,13 @@ def _check_bi_schemas(sql, *, context=None, database_only=False, _platform_autho
             continue
         if token == '(':
             depth += 1
+            # These SQL special forms use FROM as an argument separator, only
+            # at their own argument depth. Nested queries still traverse below.
+            if (i > 0 and raw_tokens[i - 1].lower() in {'substring', 'extract', 'trim'}
+                    and i - 1 not in consumed and tokens[i - 2:i - 1] != ['.']):
+                scalar_from_depths.add(depth)
         elif token == ')':
+            scalar_from_depths.discard(depth)
             from_depths.discard(depth)
             if depth in relation_groups:
                 relation_groups.discard(depth)
@@ -1274,6 +1281,10 @@ def _check_bi_schemas(sql, *, context=None, database_only=False, _platform_autho
                 reject()
         elif clause_at(i):
             from_depths.discard(depth)
+        if token in {'select', 'with'}:
+            scalar_from_depths.discard(depth)
+        if token == 'from' and depth in scalar_from_depths:
+            continue
         if token == 'from':
             from_depths.add(depth)
         show_context = raw_tokens[0].lower() == 'show' and token in {'in', 'for'}

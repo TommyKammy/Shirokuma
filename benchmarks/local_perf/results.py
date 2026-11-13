@@ -273,3 +273,50 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
     finally:
         a.f.close()
         b.f.close()
+
+
+def decoded(value):
+    """Decode a validated typed result cell without losing numeric precision."""
+    if value is None:
+        return None
+    tag, raw = value
+    return {"i": int, "d": Decimal, "f": float, "date": dt.date.fromisoformat,
+            "ts": dt.datetime.fromisoformat, "s": str, "b": lambda x: x}[tag](raw)
+
+
+def validate_order(path, order_by, check=lambda: None):
+    """Validate every row/footer and ORDER key; batch expensive budget checks."""
+    check()
+    reader = Reader(path)
+    try:
+        columns = reader.header["columns"]
+        if not isinstance(order_by, list):
+            raise ValueError("order_by list required")
+        seen = set()
+        for key in order_by:
+            if (not isinstance(key, dict) or set(key) != {"index", "descending", "nulls"}
+                    or type(key["index"]) is not int or not 0 <= key["index"] < len(columns)
+                    or key["index"] in seen or type(key["descending"]) is not bool
+                    or key["nulls"] not in ("first", "last")):
+                raise ValueError("invalid ORDER BY contract")
+            seen.add(key["index"])
+        previous = None
+        for count, row in enumerate(reader, 1):
+            values = [decoded(row[k["index"]]) for k in order_by]
+            if previous is not None:
+                for a, b, key in zip(previous, values, order_by):
+                    if a == b:
+                        continue
+                    if a is None or b is None:
+                        forward = (a is None) == (key["nulls"] == "first")
+                    else:
+                        forward = a > b if key["descending"] else a < b
+                    if not forward:
+                        raise ValueError("result violates ORDER BY")
+                    break
+            previous = values
+            if count % 256 == 0:
+                check()
+        check()
+    finally:
+        reader.f.close()

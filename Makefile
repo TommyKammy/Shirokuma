@@ -150,6 +150,10 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_public.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpch_sql.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_ingest.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_snapshots.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bindings.py'
 
 .PHONY: test-local-perf qualify-local-perf
 test-local-perf:
@@ -159,6 +163,10 @@ test-local-perf:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_public.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpch_sql.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_ingest.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_snapshots.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bindings.py'
 
 # Explicit opt-in; never pulled into verify/test-resident-core.
 qualify-local-perf:

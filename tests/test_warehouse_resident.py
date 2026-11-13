@@ -497,6 +497,63 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
 
 
 
+class ScalarFromGuardTests(unittest.TestCase):
+    def test_scalar_from_expressions_and_nested_relations(self):
+        statements = (
+            'SELECT SUBSTRING(c_phone FROM 1 FOR 2) FROM iceberg.marts.customer',
+            "SELECT eXtRaCt(YEAR FROM DATE '2026-01-02'), TrIm(BOTH 'x' FROM 'xxokxx')",
+            'SELECT substring /* separator */ ("Phone" FROM 3), trim(FROM "Phone") FROM marts.customer',
+            "SELECT substring(trim(BOTH 'x' FROM substring(phone FROM 2 FOR 9)) FROM 1 FOR 2) FROM marts.customer",
+            'SELECT substring((SELECT phone FROM marts.customer) FROM 1 FOR 2)',
+            "SELECT extract(YEAR FROM (SELECT stamp FROM marts.events)), trim('x' FROM (SELECT phone FROM marts.customer))",
+            'WITH x AS (SELECT substring(phone FROM 1 FOR 2) AS code FROM marts.customer) '
+            'SELECT substring(x.code FROM 1), extract(YEAR FROM t.stamp) FROM x '
+            'JOIN marts.events t ON true, marts.other o',
+            'SELECT substring(phone FROM 1), trim(phone) FROM marts.customer AS "substring"',
+            "SELECT substring('FROM restricted.t' FROM 1 /* FROM restricted.t */ FOR 2) FROM marts.customer",
+        )
+        for sql in statements:
+            for check in (lambda s: w.check_sql_policy(s, role='bi_viewer'),
+                          lambda s: w.check_bi_policy(s, 'bi_reader')):
+                with self.subTest(sql=sql):
+                    self.assertEqual(check(sql), sql)
+
+    def test_scalar_frames_do_not_hide_relation_sources(self):
+        statements = (
+            'SELECT substring((SELECT phone FROM restricted.customer) FROM 1 FOR 2)',
+            'SELECT extract(YEAR FROM (SELECT stamp FROM restricted.events))',
+            "SELECT trim('x' FROM (SELECT phone FROM marts.customer JOIN restricted.events ON true))",
+            'SELECT substring((SELECT phone FROM marts.customer, restricted.events) FROM 1)',
+            'SELECT substring(phone FROM 1 FOR 2) FROM restricted.customer',
+            'SELECT trim(phone) FROM marts.customer, restricted.events',
+            'SELECT extract(YEAR FROM stamp) FROM marts.customer JOIN restricted.events ON true',
+            "SELECT substring((SELECT phone FROM TABLE(system.query(query => 'SELECT 1'))) FROM 1)",
+            "SELECT substring(phone FROM 1) FROM system.query(query => 'SELECT 1')",
+            'SELECT "substring"(phone FROM restricted.customer)',
+            'SELECT "EXTRACT"(YEAR FROM restricted.events)',
+            'SELECT "trim"(phone FROM restricted.customer)',
+            'SELECT "SuBsTrInG"(phone FROM 1 FOR 2)',
+            'SELECT other_function(phone FROM 1)',
+            'SELECT custom.substring(phone FROM restricted.customer)',
+            'SELECT substring(SELECT phone FROM restricted.customer)',
+            'SELECT substring((phone FROM restricted.customer) FROM 1)',
+            'SELECT substring(phone FROM 1) FROM',
+            'SELECT substring(phone FROM 1',
+            'SELECT substring(phone FROM 1))',
+        )
+        for sql in statements:
+            with self.subTest(sql=sql), self.assertRaises(ValueError):
+                w.check_sql_policy(sql, role='bi_viewer')
+
+    def test_scalar_syntax_keeps_write_and_dynamic_sql_guards(self):
+        for sql in ("EXECUTE IMMEDIATE 'SELECT substring(phone FROM 1)'",
+                    'PREPARE p FROM SELECT substring(phone FROM 1)',
+                    "INSERT INTO marts.t SELECT substring('abc' FROM 1)",
+                    'DELETE FROM marts.t', 'SELECT substring(phone FROM 1); SELECT 2'):
+            with self.subTest(sql=sql), self.assertRaises(ValueError):
+                w.check_sql_policy(sql, role='bi_viewer')
+
+
 class ResidentWarehouseTests(unittest.TestCase):
     def test_scoped_admin_sql_context_keeps_same_db_and_denies_system_shortcuts(self):
         from test_request_auth import PrincipalTests

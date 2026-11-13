@@ -1,0 +1,702 @@
+{
+  "format": 1,
+  "source": "DuckDB 1.4.3 tpch_queries",
+  "queries": [
+    {
+      "id": "1",
+      "source_sql_sha256": "8aefe77a1c97459bc69acbbcdaf3b8637d8ea22dfc3ac7be732d4446da83b69b",
+      "columns": [
+        {
+          "name": "l_returnflag",
+          "type": "varchar"
+        },
+        {
+          "name": "l_linestatus",
+          "type": "varchar"
+        },
+        {
+          "name": "sum_qty",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "sum_base_price",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "sum_disc_price",
+          "type": "decimal(38,4)"
+        },
+        {
+          "name": "sum_charge",
+          "type": "decimal(38,6)"
+        },
+        {
+          "name": "avg_qty",
+          "type": "double"
+        },
+        {
+          "name": "avg_price",
+          "type": "double"
+        },
+        {
+          "name": "avg_disc",
+          "type": "double"
+        },
+        {
+          "name": "count_order",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": [
+        "Use AVG(CAST(l_quantity AS DOUBLE)), AVG(CAST(l_extendedprice AS DOUBLE)), AVG(CAST(l_discount AS DOUBLE)); outer CAST of decimal AVG does not restore lost scale."
+      ]
+    },
+    {
+      "id": "2",
+      "source_sql_sha256": "a2219893f952dd2a2586ab297d909ec2d440faabb5e692f24880158aa6877344",
+      "columns": [
+        {
+          "name": "s_acctbal",
+          "type": "decimal(15,2)"
+        },
+        {
+          "name": "s_name",
+          "type": "varchar"
+        },
+        {
+          "name": "n_name",
+          "type": "varchar"
+        },
+        {
+          "name": "p_partkey",
+          "type": "bigint"
+        },
+        {
+          "name": "p_mfgr",
+          "type": "varchar"
+        },
+        {
+          "name": "s_address",
+          "type": "varchar"
+        },
+        {
+          "name": "s_phone",
+          "type": "varchar"
+        },
+        {
+          "name": "s_comment",
+          "type": "varchar"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": 100,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "3",
+      "source_sql_sha256": "1f120d790d4914652cbf3fbc0fa28ed6573e4adee61ae7164a8c3d99b7c6b7fe",
+      "columns": [
+        {
+          "name": "l_orderkey",
+          "type": "bigint"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        },
+        {
+          "name": "o_orderdate",
+          "type": "date"
+        },
+        {
+          "name": "o_shippriority",
+          "type": "integer"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": 10,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "4",
+      "source_sql_sha256": "2a2be89752fc917bc71e1a59168ead9d00d40c40ea0bbe646206e414b372f888",
+      "columns": [
+        {
+          "name": "o_orderpriority",
+          "type": "varchar"
+        },
+        {
+          "name": "order_count",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "5",
+      "source_sql_sha256": "495def7debb02ab1def31da07fbc88b4796813b754832ce15d54a35dcb104577",
+      "columns": [
+        {
+          "name": "n_name",
+          "type": "varchar"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "6",
+      "source_sql_sha256": "3638535fb92a6026b3359a2ad9e6ed7da9ad9080152513e6fd3818d1a853c29f",
+      "columns": [
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "7",
+      "source_sql_sha256": "5e8077121a42ca8ebf5ff54e5842a614e839da945b0331e3b63d9ccad2361201",
+      "columns": [
+        {
+          "name": "supp_nation",
+          "type": "varchar"
+        },
+        {
+          "name": "cust_nation",
+          "type": "varchar"
+        },
+        {
+          "name": "l_year",
+          "type": "bigint"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "8",
+      "source_sql_sha256": "948338f54b97a2c49aea15f8c4d609ecf244d00ad7754edcea60b4748504a1ce",
+      "columns": [
+        {
+          "name": "o_year",
+          "type": "bigint"
+        },
+        {
+          "name": "mkt_share",
+          "type": "double"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": [
+        "Make ratio DOUBLE before division; keep decimal SUM exact."
+      ]
+    },
+    {
+      "id": "9",
+      "source_sql_sha256": "af90ccbe30ece396209e6627c10c0086ed54208100357922ee404de8bb867e56",
+      "columns": [
+        {
+          "name": "nation",
+          "type": "varchar"
+        },
+        {
+          "name": "o_year",
+          "type": "bigint"
+        },
+        {
+          "name": "sum_profit",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "10",
+      "source_sql_sha256": "0b48b00cffa3776b32e67e9041191dea25095e2a952ee5251990b9c8585031ed",
+      "columns": [
+        {
+          "name": "c_custkey",
+          "type": "bigint"
+        },
+        {
+          "name": "c_name",
+          "type": "varchar"
+        },
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        },
+        {
+          "name": "c_acctbal",
+          "type": "decimal(15,2)"
+        },
+        {
+          "name": "n_name",
+          "type": "varchar"
+        },
+        {
+          "name": "c_address",
+          "type": "varchar"
+        },
+        {
+          "name": "c_phone",
+          "type": "varchar"
+        },
+        {
+          "name": "c_comment",
+          "type": "varchar"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 2,
+          "descending": true,
+          "nulls": "last"
+        }
+      ],
+      "limit": 20,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "11",
+      "source_sql_sha256": "f313c766fac507c1204fb6f2bacd35719a61a11c0f69601302555150dddeda78",
+      "columns": [
+        {
+          "name": "ps_partkey",
+          "type": "bigint"
+        },
+        {
+          "name": "value",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "12",
+      "source_sql_sha256": "3814c9f4b7a476ee894c477d43cedb299603b1ed0f5315790d52839c8da355bf",
+      "columns": [
+        {
+          "name": "l_shipmode",
+          "type": "varchar"
+        },
+        {
+          "name": "high_line_count",
+          "type": "bigint"
+        },
+        {
+          "name": "low_line_count",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": [
+        "CAST each SUM(CASE...) AS BIGINT; prove signed-64 range in source parity audit."
+      ]
+    },
+    {
+      "id": "13",
+      "source_sql_sha256": "4a4a0b2c5646b2cad8f220a8f4b73ccb9f0acd45542353d63c18a69227bc20a3",
+      "columns": [
+        {
+          "name": "c_count",
+          "type": "bigint"
+        },
+        {
+          "name": "custdist",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 0,
+          "descending": true,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "14",
+      "source_sql_sha256": "e7ec7960a4c49219fc76dc03495a1530aeb30c796413dd1dc9d501b86934f222",
+      "columns": [
+        {
+          "name": "promo_revenue",
+          "type": "double"
+        }
+      ],
+      "order_by": [],
+      "limit": null,
+      "rewrite_reasons": [
+        "Make ratio DOUBLE before division; keep underlying decimal SUM exact."
+      ]
+    },
+    {
+      "id": "15",
+      "source_sql_sha256": "1cb57383eeff60261a1b4b2a141c71d8672729d743a7dfa74d9a4bcaf69c44d4",
+      "columns": [
+        {
+          "name": "s_suppkey",
+          "type": "bigint"
+        },
+        {
+          "name": "s_name",
+          "type": "varchar"
+        },
+        {
+          "name": "s_address",
+          "type": "varchar"
+        },
+        {
+          "name": "s_phone",
+          "type": "varchar"
+        },
+        {
+          "name": "total_revenue",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": [
+        "CTE already used. Change GROUP BY supplier_no to GROUP BY l_suppkey."
+      ]
+    },
+    {
+      "id": "16",
+      "source_sql_sha256": "45085e7672cb1500e625e048156fc55369e7a9bc91fd3647c3f7735a870c3ef8",
+      "columns": [
+        {
+          "name": "p_brand",
+          "type": "varchar"
+        },
+        {
+          "name": "p_type",
+          "type": "varchar"
+        },
+        {
+          "name": "p_size",
+          "type": "integer"
+        },
+        {
+          "name": "supplier_cnt",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 3,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "last"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "17",
+      "source_sql_sha256": "dfc7f00ac8a500c2ac2735b05b41b462bbe4af9ce7cd6c37e42d1bb9df4a02e1",
+      "columns": [
+        {
+          "name": "avg_yearly",
+          "type": "double"
+        }
+      ],
+      "order_by": [],
+      "limit": null,
+      "rewrite_reasons": [
+        "Make AVG(l_quantity) DOUBLE within predicate and make final division DOUBLE. Recheck membership parity, including NULL scalar output."
+      ]
+    },
+    {
+      "id": "18",
+      "source_sql_sha256": "8c5076061727d974f96708f0da930fc58843eac297a80c7ad658d64d152a19bb",
+      "columns": [
+        {
+          "name": "c_name",
+          "type": "varchar"
+        },
+        {
+          "name": "c_custkey",
+          "type": "bigint"
+        },
+        {
+          "name": "o_orderkey",
+          "type": "bigint"
+        },
+        {
+          "name": "o_orderdate",
+          "type": "date"
+        },
+        {
+          "name": "o_totalprice",
+          "type": "decimal(15,2)"
+        },
+        {
+          "name": "sum(l_quantity)",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 4,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": 100,
+      "rewrite_reasons": [
+        "Add explicit quoted alias AS \"sum(l_quantity)\" to outer SUM to retain original DuckDB column label; do not rename via generic Reader."
+      ]
+    },
+    {
+      "id": "19",
+      "source_sql_sha256": "341f97d1f74deb30aca2a8b0ee849772a3b0e098a06cf12266c63573cb985478",
+      "columns": [
+        {
+          "name": "revenue",
+          "type": "decimal(38,4)"
+        }
+      ],
+      "order_by": [],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "20",
+      "source_sql_sha256": "fa96ad5cb897bf31ec9b96a6b2a0d1f7132e71e2f481321e6db16628bc3e5fd5",
+      "columns": [
+        {
+          "name": "s_name",
+          "type": "varchar"
+        },
+        {
+          "name": "s_address",
+          "type": "varchar"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "21",
+      "source_sql_sha256": "b29463f30a64e45a795047ee6e557e6c3c1f01fc612acc997873594048e74b59",
+      "columns": [
+        {
+          "name": "s_name",
+          "type": "varchar"
+        },
+        {
+          "name": "numwait",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": 100,
+      "rewrite_reasons": []
+    },
+    {
+      "id": "22",
+      "source_sql_sha256": "d8ed6332e75f9193391000ba071e17adcf735a2d99c5a4da0f7c13d695ccbd42",
+      "columns": [
+        {
+          "name": "cntrycode",
+          "type": "varchar"
+        },
+        {
+          "name": "numcust",
+          "type": "bigint"
+        },
+        {
+          "name": "totacctbal",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "last"
+        }
+      ],
+      "limit": null,
+      "rewrite_reasons": [
+        "Make AVG(c_acctbal) DOUBLE inside predicate; exact source membership parity required. SUBSTRING(... FROM ... FOR ...) is supported and needs no rewrite."
+      ]
+    }
+  ]
+}

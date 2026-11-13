@@ -595,5 +595,229 @@ class PublicTests(unittest.TestCase):
             thread.join()
 
 
+    def test_definite_submission_rejection_and_nondefinite_errors(self):
+        from test_local_perf_http import http_failure
+        for name, options, definite in [('captured', {}, True), ('other-code', dict(code='OTHER'), False),
+                ('server-error', dict(status=503), False), ('get', dict(method='GET'), False),
+                ('other-route', dict(path='/api/v1/ingests'), False), ('partial', dict(framing='partial'), False),
+                ('oversize', dict(framing='oversize'), False), ('deadline', dict(framing='deadline'), False)]:
+            error = http_failure(**options)
+            class Rejected(ScriptedPublic):
+                def request(self, method, url, deadline, body=None):
+                    self.calls.append((method, url))
+                    if method == 'POST':
+                        self.posts += 1
+                        raise error
+                    return dict(queries=[])
+            adapter = Rejected()
+            with self.assertRaises(Exception):
+                self.run_adapter(adapter, name)
+            intent = json.loads(self.receipt(name).read_text())
+            self.assertEqual(intent['status'], 'FAILED' if definite else 'UNKNOWN')
+            self.assertEqual(adapter.posts, 1)
+            self.assertNotIn('never-record-password', self.receipt(name).read_text())
+            if definite:
+                self.assertEqual(intent['reconciliation'], 'REJECTED')
+                self.assertEqual(intent['error_code'], 'SQL_PERMISSION_DENIED')
+                self.assertEqual(intent['submission_rejection']['captured_api_code'], 'SQL_PERMISSION_DENIED')
+                self.assertEqual(len(adapter.calls), 1)
+                before = list(adapter.calls)
+                self.assertEqual(runner.reconcile(self.receipt(name), adapter)['status'], 'FAILED')
+                self.assertEqual(adapter.calls, before)
+            else:
+                self.assertNotIn('submission_rejection', intent)
+                self.assertEqual(len(adapter.calls), 2)
+            # Isolate intentional UNKNOWN holds for the next independent case.
+            if not definite:
+                self.tmp.cleanup()
+                self.setUp()
+
+    def legacy_audit(self):
+        import hashlib
+        adapter = ScriptedPublic('lost0')
+        with self.assertRaises(OSError):
+            self.run_adapter(adapter)
+        path = self.receipt()
+        intent = json.loads(path.read_text())
+        manifest = path.parent.parent / 'queries.json'
+        report = json.loads((manifest.parent / 'run.json').read_text())
+        linked = self.root / 'readonly-audit.json'
+        linked.write_text(json.dumps(dict(ledger_rows=0, completed_http_events=1)))
+        evidence = dict(format=1, kind='local-operator-audit', reviewer='Codex local operator',
+            observed_http_status=403, captured_api_code=None, derived_code='SQL_PERMISSION_DENIED',
+            completed_response=True, unique_http_event=True, readonly_ledger_rows=0, pre_dispatch_guard_rejected=True,
+            backend_nonterminal=0, original_attempt_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+            manifest_sha256=hashlib.sha256(manifest.read_bytes()).hexdigest(), query_manifest_sha256=report['query_manifest_sha256'],
+            context=copy.deepcopy(intent['dispatch']['context']), policy_source_commit='a'*40, policy_source_sha256='b'*64,
+            evidence_files=[dict(path=str(linked), sha256=hashlib.sha256(linked.read_bytes()).hexdigest())],
+            **{k: copy.deepcopy(intent[k]) for k in ('request_id', 'dispatch', 'adapter_identity', 'sql_sha256')})
+        audit = self.root / 'operator-rejection.json'
+        audit.write_text(json.dumps(evidence))
+        return adapter, path, audit, evidence
+
+    def test_legacy_operator_audit_sidecar_preserves_original_bytes_and_reuses_without_http(self):
+        adapter, path, audit, evidence = self.legacy_audit()
+        files = [path, path.parent.parent / 'run.json', path.parent.parent / 'queries.json']
+        originals = {p: p.read_bytes() for p in files}
+        with patch.object(adapter, 'request', side_effect=AssertionError('operator path must not use HTTP')):
+            result = runner.reconcile(path, adapter, rejection_evidence=audit)
+            self.assertEqual(result['status'], 'FAILED')
+            self.assertEqual(result['reconciliation'], 'REJECTED')
+            self.assertIsNone(result['handle'])
+            self.assertIsNone(result['no_dispatch_evidence']['captured_api_code'])
+            self.assertEqual(result['no_dispatch_evidence']['derived_code'], 'SQL_PERMISSION_DENIED')
+            self.assertEqual(json.loads(path.read_text())['status'], 'UNKNOWN')
+            self.assertEqual(runner.reconcile(path, adapter), result)
+        self.assertEqual({p: p.read_bytes() for p in files}, originals)
+        # A fresh bounded run can pass the old hold only through the validated sidecar.
+        self.run_adapter(ScriptedPublic(), 'fresh')
+        evidence['observed_http_status'] = 500
+        sidecar = path.parent / 'reconciliation.json'
+        bad = json.loads(sidecar.read_text())
+        bad['no_dispatch_evidence'] = evidence
+        sidecar.write_text(json.dumps(bad))
+        self.assertIsNone(runner.terminal_reconciliation(sidecar, json.loads(path.read_text())))
+
+    def test_legacy_rejection_audit_rejects_tampered_scopes_facts_and_linked_bytes_without_http(self):
+        adapter, path, audit, evidence = self.legacy_audit()
+        changes = [('request_id', 'different'), ('sql_sha256', '0'*64), ('original_attempt_sha256', '0'*64),
+                   ('manifest_sha256', '0'*64), ('query_manifest_sha256', '0'*64), ('observed_http_status', 500),
+                   ('captured_api_code', 'SQL_PERMISSION_DENIED'), ('derived_code', 'OTHER'), ('unique_http_event', False),
+                   ('readonly_ledger_rows', 1), ('backend_nonterminal', 1), ('completed_response', False),
+                   ('pre_dispatch_guard_rejected', False), ('evidence_files', []), ('policy_source_commit', ''),
+                   ('context', dict(evidence['context'], generation_id='wrong')),
+                   ('dispatch', dict(evidence['dispatch'], worksheet_id='wrong')),
+                   ('adapter_identity', dict(evidence['adapter_identity'], account='wrong'))]
+        with patch.object(adapter, 'request', side_effect=AssertionError('no HTTP on rejected audit')):
+            for key, value in changes:
+                bad = copy.deepcopy(evidence)
+                bad[key] = value
+                audit.write_text(json.dumps(bad))
+                with self.subTest(key=key), self.assertRaises(ValueError):
+                    runner.reconcile(path, adapter, rejection_evidence=audit)
+            audit.write_text(json.dumps(evidence))
+            original = path.read_bytes()
+            for key, value in [('handle', dict(id='known')), ('sql', 'SELECT 999'), ('status', 'RUNNING')]:
+                intent = json.loads(original)
+                intent[key] = value
+                path.write_text(json.dumps(intent))
+                with self.subTest(intent=key), self.assertRaises(ValueError):
+                    runner.reconcile(path, adapter, rejection_evidence=audit)
+                path.write_bytes(original)
+            manifest = path.parent.parent / 'queries.json'
+            raw = manifest.read_bytes()
+            manifest.write_bytes(raw + b' ')
+            with self.assertRaises(ValueError):
+                runner.reconcile(path, adapter, rejection_evidence=audit)
+            manifest.write_bytes(raw)
+            linked = Path(evidence['evidence_files'][0]['path'])
+            linked.write_text('{}')
+            with self.assertRaises(ValueError):
+                runner.reconcile(path, adapter, rejection_evidence=audit)
+        self.assertFalse((path.parent / 'reconciliation.json').exists())
+
+
+    def test_captured_rejection_scope_and_forged_legacy_captured_receipt_are_refused(self):
+        from test_local_perf_http import http_failure
+        from benchmarks.local_perf.public import valid_submission_rejection
+        adapter = ScriptedPublic()
+        with patch.object(adapter, 'request', side_effect=http_failure()):
+            with self.assertRaises(runner.HTTPFailure):
+                self.run_adapter(adapter)
+        intent = json.loads(self.receipt().read_text())
+        for field, value in [('http_status', 500), ('request_id', 'wrong'), ('sql_sha256', 'wrong'),
+                             ('path', '/api/v1/other'), ('captured_api_code', 'OTHER'),
+                             ('dispatch', dict(intent['dispatch'], context=dict(CONTEXT, generation_id='wrong')))]:
+            rejection = copy.deepcopy(intent['submission_rejection'])
+            rejection[field] = value
+            with self.subTest(field=field):
+                self.assertFalse(valid_submission_rejection(rejection, intent))
+        # A new run can reuse the genuinely captured terminal attempt without HTTP to it.
+        self.run_adapter(ScriptedPublic(), 'after-captured')
+        self.tmp.cleanup()
+        self.setUp()
+        adapter, path, audit, evidence = self.legacy_audit()
+        original = json.loads(path.read_text())
+        adapter.bind(original)
+        forged = adapter.submission_rejection(http_failure(), original)
+        sidecar = path.parent / 'reconciliation.json'
+        sidecar.write_text(json.dumps(dict(original, status='FAILED', reconciliation='REJECTED', submission_rejection=forged)))
+        self.assertIsNone(runner.terminal_reconciliation(sidecar, original))
+        sidecar.unlink()
+        resolved = runner.reconcile(path, adapter, rejection_evidence=audit)
+        resolved['error_code'] = 'SQL_PERMISSION_DENIED'  # Cannot relabel an old lost code as captured.
+        sidecar.write_text(json.dumps(resolved))
+        self.assertIsNone(runner.terminal_reconciliation(sidecar, original))
+
+
+    def test_operator_reviewer_is_explicit_bounded_and_not_agent_specific(self):
+        adapter, path, audit, evidence = self.legacy_audit()
+        original = path.read_bytes()
+        with patch.object(adapter, 'request', side_effect=AssertionError('no HTTP for operator audit')):
+            for reviewer in ('Codex local operator', 'Aiko Tanaka', 'Local operator 7'):
+                evidence['reviewer'] = reviewer
+                audit.write_text(json.dumps(evidence))
+                result = runner.reconcile(path, adapter, rejection_evidence=audit)
+                self.assertEqual(result['no_dispatch_evidence']['reviewer'], reviewer)
+                self.assertEqual(path.read_bytes(), original)
+            for reviewer in ('', '   ', 'x' * 129, 'operator\nforged', 'operator\rforged', 'operator\x00forged', None):
+                evidence['reviewer'] = reviewer
+                audit.write_text(json.dumps(evidence))
+                with self.subTest(reviewer=repr(reviewer)), self.assertRaises(ValueError):
+                    runner.reconcile(path, adapter, rejection_evidence=audit)
+
+    def test_submission_rejection_drops_reflected_non_uuid_server_id(self):
+        from test_local_perf_http import http_failure
+        from benchmarks.local_perf.public import valid_submission_rejection
+        adapter = ScriptedPublic()
+        with patch.object(adapter, 'request', side_effect=http_failure(request_id='never-record-password')):
+            with self.assertRaises(runner.HTTPFailure):
+                self.run_adapter(adapter)
+        intent = json.loads(self.receipt().read_text())
+        receipt = intent['submission_rejection']
+        self.assertIsNone(receipt['server_request_id'])
+        self.assertNotIn('never-record-password', self.receipt().read_text())
+        self.assertTrue(valid_submission_rejection(receipt, intent))
+        receipt['server_request_id'] = 'never-record-password'
+        self.assertFalse(valid_submission_rejection(receipt, intent))
+        receipt['server_request_id'] = 'a9ee0597-9d68-49fb-bb2a-1408a6d774b3'
+        self.assertTrue(valid_submission_rejection(receipt, intent))
+
+
+    def test_original_intent_without_reconciliation_reuses_rejected_sidecar_without_http(self):
+        import hashlib
+        adapter, path, audit, evidence = self.legacy_audit()
+        intent = json.loads(path.read_text())
+        intent['status'] = 'INTENT'
+        intent.pop('reconciliation', None)
+        path.write_text(json.dumps(intent))
+        original = path.read_bytes()
+        manifest = path.parent.parent / 'queries.json'
+        manifest_bytes = manifest.read_bytes()
+        evidence['original_attempt_sha256'] = hashlib.sha256(original).hexdigest()
+        evidence['manifest_sha256'] = hashlib.sha256(manifest_bytes).hexdigest()
+        audit.write_text(json.dumps(evidence))
+        with patch.object(adapter, 'request', side_effect=AssertionError('INTENT rejection must not dispatch or use HTTP')):
+            result = runner.reconcile(path, adapter, rejection_evidence=audit)
+            self.assertEqual(result['status'], 'FAILED')
+            self.assertEqual(result['reconciliation'], 'REJECTED')
+            sidecar = path.parent / 'reconciliation.json'
+            self.assertEqual(runner.terminal_reconciliation(sidecar, intent), result)
+            self.assertEqual(runner.reconcile(path, adapter), result)
+            for key, value in [('status', 'UNKNOWN'), ('request_id', 'wrong'), ('handle', dict(id='known'))]:
+                bad = copy.deepcopy(result)
+                bad[key] = value
+                sidecar.write_text(json.dumps(bad))
+                with self.subTest(key=key):
+                    self.assertIsNone(runner.terminal_reconciliation(sidecar, intent))
+            bad = copy.deepcopy(result)
+            bad['no_dispatch_evidence']['manifest_sha256'] = '0' * 64
+            sidecar.write_text(json.dumps(bad))
+            self.assertIsNone(runner.terminal_reconciliation(sidecar, intent))
+            sidecar.write_text(json.dumps(result))
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(manifest.read_bytes(), manifest_bytes)
+
+
 if __name__ == "__main__":
     unittest.main()

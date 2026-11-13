@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import uuid
 
-from .runner import TrinoAdapter
+from .runner import HTTPFailure, SERVER_ERROR_ID, TrinoAdapter, sql_identity
 from .results import Writer, column
 
 CONTEXT = ("database_id", "schema_id", "warehouse_id", "sql_catalog", "sql_schema",
@@ -70,6 +70,30 @@ def valid_handle(handle):
                  isinstance(handle["backend_query_id"], str) and bool(handle["backend_query_id"])))
 
 
+def rejection_scope(value, intent):
+    try:
+        b, identity = intent["dispatch"], intent["adapter_identity"]
+        return (isinstance(value, dict) and intent.get("handle") is None and identity["kind"] == "shirokuma-public"
+                and context(b["context"]) == identity["context"] and b["context"]["selected_role"] == identity["selected_role"]
+                and b["request_id"] == intent["request_id"] and isinstance(b["worksheet_id"], str) and bool(b["worksheet_id"])
+                and intent.get("mode") == "read-only" and sql_identity(intent["sql"]) == intent["sql_sha256"]
+                and all(value.get(k) == intent[k] for k in ("request_id", "dispatch", "adapter_identity", "sql_sha256")))
+    except (KeyError, ValueError, TypeError):
+        return False
+
+
+def valid_submission_rejection(value, intent):
+    return (rejection_scope(value, intent)
+            and set(value) == {"format", "kind", "http_status", "captured_api_code", "completed_response",
+                               "server_request_id", "method", "path", "origin", "request_id", "dispatch", "adapter_identity", "sql_sha256"}
+            and type(value.get("format")) is int and value["format"] == 1 and value.get("kind") == "http-submission-rejection"
+            and type(value.get("http_status")) is int and value["http_status"] == 403 and value.get("captured_api_code") == "SQL_PERMISSION_DENIED"
+            and value.get("completed_response") is True and value.get("method") == "POST"
+            and value.get("path") == "/api/v1/queries" and value.get("origin") == intent["adapter_identity"]["origin"]
+            and (value.get("server_request_id") is None or isinstance(value["server_request_id"], str)
+                 and re.fullmatch(SERVER_ERROR_ID, value["server_request_id"]) is not None))
+
+
 class PublicAdapter(TrinoAdapter):
     name = "shirokuma-public"
 
@@ -125,6 +149,18 @@ class PublicAdapter(TrinoAdapter):
             raise PublicError("PUBLIC_CONTEXT")
         self.binding = copy.deepcopy(b)
         self.sql, self.mode = intent["sql"], intent["mode"]
+
+    def submission_rejection(self, error, intent):
+        if (not isinstance(error, HTTPFailure) or error.http_status != 403 or error.api_code != "SQL_PERMISSION_DENIED"
+                or error.method != "POST" or error.path != "/api/v1/queries" or list(error.origin) != self.identity()["origin"]
+                or intent.get("handle") is not None or self.binding != intent.get("dispatch")
+                or self.sql != intent.get("sql") or self.identity() != intent.get("adapter_identity")):
+            return None
+        value = dict(format=1, kind="http-submission-rejection", http_status=403, captured_api_code=error.api_code,
+                     completed_response=True, server_request_id=error.server_request_id, method=error.method,
+                     path=error.path, origin=list(error.origin),
+                     **{k: copy.deepcopy(intent[k]) for k in ("request_id", "dispatch", "adapter_identity", "sql_sha256")})
+        return value if valid_submission_rejection(value, intent) else None
 
     def validate(self, page, handle=None):
         b = self.binding
