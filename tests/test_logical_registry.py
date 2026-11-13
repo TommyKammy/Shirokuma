@@ -15,10 +15,10 @@ import runtime_profile
 class LogicalRegistryTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(':memory:')
+        self.addCleanup(self.db.close)
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA foreign_keys=ON')
         store._bootstrap(self.db)
-        self.addCleanup(self.db.close)
         current = patch.object(runtime_profile, '_current', None)
         current.start(); self.addCleanup(current.stop)
         self.db.execute('BEGIN IMMEDIATE')

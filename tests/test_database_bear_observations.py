@@ -28,6 +28,7 @@ with tempfile.TemporaryDirectory() as _bootstrap:
         import workbench_server as wb
         import warehouse_resident as wr
         import runtime_profile
+from fixture_lifecycle import setup_fixture
 from query_context import QueryError
 
 NOW = '2026-11-01T01:00:00Z'
@@ -577,8 +578,7 @@ class LogicalObservationTests(unittest.TestCase):
         import test_logical_registry as logical_fixtures
         import logical_registry as logical
         fixture = logical_fixtures.LogicalRegistryTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        setup_fixture(self, fixture)
         fixture.setup_ready()
         fixture.db.execute("UPDATE warehouse_config_generations SET database_revisions='[]',grant_revisions='[]',configuration_refs='[]'")
         fixture.grant()

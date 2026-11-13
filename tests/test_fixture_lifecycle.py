@@ -1,5 +1,6 @@
 """Nested fixture ownership contracts; all backends remain local test doubles."""
 import os
+import sqlite3
 import sys
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -12,6 +13,10 @@ import test_manual_wap as wap_tests
 import test_dataops_service as dataops_tests
 import test_request_auth as auth_tests
 import test_query_service as query_tests
+import test_logical_registry as registry_tests
+import test_logical_access as access_tests
+import test_database_ai_sources as source_tests
+import test_database_bear_observations as observation_tests
 import trino_auth
 import warehouse_resident
 
@@ -337,3 +342,172 @@ class DbtFixtureFailureTests(unittest.TestCase):
             finally:
                 self.assertTrue(parent.doCleanups())
         return observed['principal'].root
+
+
+class LogicalFixtureFailureTests(unittest.TestCase):
+    def capture_registry(self, stack, stage=None):
+        """Track the real leaf connection, injecting only at its setup boundaries."""
+        observed = {}
+        connect = sqlite3.connect
+        bootstrap = registry_tests.store._bootstrap
+        setup = registry_tests.LogicalRegistryTests.setUp
+        failure = RuntimeError('injected ' + str(stage))
+        owner = self
+
+        class Connection(sqlite3.Connection):
+            close_calls = 0
+
+            def close(self):
+                self.close_calls += 1
+                return super().close()
+
+            def execute(self, sql, *args, **kwargs):
+                if stage == 'begin' and observed.get('bootstrapped') and sql == 'BEGIN IMMEDIATE':
+                    owner.assertIsNone(registry_tests.runtime_profile._current)
+                    owner.assertEqual(self.close_calls, 0)
+                    observed['cleanup'].assert_not_called()
+                    raise failure
+                return super().execute(sql, *args, **kwargs)
+
+        def capture_connect(database, *args, **kwargs):
+            if database == ':memory:':
+                kwargs['factory'] = Connection
+                observed['db'] = connect(database, *args, **kwargs)
+                return observed['db']
+            return connect(database, *args, **kwargs)
+
+        def fail_bootstrap(db):
+            if stage == 'bootstrap' and db is observed.get('db'):
+                self.assertIs(registry_tests.runtime_profile._current, observed['profile'])
+                self.assertEqual(db.execute('SELECT 1').fetchone()[0], 1)
+                self.assertEqual(db.close_calls, 0)
+                observed['cleanup'].assert_not_called()
+                raise failure
+            result = bootstrap(db)
+            if db is observed.get('db'):
+                observed['bootstrapped'] = True
+            return result
+
+        def record_setup(child):
+            observed['child'] = child
+            observed['profile'] = registry_tests.runtime_profile._current
+            observed['cleanup'] = stack.enter_context(
+                patch.object(child, 'doCleanups', wraps=child.doCleanups))
+            return setup(child)
+
+        stack.enter_context(patch.object(sqlite3, 'connect', side_effect=capture_connect))
+        stack.enter_context(patch.object(registry_tests.store, '_bootstrap', side_effect=fail_bootstrap))
+        stack.enter_context(patch.object(registry_tests.LogicalRegistryTests, 'setUp', record_setup))
+        return observed, failure
+
+    def assert_closed_once(self, observed):
+        self.assertEqual(observed['db'].close_calls, 1)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            observed['db'].execute('SELECT 1')
+        observed['cleanup'].assert_called_once_with()
+
+    def release_child(self, observed):
+        # Keep even a failing regression subtest from leaking a patch or DB.
+        child = observed.get('child')
+        if child is not None and child._cleanups:
+            child.doCleanups()
+        db = observed.get('db')
+        if db is not None and not db.close_calls:
+            db.close()
+
+    def test_direct_leaf_failure_is_cleaned_by_unittest(self):
+        for stage in ('bootstrap', 'begin'):
+            with self.subTest(stage=stage), ExitStack() as stack:
+                sentinel = object()
+                stack.enter_context(patch.object(registry_tests.runtime_profile, '_current', sentinel))
+                observed, failure = self.capture_registry(stack, stage)
+                leaf = registry_tests.LogicalRegistryTests(
+                    'test_foundation_requires_real_applied_generation_and_cas')
+                try:
+                    result = unittest.TestResult()
+                    leaf.run(result)
+                    self.assertEqual(len(result.errors), 1)
+                    self.assertIn(str(failure), result.errors[0][1])
+                    self.assertEqual(result.failures, [])
+                    self.assert_closed_once(observed)
+                    self.assertIs(registry_tests.runtime_profile._current, sentinel)
+                finally:
+                    self.release_child(observed)
+
+    def test_actual_callers_unwind_leaf_failure_before_parent_cleanup(self):
+        callers = (
+            (access_tests.LogicalAccessTests, 'setUp'),
+            (source_tests.LogicalSourceTests,
+             'test_retired_identity_and_changed_username_never_fallback'),
+            (observation_tests.LogicalObservationTests,
+             'test_current_identity_and_new_snapshot_identity_revoke'),
+        )
+        for parent_type, method in callers:
+            for stage in ('bootstrap', 'begin'):
+                with self.subTest(caller=parent_type.__name__, stage=stage), ExitStack() as stack:
+                    sentinel = object()
+                    stack.enter_context(patch.object(registry_tests.runtime_profile, '_current', sentinel))
+                    observed, failure = self.capture_registry(stack, stage)
+                    parent = parent_type()
+                    # Independent parent-owned resources must survive child unwind.
+                    parent_db = sqlite3.connect('')
+                    parent.addCleanup(parent_db.close)
+                    original = registry_tests.lr._credentials
+                    parent_patch = patch.object(registry_tests.lr, '_credentials', object())
+                    installed = parent_patch.start()
+                    parent.addCleanup(parent_patch.stop)
+                    try:
+                        with self.assertRaises(RuntimeError) as caught:
+                            getattr(parent, method)()
+                        self.assertIs(caught.exception, failure)
+                        self.assert_closed_once(observed)
+                        self.assertIs(registry_tests.runtime_profile._current, observed['profile'])
+                        self.assertIs(registry_tests.lr._credentials, installed)
+                        self.assertEqual(parent_db.execute('SELECT 1').fetchone()[0], 1)
+                        if parent_type is access_tests.LogicalAccessTests:
+                            self.assertIsNot(observed['profile'], sentinel)
+                            self.assertTrue(parent.root.is_dir())
+                            self.assertEqual(os.environ['SHIROKUMA_RUNTIME_PROFILE'],
+                                             str(parent.root / 'runtime-profile.json'))
+                        self.assertTrue(parent.doCleanups())
+                        self.assertTrue(parent.doCleanups())
+                        self.assert_closed_once(observed)
+                        self.assertIs(registry_tests.runtime_profile._current, sentinel)
+                        self.assertIs(registry_tests.lr._credentials, original)
+                        with self.assertRaises(sqlite3.ProgrammingError):
+                            parent_db.execute('SELECT 1')
+                        if parent_type is access_tests.LogicalAccessTests:
+                            self.assertFalse(parent.root.exists())
+                    finally:
+                        self.release_child(observed)
+                        self.assertTrue(parent.doCleanups())
+
+    def test_access_success_releases_child_before_first_principal(self):
+        with ExitStack() as stack:
+            sentinel = object()
+            stack.enter_context(patch.object(registry_tests.runtime_profile, '_current', sentinel))
+            observed, _ = self.capture_registry(stack)
+            parent = access_tests.LogicalAccessTests()
+            principal = access_tests.auth.AuthenticatedPrincipal
+            calls = []
+
+            def check_continuation(*args, **kwargs):
+                self.assert_closed_once(observed)
+                self.assertIs(registry_tests.runtime_profile._current, observed['profile'])
+                self.assertIsNot(observed['profile'], sentinel)
+                self.assertTrue(parent.root.is_dir())
+                calls.append(args[0])
+                return principal(*args, **kwargs)
+
+            stack.enter_context(patch.object(access_tests.auth, 'AuthenticatedPrincipal',
+                                            side_effect=check_continuation))
+            try:
+                parent.setUp()
+                self.assertEqual(calls, ['alice', 'bob', 'operator'])
+                self.assertTrue(parent.doCleanups())
+                self.assertTrue(parent.doCleanups())
+                self.assert_closed_once(observed)
+                self.assertIs(registry_tests.runtime_profile._current, sentinel)
+            finally:
+                self.release_child(observed)
+                self.assertTrue(parent.doCleanups())
