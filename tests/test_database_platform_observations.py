@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / 'tools/local_experiment'))
 # Both real handler families may initialize legacy settings at import.
 with tempfile.TemporaryDirectory() as _bootstrap:
     with patch.dict(os.environ, {'SHIROKUMA_STATE_DIR': _bootstrap}):
+        import db_platform_collect as collect
         import db_platform_observations as obs
         import ai_routes
         import audit_service as audit
@@ -84,7 +85,7 @@ class PlatformTests(unittest.TestCase):
                      '--context', 'context-secret', '--namespace', 'fixed-ns', '--request-timeout=15s']
         self.kube = self.patch(patch.object(obs.logical_foundation, 'kube_argv', return_value=self.argv))
         self.runner = self.patch(patch.object(obs.subprocess, 'Popen', side_effect=lambda *a, **k: Process(ROWS)))
-        self.selector = self.patch(patch.object(obs.selectors, 'DefaultSelector', Selector))
+        self.selector = self.patch(patch.object(collect.selectors, 'DefaultSelector', Selector))
         self.proof = self.root / 'local-engine-ready.json'
         self.policy = self.root / 'runtime' / 'auto_chill.json'
         self.policy.parent.mkdir()
@@ -259,7 +260,7 @@ class PlatformTests(unittest.TestCase):
                         if not 0 < self_timeout <= 8:
                             raise AssertionError('unbounded select')
                         return [] if mode == 'timeout' else [True]
-                with patch.object(obs.selectors, 'DefaultSelector', TimedSelector), ExitStack() as stack:
+                with patch.object(collect.selectors, 'DefaultSelector', TimedSelector), ExitStack() as stack:
                     if mode == 'outer_timeout':
                         stack.enter_context(patch.object(obs.time, 'monotonic', side_effect=[0, 9]))
                     result = self.observe()

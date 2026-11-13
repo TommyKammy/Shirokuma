@@ -54,6 +54,81 @@ class Selector:
     def select(self, timeout): return [True]
 
 
+class BoundedStdoutTests(unittest.TestCase):
+    def setUp(self):
+        selector = patch.object(collect.selectors, 'DefaultSelector', Selector)
+        selector.start()
+        self.addCleanup(selector.stop)
+
+    def test_exact_cap_and_overflow_leave_cleanup_to_caller(self):
+        for raw in (b'abcd', b'abcde'):
+            process = Process(raw)
+            with self.subTest(raw=raw), \
+                    patch.object(collect.time, 'monotonic', return_value=2), \
+                    patch.object(process.stdout, 'read1', wraps=process.stdout.read1) as read, \
+                    patch.object(process, 'poll', side_effect=AssertionError('caller owns poll')), \
+                    patch.object(process, 'kill', side_effect=AssertionError('caller owns kill')):
+                if len(raw) == 4:
+                    self.assertEqual(collect.read_bounded_stdout(process, deadline=10,
+                        max_stdout_bytes=4, timeout_argv=['fixed']), raw)
+                    self.assertEqual([call.args for call in read.call_args_list], [(5,), (1,)])
+                    self.assertEqual(process.timeouts, [8])
+                else:
+                    with self.assertRaises(ValueError):
+                        collect.read_bounded_stdout(process, deadline=10,
+                            max_stdout_bytes=4, timeout_argv=['fixed'])
+                    self.assertEqual([call.args for call in read.call_args_list], [(5,)])
+                    self.assertEqual(process.timeouts, [])
+                self.assertFalse(process.stdout.closed)
+
+    def test_eof_after_absolute_deadline_does_not_wait(self):
+        process = Process(b'')
+        with patch.object(collect.time, 'monotonic', side_effect=[9, 10]), \
+                self.assertRaises(ValueError):
+            collect.read_bounded_stdout(process, deadline=10,
+                max_stdout_bytes=4, timeout_argv=['fixed'])
+        self.assertEqual(process.timeouts, [])
+        self.assertFalse(process.stdout.closed)
+        self.assertFalse(process.killed)
+
+    def test_timeout_metadata_for_deadline_and_select_expiry(self):
+        argv = ['kubectl', '--context', 'fixed']
+        for now, selected in ((10, [True]), (9, [])):
+            process = Process(b'')
+            with self.subTest(now=now), \
+                    patch.object(collect.time, 'monotonic', return_value=now), \
+                    patch.object(Selector, 'select', return_value=selected) as select, \
+                    self.assertRaises(subprocess.TimeoutExpired) as raised:
+                collect.read_bounded_stdout(process, deadline=10,
+                    max_stdout_bytes=4, timeout_argv=argv)
+            self.assertIs(raised.exception.cmd, argv)
+            self.assertEqual(raised.exception.timeout, 8)
+            self.assertEqual(select.call_count, int(now < 10))
+            if now < 10:
+                select.assert_called_once_with(1)
+            self.assertEqual(process.timeouts, [])
+            self.assertFalse(process.stdout.closed)
+            self.assertFalse(process.killed)
+
+    def test_foundation_controllers_cleanup_failure_still_closes_and_checks(self):
+        import db_platform_foundation_controllers as controllers
+        for failing in ('kill', 'wait'):
+            process = Process(b'')
+            checks = []
+            def check():
+                checks.append(process.stdout.closed)
+            with self.subTest(failing=failing), \
+                    patch.object(controllers.logical_foundation, 'kube_argv', return_value=['kubectl']), \
+                    patch.object(controllers.time, 'monotonic', return_value=0), \
+                    patch.object(controllers.subprocess, 'Popen', return_value=process), \
+                    patch.object(process.stdout, 'read1', side_effect=ValueError), \
+                    patch.object(process, failing, side_effect=OSError('cleanup failure')), \
+                    self.assertRaisesRegex(OSError, 'cleanup failure'):
+                controllers._collect({'prefix': 'sample'}, check, 8)
+            self.assertTrue(process.stdout.closed)
+            self.assertEqual(checks, [False, True])
+
+
 class ResourcesTests(unittest.TestCase):
     def patch(self, item):
         result = item.start()
