@@ -2,7 +2,7 @@
 
 Local-only preparation under ADR-0036. Python 3.9+ runs the stdlib suite;
 generation/reference execution uses a separate Python 3.12 venv and **DuckDB
-1.4.3**, pinned in `requirements.txt`. No pandas/Arrow, product API edits,
+1.4.3**, pinned in `requirements.txt`. No pandas/Arrow, public API contract changes,
 workload changes, VM application, cloud execution, or global Python installation.
 
 This initial toolkit prepares TPC-derived data and reference results and runs
@@ -37,9 +37,10 @@ the printed artifact directory, including FAILED metadata on exceptions.
 References are same-engine Parquet roundtrips, **not independent verification**.
 
 The stdlib suite keeps scripted transport/lifecycle tests separate from real
-loopback fake-server tests. The Commander host runs on 2026-11-13 passed all 45
-tests on both Python 3.9.6 and 3.12.12, including 8 real loopback cases for slow-drip status/headers, incomplete
-Content-Length and query lifecycle. Fresh-cache/install failures are also mocked
+loopback fake-server tests. The Commander host runs on 2026-11-13 passed all 70
+tests on both Python 3.9.6 and 3.12.12, including 9 real loopback cases for public
+context/auth/pages, slow-drip status/headers, incomplete Content-Length and query
+lifecycle. Fresh-cache/install failures are also mocked
 without network in the ordinary suite. Real generation remains an explicit step.
 
 Focused review regressions (stdlib, no downloads):
@@ -204,9 +205,13 @@ rtk proxy python3 -m benchmarks.local_perf run "${TMPDIR:-/tmp}/local-perf-examp
 ```
 
 This command does not load Parquet into Trino. Prepare the isolated snapshot
-separately later; the worker did not contact live services. Optional Basic
-credentials come from `--password-env ENVIRONMENT_VARIABLE_NAME`, never a CLI
-password. Every URL must be the same configured loopback origin. Redirects,
+separately. For authenticated HTTPS use `--ca-file` and an explicit mode-0600
+`--auth-file` containing exactly `username` and `password`. CA and hostname
+verification remain enabled. Direct credentials must belong to the selected
+database's execution identity, not a platform provisioner. The toolkit never
+looks up operator secrets. Optional legacy Basic credentials come from
+`--password-env ENVIRONMENT_VARIABLE_NAME`, never a CLI password. Every URL must
+be the same configured loopback origin. Redirects,
 foreign pages and URL credentials are rejected before sending credentials.
 Backend exception bodies/auth are not written to artifacts or CLI errors.
 
@@ -223,12 +228,12 @@ chunk parser and body reads; socket waits also use remaining deadline (maximum
 reconciles the engine query endpoint; cancellation failure stays UNKNOWN and
 blocks all subsequent dispatch in the campaign. Any failure stops the run.
 Response-loss POST is never resubmitted, including after restarting the tool.
-Unknown attempts without handles cannot be resolved by this adapter. Failed and
+Direct Trino attempts without handles remain UNKNOWN. Failed and
 uncertain attempts remain in run counts and fresh outputs cannot overwrite them.
 
 ```sh
 rtk proxy python3 -m benchmarks.local_perf inspect "${TMPDIR:-/tmp}/local-perf-example/qualification/run.json"
-rtk proxy python3 -m benchmarks.local_perf reconcile "${TMPDIR:-/tmp}/local-perf-example/trino-qualification/1-0/attempt.json" --adapter trino --url http://127.0.0.1:8080
+rtk proxy python3 -m benchmarks.local_perf reconcile "${TMPDIR:-/tmp}/local-perf-example/trino-qualification/1-0/attempt.json" --adapter trino --url http://127.0.0.1:8080 --catalog iceberg --schema benchmark
 ```
 
 Reconcile verifies the owned campaign/run/attempt path and original adapter kind,
@@ -265,6 +270,75 @@ Current qualification timers include capacity checks and durable receipt IO
 before dispatch. Send/queue/engine/first-row/last-row timing boundaries must be
 instrumented separately before these records are used for performance comparison.
 
+## Public API and portable connection qualification
+
+`public` uses the normal `/api/v1/queries` interface, with Basic authentication
+and `X-Shirokuma-Role`. Supply an explicit mode-0600 client JSON containing
+exactly `username`, `password`, and `selected_role`. Alternatively,
+`--runtime-profile path.json` reads only its absolute `client_auth_file`
+reference; it does not load server credentials or infer an engine endpoint.
+The default public URL is `http://127.0.0.1:8888`. The runtime profile's legacy
+`sql_endpoint_url` is not proof of the logical engine's address.
+
+Select one database and schema by ID or SQL name. A frozen connection retains
+the public account, role, origin, max_rows, credential **path**, and all nine
+resolved context fields: database/schema/warehouse IDs, SQL catalog/schema,
+selected role, binding revision, generation, and grant revision. Later commands
+cannot override that identity. Context captured outside the selector can instead
+be supplied through `--context-file`; it must contain exactly those fields.
+
+The portable examples use identical inline VALUES and explicit SQL casts across
+DuckDB, direct Trino, and the public API. They exercise scalar types, NULL,
+duplicates, empty results, aggregates, joins, windows, microsecond timestamps,
+and 4,096 wide rows for pagination. They do not register tables or claim an
+identical persisted Iceberg snapshot. Create a fresh Git-external campaign:
+
+```sh
+rtk proxy python3 -m benchmarks.local_perf init /tmp/local-perf-connections-unique
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-sql-reference /tmp/local-perf-connections-unique benchmarks/local_perf/examples/connection-qualification.json reference
+rtk proxy python3 -m benchmarks.local_perf freeze-public-connection /tmp/local-perf-connections-unique/public.json --adapter public --auth-file /absolute/private/client-auth.json --database YOUR_DATABASE_ID --schema YOUR_SCHEMA_ID
+rtk proxy python3 -m benchmarks.local_perf run /tmp/local-perf-connections-unique public benchmarks/local_perf/examples/connection-qualification.json --adapter public --connection-file /tmp/local-perf-connections-unique/public.json --references /tmp/local-perf-connections-unique/reference
+rtk proxy python3 -m benchmarks.local_perf run /tmp/local-perf-connections-unique direct benchmarks/local_perf/examples/connection-qualification.json --adapter trino --url https://127.0.0.1:YOUR_OWNED_FORWARD_PORT --ca-file /absolute/private/trino-ca.pem --auth-file /absolute/private/database-auth.json --catalog YOUR_SQL_CATALOG --schema YOUR_SQL_SCHEMA --references /tmp/local-perf-connections-unique/reference
+```
+
+Replace every placeholder with verified local values. An owned tunnel must
+remain open for the whole run and cancellation/reconciliation window. Stop only
+that tunnel afterward and remove any temporary credential copy. Direct Trino
+advertises `PARAMETRIC_DATETIME` to preserve timestamp precision; the public
+service must preserve it on its own backend connection too. See the
+[Trino client protocol](https://trino.io/docs/current/develop/client-protocol.html).
+The SQL-only reference records its provenance and never fabricates `dataset.json`.
+
+Commander live qualification passed the nine portable queries through both Trino
+483 and the public API, each with 4,111 rows fully matching DuckDB. Overflow,
+lost-response cancellation and role isolation were also checked; see the
+[connection verification record](../../docs/guides/performance-connections-2026-11-13.md).
+
+Public attempts persist request ID, worksheet ID, full context and read-only
+mode before POST. All returned pages must retain these identities, backend ID,
+schema and mapped states. Empty pre-schema waiting pages are accepted, while
+duplicate receipts, foreign/cross-query page URLs, errors, truncation, missing
+schema or missing terminal completion fail. Native column types remain in the
+attempt audit; bounded VARCHAR is compared losslessly as VARCHAR. FINISHED alone
+does not prove all requested results were fetched.
+
+`max_rows` remains 1..10,000, default 10,000. The overflow example returns 10,001
+rows and must fail as `PUBLIC_TRUNCATED`; use its own prepared reference and
+run name. Never change it to `None` or bypass public authorization. Public
+qualification is recorded only after full result comparison succeeds through
+this adapter; direct-engine success never sets that flag.
+
+If the initial POST response is lost, recovery searches public history for a
+unique match of request/worksheet IDs, all context fields, exact SQL and mode.
+Zero or multiple matches remain UNKNOWN and block dispatch; the POST is never
+retried. An owned handle is inspected before cancellation. Verified terminal
+state is retained, but incomplete result data is never upgraded to SUCCESS.
+Public recovery uses the original frozen connection:
+
+```sh
+rtk proxy python3 -m benchmarks.local_perf reconcile /tmp/local-perf-connections-unique/public/types-0/attempt.json --adapter public --connection-file /tmp/local-perf-connections-unique/public.json
+```
+
 ## Ownership, cleanup and remaining gates
 
 `cleanup campaign name` only removes successful owned dataset/comparison output;
@@ -275,15 +349,13 @@ cleanup, supervisor or implicit deletion of previous campaigns. Keep campaign
 JSON, raw attempts and results outside Git; they may contain SQL/data and runtime
 paths. Never put secrets in SQL/manifests.
 
-Remaining P1/G1 work: verify real Trino snapshot/dialect/types and cancellation
-behavior, independent cross-engine oracle checks, TPC-DS query execution/variants,
+Remaining P1/G1 work: verify persisted Trino snapshot/dialect and the full TPC
+query suite, TPC-DS query execution/variants,
 query ordering/tie contracts, load registration and telemetry. Generated initial
 TPC manifests select duplicate-preserving unordered comparison; ordered comparison
 is available explicitly, but SQL ORDER BY/tie semantics are not inferred here.
-Fake HTTP transport and packaged TPC-H answers
-have passed locally; they do not replace those real product/engine checks.
-The **public Shirokuma adapter is not implemented**: no private bypass, no
-max_rows=None, no treating 10,000-row truncation as completion. Product API
-auth/context/history/cancellation and bulk/full-page handling remain a separate
-reviewed change. P2 resource/profile application, guest expansion, concurrent
+Portable connection qualification, fake HTTP transport and packaged TPC-H
+answers do not replace those full dataset checks. Public results beyond the
+10,000-row ceiling require a separate reviewed product change. No private
+bypass or `max_rows=None` is used. P2 resource/profile application, guest expansion, concurrent
 load, arrival-rate tests, SLO freezing and long runs are not implemented here.

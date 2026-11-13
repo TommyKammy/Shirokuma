@@ -649,6 +649,7 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
     except (RuntimeError, PermissionError):
         raise QueryError('FEATURE_UNAVAILABLE', 501) from None
     headers.update({'X-Trino-Catalog': context.sql_catalog, 'X-Trino-Schema': context.sql_schema,
+                    'X-Trino-Client-Capabilities': 'PARAMETRIC_DATETIME',
                     'Accept-Encoding': 'identity'})
     query_id, credential_ref = str(uuid.uuid4()), secrets.token_urlsafe(32)
     headers = {key: value for key, value in headers.items() if key.lower() != 'x-trino-source'}
@@ -797,6 +798,7 @@ def _capture_dataops(principal, context):
     if current != context:
         raise QueryError('CONTEXT_MISMATCH', 409)
     headers.update({'X-Trino-Catalog': context.sql_catalog, 'X-Trino-Schema': context.sql_schema,
+                    'X-Trino-Client-Capabilities': 'PARAMETRIC_DATETIME',
                     'Accept-Encoding': 'identity'})
     return _Pin(context, '', dict(headers), trino_auth.backend_ssl_context(), max_rows=None)
 

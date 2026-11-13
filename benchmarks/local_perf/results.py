@@ -22,6 +22,10 @@ def column(name, kind):
                "timestamp": "timestamp(6)", "timestamp with time zone": "timestamp(6) with time zone",
                "timestamptz": "timestamp(6) with time zone"}
     kind = aliases.get(kind, kind)
+    # Trino bounded VARCHAR is the same lossless string value domain here.
+    # Adapters retain the native bounded contract separately in attempt evidence.
+    if re.fullmatch(r"varchar\((0|[1-9][0-9]*)\)", kind):
+        kind = "varchar"
     if kind not in ("tinyint", "smallint", "integer", "bigint", "hugeint", "ubigint",
                     "varchar", "boolean", "date", "double", "real") and not (
             re.fullmatch(r"decimal\(\d+,\d+\)", kind) or

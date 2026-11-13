@@ -3,6 +3,7 @@ import base64
 import copy
 import hashlib
 import socket
+import ssl
 import threading
 import http.client
 from decimal import Decimal
@@ -26,12 +27,15 @@ def sql_identity(sql):
 
 
 def adapter_identity(adapter):
+    if adapter.name == "shirokuma-public":
+        return adapter.identity()
     if isinstance(adapter, TrinoAdapter):
-        return dict(kind=adapter.name, origin=list(adapter.origin),
+        return dict(tls_verified=adapter.origin[0] == "https", kind=adapter.name, origin=list(adapter.origin),
                     user=adapter.headers["X-Trino-User"],
+                    client_capabilities=adapter.headers.get("X-Trino-Client-Capabilities"),
                     catalog=adapter.headers.get("X-Trino-Catalog"), schema=adapter.headers.get("X-Trino-Schema"))
     if isinstance(adapter, DuckDBAdapter):
-        return dict(kind=adapter.name, dataset=str(adapter.dataset.resolve()))
+        return dict(kind=adapter.name, dataset=str(adapter.dataset.resolve()) if adapter.dataset is not None else None)
     raise ValueError("unsupported adapter identity")
 
 
@@ -51,12 +55,18 @@ def origin(url):
 class TrinoAdapter:
     name = "trino-loopback"
 
-    def __init__(self, url, user="local-perf", password=None, catalog=None, schema=None):
+    def __init__(self, url, user="local-perf", password=None, catalog=None, schema=None, *, ca_file=None, ssl_context=None):
         self.url = url.rstrip("/")
         self.origin = origin(self.url)
+        if ca_file is not None and ssl_context is not None:
+            raise ValueError("choose CA file or verified SSL context")
+        self.ssl_context = ssl_context or ssl.create_default_context(cafile=ca_file)
+        if not self.ssl_context.check_hostname or self.ssl_context.verify_mode != ssl.CERT_REQUIRED:
+            raise ValueError("verified TLS required")
         if urllib.parse.urlsplit(self.url).path not in ("", "/") or urllib.parse.urlsplit(self.url).query:
             raise ValueError("Trino base must be origin only")
-        self.headers = {"X-Trino-User": user, "Content-Type": "text/plain; charset=utf-8"}
+        self.headers = {"X-Trino-User": user, "Content-Type": "text/plain; charset=utf-8",
+                        "X-Trino-Client-Capabilities": "PARAMETRIC_DATETIME"}
         if password is not None:
             token = base64.b64encode((user + ":" + password).encode()).decode()
             self.headers["Authorization"] = "Basic " + token
@@ -76,7 +86,8 @@ class TrinoAdapter:
             raise TimeoutError("query deadline")
         parsed = urllib.parse.urlsplit(url)
         cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
-        conn = cls(parsed.hostname, parsed.port, timeout=min(5, remaining))
+        kwargs = {"context": self.ssl_context} if parsed.scheme == "https" else {}
+        conn = cls(parsed.hostname, parsed.port, timeout=min(5, remaining), **kwargs)
         timer, expired = None, threading.Event()
         try:
             conn.connect()
@@ -100,6 +111,8 @@ class TrinoAdapter:
             if not 200 <= response.status < 300:
                 raise RuntimeError("non-2xx backend")
             expected_length = response.length
+            if expected_length is not None and expected_length > 16 * 1024 ** 2:
+                raise ValueError("page exceeds bounded transport size")
             chunks, size = [], 0
             # read1 may close the response/socket as the final bytes arrive.
             while not response.isclosed() and response.length != 0:
@@ -149,6 +162,7 @@ class TrinoAdapter:
     def execute(self, sql, out, metadata, deadline, save, check):
         page = self.request("POST", self.url + "/v1/statement", deadline, sql.encode())
         writer, columns, seen, page_ids, handle = None, None, set(), set(), None
+        native = None
         try:
             while True:
                 qid = page.get("id")
@@ -169,7 +183,12 @@ class TrinoAdapter:
                         or state not in ("QUEUED", "WAITING_FOR_RESOURCES", "DISPATCHING", "PLANNING", "STARTING", "RUNNING", "FINISHING", "FINISHED")):
                     raise ValueError("backend error/truncation/invalid state")
                 if "columns" in page:
-                    incoming = [column(c["name"], c["type"]) for c in page["columns"]]
+                    raw = [{"name": c["name"], "type": c["type"]} for c in page["columns"]]
+                    if native is not None and native != raw:
+                        raise ValueError("native page schema changed")
+                    native = raw
+                    save(dict(handle, native_columns=native))
+                    incoming = [column(c["name"], c["type"]) for c in raw]
                     if columns is not None and incoming != columns:
                         raise ValueError("page schema changed")
                     columns = incoming
@@ -202,12 +221,13 @@ class TrinoAdapter:
 class DuckDBAdapter:
     name = "duckdb-isolated"
 
-    def __init__(self, dataset):
-        self.dataset = Path(dataset)
+    def __init__(self, dataset=None):
+        self.dataset = Path(dataset) if dataset is not None else None
         self.con = None
 
     def execute(self, sql, out, metadata, deadline, save, check):
-        meta = json.loads((self.dataset / "dataset.json").read_text())
+        meta = (json.loads((self.dataset / "dataset.json").read_text()) if self.dataset is not None
+                else dict(status="SUCCESS", peak_bytes=256 * 1024 ** 2, tables=[]))
         if meta["status"] != "SUCCESS":
             raise ValueError("incomplete dataset")
         work = out.parent / "duckdb-work"
@@ -301,7 +321,7 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
     campaign.check(cfg["peak_bytes"])
     root = campaign.own(name, "run")
     report = dict(format=1, status="INCOMPLETE", adapter=adapter.name, adapter_identity=identity, dataset_id=manifest["dataset_id"], settings=cfg,
-                  reference_label=reference_label, attempts=[],
+                  reference_label=reference_label, provenance=reference_label, attempts=[],
                   query_manifest_sha256=hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest(), public_api_qualified=False,
                   planned_attempts=len(queries) * cfg["repetitions"],
                   pending_attempts=len(queries) * cfg["repetitions"], not_run_attempts=0,
@@ -331,6 +351,8 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                               adapter=adapter.name, adapter_identity=identity, sql_sha256=q["sql_sha256"], handle=None, elapsed_s=None, dataset_id=manifest.get("dataset_id"),
                               timeout_s=cfg["timeout_s"], wall_started=time.time(),
                               engine_origin=list(adapter.origin) if isinstance(adapter, TrinoAdapter) else None)
+                if adapter.name == "shirokuma-public":
+                    adapter.prepare_attempt(intent)
                 path = attempt / "attempt.json"
                 report["attempts"].append(dict(path=str(attempt.relative_to(root)), status="INTENT",
                                                request_id=intent["request_id"]))
@@ -340,6 +362,9 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                 write_json(path, intent)  # fsync + atomic replace BEFORE POST/execute
 
                 def save(handle):
+                    handle = dict(handle)
+                    if "native_columns" in handle:
+                        intent["native_columns"] = handle.pop("native_columns")
                     intent.update(status="RUNNING", handle=handle)
                     write_json(path, intent)
 
@@ -356,10 +381,14 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                                   validation_s=time.monotonic() - fetched,
                                   validation="full comparison" if references is not None else "reference preparation only")
                 except BaseException as exc:
-                    terminal = (adapter.cancel_reconcile(intent["handle"])
+                    terminal = (adapter.recover(intent, save) if adapter.name == "shirokuma-public"
+                                and adapter_identity(adapter) == intent["adapter_identity"] else
+                                adapter.cancel_reconcile(intent["handle"])
                                 if adapter_identity(adapter) == intent["adapter_identity"] else "UNKNOWN")
                     intent.update(status="UNKNOWN" if terminal == "UNKNOWN" else "FAILED",
                                   error_type=type(exc).__name__, reconciliation=terminal)
+                    if adapter.name == "shirokuma-public":
+                        intent["error_code"] = getattr(exc, "code", "PUBLIC_QUERY_UNMET")
                     raise
                 finally:
                     intent["elapsed_s"] = time.monotonic() - started
@@ -368,6 +397,7 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                     report["pending_attempts"] = report["planned_attempts"] - len(report["attempts"])
                     write_json(root / "run.json", report)
         report["status"] = "SUCCESS"
+        report["public_api_qualified"] = adapter.name == "shirokuma-public" and references is not None
         campaign.mark(root, "SUCCESS")
         return root
     except BaseException:
@@ -386,12 +416,28 @@ def result_metadata(manifest, q):
 
 
 def terminal_reconciliation(path, intent):
-    if not path.exists() or intent.get("adapter_identity", {}).get("kind") != TrinoAdapter.name:
+    if not path.exists() or intent.get("adapter_identity", {}).get("kind") not in (TrinoAdapter.name, "shirokuma-public"):
         return None
     result = json.loads(path.read_text())
-    if (intent.get("handle") and result.get("status") == "FAILED"
+    keys = ("request_id", "handle", "adapter_identity", "dispatch", "query_id", "sql_sha256", "dataset_id", "sql", "mode")
+    handle = result.get("recovered_handle") or intent.get("handle")
+    if (handle and result.get("status") == "FAILED"
             and result.get("reconciliation") in ("FINISHED", "FAILED", "CANCELED", "CANCELLED")
-            and all(result.get(key) == intent.get(key) for key in ("request_id", "handle", "adapter_identity"))):
+            and all(result.get(key) == intent.get(key) for key in keys)):
+        if intent["adapter_identity"]["kind"] == "shirokuma-public":
+            from .public import context, valid_handle
+            identity, binding = intent["adapter_identity"], intent.get("dispatch", {})
+            try:
+                if (not valid_handle(handle) or context(binding.get("context")) != identity.get("context")
+                        or binding.get("request_id") != intent.get("request_id")
+                        or not isinstance(binding.get("worksheet_id"), str) or not binding["worksheet_id"]
+                        or binding["context"]["selected_role"] != identity.get("selected_role")
+                        or not isinstance(intent.get("sql"), str) or intent.get("mode") != "read-only"
+                        or intent.get("handle") and any(intent["handle"].get(k) is not None
+                            and intent["handle"][k] != handle.get(k) for k in ("id", "backend_query_id"))):
+                    return None
+            except (ValueError, KeyError, TypeError):
+                return None
         return result
     return None
 
@@ -423,10 +469,24 @@ def reconcile(path, adapter):
         return intent
     if isinstance(adapter, DuckDBAdapter):
         raise ValueError("external DuckDB reconciliation cannot prove original connection closed")
+    if adapter.name == "shirokuma-public":
+        adapter.bind(intent)
     retained = terminal_reconciliation(path.parent / "reconciliation.json", intent)
     if retained is not None:
         return retained
-    terminal = adapter.cancel_reconcile(intent.get("handle")) if intent.get("handle") else "UNKNOWN"
-    result = dict(intent, status="UNKNOWN" if terminal == "UNKNOWN" else "FAILED", reconciliation=terminal)
-    write_json(path.parent / "reconciliation.json", result)
+    result = dict(intent, status="UNKNOWN", reconciliation="UNKNOWN")
+    evidence = path.parent / "reconciliation.json"
+    if adapter.name == "shirokuma-public":
+        if evidence.exists():
+            previous = json.loads(evidence.read_text())
+            if all(previous.get(k) == intent.get(k) for k in ("request_id", "handle", "dispatch", "adapter_identity", "sql", "mode")):
+                result["recovered_handle"] = previous.get("recovered_handle")
+        def save_recovered(handle):
+            result["recovered_handle"] = handle
+            write_json(evidence, result)  # recoverable before cancel, without changing original intent
+        terminal = adapter.recover(dict(intent, handle=result.get("recovered_handle") or intent.get("handle")), save_recovered)
+    else:
+        terminal = adapter.cancel_reconcile(intent.get("handle")) if intent.get("handle") else "UNKNOWN"
+    result.update(status="UNKNOWN" if terminal == "UNKNOWN" else "FAILED", reconciliation=terminal)
+    write_json(evidence, result)
     return result

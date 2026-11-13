@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "dataset_id": "portable-inline-overflow-v1",
+  "queries": [
+    {
+      "id": "over_limit",
+      "ordered": true,
+      "sql": "WITH digits(n) AS (VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9)), seq AS (SELECT CAST(a.n+10*b.n+100*c.n+1000*d.n+10000*e.n AS BIGINT) AS k FROM digits a CROSS JOIN digits b CROSS JOIN digits c CROSS JOIN digits d CROSS JOIN digits e) SELECT k FROM seq WHERE k<10001 ORDER BY k"
+    }
+  ]
+}

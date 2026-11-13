@@ -149,6 +149,7 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_recovery.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_public.py'
 
 .PHONY: test-local-perf qualify-local-perf
 test-local-perf:
@@ -157,6 +158,7 @@ test-local-perf:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_recovery.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_public.py'
 
 # Explicit opt-in; never pulled into verify/test-resident-core.
 qualify-local-perf:

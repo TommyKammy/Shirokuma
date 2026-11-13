@@ -4,13 +4,18 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-13
-version: "1.92"
+updated: 2026-11-14
+version: "1.93"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[性能試験P1の実Trino・公開API接続と照合](../../guides/performance-connections-2026-11-13.md)を整備した。9 SQL・各4,111行がDuckDB参照と一致し、公開打切り・応答喪失後の取消・ロール分離を実機確認した。
+全pageでcontext・schema・状態を確認し、POSTの再送を避けて未確定を保持する。実機で検出したtimestamp精度低下をcapability指定で修正し、両Pythonの重点70件を確認した。
+最終Makeは単一実行で145群・5,456件成功・既定34 skip・失敗0件。設計整合とdoctor healthyを確認した。
+永続TPC snapshot・22 SQL／TPC-DS variant・全結果API拡張と計測をG1後続に残す。VM・資源profile・大規模負荷は変更していない。
 
 2026-11-13 JST、[ローカル性能試験P0／P1の初期基盤](../../guides/performance-preparation-2026-11-13.md)を整備した。host空き約3.105TBを再確認し、追加物理占有2TBと次のL1（VM24 vCPU／192GiB）を固定した。
 専用環境で生成・全結果検証・共通runnerと復旧を実装し、Python 3.9／3.12で重点45件、TPC-H SF0.01／0.1の8表・22 query再実行／配布済み期待結果との照合が成功。TPC-DSは24表生成・99 SQL列挙まで確認した。

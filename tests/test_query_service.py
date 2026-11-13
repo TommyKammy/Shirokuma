@@ -17,6 +17,23 @@ class QueryStatementWireTests(unittest.TestCase):
         self.f = setup_fixture(self, DataOpsTests())
         self.qs = qs
 
+    def test_public_submit_advertises_only_parametric_datetime(self):
+        sql = "SELECT CAST(TIMESTAMP '2026-01-01 12:34:56.123456' AS TIMESTAMP(6))"
+        columns = [dict(name='value', type='timestamp(6)')]
+        data = [['2026-01-01 12:34:56.123456']]
+        with patch.object(self.qs, '_transport',
+                return_value=dict(id='timestamp_backend', columns=columns, data=data)) as transport:
+            page = self.qs.submit(self.f.principal, self.f.context(), sql, mode='read-only',
+                max_rows=10, request_id=None, worksheet_id=None)
+        transport.assert_called_once()
+        self.assertEqual(transport.call_args.args[1], 'POST')
+        self.assertEqual(transport.call_args.args[3], sql.encode())
+        headers = transport.call_args.args[2].headers
+        self.assertEqual(headers['X-Trino-Client-Capabilities'], 'PARAMETRIC_DATETIME')
+        self.assertEqual(headers['Accept-Encoding'], 'identity')
+        self.assertEqual(page['columns'], columns)
+        self.assertEqual(page['data'], data)
+
     def test_public_submit_preserves_original_and_sends_one_statement(self):
         cases = (
             ('SELECT 1;', 'SELECT 1'),
@@ -77,6 +94,7 @@ class QueryStatementWireTests(unittest.TestCase):
         execution = self.f.begin()
         frozen, parent, _, _ = ds._live[execution.id]
         original_headers = dict(frozen.headers)
+        self.assertEqual(original_headers['X-Trino-Client-Capabilities'], 'PARAMETRIC_DATETIME')
         cases = (
             ('job_sql', "SELECT 'a'';b'; -- ;", "SELECT 'a'';b' -- ;"),
             ('drop_table', 'DROP TABLE "sales"."raw"."a"";b"; /* outer /* ; */ ; */',
@@ -90,6 +108,7 @@ class QueryStatementWireTests(unittest.TestCase):
             step = str(step)
             with self.subTest(action=action), patch.object(self.qs, '_transport',
                     return_value=dict(id='private_backend', data=[])) as transport, \
+                    patch('trino_auth.prepare_backend_v2', side_effect=AssertionError('recaptured frozen headers')), \
                     patch.object(wr, 'check_sql_policy', side_effect=AssertionError('public policy on generated SQL')):
                 page = self.qs._submit_dataops(self.f.principal, ds._Statement(action, original),
                     frozen, parent, execution.id, step)

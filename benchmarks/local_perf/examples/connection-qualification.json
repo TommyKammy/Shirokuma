@@ -1,0 +1,51 @@
+{
+  "format": 1,
+  "dataset_id": "portable-inline-values-v1",
+  "queries": [
+    {
+      "id": "types",
+      "ordered": true,
+      "sql": "SELECT CAST(9223372036854775807 AS BIGINT) AS big, CAST(12345678901234567890.12 AS DECIMAL(22,2)) AS amount, CAST('' AS VARCHAR) AS empty_text, CAST('NULL' AS VARCHAR) AS literal_null, DATE '2026-01-01' AS day, CAST(TRUE AS BOOLEAN) AS flag"
+    },
+    {
+      "id": "rows",
+      "ordered": true,
+      "sql": "WITH seed(k, amount, label) AS (VALUES (CAST(1 AS BIGINT),CAST(10.25 AS DECIMAL(18,2)),CAST('a' AS VARCHAR)),(CAST(2 AS BIGINT),CAST(NULL AS DECIMAL(18,2)),CAST(NULL AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR))) SELECT k, amount, label FROM seed ORDER BY k, amount NULLS FIRST, label NULLS FIRST"
+    },
+    {
+      "id": "aggregate",
+      "ordered": true,
+      "sql": "WITH seed(k, amount, label) AS (VALUES (CAST(1 AS BIGINT),CAST(10.25 AS DECIMAL(18,2)),CAST('a' AS VARCHAR)),(CAST(2 AS BIGINT),CAST(NULL AS DECIMAL(18,2)),CAST(NULL AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR))) SELECT CAST(count(*) AS BIGINT) AS n, CAST(sum(k) AS BIGINT) AS total_key, CAST(sum(amount) AS DECIMAL(38,2)) AS total_amount, CAST(avg(CAST(amount AS DOUBLE)) AS DOUBLE) AS mean_amount FROM seed"
+    },
+    {
+      "id": "join",
+      "ordered": true,
+      "sql": "WITH seed(k, amount, label) AS (VALUES (CAST(1 AS BIGINT),CAST(10.25 AS DECIMAL(18,2)),CAST('a' AS VARCHAR)),(CAST(2 AS BIGINT),CAST(NULL AS DECIMAL(18,2)),CAST(NULL AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR))) SELECT a.k AS k, CAST(count(*) AS BIGINT) AS n FROM seed a JOIN seed b ON a.k=b.k GROUP BY a.k ORDER BY a.k"
+    },
+    {
+      "id": "window",
+      "ordered": true,
+      "sql": "WITH seed(k, amount, label) AS (VALUES (CAST(1 AS BIGINT),CAST(10.25 AS DECIMAL(18,2)),CAST('a' AS VARCHAR)),(CAST(2 AS BIGINT),CAST(NULL AS DECIMAL(18,2)),CAST(NULL AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR)),(CAST(3 AS BIGINT),CAST(-2.50 AS DECIMAL(18,2)),CAST('' AS VARCHAR))) SELECT CAST(row_number() OVER(ORDER BY k, amount NULLS FIRST, label NULLS FIRST) AS BIGINT) AS rn, k, amount, label FROM seed ORDER BY rn"
+    },
+    {
+      "id": "empty",
+      "ordered": true,
+      "sql": "SELECT CAST(0 AS BIGINT) AS k WHERE FALSE"
+    },
+    {
+      "id": "scalar_null",
+      "ordered": true,
+      "sql": "SELECT CAST(NULL AS DOUBLE) AS mean"
+    },
+    {
+      "id": "timestamp",
+      "ordered": true,
+      "sql": "SELECT CAST(TIMESTAMP '2026-01-01 12:34:56.123456' AS TIMESTAMP(6)) AS observed_at"
+    },
+    {
+      "id": "pages",
+      "ordered": true,
+      "sql": "WITH digits(n) AS (VALUES(0),(1),(2),(3),(4),(5),(6),(7),(8),(9)), seq AS (SELECT CAST(a.n+10*b.n+100*c.n+1000*d.n+10000*e.n AS BIGINT) AS k FROM digits a CROSS JOIN digits b CROSS JOIN digits c CROSS JOIN digits d CROSS JOIN digits e) SELECT k, CAST(rpad('x',512,'x') AS VARCHAR) AS pad FROM seq WHERE k<4096 ORDER BY k"
+    }
+  ]
+}

@@ -4,9 +4,10 @@ import json
 import os
 from pathlib import Path
 
-from .capacity import Campaign, guest_requirement
-from .dataset import generate, prepare_reference, qualify_packaged_tpch
+from .capacity import Campaign, guest_requirement, write_json
+from .dataset import generate, prepare_reference, qualify_packaged_tpch, prepare_sql_reference
 from .protocol import GIB, plan, protocol
+from .public import PublicAdapter, client_auth_path, private_auth
 from .results import compare
 from .runner import DuckDBAdapter, TrinoAdapter, reconcile, run
 
@@ -34,6 +35,14 @@ def main():
     p.add_argument("campaign")
     p.add_argument("dataset")
     p.add_argument("name")
+    p = commands.add_parser("prepare-sql-reference")
+    p.add_argument("campaign")
+    p.add_argument("manifest")
+    p.add_argument("name")
+    p.add_argument("--timeout", type=float)
+    p = commands.add_parser("freeze-public-connection")
+    p.add_argument("output")
+    add_adapter(p, public_only=True)
     p = commands.add_parser("qualify-packaged-tpch")
     p.add_argument("campaign")
     p.add_argument("dataset")
@@ -83,6 +92,19 @@ def main():
             result = str(generate(Campaign(args.campaign), args.name, args.suite, **config(args)))
         elif cmd == "prepare-reference":
             result = str(prepare_reference(Campaign(args.campaign), args.dataset, args.name))
+        elif cmd == "prepare-sql-reference":
+            result = str(prepare_sql_reference(Campaign(args.campaign), json.loads(Path(args.manifest).read_text()),
+                                              args.name, timeout=args.timeout))
+        elif cmd == "freeze-public-connection":
+            target = Path(args.output).resolve()
+            repo = Path(__file__).resolve().parents[2]
+            if target == repo or repo in target.parents or target.exists():
+                raise ValueError("fresh connection output outside Git required")
+            public = adapter(args)
+            result = public.identity()
+            result["url"] = public.url
+            result["auth_file"] = client_auth_path(args.auth_file, args.runtime_profile)
+            write_json(target, result)
         elif cmd == "qualify-packaged-tpch":
             result = str(qualify_packaged_tpch(Campaign(args.campaign), args.dataset, args.reference, args.name))
         elif cmd == "run":
@@ -127,11 +149,19 @@ def config(args):
                 timeout=args.timeout, repetitions=args.repetitions, peak_evidence=args.peak_evidence)
 
 
-def add_adapter(p, trino_only=False):
-    p.add_argument("--adapter", choices=["trino"] if trino_only else ["duckdb", "trino"], required=True)
+def add_adapter(p, trino_only=False, public_only=False):
+    p.add_argument("--adapter", choices=["public"] if public_only else ["trino", "public"] if trino_only else ["duckdb", "trino", "public"], required=True)
     p.add_argument("--dataset", help="successful local dataset for isolated DuckDB")
-    p.add_argument("--url", default="http://127.0.0.1:8080")
-    p.add_argument("--user", default="local-perf")
+    p.add_argument("--url")
+    p.add_argument("--user")
+    p.add_argument("--auth-file", help="explicit mode 0600 client JSON")
+    p.add_argument("--ca-file", help="verified direct Trino TLS CA")
+    p.add_argument("--runtime-profile", help="public client_auth_file reference only")
+    p.add_argument("--context-file", help="full captured nine-field public context JSON")
+    p.add_argument("--connection-file", help="frozen public connection and credential reference")
+    p.add_argument("--database", help="explicit public database id or SQL catalog")
+    p.add_argument("--max-rows", type=int)
+    p.add_argument("--sql-only", action="store_true", help="DuckDB without registered tables")
     p.add_argument("--password-env", help="environment variable name; never a credential argument")
     p.add_argument("--catalog")
     p.add_argument("--schema")
@@ -139,11 +169,40 @@ def add_adapter(p, trino_only=False):
 
 def adapter(args):
     if args.adapter == "duckdb":
-        if not args.dataset:
-            raise ValueError("dataset required")
+        if bool(args.dataset) == bool(args.sql_only):
+            raise ValueError("choose dataset or explicit SQL-only DuckDB")
         return DuckDBAdapter(args.dataset)
-    return TrinoAdapter(args.url, args.user, os.environ[args.password_env] if args.password_env else None,
-                        args.catalog, args.schema)
+    if args.adapter == "public":
+        if args.user or args.password_env or args.ca_file:
+            raise ValueError("public uses explicit client auth reference")
+        saved = json.loads(Path(args.connection_file).read_text()) if args.connection_file else None
+        if saved and any((args.url, args.auth_file, args.runtime_profile, args.context_file, args.database, args.catalog, args.schema)):
+            raise ValueError("saved connection cannot be overridden")
+        auth_path = saved["auth_file"] if saved else client_auth_path(args.auth_file, args.runtime_profile)
+        auth = private_auth(auth_path, public=True)
+        captured = saved["context"] if saved else json.loads(Path(args.context_file).read_text()) if args.context_file else None
+        if captured is not None and any((args.database, args.catalog, args.schema)):
+            raise ValueError("captured context cannot be overridden")
+        public = PublicAdapter(saved["url"] if saved else args.url or "http://127.0.0.1:8888",
+                               auth["username"], auth["password"], auth["selected_role"], captured, max_rows=args.max_rows if args.max_rows is not None else saved["max_rows"] if saved else 10000)
+        if captured is None:
+            if bool(args.database) == bool(args.catalog) or not args.schema:
+                raise ValueError("explicit database or catalog and schema required")
+            public.select(args.database or args.catalog, args.schema)
+        if saved and any(saved.get(k) != public.identity()[k] for k in ("kind", "origin", "account", "selected_role", "context", "max_rows")):
+            raise ValueError("saved public identity changed")
+        return public
+    if args.runtime_profile or args.connection_file or args.context_file or args.database:
+        raise ValueError("direct Trino cannot use public connection references")
+    if args.auth_file:
+        if args.user or args.password_env:
+            raise ValueError("ambiguous direct credentials")
+        auth = private_auth(args.auth_file)
+        user, password = auth["username"], auth["password"]
+    else:
+        user, password = args.user or "local-perf", os.environ[args.password_env] if args.password_env else None
+    return TrinoAdapter(args.url or "http://127.0.0.1:8080", user, password,
+                        args.catalog, args.schema, ca_file=args.ca_file)
 
 
 if __name__ == "__main__":

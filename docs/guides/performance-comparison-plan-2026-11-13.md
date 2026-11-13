@@ -1,6 +1,6 @@
 # Mac Studio上のShirokuma大規模性能・安定性試験計画
 
-2026-11-13 JST改訂。状態: P0固定・P1初期基盤を整備。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。所有者がSSDの空きを約3TBへ確保したため実容量を更新し、条件・資源・容量を固定した。[準備の実装・検証記録](performance-preparation-2026-11-13.md)に小規模qualificationと残るG1条件を記録する。大規模負荷・VM拡張はP2以降とする。
+2026-11-14 JST改訂。状態: P0固定・P1初期基盤と実接続qualificationを整備。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。所有者がSSDの空きを約3TBへ確保したため実容量を更新し、条件・資源・容量を固定した。[初期準備](performance-preparation-2026-11-13.md)と[実Trino・公開APIの接続／照合記録](performance-connections-2026-11-13.md)に小規模qualificationと残るG1条件を記録する。永続TPC snapshot・全query対応は継続し、大規模負荷・VM拡張はP2以降とする。
 
 ## 1. 目的・実施範囲・承認
 

@@ -274,3 +274,10 @@ def qualify_packaged_tpch(campaign, dataset, reference, name, abs_tol=1e-8, rel_
             else:
                 path.unlink(missing_ok=True)
         write_json(out / "qualification.json", record)
+
+
+def prepare_sql_reference(campaign, manifest, name, **options):
+    """Freeze arbitrary portable SELECT SQL and full values without registered data."""
+    from .runner import DuckDBAdapter, run
+    return run(campaign, name, manifest, DuckDBAdapter(), repetitions=1,
+               reference_label="SQL-only reference", **options)
