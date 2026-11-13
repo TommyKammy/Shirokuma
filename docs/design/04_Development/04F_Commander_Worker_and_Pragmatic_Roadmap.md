@@ -5,12 +5,16 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-13
-version: "1.89"
+version: "1.90"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-13 JST、[Snowflake／Databricksとの大規模性能比較計画](../../guides/performance-comparison-plan-2026-11-13.md)を策定した。
+現行単一Node・4 CPU上限workerの制約を踏まえ、総資源／費用帯の比較、100GB→1TB→3TB、同時実行・24時間試験と判定基準を定義した。配置まで揃える分散比較は別の設計・受入を要する。
+次はローカルprotocol固定とdataset／oracle／共通runnerの設計・実装。今回は読み取り調査と計画のみで、負荷投入・構成変更・cloud課金は開始していない。
 
 2026-11-13 JST、[追加調査に基づく第3巡](../../guides/refactoring-followups-2026-11-13.md#追加調査に基づく第3巡)の2項目を完了した。
 LogicalRegistry系fixtureの設定失敗時の解放と、Platform6 moduleのstdout読込を整理し、子の早期解放・認可・期限・cleanupの所有者を維持した。
