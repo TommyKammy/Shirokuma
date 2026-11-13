@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 
+from fixture_lifecycle import setup_fixture
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
 
@@ -12,9 +14,7 @@ class QueryStatementWireTests(unittest.TestCase):
     def setUp(self):
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs = qs
 
     def test_public_submit_preserves_original_and_sends_one_statement(self):
@@ -192,9 +192,7 @@ class QueryPollCleanupTests(unittest.TestCase):
     def setUp(self):
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs = qs
         self.context = self.f.context()
         self.methods = []
@@ -307,9 +305,7 @@ class QueryOriginLivenessTests(unittest.TestCase):
         import warehouse_resident as wr
         from test_dataops_service import DataOpsTests
         persistent_trino = wr.persistent_trino
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs, self.wr = qs, wr
         self.old_origin = 'http://127.0.0.1:1234'
         self.new_origin = 'http://127.0.0.1:5678'
@@ -465,9 +461,7 @@ class QueryHistoryTests(unittest.TestCase):
         import query_service as qs
         import warehouse_admission as admission
         from test_dataops_service import DataOpsTests
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         context = fixture.context(schema='marts', role='bi_viewer')
         accepted = admission.accepted
         retired = []
@@ -498,9 +492,7 @@ class QueryHistoryTests(unittest.TestCase):
         import control_store
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         context = fixture.context(schema='marts', role='bi_viewer')
         deletes = []
         def transport(url, method, pin, body=None):
@@ -529,9 +521,7 @@ class QueryHistoryTests(unittest.TestCase):
         import control_store
         import data_management as dm
         import query_service as qs
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         old = fixture.begin('old')
         ref = fixture.existing()
         old_query = old.select(ref, ['id'], step='old-read')['id']
@@ -680,9 +670,7 @@ class QueryExecutionTests(unittest.TestCase):
     def setUp(self):
         from test_request_auth import PrincipalTests
         QueryExecutionTests._mock_lifecycle(self)
-        self.fixture = PrincipalTests()
-        self.fixture.setUp()
-        self.addCleanup(self.fixture.doCleanups)
+        self.fixture = setup_fixture(self, PrincipalTests())
         import control_store
         import data_management as dm
         with control_store.connect() as db:
