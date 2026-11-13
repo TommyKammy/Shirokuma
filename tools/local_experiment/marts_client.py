@@ -5,7 +5,6 @@ from pathlib import Path
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
-from urllib.request import Request
 
 from dataops_client import Client, ClientError, configured_profile, saved_context
 
@@ -22,11 +21,7 @@ class MartClient(Client):
         if key is not None:
             headers['X-Idempotency-Key'] = key
         try:
-            with self.opener.open(Request(self.base + path, data=raw, headers=headers, method=method), timeout=3600) as response:
-                raw = response.read()
-                if response.headers.get('Content-Length') is not None and len(raw) != int(response.headers['Content-Length']):
-                    raise ValueError('incomplete response')
-                return json.loads(raw)
+            return self._read_response(method, path, raw=raw, headers=headers, timeout=3600, incomplete_message='incomplete response')
         except (HTTPError, URLError, OSError):
             # Error bodies are never protected stdout, including grant loss.
             raise ClientError('MART_REQUEST_FAILED') from None

@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 import sys
 from urllib.parse import quote, urlencode
-from urllib.request import Request
 from urllib.error import HTTPError, URLError
 
 from dataops_client import Client, ClientError, configured_profile, saved_context, _write_export
@@ -35,11 +34,7 @@ class StageClient(Client):
         if key is not None:
             headers['Idempotency-Key'] = key
         try:
-            with self.opener.open(Request(self.base + path, data=raw, headers=headers, method=method), timeout=3600) as response:
-                data = response.read()
-                if response.headers.get('Content-Length') is not None and len(data) != int(response.headers['Content-Length']):
-                    raise ValueError('incomplete HTTP response')
-                return data if binary else json.loads(data)
+            return self._read_response(method, path, raw=raw, headers=headers, timeout=3600, binary=binary)
         except HTTPError as error:
             code, recovery = 'HTTP_REQUEST_FAILED', None
             try:

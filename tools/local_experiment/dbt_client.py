@@ -10,7 +10,6 @@ import sys
 import uuid
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
-from urllib.request import Request
 
 from dataops_client import Client, configured_profile, saved_context
 
@@ -41,11 +40,7 @@ class DbtClient(Client):
         if key is not None:
             headers['Idempotency-Key'] = key
         try:
-            with self.opener.open(Request(self.base + path, data=raw, headers=headers, method=method), timeout=60) as response:
-                raw = response.read()
-                if response.headers.get('Content-Length') is not None and len(raw) != int(response.headers['Content-Length']):
-                    raise ValueError('incomplete response')
-                return json.loads(raw)
+            return self._read_response(method, path, raw=raw, headers=headers, timeout=60, incomplete_message='incomplete response')
         except HTTPError as error:
             if method == 'POST' and body and 'expected_target' in body:
                 try:
