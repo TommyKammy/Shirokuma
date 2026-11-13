@@ -4,13 +4,17 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-12
-version: "1.86"
+updated: 2026-11-13
+version: "1.87"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-13 JST、fixture改善に続く[推奨リファクタリングの後続4項目](../../guides/refactoring-followups-2026-11-13.md)を完了した。
+Platform HTTP adapter、通常JSON共通部品、Saved LineageとResult Exportの状態・操作を独立させ、認可・入力・初期化順序を維持した。
+ソース`ec1340ab`でMake138群（5,361成功・既定34 skip）と設計整合を通過。通常Workbenchの日英・権限往復・320/390px・再読込、実CSV3行とSQL再送なしを確認した。
 
 2026-11-12 JST、追加調査の最優先として、Dbt／Manual WAP／DataOpsの入れ子fixtureのcleanup所有権を小さな共通helperへ集約した。
 設定失敗時の即時解放と成功時の親への移譲を明示し、既存の属性・補助処理・LIFO順序を維持した。
