@@ -160,28 +160,158 @@ class PlatformRoutesTests(unittest.TestCase):
                                  name == 'manifest-advisory' or name.startswith('loki-'))
 
     def test_basic_unique_and_strict_framing_remain_distinct(self):
-        for case in ('duplicate', 'defect', 'control', 'header-name'):
-            for name in ('resources', 'usage', 'foundation-baseline'):
+        basic = {'workload-baseline', 'resources', 'observations'}
+        for case in ('valid', 'duplicate', 'defect', 'control', 'header-name',
+                     'te', 'empty-te', 'absent-cl', 'zero-cl', 'nonzero-cl', 'duplicate-cl'):
+            for name in SERVICES:
                 with self.subTest(case=case, name=name):
-                    h = handler(name)
+                    manifest = name == 'manifest-advisory'
+                    body = b'{"manifest":"snow"}'
+                    headers = [('Content-Type', 'application/json')] if manifest else []
+                    length = str(len(body)) if manifest else '0'
+                    headers.append(('Content-Length', length))
                     if case == 'duplicate':
-                        h.headers['X-Test'] = 'one'
-                        h.headers['x-test'] = 'two'
-                    elif case == 'defect':
-                        h.headers.defects.append(ValueError())
+                        headers.extend((('X-Test', 'one'), ('x-test', 'two')))
                     elif case == 'control':
-                        h.headers['X-Test'] = 'bad\x01value'
-                    else:
-                        h.headers['Bad Name'] = 'value'
+                        headers.append(('X-Test', 'bad\x01value'))
+                    elif case == 'header-name':
+                        headers.append(('Bad Name', 'value'))
+                    elif case in ('te', 'empty-te'):
+                        headers.append(('Transfer-Encoding', 'chunked' if case == 'te' else ''))
+                    elif case == 'absent-cl':
+                        headers.pop()
+                    elif case == 'zero-cl':
+                        headers[-1] = ('Content-Length', '0')
+                    elif case == 'nonzero-cl' and not manifest:
+                        headers[-1] = ('Content-Length', '1')
+                    elif case == 'duplicate-cl':
+                        headers.append(('Content-Length', length))
+                    h = handler(name, headers=headers, body=body)
+                    if case == 'defect':
+                        h.headers.defects.append(ValueError())
                     module, method = service(name)
-                    reject = name == 'foundation-baseline' or name == 'usage' and case == 'duplicate'
-                    with patch.object(module, method, return_value={}) as operation:
+                    reject = (case in ('te', 'empty-te', 'duplicate-cl')
+                              or case in ('absent-cl', 'zero-cl') and manifest
+                              or case == 'nonzero-cl' and not manifest
+                              or case == 'duplicate' and name not in basic
+                              or case in ('defect', 'control', 'header-name')
+                              and name not in basic | {'usage'})
+                    # Exercise Manifest's framing through the lazy reader supplied to authority.
+                    options = ({'side_effect': lambda principal, role, reader: {'manifest': reader()}}
+                               if manifest else {'return_value': {}})
+                    with patch.object(module, method, **options) as operation:
+                        call = lambda: self.dispatch(name, h, method='POST' if manifest else 'GET')
                         if reject:
-                            self.error('INVALID_INPUT', lambda: self.dispatch(name, h))
-                            operation.assert_not_called()
+                            self.error('INVALID_INPUT', call)
+                            if not manifest:
+                                operation.assert_not_called()
+                            h.respond.assert_not_called()
+                            self.assertEqual(h.rfile.tell(), 0)
                         else:
-                            self.assertTrue(self.dispatch(name, h))
+                            self.assertTrue(call())
                             operation.assert_called_once()
+
+    def test_path_and_params_short_circuit_before_headers(self):
+        for name in SERVICES:
+            # History intentionally accepts raw query and ignores parsed params.
+            if name == 'runtime-history':
+                continue
+            module, method = service(name)
+            manifest = name == 'manifest-advisory'
+            for suffix, params in (('?', Poison()), ('#', Poison()), ('', {'x': ['1']})):
+                with self.subTest(name=name, suffix=suffix, params=type(params).__name__):
+                    h = handler(name, suffix=suffix)
+                    h.headers = SimpleNamespace(get=Mock(return_value='1')) if manifest else Poison()
+                    if name.startswith('loki-') or name == 'telemetry-raw-logs':
+                        h.headers = SimpleNamespace(get_all=Mock(side_effect=lambda key, default:
+                            [] if key == 'Origin' else self.fail('headers after path/params')))
+                    options = ({'side_effect': lambda principal, role, reader: reader()}
+                               if manifest else {})
+                    with patch.object(module, method, **options):
+                        self.error('INVALID_INPUT', lambda: self.dispatch(
+                            name, h, method='POST' if manifest else 'GET', params=params))
+                    if manifest:
+                        h.headers.get.assert_called_once_with('Content-Length', '')
+        h = handler('runtime-history', suffix='#')
+        h.headers = Poison()
+        self.error('INVALID_INPUT', lambda: self.dispatch('runtime-history', h, params=Poison()))
+
+    def test_strict_header_fields_short_circuit_before_later_header_checks(self):
+        for name in SERVICES.keys() - {'workload-baseline', 'resources', 'observations', 'usage'}:
+            for case in ('defect', 'header-name', 'control'):
+                with self.subTest(name=name, case=case):
+                    defect = case == 'defect'
+                    h = handler(name)
+                    # Missing methods are poisoned: defects must precede raw_items;
+                    # invalid raw fields must precede keys, Transfer-Encoding and length lists.
+                    h.headers = SimpleNamespace(defects=[ValueError()] if defect else [],
+                        raw_items=Mock(side_effect=AssertionError('raw_items after defects'))
+                                  if defect else Mock(return_value=[('Bad Name', 'value')
+                                      if case == 'header-name' else ('X-Test', 'bad\x01value')]))
+                    if name == 'manifest-advisory':
+                        h.headers.get = Mock(return_value='1')
+                    if name.startswith('loki-') or name == 'telemetry-raw-logs':
+                        h.headers.get_all = Mock(side_effect=lambda key, default: [] if key == 'Origin'
+                                                else self.fail('framing list accessed too soon'))
+                    module, method = service(name)
+                    manifest = name == 'manifest-advisory'
+                    options = ({'side_effect': lambda principal, role, reader: reader()}
+                               if manifest else {})
+                    with patch.object(module, method, **options):
+                        self.error('INVALID_INPUT', lambda: self.dispatch(
+                            name, h, method='POST' if manifest else 'GET'))
+                    if defect:
+                        h.headers.raw_items.assert_not_called()
+                    else:
+                        h.headers.raw_items.assert_called_once_with()
+                    if manifest:
+                        h.headers.get.assert_called_once_with('Content-Length', '')
+
+    def test_basic_transfer_encoding_precedes_content_length(self):
+        for name in ('workload-baseline', 'resources', 'observations'):
+            with self.subTest(name=name):
+                h = handler(name)
+                h.headers = SimpleNamespace(get_all=Mock(side_effect=lambda key, default:
+                    [''] if key == 'Transfer-Encoding' else self.fail('length read after TE')))
+                self.error('INVALID_INPUT', lambda: self.dispatch(name, h))
+                h.headers.get_all.assert_called_once_with('Transfer-Encoding', [])
+
+    def test_log_origin_precedes_framing_and_raw_logs_do_not_close(self):
+        for name in ('loki-errors', 'loki-foundation-errors', 'telemetry-raw-logs'):
+            for origins in ((), ('https://elsewhere.invalid',),
+                            ('http://localhost', 'http://localhost')):
+                with self.subTest(name=name, origins=origins):
+                    h = handler(name)
+                    h.headers = SimpleNamespace(get_all=Mock(side_effect=lambda key, default:
+                        list(origins) if key == 'Origin' else self.fail('frame before Origin')))
+                    if origins:
+                        with patch('http_origin.request_origin_allowed', return_value=False):
+                            self.error('INVALID_ORIGIN', lambda: self.dispatch(name, h), 403)
+                    else:
+                        # Absent Origin reaches the strict frame on all GET log routes.
+                        h.headers.defects = [ValueError()]
+                        self.error('INVALID_INPUT', lambda: self.dispatch(name, h))
+                    self.assertEqual(h.close_connection, name.startswith('loki-'))
+        for name in SERVICES.keys() - {'loki-errors',
+                                      'loki-foundation-errors', 'telemetry-raw-logs'}:
+            with self.subTest(ordinary=name):
+                h = handler(name, headers=(('Origin', 'https://elsewhere.invalid'),))
+                module, method = service(name)
+                options = ({'side_effect': lambda principal, role, reader: {'manifest': reader()}}
+                           if name == 'manifest-advisory' else {'return_value': {}})
+                if name == 'manifest-advisory':
+                    body = b'{"manifest":"snow"}'
+                    h.rfile = io.BytesIO(body)
+                    h.headers['Content-Type'] = 'application/json'
+                    h.headers['Content-Length'] = str(len(body))
+                with patch.object(module, method, **options):
+                    self.assertTrue(self.dispatch(name, h,
+                        method='POST' if name == 'manifest-advisory' else 'GET'))
+        h = handler('telemetry-raw-logs')
+        module, method = service('telemetry-raw-logs')
+        with patch.object(module, method, return_value={}):
+            self.assertTrue(self.dispatch('telemetry-raw-logs', h))
+        self.assertFalse(h.close_connection)
 
     def test_manifest_authority_before_reader_and_early_close(self):
         module, _ = service('manifest-advisory')

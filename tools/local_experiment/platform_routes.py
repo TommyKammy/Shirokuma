@@ -25,13 +25,23 @@ from query_context import QueryError
 MANIFEST_ADVISORY_PATH = '/api/v1/bears/platform-manifest-advisory'
 
 
+def _invalid_basic_frame(handler, params):
+    return ('?' in handler.path or '#' in handler.path or params
+            or handler.headers.get_all('Transfer-Encoding', [])
+            or handler.headers.get_all('Content-Length', []) not in ([], ['0']))
+
+
+def _invalid_header_fields(headers):
+    return (headers.defects
+            or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", key)
+                   or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in value)
+                   for key, value in headers.raw_items()))
+
+
 def _read_advisory_manifest(handler, params):
     headers = handler.headers
     length = headers.get('Content-Length', '')
-    if (handler.path != MANIFEST_ADVISORY_PATH or params or headers.defects
-            or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", key)
-                   or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in value)
-                   for key, value in headers.raw_items())
+    if (handler.path != MANIFEST_ADVISORY_PATH or params or _invalid_header_fields(headers)
             or any(len(headers.get_all(key)) != 1 for key in headers.keys())
             or headers.get_all('Transfer-Encoding')
             or len(headers.get_all('Content-Type', [])) != 1
@@ -76,10 +86,7 @@ def dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         raw = handler.path.partition('?')[2]
-        if ('#' in handler.path or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+        if ('#' in handler.path or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])
@@ -102,9 +109,7 @@ def dispatch(handler, method, path, params, principal, role):
     if path == '/api/v1/bears/platform-workload-baseline':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
-        if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.get_all('Transfer-Encoding', [])
-                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+        if _invalid_basic_frame(handler, params):
             raise QueryError('INVALID_INPUT', 400)
         try:
             result = db_platform_workload_baseline.observe(principal, role)
@@ -130,10 +135,7 @@ def dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+                or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
@@ -148,10 +150,7 @@ def dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+                or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
@@ -179,10 +178,7 @@ def dispatch(handler, method, path, params, principal, role):
                     raise QueryError('INVALID_ORIGIN', 403)
         if (severity_route and handler.path != path
                 or '?' in handler.path or '#' in handler.path or params
-                or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+                or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
@@ -211,10 +207,7 @@ def dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+                or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
@@ -229,10 +222,7 @@ def dispatch(handler, method, path, params, principal, role):
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
         if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.defects
-                or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", k)
-                       or any(ord(c) < 32 and c != '\t' or ord(c) == 127 for c in v)
-                       for k, v in handler.headers.raw_items())
+                or _invalid_header_fields(handler.headers)
                 or any(len(handler.headers.get_all(k, [])) != 1 for k in handler.headers.keys())
                 or handler.headers.get_all('Transfer-Encoding', [])
                 or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
@@ -246,9 +236,7 @@ def dispatch(handler, method, path, params, principal, role):
     if path == '/api/v1/bears/platform-resources':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
-        if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.get_all('Transfer-Encoding', [])
-                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+        if _invalid_basic_frame(handler, params):
             raise QueryError('INVALID_INPUT', 400)
         try:
             result = db_platform_resources.observe(principal, role)
@@ -259,9 +247,7 @@ def dispatch(handler, method, path, params, principal, role):
     if path == '/api/v1/bears/platform-observations':
         if method != 'GET':
             raise QueryError('NOT_FOUND', 404)
-        if ('?' in handler.path or '#' in handler.path or params
-                or handler.headers.get_all('Transfer-Encoding', [])
-                or handler.headers.get_all('Content-Length', []) not in ([], ['0'])):
+        if _invalid_basic_frame(handler, params):
             raise QueryError('INVALID_INPUT', 400)
         try:
             result = db_platform_observations.observe(principal, role)
