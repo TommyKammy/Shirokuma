@@ -49,3 +49,25 @@ Scheduleや復旧・認可全体の再設計は追加調査で優先度を下げ
 - 新規23試験を追加した。既存の異なる環境roleでLineage／Exportの3試験をそれぞれ選択するため、実行数の増加は26件となる。不要な重複削除や試験の省略はない。
 - Platformの17経路と入力契約、通常JSONのnative独立性、両factoryの状態・取得・保存の所有者、読込・認可・表示の互換性を、コード・旧実装比較・境界試験・通常画面の証拠で照合した。
 - `make verify-design-context`と差分レビューを通過。最終試験後の変更は記録のみとし、既存のローカル構成差分2件を維持した。上表の作業単位を完了する。
+
+## 追加調査に基づく第2巡
+
+2026-11-13 JST、追加調査で確認した4項目を次の順に実施した。UIの追加分割、Schedule、復旧・認可全体の再編は今回の範囲に含めなかった。
+
+| 順序 | 対象 | 完了条件 | 状態 |
+|---|---|---|---|
+| 1 | Queryの入れ子fixture | 7か所を既存helperへ移行し、実際の呼出元で設定途中の失敗と親子の解放順を検証する | 完了: `e4be0cc` |
+| 2 | OriginとExportの依存 | 共通Origin判定と既存JSON部品を利用し、routeからWorkbenchのpolicy／codecへの依存を解消する | 完了: `02f5825` |
+| 3 | CLIのHTTP正常系 | 同一処理を持つMartも含む4 clientのRequest構築・正常応答読込を共通化し、例外境界・timeout・binary・不確定結果と復旧情報の契約を保つ | 完了: `4f9cb94` |
+| 4 | Platformの入力検査 | 同じadapter内の同一検査をまとめ、basic／unique／strict、Manifest、history、Lokiの差と検査順を保つ | 完了: `2b02f7d` |
+
+各単位の重点回帰・差分レビュー・ローカルコミット後、最終確認に`make verify-local-experiment PYTHON=tools/local_experiment/dataops/.venv/bin/python3`と`make verify-design-context`を用いた。
+
+- Queryの全7呼出元に失敗を注入し、子の即時解放と親のpatch保持、LIFO・一度だけの解放を検証した。新規回帰は旧Query実装で7経路とも失敗し、移行後の既存44試験と寿命管理6試験が通過した。
+- Origin関数のASTは移動前と一致し、各入口の空値・重複・検査順を保った。policy／Platform16試験と、両HTTP面・Export・作成・廃止・runtime・通常JSONの69試験が通過した。policy4試験は標準Pythonでも通過した。
+- 4 clientの事前変換と例外分岐を変えず、共通正常応答処理へ接続した。追加6試験は旧実装でも通過し、関連88試験でtimeout・binary・短読込・復旧情報・送信結果の不確定分類を確認した。
+- Platformは2つの小さなpredicateだけを追加した。展開したASTは旧実装と一致し、17経路×11入力と検査順の16試験は旧・新とも通過した。関連backend265試験は264成功・既定1 skipだった。
+
+最終ソース`2b02f7d`の全体Makeは139群・5,412件を完走し、5,378成功・既定34 skipだった。追加16試験に対し、Exportの既存の環境別選択を保ったため実行数は17件増えた。Makeの既存対象・環境区分・順序は変わらず、Origin試験の1行だけを追加した。
+
+設計整合と差分レビューを通過し、4項目の実装・失敗時の所有権・依存境界・互換性を現行ソースと試験で照合した。検証は一時SQLite・模擬catalog／transport・ローカルHTTP・Node harnessを用いた。最終試験後の変更は記録のみとし、既存のローカル構成差分2件を維持して第2巡を完了する。
