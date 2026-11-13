@@ -144,6 +144,23 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_marts_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_ai_semantic_benchmark.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_runner.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_recovery.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
+
+.PHONY: test-local-perf qualify-local-perf
+test-local-perf:
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_runner.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_recovery.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_http.py'
+
+# Explicit opt-in; never pulled into verify/test-resident-core.
+qualify-local-perf:
+	@LOCAL_PERF_REAL=1 benchmarks/local_perf/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_perf_real.py'
 
 WAREHOUSE ?= LOCAL
 BEAR_QUERY ?= SELECT * FROM iceberg.marts.fct_orders LIMIT 10

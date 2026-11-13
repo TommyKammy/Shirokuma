@@ -1,6 +1,6 @@
 # Mac Studio上のShirokuma大規模性能・安定性試験計画
 
-2026-11-13 JST改訂。状態: 計画案。所有者の方針変更に基づき、Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較へ変更した。今回の更新は読み取り調査と計画のみで、負荷投入・VM変更は開始していない。
+2026-11-13 JST改訂。状態: P0固定・P1初期基盤を整備。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。所有者がSSDの空きを約3TBへ確保したため実容量を更新し、条件・資源・容量を固定した。[準備の実装・検証記録](performance-preparation-2026-11-13.md)に小規模qualificationと残るG1条件を記録する。大規模負荷・VM拡張はP2以降とする。
 
 ## 1. 目的・実施範囲・承認
 
@@ -25,7 +25,7 @@ Mac Studio M3 Ultra／512GB RAM／4TB SSD上で、Shirokumaが正しい結果・
 | 項目 | 確認した状態と意味 |
 |---|---|
 | Host | M3 Ultra、32 CPU（Performance 24＋Efficiency 8）、512GiB RAM。vCPUをP-core占有とみなさない |
-| Host SSD | filesystem約3.6TiB、空き2,159,262,572,544 bytes（約2.16TB）。公称4TBと現在の空きを区別する |
+| Host SSD | filesystem約3.6TiB、空き3,105,012,654,080 bytes（約3.105TB／2.824TiB）へ増加。公称4TBと現在の空きを区別する |
 | 専用Colima | `mac-studio-solo`、16 vCPU／96GiB／400GiB設定、Linux/arm64単一Node |
 | Guest disk | data filesystem約393GiB・空き約146GiB、rootは別20GiB・空き約15.7GiB。host空きだけではTB試験に進めない |
 | SQL基盤 | Coordinator 1＋Worker 1、各limits 4 CPU／4GiB、requests 100m／256Mi。CoordinatorはSQL実行に参加しない。heap 2GiB、query memory全体／node各1GB、headroom 512MB |
@@ -41,16 +41,17 @@ Mac Studio M3 Ultra／512GB RAM／4TB SSD上で、Shirokumaが正しい結果・
 
 単一Colima／単一k3s Node／coordinator 1＋worker 1を基本とする。storage・catalogも同じhostに置いた製品全体を測り、CPU／RAM／SSD／VM overheadを含めて報告する。複数workerや物理分散対応を開始条件にしない。
 
-| Profile候補 | VM全体 | 主な用途 |
+| Profile宣言値 | VM全体 | 主な用途 |
 |---|---|---|
 | L0: 現状 | 16 vCPU／96GiB、workerは現行4 CPU／4GiB | 1〜10GBで現状の限界と互換性を記録 |
-| L1: 拡張 | 24 vCPU／192GiB | 100〜300GBのpilot。worker候補16 CPU／128GiB、heap96GiB |
-| L2: 大メモリ | 24 vCPU／384GiB | L1とCPU数を揃え、worker候補16 CPU／256GiB、heap192GiBでmemory効果とTB級を確認 |
-| L3: 上限探索 | 28 vCPU／384GiB、余裕がある場合のみ30 vCPU／416GiB | worker候補20〜22 CPU。host・他VM・計測器の余力を確認して採用。上限を使えるとは事前保証しない |
+| L1: 拡張 | 24 vCPU／192GiB | 次に適用するprofile。100〜300GBのpilot、worker16 CPU／128GiB、heap96GiB |
+| L2: 大メモリ | 24 vCPU／384GiB | L1とCPU数を揃え、worker16 CPU／256GiB、heap192GiBでmemory効果とTB級を確認 |
+| L3: 上限探索 | 28 vCPU／384GiB | worker20 CPU／256GiB。host・他VM・計測器の余力を確認した場合だけ採用 |
+| L3-extra: 追加上限 | 30 vCPU／416GiB | worker22 CPU／288GiB、heap216GiB。競合が小さい場合だけ採用 |
 
-表は構成候補であり、今回VMを変更したことを表さない。G2でCPU／RAM合計を確定する。Coordinator、SeaweedFS、Polaris／PostgreSQL、OPA、k3s、OS、load generatorに資源を残し、VM全量をworkerへ渡さない。L1／L2のworker外RAMはそれぞれ64／128GiB、worker外CPUは8 vCPUを共用基盤へ配分する初期案とする。全containerのrequests／limitsと実測消費を台帳へ記録し、合計とVM allocatableを照合する。
+P0では次に適用する対象をL1に固定し、[version 1 protocol](../../benchmarks/local_perf/protocol.json)に宣言値を保存する。今回VMを変更したことは表さず、G2で実機への適用・allocatable・復旧を検証する。Coordinator、SeaweedFS、Polaris／PostgreSQL、OPA、k3s、OSに、L1は合計8 vCPU／64GiB、L2は8 vCPU／128GiBを予約する。load generatorはhost側に別枠を置く。各Podへの内訳はG2で合計予約枠内に設定し、requests／limitsと実消費を照合する。
 
-Trinoのheap、query memory全体／node、headroom、off-heap、spillの上限は一組で設計・検証する。例えばL1はheap96GiBに対しquery memory64GiB＋headroom24GiB、L2はheap192GiBに対し128GiB＋48GiBを初期候補とし、版ごとの制約・並列時の総量・実行時metricsで確定する。CPU／memoryを一度に変えた結果と、片方だけ変える効果確認を区別する。
+Trinoのheap、query memory全体／node、headroom、off-heap、spillの上限は一組で設計・検証する。L1はheap96GiBに対しquery memory64GiB＋headroom24GiB、L2はheap192GiBに対し128GiB＋48GiBを宣言値とし、G2で版ごとの制約・並列時の総量・実行時metricsと適合を確認する。CPU／memoryを一度に変えた結果と、片方だけ変える効果確認を区別する。
 
 Spillはすべての演算を救済できる機能ではない。実際に使うTrino版の対応演算・設定・上限を小規模で確認し、SSDが空いていれば必ず実行できるとは仮定しない。fault-tolerant execution／exchange導入が必要になれば、別caseの設定・復旧・容量を検証してから採用する。[Trino spill](https://trino.io/docs/current/admin/spill.html)
 
@@ -62,7 +63,7 @@ Spillはすべての演算を救済できる機能ではない。実際に使う
 
 「2TBまで」は、保守的に**試験が追加で占有する物理SSD容量の上限2,000,000,000,000 bytes**として計画する。論理データ量も最大2TBまでとするが、2TBのtableに加えて中間物を無制限に作る意味にはしない。圧縮率・spill・空き次第で、実施できる最大scaleは下がる。
 
-実行開始時の有効な追加容量予算は、`B = min(2TB, hostの実空き − host予備領域)` とする。host予備は初期案256GiB。現在の空きならBは約1.88TB以下となり、他の書込みでさらに減る。Guest dataにも最低`max(64GiB, filesystem容量の10%)`、rootは`max(4GiB, root容量の10%)`の空きと十分なinodeを残す。VMの公称diskサイズやAPFSのpurgeable表示だけで利用可能としない。
+実行開始時の有効な追加容量予算は、`B = min(2TB, hostの実空き − host予備領域)` とする。host予備は256GiBに固定する。空き更新後は約2.83TBが予備差引後に残るため、従来の上限2TBを満額利用できる。新しい空き容量だけを理由に試験上限を3TBへ自動拡大しない。他の書込みが増えれば有効容量は再計算する。Guest dataにも最低`max(64GiB, filesystem容量の10%)`、rootは`max(4GiB, root容量の10%)`の空きと十分なinodeを残す。VMの公称diskサイズやAPFSのpurgeable表示だけで利用可能としない。
 
 会計を二重に足さない。host側では試験開始前のbaselineから増えたVM imageの**実割当**と、重複しないhost直置き試験ファイルを合計する。guest内のParquet／Iceberg／spillはimageの内訳であり、同じbytesをhost会計に再加算しない。削除してもimageの割当やsnapshotが解放されない場合は使用中として扱い、host実空きも別に監視する。campaignの途中でbaselineを取り直して使用量を0へ戻さない。
 
@@ -173,4 +174,4 @@ ARM／x86、SSD／cloud object storage、Iceberg／native形式、warehouse世�
 
 追加クラウド費用は0円を前提とする。hostの占有時間・生成時間・書込み量は記録するが、ローカルを無料と見なす価格優位は主張しない。準備5〜10営業日はrunner／qualificationの初期目安に限定し、profile／転送経路の先行変更が増える場合は見直す。本測定はpilotのquery時間と `Σ(実query本数×反復×block×profile×scale×cache条件)`、生成・load・soak・cleanupから積算する。最初から全matrixを実行せず、24時間試験は予備2／8時間とは別に確保する。
 
-最初の着手はP0／P1。実装は通常のCommander／Worker手順、重点試験、差分レビューで進める。本計画更新だけでは負荷投入を行っていないが、後続のローカル資源利用を未承認として再確認待ちにはしない。
+現在の着手範囲はP0／P1。実装は通常のCommander／Worker手順、重点試験、差分レビューで進める。準備用の小規模生成・参照実行を大規模性能の実績とは扱わず、P1の初期整備とG1全体の受入を分けて記録する。後続のローカル資源利用を未承認として再確認待ちにはしない。

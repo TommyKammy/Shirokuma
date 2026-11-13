@@ -5,16 +5,21 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-13
-version: "1.91"
+version: "1.92"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
+2026-11-13 JST、[ローカル性能試験P0／P1の初期基盤](../../guides/performance-preparation-2026-11-13.md)を整備した。host空き約3.105TBを再確認し、追加物理占有2TBと次のL1（VM24 vCPU／192GiB）を固定した。
+専用環境で生成・全結果検証・共通runnerと復旧を実装し、Python 3.9／3.12で重点45件、TPC-H SF0.01／0.1の8表・22 query再実行／配布済み期待結果との照合が成功。TPC-DSは24表生成・99 SQL列挙まで確認した。
+回帰は新HTTPの3.12互換性を修正後に影響範囲と後続を再確認し、既存139群＋追加5群の合算5,430成功・既定34 skipを確認した。
+G1全体の受入は実Trino・公開API・TPC-DS全variant等の後続を残す。VM変更・大規模負荷は未実施で、P2のprofile適用・guest拡張へ進む前に残る接続・照合を整える。
+
 2026-11-13 JST、所有者の方針変更に基づき、[性能試験計画](../../guides/performance-comparison-plan-2026-11-13.md)をMac Studio M3 Ultra／512GB／4TB内の大規模・同時実行・24時間試験へ改訂した。
 空きが許す検証用host資源利用は承認済み。試験の追加物理占有2TBを上限に、100GB→300GB→1TB→容量内の上限を探索し、VM拡張と単一worker profileを先行する。
-Snowflake／Databricksの有償・直接実測と3TB／10TBを対象から外し、公開値の粗い参考比較へ変更。次はローカルprotocol・dataset／oracle／runnerで、今回は計画のみ、負荷投入・構成変更なし。
+Snowflake／Databricksの有償・直接実測と3TB／10TBを対象から外し、公開値の粗い参考比較へ変更。計画改訂時点ではローカルprotocol・dataset／oracle／runnerが次の作業で、負荷投入・構成変更は行っていなかった。
 
 2026-11-13 JST、[追加調査に基づく第3巡](../../guides/refactoring-followups-2026-11-13.md#追加調査に基づく第3巡)の2項目を完了した。
 LogicalRegistry系fixtureの設定失敗時の解放と、Platform6 moduleのstdout読込を整理し、子の早期解放・認可・期限・cleanupの所有者を維持した。

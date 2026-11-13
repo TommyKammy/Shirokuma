@@ -1,0 +1,21 @@
+{
+  "protocol_version": 1,
+  "campaign_scope": "local-only",
+  "physical_additional_limit_bytes": 2000000000000,
+  "logical_limit_bytes": 2000000000000,
+  "host_reserve_bytes": 274877906944,
+  "guest_data_reserve": {"minimum_bytes": 68719476736, "fraction": 0.1},
+  "guest_root_reserve": {"minimum_bytes": 4294967296, "fraction": 0.1},
+  "host": {"cpu": 32, "performance_cpu": 24, "efficiency_cpu": 8, "ram_gib": 512},
+  "host_ram_reserves_gib": {"os": 64, "other_vm": 8, "generator": 8},
+  "observed_2026_11_13": {"host_free_bytes": 3105012654080, "vm_cpu": 16, "vm_ram_gib": 96, "vm_data_gib": 400, "guest_data_free_bytes": 157018820608},
+  "profiles": {
+    "L0": {"vm_cpu": 16, "vm_ram_gib": 96, "worker_cpu": 4, "worker_ram_gib": 4, "heap_gib": 2, "query_gib": 1, "headroom_gib": 0.5, "conditional": false},
+    "L1": {"vm_cpu": 24, "vm_ram_gib": 192, "worker_cpu": 16, "worker_ram_gib": 128, "heap_gib": 96, "query_gib": 64, "headroom_gib": 24, "conditional": false},
+    "L2": {"vm_cpu": 24, "vm_ram_gib": 384, "worker_cpu": 16, "worker_ram_gib": 256, "heap_gib": 192, "query_gib": 128, "headroom_gib": 48, "conditional": false},
+    "L3": {"vm_cpu": 28, "vm_ram_gib": 384, "worker_cpu": 20, "worker_ram_gib": 256, "heap_gib": 192, "query_gib": 128, "headroom_gib": 48, "conditional": true},
+    "L3-extra": {"vm_cpu": 30, "vm_ram_gib": 416, "worker_cpu": 22, "worker_ram_gib": 288, "heap_gib": 216, "query_gib": 144, "headroom_gib": 54, "conditional": true}
+  },
+  "qualification": {"mode": "qualification", "scale": 0.01, "max_logical_bytes": 1000000000, "query_timeout_s": 120, "threads": 2, "memory_gib": 4, "repetitions": 1, "concurrency": 1, "performance_claim": false},
+  "future_performance": {"deadlines_s": {"D0": 120, "D1": 900, "D2": 1800, "D3": 3600, "D4": 3600}, "concurrency": [1, 4, 8, 16, 32, 64], "warmup_s": 600, "steady_s": 1800, "pilot_blocks": 3, "measurement_blocks": 5, "repetitions": 5, "max_repetitions": 100, "query_order_seed": 20261113, "slo": "freeze after pilot; qualification is not final SLO pass", "cache": "data cache unknown"}
+}
