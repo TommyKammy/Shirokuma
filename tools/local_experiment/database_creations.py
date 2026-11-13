@@ -868,10 +868,10 @@ def dispatch(handler, method):
         elif method == 'POST':
             if parsed.query:
                 raise OperationError('INVALID_REQUEST',400)
-            import workbench_server
+            import http_origin
             if len(handler.headers.get_all('Origin',[])) > 1:
                 raise OperationError('INVALID_REQUEST',400)
-            if handler.headers.get('Origin') and not workbench_server.request_origin_allowed(handler.headers):
+            if handler.headers.get('Origin') and not http_origin.request_origin_allowed(handler.headers):
                 raise OperationError('INVALID_ORIGIN',403)
             (coordinator.check_environment if logical else _check_environment)(handler.headers)
             keys = handler.headers.get_all('Idempotency-Key',[])

@@ -174,7 +174,7 @@ def dispatch(handler, method, path, params, principal, role):
             origins = handler.headers.get_all('Origin', [])
             require_origin = severity_route and method == 'POST' and not getattr(handler, '_native_bears', False)
             if origins or require_origin:
-                from workbench_server import request_origin_allowed
+                from http_origin import request_origin_allowed
                 if len(origins) != 1 or not request_origin_allowed(handler.headers):
                     raise QueryError('INVALID_ORIGIN', 403)
         if (severity_route and handler.path != path

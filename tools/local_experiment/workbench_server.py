@@ -21,6 +21,7 @@ import schedule_resident
 import stage_exports
 import warehouse_resident
 import request_auth
+from http_origin import request_origin_allowed
 from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
@@ -110,21 +111,6 @@ def lake_input(body):
     if 'content_base64' in body:
         content = base64.b64decode(content, validate=True)
     return None, dict(filename=filename, content=content)
-
-
-def request_origin_allowed(headers):
-    """Match the browser authority; TLS proxies must preserve Host."""
-    origin, host = headers.get('Origin'), headers.get('Host')
-    if not origin or not host:
-        return False
-    if origin == 'http://' + host:
-        return True
-    if origin == 'https://' + host:
-        try:
-            return request_auth.shared_mode()
-        except request_auth.AuthenticationError:
-            return False
-    return False
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):

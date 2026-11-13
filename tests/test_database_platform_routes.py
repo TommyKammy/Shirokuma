@@ -254,7 +254,7 @@ class PlatformRoutesTests(unittest.TestCase):
                     h = handler(name, native=native,
                                 headers=[('Origin', value) for value in origins])
                     with patch.object(module, 'capture', return_value={}) as operation, \
-                         patch('workbench_server.request_origin_allowed', return_value=True):
+                         patch('http_origin.request_origin_allowed', return_value=True):
                         if allowed:
                             self.assertTrue(self.dispatch(name, h, method='POST'))
                             operation.assert_called_once_with(self.principal, self.role)
@@ -263,7 +263,7 @@ class PlatformRoutesTests(unittest.TestCase):
                             operation.assert_not_called()
                         self.assertTrue(h.close_connection)
             h = handler(name, headers=(('Origin', 'https://elsewhere.invalid'),))
-            with patch('workbench_server.request_origin_allowed', return_value=False):
+            with patch('http_origin.request_origin_allowed', return_value=False):
                 self.error('INVALID_ORIGIN', lambda: self.dispatch(name, h), 403)
             self.assertTrue(h.close_connection)
 

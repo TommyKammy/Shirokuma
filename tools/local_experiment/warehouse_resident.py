@@ -1527,7 +1527,7 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             import dataops_routes
             import database_inventory
             from query_context import QueryError
-            from workbench_server import request_origin_allowed
+            from http_origin import request_origin_allowed
             url = urllib.parse.urlsplit(self.path)
             stage = url.path == '/api/v1/stages' or url.path.startswith('/api/v1/stages/')
             self._sensitive_telemetry = url.path in (RAW_LOGS_PATH, LOKI_ERRORS_PATH, FOUNDATION_ERRORS_PATH)

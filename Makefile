@@ -6,6 +6,7 @@ DATAOPS_PYTHON ?= tools/local_experiment/dataops/.venv/bin/python3
 verify-core: test-resident-core verify-go verify-design-context check-newlines check-trailing-whitespace check-no-secret-filenames
 
 test-resident-core:
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_http_origin.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_fixture_lifecycle.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_m1_small_load.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_runtime_conditions_database_ui.py'

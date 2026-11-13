@@ -3,6 +3,7 @@ import base64
 from contextlib import ExitStack
 from copy import deepcopy
 from decimal import Decimal
+from email.message import Message
 from http.client import HTTPResponse
 import io
 import json
@@ -14,6 +15,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 import control_store
+import database_http_json
 import query_result_exports as exports
 import query_service as qs
 from query_context import QueryError
@@ -444,6 +446,58 @@ class ResultExportTests(unittest.TestCase):
                 self.assertEqual(native.call_args.args[1:],(path,method,body.encode(),'https://native'))
                 self.assertEqual(native.call_args.kwargs,{'warehouse_id':'LOCAL'})
             self.assertEqual(native.call_count,3)
+
+    def test_export_uses_shared_codec_when_workbench_body_wrapper_is_poisoned(self):
+        self.submit()
+        codec = database_http_json.database_body
+        for handler in self.handlers():
+            for body in ('{"label":"雪"}', '{"label":1,"label":2}',
+                         '[]', '{"label":NaN}', '{'):
+                raw = body.encode('utf-8')
+                message = Message()
+                message['Content-Type'] = 'application/json'
+                message['Content-Length'] = str(len(raw))
+                expected = SimpleNamespace(headers=message, rfile=io.BytesIO(raw))
+                try:
+                    decoded = codec(expected)
+                    error = None
+                except ValueError as caught:
+                    error = (type(caught), str(caught))
+                observed = []
+
+                def read(actual):
+                    # Capture the bytes delivered by the real HTTP handler to the
+                    # shared codec, while retaining its original JSON validation.
+                    stream = actual.rfile
+                    class Reader:
+                        def read(self, length):
+                            data = stream.read(length)
+                            observed.append(data)
+                            return data
+                    actual.rfile = Reader()
+                    try:
+                        return codec(actual)
+                    except ValueError as caught:
+                        self.assertEqual((type(caught), str(caught)), error)
+                        raise
+                    finally:
+                        actual.rfile = stream
+
+                with self.subTest(handler=handler, body=body), \
+                        patch.object(wb.WorkbenchHandler, 'database_body',
+                                     side_effect=AssertionError('Workbench codec dependency')), \
+                        patch.object(database_http_json, 'database_body', side_effect=read) as shared, \
+                        patch.object(exports, 'export', return_value={'codec': True}) as export:
+                    status, result = self.request(handler, body=body)
+                    shared.assert_called_once()
+                    self.assertEqual(observed, [raw])
+                    if error is None:
+                        self.assertEqual((status, result), (200, {'codec': True}))
+                        export.assert_called_once_with(self.f.principal, self.id,
+                                                       'data_engineer', decoded)
+                    else:
+                        self.assertEqual((status, result['code']), (400, 'INVALID_INPUT'))
+                        export.assert_not_called()
 
     def test_both_http_surfaces_strict_inputs(self):
         self.submit()
