@@ -11,6 +11,15 @@ from .protocol import LIMIT, settings
 
 
 def generate(campaign, name, suite="tpch", **options):
+    target_file_bytes = options.pop("target_file_bytes", None)
+    row_group_size = options.pop("row_group_size", 122880)
+    max_file_bytes = options.pop("max_file_bytes", 104857600000)
+    from .sharding import controls, export_table
+    if target_file_bytes is None:
+        if type(row_group_size) is not int or row_group_size != 122880 or type(max_file_bytes) is not int or max_file_bytes != 104857600000:
+            raise ValueError("sharding controls require target_file_bytes")
+    else:
+        controls(target_file_bytes, row_group_size, max_file_bytes, options.get("timeout") or 120)
     cfg = settings(**options)
     if suite not in ("tpch", "tpcds"):
         raise ValueError("unsupported suite")
@@ -28,6 +37,11 @@ def generate(campaign, name, suite="tpch", **options):
     meta["measured_logical_bytes"] = 0
     meta["logical_measurement"] = "UTF8 SQL text of each non-null value plus one delimiter per column and newline per row; distinct from nominal scale"
     meta["dataset_id"] = campaign.state["id"] + "/" + name
+    if target_file_bytes is not None:
+        meta["format"] = 2
+        meta["fixed_parameters"]["row_group_size"] = row_group_size
+        meta["sharding"] = dict(target_file_bytes=target_file_bytes, target_kind="soft",
+                                row_group_size=row_group_size, max_file_bytes=max_file_bytes)
     manifest = out / "dataset.json"
     write_json(manifest, meta)
     con = None
@@ -76,18 +90,25 @@ def generate(campaign, name, suite="tpch", **options):
                 logical_limit = 1_000_000_000 if cfg["mode"] == "qualification" else LIMIT
                 if meta["measured_logical_bytes"] > logical_limit:
                     raise RuntimeError("measured logical data exceeds mode ceiling")
-                con.execute("COPY " + ident(table) + " TO " + quote(path) + " (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 122880)")
-                parquet = "SELECT * FROM read_parquet(" + quote(path) + ")"
-                exported_schema = [{"name": r[0], "type": r[1]} for r in con.execute("DESCRIBE " + parquet).fetchall()]
-                if exported_schema != schema:
-                    raise ValueError("export schema mismatch")
-                source = "SELECT * FROM " + ident(table)
-                difference = "SELECT count(*) FROM ((" + source + " EXCEPT ALL " + parquet + ") UNION ALL (" + parquet + " EXCEPT ALL " + source + ")) differences"
-                if con.execute(difference).fetchone()[0] != 0:
-                    raise ValueError("full Parquet multiset roundtrip mismatch")
-                meta["tables"].append(dict(name=table, rows=rows, schema=schema, logical_bytes=logical,
-                                           file=path.name, physical_bytes=allocated(path), file_bytes=path.stat().st_size,
-                                           roundtrip="full EXCEPT ALL both ways; same-engine, not independent"))
+                if target_file_bytes is not None:
+                    exported = export_table(con, out, len(meta["tables"]), "SELECT * FROM " + ident(table),
+                                            schema, rows, target_file_bytes=target_file_bytes,
+                                            row_group_size=row_group_size, max_file_bytes=max_file_bytes, check=check)
+                    exported.update(name=table, logical_bytes=logical)
+                    meta["tables"].append(exported)
+                else:
+                    con.execute("COPY " + ident(table) + " TO " + quote(path) + " (FORMAT PARQUET, COMPRESSION ZSTD, ROW_GROUP_SIZE 122880)")
+                    parquet = "SELECT * FROM read_parquet(" + quote(path) + ")"
+                    exported_schema = [{"name": r[0], "type": r[1]} for r in con.execute("DESCRIBE " + parquet).fetchall()]
+                    if exported_schema != schema:
+                        raise ValueError("export schema mismatch")
+                    source = "SELECT * FROM " + ident(table)
+                    difference = "SELECT count(*) FROM ((" + source + " EXCEPT ALL " + parquet + ") UNION ALL (" + parquet + " EXCEPT ALL " + source + ")) differences"
+                    if con.execute(difference).fetchone()[0] != 0:
+                        raise ValueError("full Parquet multiset roundtrip mismatch")
+                    meta["tables"].append(dict(name=table, rows=rows, schema=schema, logical_bytes=logical,
+                                               file=path.name, physical_bytes=allocated(path), file_bytes=path.stat().st_size,
+                                               roundtrip="full EXCEPT ALL both ways; same-engine, not independent"))
                 write_json(manifest, meta)
                 check()
             meta["parquet_physical_bytes"] = sum(t["physical_bytes"] for t in meta["tables"])

@@ -44,6 +44,34 @@ class CliTests(unittest.TestCase):
     def module(self, suite):
         return self.modules[f"benchmarks.local_perf.{suite}_sql"]
 
+    def test_sharding_lazy_dispatch_flags_and_generate_legacy_kwargs(self):
+        shard = ModuleType("benchmarks.local_perf.sharding")
+        shard.shard_dataset = Mock(return_value="sharded")
+        with patch.dict(sys.modules, {shard.__name__: shard}):
+            self.invoke("shard-dataset", self.campaign.root, "source", "out")
+            args, kwargs = shard.shard_dataset.call_args
+            self.assertEqual(args[1:], ("source", "out"))
+            self.assertEqual(kwargs, dict(target_file_bytes=268435456, row_group_size=122880,
+                                         max_file_bytes=104857600000, timeout=600, peak_bytes=None))
+            self.invoke("shard-dataset", self.campaign.root, "source", "out", "--target-file-bytes", "100",
+                        "--row-group-size", "2048", "--max-file-bytes", "200", "--timeout", "2.5", "--peak-bytes", "300")
+            self.assertEqual(shard.shard_dataset.call_args.kwargs, dict(target_file_bytes=100, row_group_size=2048,
+                             max_file_bytes=200, timeout=2.5, peak_bytes=300))
+            for flag in ("--target-file-bytes", "--row-group-size", "--max-file-bytes", "--peak-bytes", "--timeout"):
+                for value in ("0", "-1", "nan", "invalid"):
+                    self.invoke("shard-dataset", self.campaign.root, "source", "out", flag, value, code=2)
+        with patch.object(cli, "generate", return_value="generated") as generate:
+            self.invoke("generate", self.campaign.root, "out")
+            legacy = dict(mode="qualification", scale=None, peak=None, timeout=None, repetitions=None, peak_evidence=None)
+            self.assertEqual(generate.call_args.kwargs, legacy)
+            self.invoke("generate", self.campaign.root, "out", "--target-file-bytes", "100")
+            self.assertEqual(generate.call_args.kwargs, dict(legacy, target_file_bytes=100,
+                             row_group_size=122880, max_file_bytes=104857600000))
+            for flag in ("--row-group-size", "--max-file-bytes"):
+                generate.reset_mock()
+                self.invoke("generate", self.campaign.root, "out", flag, "100", code=1)
+                generate.assert_not_called()
+
     def test_load_public_batch_size_dispatch_and_argument_validation(self):
         prepared = self.root / "prepared.json"
         ingest = ModuleType("benchmarks.local_perf.ingest")

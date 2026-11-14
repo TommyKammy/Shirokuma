@@ -364,3 +364,41 @@ class BindingTests(unittest.TestCase):
         self.assertGreater(len(decoded_rows), 0)
         self.assertLessEqual(len(decoded_rows), 256)
         self.assertEqual(len(calls), 2)
+
+
+class MultifileReaderTests(unittest.TestCase):
+    def test_explicit_paths_and_individual_schema_validation(self):
+        from unittest.mock import Mock
+        from benchmarks.local_perf.runner import dataset_read, dataset_version
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            files = []
+            for i in range(2):
+                path = root / (str(i) + ".parquet")
+                path.write_bytes(b"parquet")
+                files.append(dict(file=path.name, rows=2, file_bytes=7, physical_bytes=4096, sha256="a" * 64))
+            table = dict(name="events", schema=[dict(name="id", type="bigint")], files=files,
+                         rows=4, file_bytes=14, physical_bytes=8192)
+            con, check = Mock(), Mock()
+            con.execute.return_value.fetchall.return_value = [("id", "BIGINT")]
+            sql = dataset_read(con, root, table, 2, check)
+            self.assertEqual(sql, "SELECT * FROM read_parquet(['" + str(root / "0.parquet") + "', '" +
+                             str(root / "1.parquet") + "'], union_by_name=false)")
+            self.assertEqual(con.execute.call_count, 2)
+            for later in ([("id", "DOUBLE")], [("renamed", "BIGINT")]):
+                con.execute.return_value.fetchall.side_effect = [[("id", "BIGINT")], later]
+                with self.assertRaisesRegex(ValueError, "schema"):
+                    dataset_read(con, root, table, 2, check)
+            con.execute.return_value.fetchall.side_effect = None
+            table["rows"] += 1
+            with self.assertRaisesRegex(ValueError, "aggregate"):
+                dataset_read(con, root, table, 2, check)
+            table["rows"] -= 1
+            (root / "1.parquet").unlink()
+            with self.assertRaises(ValueError):
+                dataset_read(con, root, table, 2, check)
+            self.assertGreater(check.call_count, 2)
+        for invalid in (True, False, 0, 3, "2", 2.0):
+            with self.assertRaises(ValueError):
+                dataset_version(dict(format=invalid))
+        self.assertEqual(dataset_version({}), 1)

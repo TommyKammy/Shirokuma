@@ -75,4 +75,4 @@ queryと取込の速度比較・SLOの判定は行っていない。回帰検証
 
 ## 次の順序
 
-後続の[bulk取込と公開APIの全結果取得](performance-bulk-results-2026-11-14.md)は小規模実機照合を通過した。次はParquet分割生成/複数ファイル登録、残るTPC-DS variant/scaleと計測器負荷等のG1残件を整え、L1/guest disk拡張と100GB pilotへ進む。追加物理占有2TB・host予備256GiBを維持する。
+後続の[bulk取込と公開APIの全結果取得](performance-bulk-results-2026-11-14.md)と[Parquet分割生成/複数ファイル登録](performance-parquet-shards-2026-11-14.md)を整備した。次は残るTPC-DS variant/scaleと計測器負荷等のG1残件を整え、L1/guest disk拡張と100GB pilotへ進む。追加物理占有2TB・host予備256GiBを維持する。

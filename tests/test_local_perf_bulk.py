@@ -14,6 +14,7 @@ import urllib.parse
 import uuid
 
 from benchmarks.local_perf import bulk
+from benchmarks.local_perf.bulk import SDK as RealSDK
 from benchmarks.local_perf.capacity import Campaign, write_json
 from benchmarks.local_perf.public import PublicAdapter
 
@@ -88,8 +89,11 @@ class Output:
 class FakeTable:
     def __init__(self, sdk, identifier, schema, properties):
         self.sdk, self.identifier, self.cols, self.properties = sdk, identifier, schema, properties
-        self.metadata = SimpleNamespace(table_uuid=uuid.uuid4(), format_version=2)
-        self.io = SimpleNamespace(new_output=lambda p: Output(sdk, p))
+        self.metadata = SimpleNamespace(table_uuid=uuid.uuid4(), format_version=2, current_schema_id=0)
+        def output(path):
+            sdk.assert_intent("upload")
+            return Output(sdk, path)
+        self.io = SimpleNamespace(new_output=output)
         self.snap = None
 
     def location(self):
@@ -100,20 +104,23 @@ class FakeTable:
 
     def add_files(self, paths, snapshot_properties, check_duplicate_files):
         self.sdk.assert_intent("commit")
-        assert len(paths) == len(set(paths)) == 1 and check_duplicate_files is True
+        assert paths and len(paths) == len(set(paths)) and check_duplicate_files is True
         assert all(p.startswith(self.location() + "/data/") for p in paths)
+        self.sdk.commit_table = self
         self.sdk.commits += 1
         if self.sdk.fail == "commit":
             raise OSError("secret-do-not-record")
-        self.files = [SimpleNamespace(file=SimpleNamespace(file_path=paths[0], record_count=self.sdk.rows,
-                      file_size_in_bytes=len(self.sdk.objects[paths[0]])))]
+        self.files = [SimpleNamespace(file=SimpleNamespace(file_path=p, record_count=self.sdk.part_rows[i]
+                      if hasattr(self.sdk, "part_rows") else self.sdk.rows,
+                      file_size_in_bytes=len(self.sdk.objects[p]))) for i, p in enumerate(paths)]
         self.snap = SimpleNamespace(snapshot_id=42, summary=SimpleNamespace(operation="append", additional_properties={
             **snapshot_properties, "total-records": str(self.sdk.rows), "added-records": str(self.sdk.rows),
-            "total-data-files": "1", "added-data-files": "1"}))
+            "total-data-files": str(len(paths)), "added-data-files": str(len(paths))}))
         self.sdk.on_commit()
 
 
-    def scan(self):
+    def scan(self, **kwargs):
+        assert not kwargs or kwargs == {"options": {"include_empty_files": "true"}}
         return SimpleNamespace(plan_files=lambda: iter(self.files))
 
 
@@ -178,6 +185,12 @@ class BulkTests(unittest.TestCase):
         patch.object(bulk, "SDK", return_value=self.sdk).start()
         patch.object(self.campaign, "check", return_value={}).start()
 
+    def distinct_sources(self):
+        for i, table in enumerate(self.meta["tables"][1:], 1):
+            path = self.source / ("table_%d.parquet" % i)
+            path.write_bytes(self.raw)
+            table["file"] = path.name
+
     def write_meta(self):
         write_json(self.source / "dataset.json", self.meta)
 
@@ -228,9 +241,9 @@ class BulkTests(unittest.TestCase):
         def stat(path, *args, **kwargs):
             result = original(path, *args, **kwargs)
             if path == self.parquet:
-                fields = list(result)
-                fields[6] = size
-                return type(result)(fields)
+                fields = {k: getattr(result, k) for k in dir(result) if k.startswith("st_")}
+                fields["st_size"] = size
+                return SimpleNamespace(**fields)
             return result
         return patch.object(Path, "stat", stat)
 
@@ -249,6 +262,33 @@ class BulkTests(unittest.TestCase):
         self.assertFalse(self.sdk.objects)
         self.assertEqual(self.journal()["operations"], [])
         self.assertEqual(self.parquet.read_bytes(), self.raw)
+
+    def test_source_growth_after_raw_stat_is_rejected_before_hash(self):
+        original = Path.stat
+        calls = 0
+        def growing(path, *args, **kwargs):
+            nonlocal calls
+            result = original(path, *args, **kwargs)
+            if path == self.parquet:
+                calls += 1
+                if calls > 1:
+                    fields = {k: getattr(result, k) for k in dir(result) if k.startswith("st_")}
+                    fields["st_size"] = bulk.MAX_SOURCE_FILE_BYTES + 1
+                    return SimpleNamespace(**fields)
+            return result
+        with patch.object(Path, "stat", growing), patch.object(bulk, "file_hash", wraps=bulk.file_hash) as hashes:
+            with self.assertRaisesRegex(ValueError, "multipart size limit"):
+                self.load()
+        self.assertTrue(all(call.args[0].name == "dataset.json" for call in hashes.call_args_list))
+        self.assertEqual(self.sdk.creates, 0)
+
+    def test_source_growth_during_footer_is_rejected_before_second_hash(self):
+        self.sdk.on_footer = lambda: self.parquet.write_bytes(self.raw + b"grown")
+        with patch.object(bulk, "file_hash", wraps=bulk.file_hash) as hashes:
+            with self.assertRaisesRegex(ValueError, "source schema/rows/hash mismatch"):
+                self.load()
+        self.assertEqual(sum(call.args[0] == self.parquet for call in hashes.call_args_list), 1)
+        self.assertEqual(self.sdk.creates, 0)
 
     def test_source_at_multipart_limit_reaches_create(self):
         self.meta["tables"][0]["file_bytes"] = bulk.MAX_SOURCE_FILE_BYTES
@@ -270,6 +310,7 @@ class BulkTests(unittest.TestCase):
         self.sdk.cols = cols
         self.meta["tables"] = [dict(self.meta["tables"][0], name=n, schema=cols)
                                for n in ("Mixed Case/table", "a_very_long_source_table_name_which_needs_hashing")]
+        self.distinct_sources()
         self.write_meta()
         self.load()
         tables = self.journal()["tables"]
@@ -380,6 +421,42 @@ class BulkTests(unittest.TestCase):
                 self.assertEqual(j["tables"][0]["committed_rows"], 0)
                 self.assertIsNone(j["tables"][0]["cleanup_clean"])
                 self.assertEqual(j["operations"][-1]["acknowledgement"], "RETURNED")
+
+    def test_invalid_initial_schema_id_stops_before_upload(self):
+        for schema_id in (True, False, "0", -1):
+            with self.subTest(schema_id=schema_id):
+                self.setUp()
+                create = self.sdk.create_table
+                def invalid(*args, **kwargs):
+                    table = create(*args, **kwargs)
+                    table.metadata.current_schema_id = schema_id
+                    return table
+                with patch.object(self.sdk, "create_table", side_effect=invalid):
+                    with self.assertRaisesRegex(ValueError, "current schema ID"):
+                        self.load()
+                self.assertEqual(self.sdk.objects, {})
+                self.assertEqual(self.sdk.commits, 0)
+                journal = self.journal()
+                item = journal["tables"][0]
+                self.assertEqual(item["uuid"], str(self.sdk.tables[-1].metadata.table_uuid))
+                self.assertEqual(item["uuid_candidate"], item["uuid"])
+                self.assertEqual(journal["operations"][0]["kind"], "create")
+                self.assertEqual(journal["operations"][0]["status"], "RETURNED")
+                self.assertTrue(all(op["status"] == "RETURNED" for op in journal["operations"]))
+                self.assertEqual(journal["status"], "FAILED")
+                self.assertEqual(item["uploadedfiles"], [])
+                self.assertEqual(item["committed_rows"], 0)
+
+    def test_changed_schema_id_in_commit_proof_never_claims_rows(self):
+        self.sdk.on_commit = lambda: setattr(self.sdk.tables[-1].metadata, "current_schema_id", 1)
+        with self.assertRaisesRegex(ValueError, "committed table identity/schema changed"):
+            self.load()
+        self.assertEqual(self.sdk.schema(self.sdk.tables[-1]), COLS)
+        self.assertEqual(self.sdk.commits, 1)
+        j = self.journal()
+        self.assertEqual(j["status"], "UNKNOWN")
+        self.assertEqual(j["tables"][0]["committed_rows"], 0)
+        self.assertEqual(j["operations"][-1]["acknowledgement"], "RETURNED")
 
     @unittest.skipUnless(importlib.util.find_spec("pyiceberg"), "optional pinned SDK")
     def test_real_snapshot_operation_enum(self):
@@ -608,6 +685,7 @@ class BulkTests(unittest.TestCase):
 
     def test_later_table_loss_keeps_completed_table_evidence(self):
         self.meta["tables"].append(dict(self.meta["tables"][0], name="second"))
+        self.distinct_sources()
         self.write_meta()
         self.sdk.on_commit = lambda: setattr(self.sdk, "fail", "create")
         with self.assertRaises(OSError):
@@ -719,6 +797,454 @@ class BulkTests(unittest.TestCase):
             with self.subTest(kind=kind), self.assertRaises(ValueError):
                 bulk._columns([dict(name="x", type=kind)])
         self.assertEqual(bulk._columns([dict(name="x", type="INT32")]), [dict(name="x", type="integer")])
+
+
+class MultifileTests(unittest.TestCase):
+    setUp = BulkTests.setUp
+    write_meta = BulkTests.write_meta
+    write_auth = BulkTests.write_auth
+    journal = BulkTests.journal
+    load = BulkTests.load
+
+    def shards(self, rows=(1, 2, 0)):
+        files = []
+        for i, count in enumerate(rows):
+            path = self.source / ("part-%d.parquet" % i)
+            # Deliberately identical content for distinct file names.
+            path.write_bytes(b"parquet-footer-placeholder")
+            files.append(dict(file=path.name, rows=count, file_bytes=path.stat().st_size,
+                              physical_bytes=path.stat().st_size, sha256=bulk.file_hash(path)))
+        self.meta["format"] = 2
+        self.meta["tables"] = [dict(name="events", schema=COLS, rows=sum(rows), files=files,
+            file_bytes=sum(f["file_bytes"] for f in files), physical_bytes=sum(f["physical_bytes"] for f in files))]
+        self.sdk.rows = sum(rows)
+        self.sdk.part_rows = rows
+        self.sdk.footer = lambda p: (COLS, COLS, rows[int(p.stem.split("-")[-1])])
+        self.loads, self.used_io = [], []
+        self.on_load = lambda t: None
+        def load(identifier):
+            self.loads.append(identifier)
+            table = copy.copy(self.sdk.tables[-1])
+            table.metadata = copy.copy(table.metadata)
+            table.properties = dict(table.properties)
+            table.cols = copy.deepcopy(table.cols)
+            self.on_load(table)
+            generation = len(self.loads)
+            def output(path):
+                self.sdk.assert_intent("upload")
+                self.used_io.append(generation)
+                return Output(self.sdk, path)
+            table.io = SimpleNamespace(new_output=output)
+            table.io_generation = generation
+            self.sdk.tables[-1] = table
+            return table
+        self.sdk.load_table = load
+        self.write_meta()
+
+    def test_three_parts_equal_hash_one_commit_fresh_io_and_ordered_receipt(self):
+        self.shards()
+        self.load()
+        j = self.journal()
+        t = j["tables"][0]
+        self.assertEqual(j["status"], "SUCCESS")
+        self.assertEqual((self.sdk.creates, self.sdk.commits, len(self.loads)), (1, 1, 3))
+        self.assertEqual(self.used_io, [1, 2])
+        self.assertEqual(self.sdk.commit_table.io_generation, 3)
+        self.assertEqual(len(self.sdk.objects), 3)
+        self.assertEqual([p["location"] for p in t["registeredfiles"]], list(self.sdk.objects))
+        self.assertEqual(t["source_files"], self.meta["tables"][0]["files"])
+        self.assertEqual(t["source_sha256"], bulk.file_identity(t["source_files"], version=2))
+        self.assertEqual(t["committed_rows"], 3)
+
+    def test_v1_optional_hash_and_sizes_preserve_digest_and_target_shape(self):
+        self.meta["tables"][0].pop("sha256")
+        self.meta["tables"][0].pop("file_bytes")
+        self.write_meta()
+        self.load()
+        j = self.journal()
+        t = j["tables"][0]
+        sha = bulk.file_hash(self.parquet)
+        self.assertEqual(t["source_sha256"], sha)
+        self.assertNotIn("source_files", t)
+        self.assertTrue(next(iter(self.sdk.objects)).endswith(j["ownership_token"] + "-" + sha + ".parquet"))
+        self.assertEqual(self.adapter.selects, 6)
+
+    def test_zero_rows_and_empty_part(self):
+        self.shards((0, 0, 0))
+        self.load()
+        self.assertEqual(self.journal()["status"], "SUCCESS")
+        self.assertEqual(self.sdk.commits, 1)
+        self.assertEqual(self.journal()["tables"][0]["committed_rows"], 0)
+
+    def test_preflight_rejects_unequal_fake_schemas_with_same_canonical_columns(self):
+        self.shards((1, 2))
+        schemas = [COLS, COLS + [dict(name="extra", type="integer")]]
+        self.sdk.footer = lambda p: (schemas[int(p.stem.split("-")[-1])], COLS,
+                                     self.sdk.part_rows[int(p.stem.split("-")[-1])])
+        with self.assertRaisesRegex(ValueError, "source part schema mismatch"):
+            self.load()
+        self.assertEqual((self.sdk.creates, self.sdk.commits, self.sdk.objects), (0, 0, {}))
+
+    def arrow_shards(self, schemas):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        self.shards((0,) * len(schemas))
+        for part, schema in zip(self.meta["tables"][0]["files"], schemas):
+            path = self.source / part["file"]
+            with pq.ParquetWriter(path, schema):
+                pass
+            part.update(file_bytes=path.stat().st_size, physical_bytes=path.stat().st_size,
+                        sha256=bulk.file_hash(path))
+        table = self.meta["tables"][0]
+        table["file_bytes"] = table["physical_bytes"] = sum(p["file_bytes"] for p in table["files"])
+        self.write_meta()
+        sdk = object.__new__(RealSDK)
+        sdk.pa, sdk.pq = pa, pq
+        self.sdk.footer = sdk.footer
+        self.sdk.schema = lambda table: bulk._arrow_columns(table.cols, pa)
+
+    @unittest.skipUnless(importlib.util.find_spec("pyarrow"), "optional real PyArrow footer")
+    def test_preflight_rejects_part_two_nullability_mismatch(self):
+        import pyarrow as pa
+        optional = pa.schema([("key", pa.int32()), ("amount", pa.decimal128(18, 4)),
+                              ("day", pa.date32()), ("at", pa.timestamp("us"))])
+        required = optional.set(0, pa.field("key", pa.int32(), nullable=False))
+        self.assertEqual(bulk._arrow_columns(optional, pa), bulk._arrow_columns(required, pa))
+        self.arrow_shards([optional, required])
+        with self.assertRaisesRegex(ValueError, "source part schema mismatch"):
+            self.load()
+        self.assertEqual((self.sdk.creates, self.sdk.commits, self.sdk.objects), (0, 0, {}))
+
+    @unittest.skipUnless(importlib.util.find_spec("pyarrow"), "optional real PyArrow footer")
+    def test_equal_arrow_schemas_ignore_metadata_and_create_with_first_schema(self):
+        import pyarrow as pa
+        first = pa.schema([("key", pa.int32()), ("amount", pa.decimal128(18, 4)),
+                           ("day", pa.date32()), ("at", pa.timestamp("us"))],
+                          metadata={b"source": b"first"})
+        second = first.with_metadata({b"source": b"second"})
+        self.assertFalse(first.equals(second, check_metadata=True))
+        self.arrow_shards([first, second])
+        with patch.object(self.sdk, "create_table", wraps=self.sdk.create_table) as create:
+            self.load()
+        self.assertTrue(create.call_args.kwargs["schema"].equals(first, check_metadata=True))
+        self.assertEqual(self.journal()["status"], "SUCCESS")
+        self.assertEqual((self.sdk.creates, self.sdk.commits, len(self.sdk.objects)), (1, 1, 2))
+
+    def test_preflight_invalid_last_part_and_layout(self):
+        changes = [lambda t: t["files"][-1].update(rows=5),
+                   lambda t: t["files"][-1].update(sha256="0" * 64),
+                   lambda t: t["files"][-1].update(file_bytes=1),
+                   lambda t: t["files"][-1].update(extra="unexpected"),
+                   lambda t: t.update(rows=True), lambda t: t.update(file="events.parquet"),
+                   lambda t: t.update(physical_bytes=0), lambda t: t.update(files=[]),
+                   lambda t: t.update(schema=[dict(name="key", type="bigint")]),
+                   lambda t: t["files"][-1].update(file=t["files"][0]["file"])]
+        for i, change in enumerate(changes):
+            with self.subTest(i=i):
+                self.shards()
+                change(self.meta["tables"][0])
+                self.write_meta()
+                with self.assertRaises(ValueError):
+                    bulk.load_bulk(self.campaign, self.source, "bad%d" % i, "p", self.adapter, self.auth_file)
+                self.assertEqual(self.sdk.creates, 0)
+
+    def test_duplicate_path_across_distinct_tables_rejected(self):
+        self.shards()
+        self.meta["tables"].append(dict(self.meta["tables"][0], name="second"))
+        self.write_meta()
+        with self.assertRaisesRegex(ValueError, "duplicate source path"):
+            self.load()
+        self.assertEqual(self.sdk.creates, 0)
+
+    def test_all_raw_file_sizes_checked_before_any_footer_or_file_hash(self):
+        self.shards()
+        last = self.source / self.meta["tables"][0]["files"][-1]["file"]
+        original = Path.stat
+        def stat(path, *args, **kwargs):
+            result = original(path, *args, **kwargs)
+            if path == last:
+                fields = list(result)
+                fields[6] = bulk.MAX_SOURCE_FILE_BYTES + 1
+                return type(result)(fields)
+            return result
+        with patch.object(Path, "stat", stat), patch.object(self.sdk, "footer") as footer, \
+                patch.object(bulk, "file_hash", wraps=bulk.file_hash) as hashes:
+            with self.assertRaisesRegex(ValueError, "multipart size limit"):
+                self.load()
+        footer.assert_not_called()
+        self.assertTrue(all(c.args[0].name == "dataset.json" for c in hashes.call_args_list))
+        self.assertEqual(self.sdk.creates, 0)
+
+    def test_refresh_drifts_before_next_part_and_commit(self):
+        changes = [lambda t: setattr(t.metadata, "table_uuid", uuid.uuid4()),
+                   lambda t: setattr(self.sdk, "location", "s3://bucket/db/foreign"),
+                   lambda t: t.properties.update({bulk.OWNER: "foreign"}),
+                   lambda t: t.properties.update({bulk.SOURCE: "foreign"}),
+                   lambda t: t.properties.update({"commit.retry.num-retries": "1"}),
+                   lambda t: setattr(t.metadata, "format_version", 1),
+                   lambda t: setattr(t, "cols", []), lambda t: setattr(t, "snap", object())]
+        for boundary in (1, 3):
+            for i, change in enumerate(changes):
+                with self.subTest(boundary=boundary, i=i):
+                    self.setUp()
+                    self.shards()
+                    self.sdk.location = None
+                    self.sdk.objects = {}
+                    def drift(t):
+                        if len(self.loads) == boundary:
+                            change(t)
+                    self.on_load = drift
+                    with self.assertRaises(ValueError):
+                        self.load()
+                    j = self.journal()
+                    self.assertEqual(j["tables"][0]["uuid"], j["tables"][0]["uuid_candidate"])
+                    self.assertEqual(len(self.sdk.objects), boundary)
+                    self.assertEqual(self.sdk.commits, 0)
+                    self.assertEqual(j["status"], "FAILED")
+
+    def test_schema_id_change_with_same_columns_stops_before_next_part_or_commit(self):
+        for boundary in (1, 3):
+            with self.subTest(boundary=boundary):
+                self.setUp()
+                self.shards()
+                def drift(table):
+                    if len(self.loads) == boundary:
+                        table.metadata.current_schema_id = 1
+                self.on_load = drift
+                with self.assertRaisesRegex(ValueError, "refreshed table identity/schema"):
+                    self.load()
+                self.assertEqual(self.sdk.schema(self.sdk.tables[-1]), COLS)
+                self.assertEqual(len(self.sdk.objects), boundary)
+                self.assertEqual(self.sdk.commits, 0)
+                self.assertEqual(self.journal()["status"], "FAILED")
+                self.assertEqual(self.journal()["tables"][0]["committed_rows"], 0)
+
+    def test_valid_nonzero_schema_id_succeeds_for_both_manifest_versions(self):
+        for version in (1, 2):
+            with self.subTest(version=version):
+                self.setUp()
+                if version == 2:
+                    self.shards()
+                create = self.sdk.create_table
+                def nonzero(*args, **kwargs):
+                    table = create(*args, **kwargs)
+                    table.metadata.current_schema_id = 7
+                    return table
+                with patch.object(self.sdk, "create_table", side_effect=nonzero):
+                    self.load()
+                self.assertEqual(self.journal()["status"], "SUCCESS")
+                self.assertEqual(self.journal()["tables"][0]["committed_rows"], 3)
+
+    def test_lost_second_upload_retains_first_and_blocks_replay(self):
+        self.shards()
+        def fail(t):
+            self.sdk.fail = "upload"
+        self.on_load = fail
+        with self.assertRaises(OSError):
+            self.load()
+        j = self.journal()
+        self.assertEqual(j["status"], "UNKNOWN")
+        self.assertEqual([p["status"] for p in j["tables"][0]["uploadedfiles"]], ["SUCCESS", "INTENT"])
+        self.assertEqual(len(self.sdk.objects), 2)
+        self.assertEqual(self.sdk.commits, 0)
+        with self.assertRaisesRegex(ValueError, "prior bulk"):
+            bulk.load_bulk(self.campaign, self.source, "retry", "p", self.adapter, self.auth_file)
+        self.assertEqual(self.sdk.creates, 1)
+
+    def test_lost_commit_retains_all_parts_no_replay(self):
+        self.shards()
+        self.sdk.fail = "commit"
+        with self.assertRaises(OSError):
+            self.load()
+        self.assertEqual(self.journal()["status"], "UNKNOWN")
+        self.assertEqual((len(self.sdk.objects), self.sdk.commits), (3, 1))
+        self.assertEqual(self.journal()["tables"][0]["committed_rows"], 0)
+
+    def test_strict_manifest_format(self):
+        for version in (True, False, 1.0, 2.0, "2", 0, 3):
+            self.meta["format"] = version
+            self.write_meta()
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                self.load()
+        self.assertEqual(self.sdk.creates, 0)
+
+    def test_read_refresh_failure_retains_known_partial_uploads(self):
+        self.shards()
+        self.sdk.load_table = Mock(side_effect=OSError("read failed"))
+        with self.assertRaises(OSError):
+            self.load()
+        self.assertEqual(self.journal()["status"], "FAILED")
+        self.assertEqual(len(self.sdk.objects), 1)
+        self.assertEqual(self.sdk.commits, 0)
+        self.sdk.load_table.assert_called_once()
+
+    def test_later_table_failure_preserves_completed_multifile_count(self):
+        self.shards()
+        other = copy.deepcopy(self.meta["tables"][0])
+        other["name"] = "later"
+        for i, part in enumerate(other["files"]):
+            path = self.source / ("later-%d.parquet" % i)
+            path.write_bytes((self.source / part["file"]).read_bytes())
+            part["file"] = path.name
+        self.meta["tables"].append(other)
+        self.write_meta()
+        self.sdk.on_commit = lambda: setattr(self.sdk, "fail", "create")
+        with self.assertRaises(OSError):
+            self.load()
+        self.assertEqual([t["committed_rows"] for t in self.journal()["tables"]], [3, 0])
+        self.assertEqual(self.sdk.commits, 1)
+
+    def test_source_mutation_after_commit_retains_multifile_rows(self):
+        self.shards()
+        last = self.source / self.meta["tables"][0]["files"][-1]["file"]
+        self.sdk.on_commit = lambda: last.write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "source changed after commit"):
+            self.load()
+        self.assertEqual(self.journal()["tables"][0]["committed_rows"], 3)
+        self.assertEqual(self.journal()["status"], "FAILED")
+        self.assert_proven_commit()
+
+    def assert_proven_commit(self, tables=1):
+        j = self.journal()
+        self.assertEqual(j["status"], "FAILED")
+        self.assertEqual(self.sdk.commits, tables)
+        for item in j["tables"]:
+            self.assertEqual((item["committed_rows"], item["snapshot"]), (3, 42))
+            self.assertEqual(len(item["registeredfiles"]), 3)
+            self.assertTrue(all(f["status"] == "SUCCESS" for f in item["uploadedfiles"]))
+        self.assertTrue(all(op["status"] == "RETURNED" for op in j["operations"]))
+        self.assertEqual(j["operations"][-1]["acknowledgement"], "RETURNED")
+
+    def second_table(self):
+        other = copy.deepcopy(self.meta["tables"][0])
+        other["name"] = "later"
+        for i, part in enumerate(other["files"]):
+            path = self.source / ("later-%d.parquet" % i)
+            path.write_bytes((self.source / part["file"]).read_bytes())
+            part["file"] = path.name
+        self.meta["tables"].append(other)
+        self.write_meta()
+
+    def test_source_hash_calls_scale_linearly(self):
+        counts = []
+        for n in (4, 8):
+            self.setUp()
+            self.shards((1,) * n)
+            with patch.object(bulk, "file_hash", wraps=bulk.file_hash) as hashes:
+                self.load()
+            counts.append(sum(call.args[0].suffix == ".parquet" for call in hashes.call_args_list))
+        self.assertGreater(counts[0], 0)
+        self.assertLessEqual(counts[1], 2 * counts[0])
+        self.assertLessEqual(counts[1], 9 * 8)
+
+    def test_earlier_uploaded_part_tamper_caught_before_commit(self):
+        self.shards()
+        first = self.source / self.meta["tables"][0]["files"][0]["file"]
+        def mutate(t):
+            if len(self.loads) == 2:
+                first.write_bytes(b"x" * first.stat().st_size)
+        self.on_load = mutate
+        with self.assertRaisesRegex(ValueError, "source changed before commit"):
+            self.load()
+        self.assertEqual(self.sdk.commits, 0)
+        self.assertEqual(len(self.sdk.objects), 3)
+        self.assertEqual(self.journal()["status"], "FAILED")
+
+    def test_postcommit_manifest_mutation_retains_multifile_evidence(self):
+        self.shards()
+        self.sdk.on_commit = lambda: (self.source / "dataset.json").write_text("{}")
+        with self.assertRaisesRegex(ValueError, "manifest changed after commit"):
+            self.load()
+        self.assert_proven_commit()
+
+    def test_later_commit_source_mutation_retains_both_table_counts(self):
+        self.shards()
+        self.second_table()
+        first = self.source / self.meta["tables"][0]["files"][0]["file"]
+        def mutate():
+            if self.sdk.commits == 2:
+                first.write_bytes(b"x" * first.stat().st_size)
+        self.sdk.on_commit = mutate
+        with self.assertRaisesRegex(ValueError, "source changed after commit"):
+            self.load()
+        self.assert_proven_commit(tables=2)
+
+    def test_postcommit_observation_failure_retains_multifile_evidence(self):
+        self.shards()
+        self.adapter.resolve_error = True
+        with self.assertRaises(OSError):
+            self.load()
+        self.assert_proven_commit()
+
+    def test_zero_summary_counters_are_strict_in_both_formats(self):
+        for version in (1, 2):
+            for key in ("added-records", "total-records"):
+                for value in (None, "1", 0, False, "00", "bad"):
+                    with self.subTest(version=version, key=key, value=value):
+                        self.setUp()
+                        if version == 2:
+                            self.shards((0, 0, 0))
+                        else:
+                            self.meta["tables"][0]["rows"] = self.sdk.rows = 0
+                            self.write_meta()
+                        def change():
+                            self.sdk.tables[-1].snap.summary.additional_properties[key] = value
+                        self.sdk.on_commit = change
+                        with self.assertRaisesRegex(ValueError, "summary mismatch"):
+                            self.load()
+                        self.assertEqual(self.journal()["status"], "UNKNOWN")
+                        self.assertEqual(self.journal()["tables"][0]["committed_rows"], 0)
+
+    @unittest.skipUnless(importlib.util.find_spec("pyiceberg"), "optional pinned SDK")
+    def test_actual_zero_datafile_summary_proves_both_formats(self):
+        from pyiceberg.manifest import DataFile, DataFileContent, FileFormat
+        from pyiceberg.typedef import Record
+        from pyiceberg.schema import Schema
+        from pyiceberg.table.snapshots import SnapshotSummaryCollector, Summary, Operation, update_snapshot_summaries
+        for version in (1, 2):
+            with self.subTest(version=version):
+                self.setUp()
+                if version == 2:
+                    self.shards((0, 0, 0))
+                else:
+                    self.meta["tables"][0]["rows"] = self.sdk.rows = 0
+                    self.write_meta()
+                def actual_summary():
+                    table = self.sdk.tables[-1]
+                    collector = SnapshotSummaryCollector()
+                    files = []
+                    for task in table.files:
+                        f = task.file
+                        data = DataFile.from_args(content=DataFileContent.DATA, file_path=f.file_path,
+                            file_format=FileFormat.PARQUET, partition=Record(), record_count=0,
+                            file_size_in_bytes=f.file_size_in_bytes)
+                        collector.add_file(data, Schema())
+                        files.append(SimpleNamespace(file=data))
+                    props = {bulk.OWNER: table.properties[bulk.OWNER], bulk.SOURCE: table.properties[bulk.SOURCE]}
+                    summary = update_snapshot_summaries(Summary(operation=Operation.APPEND, **collector.build(), **props))
+                    self.assertNotIn("added-records", summary.additional_properties)
+                    table.files = files
+                    table.snap.summary = summary
+                self.sdk.on_commit = actual_summary
+                self.load()
+                self.assertEqual(self.journal()["status"], "SUCCESS")
+                self.assertEqual(len(self.journal()["tables"][0]["registeredfiles"]), 3 if version == 2 else 1)
+
+    def test_registered_file_proofs_never_claim_rows(self):
+        changes = [lambda t: t.files.pop(), lambda t: t.files.append(t.files[0]),
+                   lambda t: setattr(t.files[-1].file, "record_count", 99),
+                   lambda t: setattr(t.files[-1].file, "file_path", "s3://bucket/db/foreign"),
+                   lambda t: setattr(t.files[-1].file, "file_size_in_bytes", True),
+                   lambda t: setattr(t, "cols", [])]
+        for i, change in enumerate(changes):
+            with self.subTest(i=i):
+                self.setUp()
+                self.shards()
+                self.sdk.on_commit = lambda: change(self.sdk.tables[-1])
+                with self.assertRaises(ValueError):
+                    self.load()
+                self.assertEqual(self.journal()["tables"][0]["committed_rows"], 0)
+                self.assertEqual(self.journal()["status"], "UNKNOWN")
 
 
 @unittest.skipUnless(importlib.util.find_spec("pyiceberg") and importlib.util.find_spec("pyarrow"), "optional pinned SDK")
@@ -851,6 +1377,53 @@ class SDKBoundaryTests(unittest.TestCase):
 
 @unittest.skipUnless(importlib.util.find_spec("pyarrow"), "optional real PyArrow footer")
 class ArrowFooterTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("pyiceberg"), "optional pinned SDK")
+    def test_real_sdk_registers_multiple_local_parquet_files_once(self):
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+        from pyiceberg.table import Table
+        from pyiceberg.catalog import CommitTableResponse
+        from pyiceberg.io.pyarrow import PyArrowFileIO
+        from pyiceberg.schema import Schema
+        from pyiceberg.types import NestedField, IntegerType
+        from pyiceberg.table.metadata import new_table_metadata
+        from pyiceberg.table.update import update_table_metadata
+        from pyiceberg.partitioning import UNPARTITIONED_PARTITION_SPEC
+        from pyiceberg.table.sorting import UNSORTED_SORT_ORDER
+        for rowsets in (([1, 2], [], [3]), ([], [], [])):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "metadata").mkdir()
+                paths = []
+                for i, rows in enumerate(rowsets):
+                    path = root / ("part%d.parquet" % i)
+                    pq.write_table(pa.table({"key": pa.array(rows, type=pa.int32())}), path)
+                    paths.append(str(path))
+                metadata = new_table_metadata(Schema(NestedField(1, "key", IntegerType(), required=False)),
+                    UNPARTITIONED_PARTITION_SPEC, UNSORTED_SORT_ORDER, location=str(root),
+                    properties={"commit.retry.num-retries": "0"})
+                def commit(table, requirements, updates):
+                    return CommitTableResponse(metadata=update_table_metadata(table.metadata, updates),
+                        metadata_location=str(root / "metadata" / "v2.json"))
+                catalog = SimpleNamespace(commit_table=Mock(side_effect=commit), _delete_old_metadata=Mock(),
+                                          supports_server_side_planning=lambda: False)
+                table = Table(("raw", "events"), metadata, str(root / "metadata" / "v1.json"),
+                              PyArrowFileIO(), catalog)
+                table.add_files(paths, snapshot_properties={}, check_duplicate_files=True)
+                catalog.commit_table.assert_called_once()
+                files = {task.file.file_path: task.file for task in table.scan(options={"include_empty_files": "true"}).plan_files()}
+                self.assertEqual(set(files), set(paths))
+                self.assertEqual(sum(f.record_count for f in files.values()), sum(map(len, rowsets)))
+                summary = table.current_snapshot().summary.additional_properties
+                self.assertEqual(summary["total-data-files"], "3")
+                self.assertEqual(summary["added-data-files"], "3")
+                self.assertEqual(summary["total-records"], str(sum(map(len, rowsets))))
+                if any(rowsets):
+                    self.assertEqual(summary["added-records"], str(sum(map(len, rowsets))))
+                else:
+                    self.assertNotIn("added-records", summary)
+                self.assertEqual(table.current_snapshot().summary.operation.value, "append")
+
     def test_exact_scalar_footer_and_reject_nested_or_int_widening(self):
         import pyarrow as pa
         import pyarrow.parquet as pq

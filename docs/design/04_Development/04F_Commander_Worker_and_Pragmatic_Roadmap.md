@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.98"
+version: "1.99"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[Parquet分割生成・複数ファイル登録](../../guides/performance-parquet-shards-2026-11-14.md)を整備した。既存format 1を維持し、format 2の明示file一覧、source系譜、全内容照合と表単位1回commitを追加した。
+TPC-H SF0.01の8表/28file/22 SQL、TPC-DSの24表/65file/99 SQLの参照方言照合が成功。後者の300秒期限切れは保持し、別の600秒検証枠で再確認した。
+実機で2表/5file/200,006行を登録・固定し、直接Trino/公開全件APIで全値・型・重複が一致。元57表/履歴/資源を保持し、OOM/再起動0・doctor healthy 46項目を確認。Make159群は5,781成功・67 skip・失敗0、実SDK91件と分割27件も全件成功した。
+次は残るvariant/scaleと計測器負荷を整える。資源設定・容量予算を維持し、L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
 
 2026-11-14 JST、[性能試験のbulk取込と公開全件取得](../../guides/performance-bulk-results-2026-11-14.md)を整備した。DB限定OAuth/STSによるParquet登録、明示all/null/read-only APIと2ページ保持、native UUID/snapshot照合を追加した。
 54MB/200,006行と既存73,049行の全値・型・重複が直接/公開で一致し、取消・旧打切りも確認。初回の比較timeoutを保持し、200ms samplingへ修正後に同じ600秒期限で再検証した。

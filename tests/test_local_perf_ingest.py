@@ -121,6 +121,115 @@ class IngestTests(unittest.TestCase):
         self.c.mark(root, 'SUCCESS')
         return root
 
+    def prepared_v2(self):
+        from benchmarks.local_perf.dataset_layout import table_files, file_identity
+        prepared = self.prepared()
+        dataset = self.c.own("dataset", "dataset")
+        meta = json.loads((prepared / "input.json").read_text())
+        files = []
+        for i in range(2):
+            path = dataset / (str(i) + ".parquet")
+            path.write_bytes(b"parquet" + bytes([i]))
+            files.append(dict(file=path.name, rows=1, file_bytes=path.stat().st_size,
+                              physical_bytes=path.stat().st_blocks * 512, sha256=file_hash(path)))
+        table = dict(name="events", schema=meta["tables"][0]["schema"], files=files, rows=2,
+                     file_bytes=sum(f["file_bytes"] for f in files), physical_bytes=sum(f["physical_bytes"] for f in files))
+        write_json(dataset / "dataset.json", dict(format=2, status="SUCCESS", dataset_id="dataset", tables=[table]))
+        self.c.mark(dataset, "SUCCESS")
+        records = table_files(dataset, table, 2)
+        meta.update(format=2, source_manifest_file=str(dataset / "dataset.json"),
+                    source_manifest_sha256=file_hash(dataset / "dataset.json"))
+        meta["tables"][0].pop("source_file")
+        meta["tables"][0].update(source_files=[dict(f, path=str(f["path"])) for f in records],
+                                  source_sha256=file_identity(records, 2), source_bytes=table["file_bytes"])
+        write_json(prepared / "input.json", meta)
+        return prepared, dataset
+
+    def test_v2_later_source_tamper_and_provenance_prevent_all_posts(self):
+        prepared, dataset = self.prepared_v2()
+        original = (prepared / "input.json").read_text()
+        later = dataset / "1.parquet"
+        raw = later.read_bytes()
+        for case in ("corrupt", "missing", "provenance", "type", "manifest"):
+            with self.subTest(case=case):
+                later.write_bytes(raw)
+                (prepared / "input.json").write_text(original)
+                meta = json.loads(original)
+                if case == "corrupt":
+                    later.write_bytes(b"badbytes")
+                elif case == "missing":
+                    later.unlink()
+                elif case == "provenance":
+                    meta["tables"][0]["source_files"][1]["path"] = str(self.source)
+                elif case == "type":
+                    meta["tables"][0]["schema"][0]["type"] = "double"
+                else:
+                    meta["source_manifest_sha256"] = "a" * 64
+                if case in ("provenance", "type", "manifest"):
+                    write_json(prepared / "input.json", meta)
+                adapter = FakePublic()
+                with self.assertRaises(ValueError):
+                    load_public(self.c, prepared, "load_" + case, adapter)
+                self.assertFalse(any(method == "POST" for method, _, _ in adapter.calls))
+        later.write_bytes(raw)
+        (prepared / "input.json").write_text(original)
+        journal = json.loads(load_public(self.c, prepared, "good", FakePublic()).read_text())
+        self.assertEqual(journal["tables"][0]["source_sha256"], json.loads(original)["tables"][0]["source_sha256"])
+
+    @unittest.skipUnless(os.environ.get("LOCAL_PERF_REAL") == "1", "explicit isolated DuckDB only")
+    def test_real_v2_streaming_preserves_duplicates_across_shards(self):
+        import duckdb
+        root = self.c.own("tiny_v2", "dataset")
+        con = duckdb.connect()
+        files = []
+        for i in range(2):
+            path = root / (str(i) + ".parquet")
+            con.execute("COPY (SELECT * FROM (VALUES (1::BIGINT, '日本語'), (1, '日本語'), (2, NULL)) t(id,label)) TO '" + str(path) + "' (FORMAT PARQUET)")
+            files.append(dict(file=path.name, rows=3, file_bytes=path.stat().st_size,
+                              physical_bytes=path.stat().st_blocks * 512, sha256=file_hash(path)))
+        con.close()
+        table = dict(name="events", schema=[dict(name="id", type="BIGINT"), dict(name="label", type="VARCHAR")],
+                     rows=6, files=files, file_bytes=sum(f["file_bytes"] for f in files),
+                     physical_bytes=sum(f["physical_bytes"] for f in files))
+        write_json(root / "dataset.json", dict(format=2, status="SUCCESS", mode="qualification", dataset_id="tiny_v2",
+                   tables=[table], timeout_s=30, peak_bytes=256*1024**2))
+        self.c.mark(root, "SUCCESS")
+        out = prepare_ingest(self.c, root, "prepared_v2", "p", chunk_bytes=65)
+        meta = json.loads((out / "input.json").read_text())
+        rows = [json.loads(line) for part in meta["tables"][0]["parts"] for line in (out / part["path"]).read_text().splitlines()]
+        self.assertEqual(rows.count(dict(id=1, label="日本語")), 4)
+        self.assertEqual(rows.count(dict(id=2, label=None)), 2)
+        self.assertEqual(meta["format"], 2)
+        self.assertNotIn("source_file", meta["tables"][0])
+        self.assertEqual(len(meta["tables"][0]["source_files"]), 2)
+        load_public(self.c, out, "loaded_v2", FakePublic())
+        from benchmarks.local_perf.runner import DuckDBAdapter
+        from benchmarks.local_perf.results import Reader, decoded
+        result = self.base / "reference.jsonl"
+        DuckDBAdapter(root).execute("SELECT * FROM events", result, {}, time.monotonic() + 30, lambda h: None, lambda: None)
+        reader = Reader(result)
+        observed = [tuple(decoded(c) for c in row) for row in reader]
+        self.assertEqual(observed.count((1, "日本語")), 4)
+        self.assertEqual(observed.count((2, None)), 2)
+        # DuckDB would widen BIGINT + DOUBLE; each file must match instead.
+        later = root / "1.parquet"
+        con = duckdb.connect()
+        con.execute("COPY (SELECT 1.5::DOUBLE id, '日本語' AS \"label\") TO '" + str(later) + "' (FORMAT PARQUET)")
+        con.close()
+        files[1].update(rows=1, file_bytes=later.stat().st_size, physical_bytes=later.stat().st_blocks * 512,
+                        sha256=file_hash(later))
+        table.update(rows=4, file_bytes=sum(f["file_bytes"] for f in files), physical_bytes=sum(f["physical_bytes"] for f in files))
+        original = json.loads((root / "dataset.json").read_text())
+        original["tables"] = [table]
+        write_json(root / "dataset.json", original)
+        with self.assertRaisesRegex(ValueError, "schema"):
+            prepare_ingest(self.c, root, "bad_schema_v2", "p")
+        with self.assertRaisesRegex(ValueError, "schema"):
+            DuckDBAdapter(root).execute("SELECT * FROM events", self.base / "bad.jsonl", {},
+                                       time.monotonic() + 30, lambda h: None, lambda: None)
+
+
+
     def test_lost_response_reconciles_unique_key_without_resubmitting(self):
         prepared = self.prepared()
         a = FakePublic('lost')

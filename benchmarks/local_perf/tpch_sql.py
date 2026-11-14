@@ -147,8 +147,11 @@ def prepare_tpch(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e-
     """Prove source/cast/portable equivalence using owned disk-backed results."""
     if any(not math.isfinite(v) or v < 0 for v in (abs_tol, rel_tol)) or not math.isfinite(timeout) or timeout <= 0:
         raise ValueError('invalid deadline/tolerance')
-    dataset = Path(dataset)
-    meta = json.loads((dataset / 'dataset.json').read_text())
+    from .runner import dataset_read, dataset_version
+    dataset = Path(dataset).resolve()
+    dataset_text = (dataset / "dataset.json").read_text()
+    meta = json.loads(dataset_text)
+    version = dataset_version(meta)
     source_text = (dataset / 'queries.json').read_text()
     source = json.loads(source_text)
     if (meta['status'] != 'SUCCESS' or meta['suite'] != 'tpch' or meta['generator_version'] != '1.4.3'
@@ -177,10 +180,13 @@ def prepare_tpch(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e-
         con = connect(out / 'parity.duckdb', out / 'spill')
         with bounded(con, check, deadline):
             for t in meta['tables']:
-                file = (dataset / t['file']).resolve()
-                if file.parent != dataset.resolve():
-                    raise ValueError('dataset table must be a direct child')
-                con.execute('CREATE VIEW ' + ident(t['name']) + ' AS SELECT * FROM read_parquet(' + quote(file) + ')')
+                if version == 1:
+                    file = (dataset / t['file']).resolve()
+                    if file.parent != dataset.resolve():
+                        raise ValueError('dataset table must be a direct child')
+                    con.execute("CREATE VIEW " + ident(t["name"]) + " AS SELECT * FROM read_parquet(" + quote(file) + ")")
+                else:
+                    con.execute("CREATE VIEW " + ident(t["name"]) + " AS " + dataset_read(con, dataset, t, version, check))
             for q in manifest['queries']:
                 check()
                 rule = rules[q['id']]
@@ -198,6 +204,9 @@ def prepare_tpch(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e-
                             abs_tol=abs_tol, rel_tol=rel_tol, scratch=out, check=check)
                 audit['status'] = 'SUCCESS'
                 write_json(out / 'plan.json', record)
+        if ((dataset / "dataset.json").read_text() != dataset_text
+                or (dataset / "queries.json").read_text() != source_text):
+            raise ValueError("source manifest changed")
         record['status'] = 'SUCCESS'
         campaign.mark(out, 'SUCCESS')
         return out

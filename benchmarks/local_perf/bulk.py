@@ -19,6 +19,7 @@ import urllib.parse
 import uuid
 
 from .capacity import write_json
+from .dataset_layout import file_identity, table_files
 from .ingest import (absent, budget, child, file_hash, owned_record,
                      public_client, resolve, target_name)
 from .protocol import LIMIT, settings
@@ -339,7 +340,7 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
     cfg = settings(mode=meta.get("mode", "qualification"), scale=meta.get("scale", .01),
                    peak=peak_bytes if peak_bytes is not None else meta.get("peak_bytes"),
                    timeout=timeout, repetitions=1, peak_evidence=meta.get("peak_evidence"))
-    if (type(meta.get("format")) is not int or meta["format"] != 1
+    if (type(meta.get("format")) is not int or meta["format"] not in (1, 2)
             or not isinstance(meta.get("dataset_id"), str) or not meta["dataset_id"].strip()
             or type(meta.get("measured_logical_bytes")) is not int
             or not 0 <= meta["measured_logical_bytes"] <= (1_000_000_000 if cfg["mode"] == "qualification" else LIMIT)):
@@ -398,6 +399,30 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
         if json.loads((source / "dataset.json").read_text()) != meta:
             raise ValueError("manifest changed")
         journal["source_manifest_sha256"] = manifest_sha
+        version = meta["format"]
+        # Stat every raw reference before any per-file hashing/footer work. The
+        # shared layout validator deliberately has no transport size policy.
+        seen_paths = set()
+        for t in meta["tables"]:
+            raw_files = t.get("files", []) if version == 2 else [t]
+            for record in raw_files:
+                if version == 2 and set(record) != {"file", "rows", "file_bytes", "sha256", "physical_bytes"}:
+                    raise ValueError("exact source file metadata required")
+                local = child(source, record["file"])
+                size = local.stat().st_size
+                if size > MAX_SOURCE_FILE_BYTES:
+                    raise ValueError("source file exceeds S3 multipart size limit")
+                resolved = local.resolve()
+                if resolved in seen_paths:
+                    raise ValueError("duplicate source path")
+                seen_paths.add(resolved)
+        def source_hash(local, expected_size, message):
+            size = local.stat().st_size
+            if size > MAX_SOURCE_FILE_BYTES:
+                raise ValueError("source file exceeds S3 multipart size limit")
+            if size != expected_size:
+                raise ValueError(message)
+            return file_hash(local, check)
         plans, names = [], set()
         for t in meta["tables"]:
             physical = target_name(prefix, t["name"])
@@ -405,40 +430,59 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
                 raise ValueError("duplicate target")
             names.add(physical)
             cols = _columns(t["schema"])
-            if type(t["rows"]) is not int or t["rows"] < 0:
-                raise ValueError("nonnegative source row count required")
-            # Existing dataset format has one file/table. No eager row materialization.
-            local = child(source, t["file"])
-            size = local.stat().st_size
-            if size > MAX_SOURCE_FILE_BYTES:
-                raise ValueError("source file exceeds S3 multipart size limit")
-            sha = file_hash(local, check)
-            arrow, actual, rows = sdk.footer(local)
-            if (actual != cols or rows != t["rows"] or t.get("file_bytes", size) != size
-                    or t.get("sha256", sha) != sha or file_hash(local, check) != sha):
-                raise ValueError("source schema/rows/hash mismatch")
+            parts = table_files(source, t, version=version, check=check)
+            arrow, total_rows = None, 0
+            for part in parts:
+                local = part["path"]
+                size = local.stat().st_size
+                sha = source_hash(local, part["file_bytes"], "source schema/rows/hash mismatch")
+                part_arrow, actual, rows = sdk.footer(local)
+                if (actual != cols or rows != part["rows"] or part["file_bytes"] != size
+                        or (part.get("sha256") is not None and part["sha256"] != sha) or source_hash(local, size, "source schema/rows/hash mismatch") != sha):
+                    raise ValueError("source schema/rows/hash mismatch")
+                if arrow is None:
+                    arrow = part_arrow
+                elif not (arrow.equals(part_arrow, check_metadata=False)
+                          if hasattr(arrow, "equals") else arrow == part_arrow):
+                    raise ValueError("source part schema mismatch")
+                total_rows += rows
+                part.update(sha256=sha, bytes=size)
+            if total_rows != t["rows"]:
+                raise ValueError("source row sum mismatch")
+            sha = file_identity(parts, version=version)
             item = dict(name=t["name"], physical_name=physical, schema=cols,
                         schema_hints={c["name"]: c["type"].upper() for c in cols},
-                        source_sha256=sha, rows=rows, committed_rows=0, ref=None, cleanup_clean=None,
+                        source_sha256=sha, rows=total_rows, committed_rows=0, ref=None, cleanup_clean=None,
                         uuid=None, snapshot=None, uploadedfiles=[])
+            if version == 2:
+                item["source_files"] = [{k: p[k] for k in
+                    ("file", "rows", "file_bytes", "sha256", "physical_bytes")} for p in parts]
             journal["tables"].append(item)
-            plans.append((item, local, arrow, dict(sha256=sha, bytes=size)))
+            plans.append((item, parts, arrow))
             check()
-        if not plans or sum(p[3]["bytes"] for p in plans) > cfg["peak_bytes"]:
+        if not plans or sum(p["bytes"] for _, parts, _ in plans for p in parts) > cfg["peak_bytes"]:
             raise ValueError("empty manifest or source exceeds copy peak")
-        if file_hash(source / "dataset.json", check) != manifest_sha:
-            raise ValueError("manifest changed")
+        def manifest_immutable(message):
+            if file_hash(source / "dataset.json", check) != manifest_sha:
+                raise ValueError("manifest changed" + message)
+        def immutable(message, selected=None):
+            manifest_immutable(message)
+            for part in (selected if selected is not None else
+                         [p for _, group, _ in plans for p in group]):
+                if source_hash(part["path"], part["bytes"], "source changed" + message) != part["sha256"]:
+                    raise ValueError("source changed" + message)
+        immutable("")
         save()
         public_check()
         absent(adapter, names, deadline)
         check()
         catalog = sdk.catalog(auth, deadline, check)
-        for item, local, arrow, expected in plans:
+        for item, parts, arrow in plans:
             public_check()
             absent(adapter, {item["physical_name"]}, deadline)
-            if file_hash(local, check) != expected["sha256"] or file_hash(source / "dataset.json", check) != manifest_sha:
-                raise ValueError("source changed before create")
-            props = {"format-version": "2", "commit.retry.num-retries": "0", OWNER: token, SOURCE: expected["sha256"]}
+            immutable(" before create", parts)
+            props = {"format-version": "2", "commit.retry.num-retries": "0", OWNER: token,
+                     SOURCE: item["source_sha256"]}
             op = intent("create", item, properties=props)
             def capture_create(value):
                 candidate = str(value)
@@ -455,6 +499,9 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
             catalog.capture_create = capture_create
             table = catalog.create_table((ctx["sql_schema"], item["physical_name"]), schema=arrow, properties=props)
             capture_create(table.metadata.table_uuid)
+            current_schema_id = table.metadata.current_schema_id
+            if type(current_schema_id) is not int or current_schema_id < 0:
+                raise ValueError("nonnegative integer current schema ID required")
             location = _location(table, auth)
             item["location"] = location
             save()
@@ -463,22 +510,43 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
                     or any(table.properties.get(k) != v for k, v in props.items() if k != "format-version")
                     or table.metadata.format_version != 2):
                 raise ValueError("created table identity/schema/properties mismatch")
+            def validate_empty(candidate):
+                if (str(candidate.metadata.table_uuid) != item["uuid"]
+                        or type(candidate.metadata.current_schema_id) is not int
+                        or candidate.metadata.current_schema_id != current_schema_id
+                        or _location(candidate, auth) != location
+                        or sdk.schema(candidate) != item["schema"]
+                        or candidate.current_snapshot() is not None
+                        or candidate.metadata.format_version != 2
+                        or any(candidate.properties.get(k) != v for k, v in props.items()
+                               if k != "format-version")):
+                    raise ValueError("refreshed table identity/schema/properties/snapshot mismatch")
+                return candidate
+            targets = []
+            for ordinal, part in enumerate(parts):
+                public_check()
+                if version == 2 and ordinal:
+                    table = validate_empty(catalog.load_table((ctx["sql_schema"], item["physical_name"])))
+                immutable(" before upload", [part])
+                suffix = (str(ordinal) + "-" if version == 2 else "") + part["sha256"]
+                target = location + "/data/" + token + "-" + suffix + ".parquet"
+                targets.append(target)
+                uploaded = dict(location=target, sha256=part["sha256"], bytes=part["bytes"], status="INTENT")
+                item["uploadedfiles"].append(uploaded)
+                op = intent("upload", item, location=target, sha256=part["sha256"], bytes=part["bytes"])
+                # Persist intent before even constructing the remote output.
+                output = table.io.new_output(target)
+                began = time.monotonic()
+                copied = _copy(part["path"], output, part, check)
+                uploaded.update(status="SUCCESS", copied_bytes=copied, elapsed_s=time.monotonic() - began)
+                op["status"] = "RETURNED"
+                save()
+                immutable(" after copy", [part])
             public_check()
-            target = location + "/data/" + token + "-" + expected["sha256"] + ".parquet"
-            uploaded = dict(location=target, sha256=expected["sha256"], bytes=expected["bytes"], status="INTENT")
-            item["uploadedfiles"].append(uploaded)
-            # Output construction is lazy; no remote write before durable intent.
-            output = table.io.new_output(target)
-            op = intent("upload", item, location=target, sha256=expected["sha256"], bytes=expected["bytes"])
-            began = time.monotonic()
-            copied = _copy(local, output, expected, check)
-            uploaded.update(status="SUCCESS", copied_bytes=copied, elapsed_s=time.monotonic() - began)
-            op["status"] = "RETURNED"
-            save()
-            if file_hash(local, check) != expected["sha256"] or file_hash(source / "dataset.json", check) != manifest_sha:
-                raise ValueError("source changed after copy")
-            public_check()
-            op = intent("commit", item, uuid=item["uuid"], files=[target])
+            if version == 2:
+                table = validate_empty(catalog.load_table((ctx["sql_schema"], item["physical_name"])))
+            immutable(" before commit", parts)
+            op = intent("commit", item, uuid=item["uuid"], files=targets)
             began = time.monotonic()
             def capture_commit(metadata):
                 op["acknowledgement"] = "RETURNED"
@@ -489,8 +557,8 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
                     item["snapshot"] = sid if type(sid) is int else None
                     save()
             catalog.capture_commit = capture_commit
-            table.add_files([target], snapshot_properties={OWNER: token, SOURCE: expected["sha256"]},
-                            check_duplicate_files=True)
+            snapshot_props = {OWNER: token, SOURCE: item["source_sha256"]}
+            table.add_files(targets, snapshot_properties=snapshot_props, check_duplicate_files=True)
             op["acknowledgement"] = "RETURNED"
             item["commit_elapsed_s"] = time.monotonic() - began
             save()
@@ -501,43 +569,55 @@ def load_bulk(campaign, dataset, name, prefix, adapter, auth_file, *, timeout=60
             item["snapshot"] = sid if type(sid) is int else None
             save()
             summary = snapshot.summary.additional_properties
-            required = {OWNER: token, SOURCE: expected["sha256"],
-                        "total-records": str(item["rows"]), "added-records": str(item["rows"]),
-                        "total-data-files": "1", "added-data-files": "1"}
+            required = {OWNER: token, SOURCE: item["source_sha256"],
+                        "total-records": str(item["rows"]),
+                        "total-data-files": str(len(parts)), "added-data-files": str(len(parts))}
+            added_valid = (summary.get("added-records") == str(item["rows"]) if item["rows"] else
+                           "added-records" not in summary or summary["added-records"] == "0")
             if (str(table.metadata.table_uuid) != item["uuid"]
+                    or not added_valid
                     or type(sid) is not int or not 0 < sid <= 2**63 - 1
                     or any(summary.get(k) != v for k, v in required.items())
                     or getattr(snapshot.summary.operation, "value", snapshot.summary.operation) != "append"):
                 raise ValueError("returned commit identity/summary mismatch")
-            files = iter(table.scan().plan_files())
-            first = next(files, None)
-            if first is None or next(files, None) is not None:
-                raise ValueError("one registered native file required")
-            f = first.file
-            proof = dict(location=f.file_path, record_count=f.record_count, file_size_in_bytes=f.file_size_in_bytes)
-            if (proof != dict(location=target, record_count=item["rows"], file_size_in_bytes=expected["bytes"])
-                    or type(f.record_count) is not int or type(f.file_size_in_bytes) is not int):
-                raise ValueError("registered file metadata mismatch")
-            item["registeredfiles"] = [proof]
+            expected_files = {target: dict(location=target, record_count=part["rows"],
+                file_size_in_bytes=part["bytes"]) for target, part in zip(targets, parts)}
+            proofs = {}
+            scan = table.scan(options={"include_empty_files": "true"})
+            for task in scan.plan_files():
+                f = task.file
+                proof = dict(location=f.file_path, record_count=f.record_count, file_size_in_bytes=f.file_size_in_bytes)
+                if (f.file_path in proofs or proof != expected_files.get(f.file_path)
+                        or type(f.record_count) is not int or type(f.file_size_in_bytes) is not int):
+                    raise ValueError("registered file metadata mismatch")
+                proofs[f.file_path] = proof
+            if proofs.keys() != expected_files.keys():
+                raise ValueError("missing registered native files")
+            item["registeredfiles"] = [proofs[target] for target in targets]
             save()
             item["committed_schema"] = sdk.schema(table)
             if (str(table.metadata.table_uuid) != item["uuid"] or _location(table, auth) != location
+                    or type(table.metadata.current_schema_id) is not int
+                    or table.metadata.current_schema_id != current_schema_id
                     or item["committed_schema"] != item["schema"]):
                 raise ValueError("committed table identity/schema changed")
+            if version == 2:
+                validate_properties = {k: v for k, v in props.items() if k != "format-version"}
+                if (table.metadata.format_version != 2
+                        or any(table.properties.get(k) != v for k, v in validate_properties.items())):
+                    raise ValueError("committed properties changed")
             item["committed_rows"] = item["rows"]
             op["status"] = "RETURNED"
             save()
+            if version == 2:
+                immutable(" after commit", parts)
             public_check()
             item["ref"] = resolve(adapter, item["physical_name"], deadline)
             check()
             item["cleanup_clean"] = True
             save()
         public_check()
-        if file_hash(source / "dataset.json", check) != manifest_sha:
-            raise ValueError("manifest changed after commit")
-        for _, local, _, expected in plans:
-            if file_hash(local, check) != expected["sha256"]:
-                raise ValueError("source changed after commit")
+        immutable(" after commit")
         journal["status"] = "SUCCESS"
         return path
     except BaseException as exc:

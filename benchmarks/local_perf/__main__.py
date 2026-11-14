@@ -32,6 +32,14 @@ def main():
     p.add_argument("name")
     p.add_argument("--suite", choices=["tpch", "tpcds"], default="tpch")
     add_settings(p)
+    add_sharding(p, target_default=None)
+    p = commands.add_parser("shard-dataset")
+    p.add_argument("campaign")
+    p.add_argument("dataset")
+    p.add_argument("name")
+    add_sharding(p, target_default=268435456)
+    p.add_argument("--timeout", type=positive_timeout, default=600)
+    p.add_argument("--peak-bytes", type=positive_int)
     p = commands.add_parser("prepare-reference")
     p.add_argument("campaign")
     p.add_argument("dataset")
@@ -127,7 +135,18 @@ def main():
                 result["guest"] = {k: guest_requirement(**snapshot[k], root=k == "root") for k in ("data", "root")}
                 result["guest_ready"] = all(s["ready"] for s in result["guest"].values())
         elif cmd == "generate":
-            result = str(generate(Campaign(args.campaign), args.name, args.suite, **config(args)))
+            options = config(args)
+            if args.target_file_bytes is not None:
+                options.update(target_file_bytes=args.target_file_bytes, row_group_size=args.row_group_size,
+                               max_file_bytes=args.max_file_bytes)
+            elif args.row_group_size != 122880 or args.max_file_bytes != 104857600000:
+                raise ValueError("shard options require target-file-bytes")
+            result = str(generate(Campaign(args.campaign), args.name, args.suite, **options))
+        elif cmd == "shard-dataset":
+            from .sharding import shard_dataset
+            result = str(shard_dataset(Campaign(args.campaign), args.dataset, args.name,
+                         target_file_bytes=args.target_file_bytes, row_group_size=args.row_group_size,
+                         max_file_bytes=args.max_file_bytes, timeout=args.timeout, peak_bytes=args.peak_bytes))
         elif cmd == "prepare-reference":
             result = str(prepare_reference(Campaign(args.campaign), args.dataset, args.name))
         elif cmd == "prepare-sql-reference":
@@ -234,6 +253,12 @@ def positive_timeout(value):
     if not math.isfinite(timeout) or timeout <= 0:
         raise argparse.ArgumentTypeError("timeout must be a finite positive number")
     return timeout
+
+
+def add_sharding(p, target_default):
+    p.add_argument("--target-file-bytes", type=positive_int, default=target_default)
+    p.add_argument("--row-group-size", type=positive_int, default=122880)
+    p.add_argument("--max-file-bytes", type=positive_int, default=104857600000)
 
 
 def add_settings(p):

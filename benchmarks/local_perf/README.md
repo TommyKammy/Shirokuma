@@ -559,16 +559,60 @@ unordered; reviewed TPC-H/TPC-DS plans add explicit ordering/tie contracts witho
 inferring them for arbitrary SQL. The reviewed opt-in public full-result mode
 removes the preview row ceiling while retaining authorization and bounded replay.
 Native bulk setup is a separate explicit-credential Parquet registration path,
-not public ingest API throughput. Its current one-file/table manifest is bounded
-to 104,857,600,000 bytes/file before hashing or writes; larger tables require
-sharded generation and multi-file registration first. P2 worker/VM profile application, guest expansion,
+not public ingest API throughput. Format 2 supports multiple files per table;
+each file is bounded to 104,857,600,000 bytes before hashing or writes. The table
+total can exceed that per-file limit within the campaign capacity budget.
+P2 worker/VM profile application, guest expansion,
 concurrent load, arrival-rate tests, SLO freezing and long runs remain subsequent work.
+
+## Sharded Parquet datasets
+
+Default generation retains the format 1 single-file manifest. Explicit
+`--target-file-bytes` generates format 2 directly from DuckDB tables, without
+first exporting one large Parquet file. `shard-dataset` converts an existing
+successful owned dataset into a fresh dataset and preserves its source manifest
+identity. Both paths stream COPY output and validate full schemas, rows and
+duplicate-preserving contents before success.
+
+```sh
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf generate "$CAMPAIGN" tpch-sharded --suite tpch --scale 0.01 --target-file-bytes 268435456 --row-group-size 122880
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf shard-dataset "$CAMPAIGN" "$SOURCE_DATASET" sharded --target-file-bytes 268435456 --row-group-size 122880 --max-file-bytes 104857600000 --timeout 600 --peak-bytes 2147483648
+```
+
+The target is soft at row-group boundaries; a separate post-generation hard
+limit rejects oversized files. Row groups require at least 2,048 rows. Format 2
+declares an ordered `files` list per table with each file's rows, size, physical
+allocation and SHA256. Consumers use that exact list without glob expansion.
+The table sums must agree, schemas must match across all files, and an empty
+table has one schema-bearing empty Parquet file. Query manifests remain format 1
+and retain their SQL and variants while binding to the new dataset identity.
+
+DuckDB references, TPC-H/TPC-DS parity preparation and JSONL preparation accept
+both formats. Source hashing occurs at generation, sharding, loading and JSONL
+preparation boundaries, rather than once per query. Failed output and FAILED
+metadata remain for diagnosis; owned temporary databases/spill are closed and
+removed. See the [contract and verification record](../../docs/guides/performance-parquet-shards-2026-11-14.md).
+
+Commander verification on 2026-11-14 covered direct sharded generation of TPC-H
+SF0.01 (8 tables/28 files/22-query parity) and TPC-DS SF0.01 (24 tables/65 files/
+99-query parity). A separate existing dataset was sharded into five files across
+two tables, including an empty table, then registered and pinned. All 200,006 rows
+matched through direct Trino and the full-result public API; JSONL preparation
+also passed. The first TPC-DS parity plan exceeded its 300s deadline and remains
+FAILED; a fresh 600s qualification completed all 99 without SQL/tolerance changes.
+These are correctness checks, with material artifact/validation overhead;
+large-scale performance and other variants/scales remain subsequent work.
 
 ## Native bulk setup
 
 `load-bulk` copies validated source Parquet in 1MiB chunks to fresh Iceberg v2
-tables with explicit DB-consumer OAuth and table-vended STS, then commits via
-PyIceberg `add_files`. It avoids VALUES expansion and eager row loading.
+tables with explicit DB-consumer OAuth and table-vended STS, then commits all
+files once per table via PyIceberg `add_files`. Every source file is validated
+before the first mutation; vended credentials are refreshed between files and
+before commit, with target UUID/location/schema ID/schema/properties rechecked.
+The snapshot proof covers all registered file paths, rows and bytes, including
+empty files. Distinct files with identical content remain distinct objects.
+It avoids VALUES expansion and eager row loading.
 Install `requirements-bulk.txt` only in a dedicated environment; provide separate
 `--bulk-auth-file`, `--prefix`, deadline and peak budget. `freeze-snapshots` accepts
 successful owned bulk journals and checks the returned UUID/snapshot against

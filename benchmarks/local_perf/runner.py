@@ -25,6 +25,30 @@ from .results import Reader, Writer, column, compare, validate_order
 
 
 
+def dataset_version(meta):
+    version = meta.get("format", 1)
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError("unsupported dataset format")
+    return version
+
+
+def dataset_read(con, root, table, version, check):
+    """Check each shard before DuckDB can reconcile their schemas."""
+    from .dataset_layout import table_files, read_sql
+    if version == 2:
+        expected = [column(c["name"], c["type"]) for c in table["schema"]]
+        for f in table_files(root, table, version, check):
+            check()
+            if f["path"].stat().st_size != f["file_bytes"]:
+                raise ValueError("source file size changed")
+            sql = "SELECT * FROM read_parquet(" + quote(f["path"]) + ")"
+            actual = [column(r[0], str(r[1])) for r in con.execute("DESCRIBE " + sql).fetchall()]
+            if actual != expected:
+                raise ValueError("dataset table schema mismatch")
+            check()
+    return read_sql(root, table, version)
+
+
 class Timings:
     """Version 1: monotonic client offsets, never backend execution estimates.
 
@@ -386,6 +410,7 @@ class DuckDBAdapter:
                 else dict(status="SUCCESS", peak_bytes=256 * 1024 ** 2, tables=[]))
         if meta["status"] != "SUCCESS":
             raise ValueError("incomplete dataset")
+        version = dataset_version(meta)
         work = out.parent / "duckdb-work"
         work.mkdir()
         writer = None
@@ -394,7 +419,7 @@ class DuckDBAdapter:
             save({"id": "local-" + uuid.uuid4().hex})
             with bounded(self.con, check, deadline):
                 for t in meta["tables"]:
-                    self.con.execute("CREATE VIEW " + ident(t["name"]) + " AS SELECT * FROM read_parquet(" + quote(self.dataset / t["file"]) + ")")
+                    self.con.execute("CREATE VIEW " + ident(t["name"]) + " AS " + dataset_read(self.con, self.dataset, t, version, check))
                 timing.mark("dispatch_started")
                 with timing.measure(timing.durations, "query_execute_s"):
                     cursor = self.con.execute(sql)

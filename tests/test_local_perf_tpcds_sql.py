@@ -423,5 +423,93 @@ class RealParity(unittest.TestCase):
               q59_source=q59["limit_audit"], q59_portable=q59["portable_limit_audit"])), flush=True)
 
 
+
+
+class MultifilePreparation(unittest.TestCase):
+    def test_v1_direct_child_guard_before_engine_sql(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            dataset = root / "source"
+            dataset.mkdir()
+            outside = root / "outside.parquet"
+            outside.write_bytes(b"outside")
+            (dataset / "linked.parquet").symlink_to(outside)
+            campaign = Campaign.create(root / "campaign")
+            columns = [dict(name="id", type="bigint")]
+            tables = [dict(name=name, file=name + ".parquet", schema=columns) for name in ds.TABLES]
+            meta = dict(format=1, status="SUCCESS", suite="tpcds", generator_version="1.4.3",
+                        dataset_id="source", tables=tables)
+            source_text = json.dumps(dict(format=1, dataset_id="source", queries=[]))
+            (dataset / "queries.json").write_text(source_text)
+            manifest = dict(format=1, dataset_id="source", source_dataset_id="source", queries=[],
+                            table_schemas={t["name"]: columns for t in tables})
+            con = Mock()
+            con.execute.return_value.description = [("id", "BIGINT")]
+            with patch.object(ds, "logical_manifest", return_value=manifest), patch.object(ds, "connect", return_value=con):
+                for case, filename in (("traversal", "../outside.parquet"), ("symlink", "linked.parquet")):
+                    with self.subTest(case=case):
+                        tables[0]["file"] = filename
+                        (dataset / "dataset.json").write_text(json.dumps(meta))
+                        con.reset_mock()
+                        with self.assertRaisesRegex(ValueError, "^dataset table must be a direct child$"):
+                            ds.prepare_tpcds(campaign, dataset, case)
+                        con.execute.assert_not_called()
+                # Missing direct children are left for the engine to open.
+                tables[0]["file"] = tables[0]["name"] + ".parquet"
+                (dataset / "dataset.json").write_text(json.dumps(meta))
+                con.reset_mock()
+                out = ds.prepare_tpcds(campaign, dataset, "missing_direct_children")
+                views = [c.args[0] for c in con.execute.call_args_list if c.args[0].startswith("CREATE VIEW")]
+                self.assertEqual(views, [
+                    "CREATE VIEW " + ds.ident(t["name"]) + " AS SELECT * FROM read_parquet("
+                    + ds.quote((dataset / t["file"]).resolve()) + ")" for t in tables])
+                self.assertEqual(json.loads((out / "queries.json").read_text()), manifest)
+                record = json.loads((out / "plan.json").read_text())
+                self.assertEqual(record["source_manifest_sha256"], ds.digest(source_text))
+                self.assertEqual(record["status"], "SUCCESS")
+
+    def test_v2_views_check_later_schema_and_keep_query_fingerprint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            dataset = root / "source"
+            dataset.mkdir()
+            campaign = Campaign.create(root / "campaign")
+            columns = [dict(name="id", type="bigint")]
+            tables = []
+            for name in ds.TABLES:
+                files = []
+                for i in range(2):
+                    path = dataset / (name + "-" + str(i) + ".parquet")
+                    path.write_bytes(b"parquet")
+                    files.append(dict(file=path.name, rows=1, file_bytes=7, physical_bytes=4096, sha256="a" * 64))
+                tables.append(dict(name=name, schema=columns, files=files, rows=2, file_bytes=14, physical_bytes=8192))
+            meta = dict(format=2, status="SUCCESS", suite="tpcds", generator_version="1.4.3", dataset_id="source", tables=tables)
+            source_text = json.dumps(dict(format=1, dataset_id="source", queries=[]))
+            (dataset / "dataset.json").write_text(json.dumps(meta))
+            (dataset / "queries.json").write_text(source_text)
+            manifest = dict(format=1, dataset_id="source", source_dataset_id="source", queries=[],
+                            table_schemas={t["name"]: columns for t in tables})
+            con = Mock()
+            con.execute.return_value.fetchall.return_value = [("id", "BIGINT")]
+            con.execute.return_value.description = [("id", "BIGINT")]
+            with patch.object(ds, "logical_manifest", return_value=manifest), patch.object(ds, "connect", return_value=con):
+                out = ds.prepare_tpcds(campaign, dataset, "good")
+                record = json.loads((out / "plan.json").read_text())
+                self.assertEqual(record["source_manifest_sha256"], ds.digest(source_text))
+                views = [c.args[0] for c in con.execute.call_args_list if c.args[0].startswith("CREATE VIEW")]
+                self.assertEqual(len(views), len(tables))
+                self.assertTrue(all("union_by_name=false" in sql and "-0.parquet" in sql and "-1.parquet" in sql for sql in views))
+                con.reset_mock()
+                con.execute.return_value.fetchall.side_effect = [[("id", "BIGINT")], [("id", "DOUBLE")]]
+                with self.assertRaisesRegex(ValueError, "schema"):
+                    ds.prepare_tpcds(campaign, dataset, "bad_schema")
+                self.assertFalse(any(c.args[0].startswith("CREATE VIEW") for c in con.execute.call_args_list))
+            for invalid in (True, 3, "2"):
+                meta["format"] = invalid
+                (dataset / "dataset.json").write_text(json.dumps(meta))
+                with self.assertRaisesRegex(ValueError, "format"):
+                    ds.prepare_tpcds(campaign, dataset, "invalid")
+
+
 if __name__ == "__main__":
     unittest.main()

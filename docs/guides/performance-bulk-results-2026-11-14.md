@@ -96,4 +96,4 @@ Workbenchは元のargv/envで一度だけ再起動してAPI変更を反映し、
 
 ## 次の順序
 
-Parquet分割生成・複数ファイル登録と、残るTPC-DS variant/scale等のG1残件を確認し、L1/guest disk拡張、100GB pilot、容量・時間の再見積りへ進む。
+後続の[Parquet分割生成・複数ファイル登録](performance-parquet-shards-2026-11-14.md)でformat 2を追加した。本記録の単一file制約は初回実装時点のもので、現在は各fileの104,857,600,000 bytes上限を維持しつつ複数fileをtableごとに1回でcommitできる。残るTPC-DS variant/scaleと計測器負荷等のG1残件を確認し、L1/guest disk拡張、100GB pilot、容量・時間の再見積りへ進む。

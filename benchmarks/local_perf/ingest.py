@@ -11,10 +11,12 @@ import urllib.parse
 import uuid
 
 from .capacity import allocated, write_json
-from .engine import bounded, connect, quote
+from .engine import bounded, connect
 from .protocol import settings
 from .public import PublicAdapter, PublicError, context
 from .results import cell, column, decoded, dumps
+from .dataset_layout import table_files, file_identity
+from .runner import dataset_version, dataset_read
 
 REF = ("database_id", "schema_id", "object_id", "incarnation")
 
@@ -116,14 +118,17 @@ def prepare_ingest(campaign, dataset, name, prefix, chunk_bytes=4 * 1024 ** 2):
     if type(chunk_bytes) is not int or not 1 <= chunk_bytes <= 4 * 1024 ** 2:
         raise ValueError("chunk_bytes must be 1..4MiB")
     source, meta = owned_record(campaign, dataset, "dataset.json", "dataset")
+    version = dataset_version(meta)
     cfg = settings(scale=meta.get("scale", .01), timeout=min(meta.get("timeout_s", 120), 600))
     if meta.get("mode", "qualification") != "qualification" or meta.get("measured_logical_bytes", 0) > 1_000_000_000:
         raise ValueError("small qualification dataset required")
     campaign.check(cfg["peak_bytes"])
     root = campaign.own(name, "ingest-preparation")
-    record = dict(format=1, status="INCOMPLETE", source_dataset_id=meta["dataset_id"],
+    record = dict(format=version, status="INCOMPLETE", source_dataset_id=meta["dataset_id"],
                   source_manifest_sha256=file_hash(source / "dataset.json"), prefix=prefix,
                   chunk_bytes=chunk_bytes, tables=[], settings=cfg)
+    if version == 2:
+        record["source_manifest_file"] = str(source / "dataset.json")
     path = root / "input.json"
     write_json(path, record)
     con = None
@@ -137,20 +142,29 @@ def prepare_ingest(campaign, dataset, name, prefix, chunk_bytes=4 * 1024 ** 2):
                 if physical in names:
                     raise ValueError("duplicate source table")
                 names.add(physical)
-                parquet = child(source, table["file"])
-                sha = file_hash(parquet, check)
-                if (parquet.stat().st_size != table.get("file_bytes", parquet.stat().st_size)
-                        or table.get("sha256", sha) != sha):
-                    raise ValueError("source file changed")
+                files = table_files(source, table, version, check)
+                for f in files:
+                    sha = file_hash(f["path"], check)
+                    if f["path"].stat().st_size != f["file_bytes"] or f.get("sha256") not in (None, sha):
+                        raise ValueError("source file changed")
+                    f["sha256"] = sha
                 columns, hints = hints_for(table["schema"])
-                sql = "SELECT * FROM read_parquet(" + quote(parquet) + ")"
+                sql = dataset_read(con, source, table, version, check)
                 actual = [column(r[0], r[1]) for r in con.execute("DESCRIBE " + sql).fetchall()]
                 if actual != columns:
                     raise ValueError("source schema changed")
+                if version == 1:
+                    item = dict(name=table["name"], physical_name=physical, schema=columns, schema_hints=hints,
+                                source_file=str(files[0]["path"]), source_sha256=files[0]["sha256"],
+                                source_bytes=files[0]["file_bytes"], rows=0, parts=[])
+                else:
+                    item = dict(name=table["name"], physical_name=physical, schema=columns, schema_hints=hints,
+                                source_sha256=file_identity(files, version), source_bytes=sum(f["file_bytes"] for f in files),
+                                rows=0, parts=[])
+                    item["source_files"] = [dict(f, path=str(f["path"])) for f in files]
+                    if con.execute("SELECT count(*) FROM (" + sql + ")").fetchone()[0] != table["rows"]:
+                        raise ValueError("source row count changed")
                 cursor = con.execute(sql)
-                item = dict(name=table["name"], physical_name=physical, schema=columns, schema_hints=hints,
-                            source_file=str(parquet), source_sha256=sha, source_bytes=parquet.stat().st_size,
-                            rows=0, parts=[])
                 record["tables"].append(item)
                 buf, rows = bytearray(), 0
                 def flush():
@@ -189,9 +203,15 @@ def prepare_ingest(campaign, dataset, name, prefix, chunk_bytes=4 * 1024 ** 2):
                         item["rows"] += 1
                 if buf or not item["parts"]:
                     flush()
-                if item["rows"] != table["rows"] or file_hash(parquet, check) != sha:
+                if version == 2 and con.execute("SELECT count(*) FROM (" + sql + ")").fetchone()[0] != table["rows"]:
+                    raise ValueError("source row count changed")
+                if (item["rows"] != table["rows"] or any(
+                        f["path"].stat().st_size != f["file_bytes"] or file_hash(f["path"], check) != f["sha256"]
+                        for f in files)):
                     raise ValueError("source row count/digest changed")
                 write_json(path, record)
+        if version == 2:
+            validate_prepared_sources(campaign, record, check)
         if file_hash(source / "dataset.json", check) != record["source_manifest_sha256"]:
             raise ValueError("source manifest changed")
         record["status"] = "SUCCESS"
@@ -410,12 +430,38 @@ def operation(adapter, route, endpoint, body, plan, save, deadline, check):
             adapter.headers["Idempotency-Key"] = previous
 
 
+def validate_prepared_sources(campaign, meta, check):
+    """Bind prepared shards to the successful owned producer before dispatch."""
+    source, original = owned_record(campaign, meta["source_manifest_file"], "dataset.json", "dataset")
+    if (Path(meta["source_manifest_file"]).resolve() != source / "dataset.json"
+            or dataset_version(original) != 2 or original["dataset_id"] != meta["source_dataset_id"]
+            or file_hash(source / "dataset.json", check) != meta["source_manifest_sha256"]):
+        raise ValueError("source manifest changed")
+    tables = original["tables"]
+    if len(tables) != len(meta["tables"]) or len({t["name"] for t in tables}) != len(tables):
+        raise ValueError("source table provenance changed")
+    by_name = {t["name"]: t for t in tables}
+    for t in meta["tables"]:
+        declared = by_name.pop(t["name"])
+        files = table_files(source, declared, 2, check)
+        expected = [dict(f, path=str(f["path"])) for f in files]
+        if (t["source_files"] != expected or t["source_sha256"] != file_identity(files, 2)
+                or t["source_bytes"] != declared["file_bytes"] or t["rows"] != declared["rows"]
+                or t["schema"] != [column(c["name"], c["type"]) for c in declared["schema"]]):
+            raise ValueError("source provenance changed")
+        for f in files:
+            check()
+            if f["path"].stat().st_size != f["file_bytes"] or file_hash(f["path"], check) != f["sha256"]:
+                raise ValueError("source file changed")
+
+
 def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000):
     identity, ctx = public_client(adapter)
     cfg = settings(timeout=timeout)
     if timeout > 600 or type(batch_size) is not int or not 1 <= batch_size <= 10000:
         raise ValueError("bounded qualification timeout/batch size required")
     source, meta = owned_record(campaign, prepared, "input.json", "ingest-preparation")
+    version = dataset_version(meta)
     campaign.refresh()
     for prior, entry in campaign.state["owned"].items():
         if entry["kind"] == "public-load" and entry["status"] in ("INCOMPLETE", "UNKNOWN"):
@@ -436,6 +482,8 @@ def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000)
     previous_timeout = adapter.request_timeout
     adapter.request_timeout = 30
     try:
+        if version == 2:
+            validate_prepared_sources(campaign, meta, check)
         # ALL input bytes/rows/schema/source hashes and worst-case encoded bodies before mutation.
         names = set()
         for t in meta["tables"]:
@@ -444,7 +492,8 @@ def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000)
                 raise ValueError("invalid fresh target")
             names.add(physical)
             cols, hints = hints_for(t["schema"])
-            if hints != t["schema_hints"] or file_hash(t["source_file"], check) != t["source_sha256"]:
+            if (hints != t["schema_hints"] or version == 1
+                    and file_hash(t["source_file"], check) != t["source_sha256"]):
                 raise ValueError("source/schema changed")
             count = 0
             for part in t["parts"]:
@@ -471,6 +520,8 @@ def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000)
                 check()
             if count != t["rows"] or not t["parts"] or count == 0:
                 raise ValueError("incomplete table chunks")
+        if file_hash(source / "input.json", check) != journal["prepared_manifest_sha256"]:
+            raise ValueError("prepared manifest changed")
         absent(adapter, names, deadline)
         for t in meta["tables"]:
             item = dict(name=t["name"], physical_name=t["physical_name"], schema=t["schema"],
@@ -528,6 +579,10 @@ def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000)
                 save()
                 if not item["cleanup_clean"]:
                     raise PublicError("PUBLIC_CLEANUP_UNMET")
+        if version == 2:
+            validate_prepared_sources(campaign, meta, check)
+        if file_hash(source / "input.json", check) != journal["prepared_manifest_sha256"]:
+            raise ValueError("prepared manifest changed")
         journal["status"] = "SUCCESS"
         return path
     except BaseException as exc:
