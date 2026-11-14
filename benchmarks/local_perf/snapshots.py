@@ -104,7 +104,17 @@ def reselect(adapter, expected):
 
 def freeze_snapshots(campaign, load_journal, name, adapter, timeout=600):
     identity, ctx = public_client(adapter)
-    _, load = owned_record(campaign, load_journal, "load.json", "public-load")
+    load_path = Path(load_journal).resolve()
+    load_root = load_path if load_path.is_dir() else load_path.parent
+    campaign.refresh()
+    kind = campaign.state["owned"].get(load_root.name, {}).get("kind")
+    if kind not in ("public-load", "bulk-load"):
+        raise ValueError("successful owned load required")
+    _, load = owned_record(campaign, load_journal, "load.json", kind)
+    if (type(load.get("format")) is not int or load["format"] != 1
+            or load.get("status") != "SUCCESS"
+            or (load.get("kind") != kind if kind == "bulk-load" else load.get("kind", kind) != kind)):
+        raise ValueError("successful matching load format required")
     if load["context"] != ctx or load["adapter_identity"] != identity:
         raise PublicError("PUBLIC_CONTEXT")
     cfg = settings(timeout=timeout)
@@ -127,6 +137,16 @@ def freeze_snapshots(campaign, load_journal, name, adapter, timeout=600):
         reselect(adapter, ctx)
         for table in load["tables"]:
             check()
+            if kind == "bulk-load":
+                uid, sid = table.get("uuid"), table.get("snapshot")
+                try:
+                    parsed_uuid = uuid.UUID(uid)
+                except (ValueError, TypeError, AttributeError):
+                    raise PublicError("PUBLIC_LOAD_UNMET") from None
+                if (not isinstance(uid, str) or str(parsed_uuid) != uid or parsed_uuid.int == 0
+                        or not (type(sid) is int and sid > 0
+                                or isinstance(sid, str) and re.fullmatch(r"[1-9][0-9]*", sid))):
+                    raise PublicError("PUBLIC_LOAD_UNMET")
             physical, ref = simple(table["physical_name"]), ref4(table["ref"], ctx)
             if (table["committed_rows"] != table["rows"] or not table["cleanup_clean"]
                     or resolve(adapter, physical, deadline) != ref):
@@ -142,6 +162,7 @@ def freeze_snapshots(campaign, load_journal, name, adapter, timeout=600):
                     or scalar_columns(source.get("columns", [])) != table["schema"]
                     or not isinstance(source.get("table_uuid"), str) or not source["table_uuid"]
                     or not re.fullmatch(r"[0-9]+", source.get("snapshot", ""))
+                    or kind == "bulk-load" and (source.get("table_uuid") != uid or source.get("snapshot") != str(sid))
                     or any(type(source.get(k)) is not int or source[k] < 0 for k in ("schema_id", "current_schema_id"))
                     or any(not re.fullmatch(r"[a-f0-9]{64}", source.get(k, ""))
                            for k in ("schema_fingerprint", "current_schema_fingerprint"))):

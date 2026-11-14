@@ -328,6 +328,92 @@ class ReviewTests(TestCase):
             self.assertEqual(cell(Decimal(value), "decimal(38,0)"), ["d",value])
             self.assertEqual(cell(Decimal("1.2300E+2"), "decimal(38,8)"), ["d","123"])
 
+    def test_sqlite_progress_samples_guard_at_200ms_and_after_check_completion(self):
+        a, b = self.root / "a", self.root / "b"
+        for path in (a, b):
+            w = Writer(path, [column("x", "integer")], {})
+            w.row([1])
+            w.finish()
+        state = {"now": 0.0, "callback": False}
+        calls = []
+        test = self
+
+        def check():
+            calls.append((state["callback"], state["now"]))
+            # A later slow guard proves the next interval starts on completion.
+            if state["callback"] and state["now"] == 0.4:
+                state["now"] = 0.45
+
+        class Connection(sqlite3.Connection):
+            def set_progress_handler(self, callback, operations):
+                test.assertEqual(operations, 10000)
+                def invoke():
+                    state["callback"] = True
+                    try:
+                        test.assertEqual(callback(), 0)
+                    finally:
+                        state["callback"] = False
+                for _ in range(10000):
+                    invoke()
+                test.assertEqual(calls, [(False, 0.0), (True, 0.0)])
+                for now, expected in ((0.199, 1), (0.2, 2), (0.399, 2),
+                                      (0.4, 3), (0.6, 3), (0.649, 3), (0.65, 4)):
+                    state["now"] = now
+                    invoke()
+                    test.assertEqual(sum(callback for callback, _ in calls), expected)
+                return super().set_progress_handler(callback, operations)
+
+        original = sqlite3.connect
+        def connect(path):
+            return original(path, factory=Connection)
+        with patch("benchmarks.local_perf.results.sqlite3.connect", side_effect=connect), patch(
+                "benchmarks.local_perf.results.time.monotonic", side_effect=lambda: state["now"]):
+            self.assertTrue(compare(a, b, scratch=self.root, check=check))
+        self.assertEqual([now for callback, now in calls if callback], [0.0, 0.2, 0.4, 0.65])
+        self.assertEqual(calls[-1], (False, 0.65))  # Explicit final check during cooldown.
+        self.assertEqual(list(self.root.glob("compare-*")), [])
+
+    def test_final_explicit_guard_errors_are_not_skipped_during_progress_cooldown(self):
+        a, b = self.root / "a", self.root / "b"
+        for path in (a, b):
+            w = Writer(path, [column("x", "integer")], {})
+            w.row([1])
+            w.finish()
+        original = sqlite3.connect
+        test = self
+        for ordered in (False, True):
+            for error_type in (TimeoutError, RuntimeError):
+                with self.subTest(ordered=ordered, error=error_type):
+                    state = {"callback": False, "sampled": False, "calls": 0}
+                    error = error_type("final deadline/capacity")
+                    def check():
+                        state["calls"] += 1
+                        if state["callback"]:
+                            state["sampled"] = True
+                        elif state["calls"] > 1:
+                            if not ordered:
+                                test.assertTrue(state["sampled"])
+                            raise error
+                    class Connection(sqlite3.Connection):
+                        def set_progress_handler(self, callback, operations):
+                            state["callback"] = True
+                            try:
+                                test.assertEqual(callback(), 0)
+                                test.assertEqual(callback(), 0)
+                            finally:
+                                state["callback"] = False
+                            return super().set_progress_handler(callback, operations)
+                    def connect(path):
+                        return original(path, factory=Connection)
+                    with patch("benchmarks.local_perf.results.sqlite3.connect", side_effect=connect), patch(
+                            "benchmarks.local_perf.results.time.monotonic", return_value=0.0):
+                        with self.assertRaises(error_type) as caught:
+                            compare(a, b, ordered=ordered, scratch=self.root, check=check)
+                    self.assertIs(caught.exception, error)
+                    self.assertIsNone(caught.exception.__cause__)
+                    self.assertEqual(state["calls"], 2 if ordered else 3)
+                    self.assertEqual(list(self.root.glob("compare-*")), [])
+
     def test_sqlite_progress_interrupts_group_by_deadline_and_capacity_preserving_cause_and_temp(self):
         a, b = self.root / "a", self.root / "b"
         for path in (a,b):
@@ -336,7 +422,7 @@ class ReviewTests(TestCase):
                 w.row([i])
             w.finish()
         original = sqlite3.connect
-        state = {"group":False, "progress":False}
+        state = {"group":False, "progress":False, "now":0.0}
         class Connection:
             def __init__(self, path):
                 self.db = original(path)
@@ -345,6 +431,7 @@ class ReviewTests(TestCase):
                 self.sql.append(sql)
                 if "GROUP BY" in sql:
                     state["group"] = True
+                    state["now"] = 0.2
                 return self.db.execute(sql, *args)
             def __getattr__(self, name):
                 return getattr(self.db, name)
@@ -354,16 +441,19 @@ class ReviewTests(TestCase):
             c = Connection(path)
             connections.append(c)
             return c
-        for error in (TimeoutError, RuntimeError):
-            state.update(group=False,progress=False)
+        for error_type in (TimeoutError, RuntimeError):
+            state.update(group=False,progress=False,now=0.0)
+            error = error_type("validation SQL deadline/capacity")
             def check():
                 if state["group"]:
                     state["progress"] = True
-                    raise error("validation SQL deadline/capacity")
-            with patch("benchmarks.local_perf.results.sqlite3.connect", side_effect=connect):
-                with self.assertRaisesRegex(error, "validation SQL deadline/capacity") as caught:
+                    raise error
+            with patch("benchmarks.local_perf.results.sqlite3.connect", side_effect=connect), patch(
+                    "benchmarks.local_perf.results.time.monotonic", side_effect=lambda: state["now"]):
+                with self.assertRaisesRegex(error_type, "validation SQL deadline/capacity") as caught:
                     compare(a,b,scratch=self.root,check=check)
             self.assertTrue(state["progress"])
+            self.assertIs(caught.exception, error)
             self.assertIsInstance(caught.exception.__cause__, sqlite3.OperationalError)
         self.assertTrue(any("temp_store_directory" in sql and str(self.root) in sql for sql in connections[0].sql))
         self.assertEqual(list(self.root.glob("compare-*")), [])

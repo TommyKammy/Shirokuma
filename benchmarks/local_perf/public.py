@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 import re
 import stat
+import sqlite3
+import tempfile
 import time
 import urllib.parse
 import uuid
@@ -99,7 +101,7 @@ class PublicAdapter(TrinoAdapter):
 
     def __init__(self, url, username, password, selected_role, captured=None, *, max_rows=10000):
         super().__init__(url)
-        if type(max_rows) is not int or not 1 <= max_rows <= 10000:
+        if max_rows is not None and (type(max_rows) is not int or not 1 <= max_rows <= 10000):
             raise ValueError("max_rows must be 1..10000")
         self.account, self.role, self.max_rows = username, selected_role, max_rows
         self.headers = {"Authorization": "Basic " + base64.b64encode((username + ":" + password).encode()).decode(),
@@ -112,8 +114,11 @@ class PublicAdapter(TrinoAdapter):
     def identity(self):
         if self.context is None:
             raise PublicError("PUBLIC_CONTEXT")
-        return dict(kind=self.name, origin=list(self.origin), account=self.account,
-                    selected_role=self.role, context=context(self.context), max_rows=self.max_rows)
+        identity = dict(kind=self.name, origin=list(self.origin), account=self.account,
+                        selected_role=self.role, context=context(self.context), max_rows=self.max_rows)
+        if self.max_rows is None:
+            identity["result_mode"] = "all"
+        return identity
 
     def select(self, database, schema, timeout=5):
         deadline = time.monotonic() + timeout
@@ -162,10 +167,11 @@ class PublicAdapter(TrinoAdapter):
                      **{k: copy.deepcopy(intent[k]) for k in ("request_id", "dispatch", "adapter_identity", "sql_sha256")})
         return value if valid_submission_rejection(value, intent) else None
 
-    def validate(self, page, handle=None):
+    def validate(self, page, handle=None, *, delivery=False):
         b = self.binding
         if (not isinstance(page, dict) or "backend_query_id" not in page or not valid_handle(page) or b is None
                 or any(page.get(k) != b[k] for k in ("request_id", "worksheet_id", "context"))
+                or delivery and self.max_rows is None and page.get("result_mode") != "all"
                 or handle and (page["id"] != handle["id"] or handle.get("backend_query_id") is not None
                                and page.get("backend_query_id") != handle["backend_query_id"])):
             raise PublicError("PUBLIC_CONTEXT")
@@ -186,20 +192,34 @@ class PublicAdapter(TrinoAdapter):
         timing = adapter_timings(self)
         timing.durations["client_poll_wait_s"] = 0
         writer, columns, native, handle = None, None, None, None
-        seen, receipts = set(), set()
+        seen, receipts = (set(), set()) if self.max_rows is not None else (None, None)
+        scratch, index = None, None
         try:
+            if self.max_rows is None:
+                with timing.measure(timing.durations, "artifact_processing_s"):
+                    check()
+                    scratch = tempfile.TemporaryDirectory(prefix="public-pages-", dir=Path(out).parent)
+                    index = sqlite3.connect(str(Path(scratch.name) / "duplicates.sqlite"), isolation_level=None)
+                    index.execute("PRAGMA journal_mode = OFF")
+                    index.execute("PRAGMA synchronous = OFF")
+                    index.execute("PRAGMA cache_size = -1024")
+                    index.execute("PRAGMA temp_store = FILE")
+                    index.execute("CREATE TABLE duplicates (kind TEXT, value TEXT, PRIMARY KEY(kind, value)) WITHOUT ROWID")
+                    check()
             b = self.binding
             if sql != self.sql:
                 raise PublicError("PUBLIC_CONTEXT")
             body = dict(sql=sql, request_id=b["request_id"], worksheet_id=b["worksheet_id"],
                         context={k: b["context"][k] for k in WIRE_CONTEXT}, mode="read-only", max_rows=self.max_rows)
+            if self.max_rows is None:
+                body["result_mode"] = "all"
             self.request_kind = "initial"
             timing.mark("dispatch_started")
             page = self.request("POST", self.url + "/api/v1/queries", deadline, json.dumps(body).encode())
             timing.mark("initial_response_complete")
             self.request_kind = "follow_up"
             while True:
-                handle = self.validate(page, handle)
+                handle = self.validate(page, handle, delivery=True)
                 save(handle)
                 # query_service._page maps backend states, then overwrites stats.state
                 # with the exposed state, including cancellation after truncation.
@@ -223,9 +243,18 @@ class PublicAdapter(TrinoAdapter):
                                and bool(page.get("next_uri")))
                     if not pending:
                         pid = page.get("result_page_id")
-                        if not (isinstance(pid, str) and re.fullmatch(TOKEN, pid) or type(pid) is int and pid > 0) or pid in receipts:
+                        if (not (isinstance(pid, str) and re.fullmatch(TOKEN, pid) or type(pid) is int and pid > 0)
+                                or receipts is not None and pid in receipts):
                             raise PublicError("PUBLIC_DUPLICATE_PAGE")
-                        receipts.add(pid)
+                        if index is None:
+                            receipts.add(pid)
+                        else:
+                            check()
+                            try:
+                                index.execute("INSERT INTO duplicates VALUES (?, ?)", ("receipt", json.dumps(pid)))
+                            except sqlite3.IntegrityError:
+                                raise PublicError("PUBLIC_DUPLICATE_PAGE") from None
+                            check()
                         if (not handle["backend_query_id"] or not incoming and
                                 (native is not None or data or state not in ("QUEUED", "RUNNING") or not page.get("next_uri"))):
                             raise PublicError("PUBLIC_SCHEMA")
@@ -255,15 +284,32 @@ class PublicAdapter(TrinoAdapter):
                     timing.mark("result_complete")
                     return
                 url = self.page_url(uri, handle["id"])
-                if url in seen:
-                    raise PublicError("PUBLIC_DUPLICATE_PAGE")
-                seen.add(url)
+                if index is None:
+                    if url in seen:
+                        raise PublicError("PUBLIC_DUPLICATE_PAGE")
+                    seen.add(url)
+                else:
+                    with timing.measure(timing.durations, "artifact_processing_s"):
+                        check()
+                        try:
+                            index.execute("INSERT INTO duplicates VALUES (?, ?)", ("uri", url))
+                        except sqlite3.IntegrityError:
+                            raise PublicError("PUBLIC_DUPLICATE_PAGE") from None
+                        check()
                 check()
                 page = self.request("GET", url, deadline)
         finally:
             self.request_kind = None
-            if writer is not None and not writer.f.closed:
-                writer.close()
+            try:
+                if writer is not None and not writer.f.closed:
+                    writer.close()
+            finally:
+                try:
+                    if index is not None:
+                        index.close()
+                finally:
+                    if scratch is not None:
+                        scratch.cleanup()
 
     def cancel_reconcile(self, handle, timeout=5):
         if self.binding is None:

@@ -223,12 +223,16 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif path == '/api/v1/queries' and method == 'POST':
                 parameters(())
                 body = self.database_body()
-                if set(body) != {'sql', 'request_id', 'worksheet_id', 'context', 'mode', 'max_rows'}:
+                fields = {'sql', 'request_id', 'worksheet_id', 'context', 'mode', 'max_rows'}
+                full_results = set(body) == fields | {'result_mode'} and body['result_mode'] == 'all'
+                if set(body) != fields and not full_results:
                     raise ValueError('Invalid query fields')
                 for name in ('sql', 'request_id', 'worksheet_id'):
                     if not isinstance(body[name], str) or not body[name].strip():
                         raise ValueError('Query text and identifiers are required')
-                if body['mode'] not in ('read-only', 'sandbox-write', 'admin-write') or type(body['max_rows']) is not int or not 1 <= body['max_rows'] <= 10000:
+                if ((full_results and (body['max_rows'] is not None or body['mode'] != 'read-only')) or
+                        (not full_results and (body['mode'] not in ('read-only', 'sandbox-write', 'admin-write') or
+                         type(body['max_rows']) is not int or not 1 <= body['max_rows'] <= 10000))):
                     raise ValueError('Invalid query mode or row limit')
                 c = body['context']
                 if not isinstance(c, dict) or set(c) != {'database_id', 'schema_id', 'warehouse_id', 'binding_revision', 'generation_id'}:
@@ -241,7 +245,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if context.generation_id != c['generation_id']:
                     raise inventory.InventoryError('STALE_CONTEXT', 409, 'Database generation changed')
                 result = query_service.submit(principal, context, body['sql'], mode=body['mode'],
-                    max_rows=body['max_rows'], request_id=body['request_id'], worksheet_id=body['worksheet_id'])
+                    max_rows=body['max_rows'], request_id=body['request_id'], worksheet_id=body['worksheet_id'],
+                    **({'result_mode': 'all'} if full_results else {}))
             elif method == 'GET' and re.fullmatch(r'/api/v1/queries/[^/]+', path):
                 parameters(())
                 result = query_service.inspect_query(principal, path.split('/')[4], selected_role=role)

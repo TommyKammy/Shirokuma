@@ -4,11 +4,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import ssl
+import sqlite3
 import tempfile
 import threading
 import time
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from benchmarks.local_perf import runner
 from benchmarks.local_perf.capacity import Campaign
@@ -26,18 +27,23 @@ class ScriptedPublic(PublicAdapter):
     def __init__(self, case="ok", **kwargs):
         super().__init__("http://127.0.0.1:8123", "account", "never-record-password", "data_engineer", CONTEXT, **kwargs)
         self.case, self.calls, self.posts, self.cancelled = case, [], 0, False
+        self.bodies = []
         self.before = lambda: None
 
     def page(self, state="RUNNING", number=1):
-        return dict(id="query", backend_query_id="backend", **copy.deepcopy(self.binding),
+        return dict(id="query", backend_query_id="backend", **({"result_mode": "all"} if self.max_rows is None else {}), **copy.deepcopy(self.binding),
                     columns=[dict(name="x", type="integer")], data=[], state=state, stats={"state": state},
                     result_page_id="receipt" + str(number), next_uri="/api/v1/queries/query/pages/token" + str(number))
 
     def inspect(self):
         p = self.page("CANCELED" if self.cancelled else "RUNNING")
-        for key in ("columns", "data", "result_page_id", "next_uri", "stats"):
+        for key in ("columns", "data", "result_page_id", "next_uri", "stats", "result_mode"):
+            if key not in p:
+                continue
             p.pop(key)
         p.update(sql=self.sql, mode=self.mode)
+        if self.case == "lost-finished":
+            p["state"] = "FINISHED"
         if self.case == "lost-sql":
             p["sql"] = "SELECT 999 AS x"
         elif self.case == "lost-mode":
@@ -54,8 +60,13 @@ class ScriptedPublic(PublicAdapter):
         if method == "POST":
             self.posts += 1
             self.before()
+            self.bodies.append(body)
             value = json.loads(body)
-            assert set(value) == {"sql", "request_id", "worksheet_id", "context", "mode", "max_rows"}
+            fields = {"sql", "request_id", "worksheet_id", "context", "mode", "max_rows"}
+            if self.max_rows is None:
+                fields.add("result_mode")
+                assert value["result_mode"] == "all"
+            assert set(value) == fields
             assert set(value["context"]) == {"database_id", "schema_id", "warehouse_id", "binding_revision", "generation_id"}
             assert value["mode"] == "read-only" and value["max_rows"] == self.max_rows
             assert value["request_id"] == self.binding["request_id"]
@@ -117,6 +128,319 @@ class PublicTests(unittest.TestCase):
 
     def receipt(self, name="run"):
         return self.c.root / name / "one-0/attempt.json"
+
+    def full_adapter(self):
+        a = ScriptedPublic(max_rows=None)
+        a.prepare_attempt(dict(request_id="request", adapter_identity=a.identity(), sql="SELECT arbitrary FROM source"))
+        return a
+
+    def execute_pages(self, a, pages, name="full.jsonl", check=lambda: None):
+        out = self.root / name
+        with patch.object(a, "request", side_effect=iter(pages)):
+            a.execute(a.sql, out, {}, time.monotonic()+30, lambda h: None, check)
+        return out
+
+    def test_legacy_identity_and_post_bytes_full_mode_opt_in(self):
+        for max_rows in (10000, 17, None):
+            a = ScriptedPublic(max_rows=max_rows)
+            identity = dict(kind="shirokuma-public", origin=list(a.origin), account="account",
+                            selected_role="data_engineer", context=CONTEXT, max_rows=max_rows)
+            if max_rows is None:
+                identity["result_mode"] = "all"
+            self.assertEqual(list(a.identity().items()), list(identity.items()))
+            self.run_adapter(a, str(max_rows))
+            b = a.binding
+            body = dict(sql=MANIFEST["queries"][0]["sql"], request_id=b["request_id"], worksheet_id=b["worksheet_id"],
+                        context={k: b["context"][k] for k in ("database_id", "schema_id", "warehouse_id", "binding_revision", "generation_id")},
+                        mode="read-only", max_rows=max_rows)
+            if max_rows is None:
+                body["result_mode"] = "all"
+            self.assertEqual(a.bodies, [json.dumps(body).encode()])
+        for bad in (0, 10001, True, 1.5, "all"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                ScriptedPublic(max_rows=bad)
+
+    def test_full_mode_over_ten_thousand_rows_and_cold_pending(self):
+        a = self.full_adapter()
+        pending = a.page("QUEUED", 0)
+        pending.update(backend_query_id=None, columns=[], data=[])
+        pending.pop("result_page_id")
+        def pages():
+            yield pending
+            for n in range(1, 5):
+                page = a.page("FINISHED" if n == 4 else "RUNNING", n)
+                page["data"] = [[i] for i in range((n-1)*3000, n*3000)]
+                if n == 4:
+                    page["next_uri"] = None
+                yield page
+        out = self.execute_pages(a, pages())
+        rows = list(Reader(out))
+        self.assertEqual(len(rows), 12000)
+        self.assertEqual(rows[-1], [["i", "11999"]])
+        self.assertEqual(list(self.root.glob("public-pages-*")), [])
+
+    def test_full_mode_requires_mode_on_pending_and_data(self):
+        for pending in (False, True):
+            for wrong in (None, "limited", "ALL", 1):
+                with self.subTest(pending=pending, mode=wrong):
+                    a = self.full_adapter()
+                    page = a.page("QUEUED" if pending else "FINISHED")
+                    if pending:
+                        page.update(backend_query_id=None, columns=[], data=[])
+                        page.pop("result_page_id")
+                    else:
+                        page["next_uri"] = None
+                    if wrong is None:
+                        page.pop("result_mode")
+                    else:
+                        page["result_mode"] = wrong
+                    with self.assertRaisesRegex(PublicError, "PUBLIC_CONTEXT"):
+                        self.execute_pages(a, [page])
+                    self.assertEqual(list(self.root.glob("public-pages-*")), [])
+
+    def test_full_mode_preserves_page_contract_rejections(self):
+        cases = ("truncated", "error", "UNKNOWN", "FAILED", "CANCELED", "context", "request_id", "worksheet_id",
+                 "id", "backend_query_id", "schema", "duplicate", "foreign", "crossquery", "fragment", "repeat")
+        for case in cases:
+            with self.subTest(case=case):
+                a = ScriptedPublic(case, max_rows=None)
+                with self.assertRaises(ValueError):
+                    self.run_adapter(a, case)
+                self.assertEqual(a.posts, 1)
+                self.assertEqual(list(self.receipt(case).parent.glob("public-pages-*")), [])
+
+    def test_full_mode_false_finish_missing_terminal_and_schema_rejected(self):
+        for case in ("false-finish", "missing-terminal", "missing-schema", "missing-state"):
+            a = self.full_adapter()
+            p = a.page("FINISHED")
+            p["next_uri"] = None
+            if case == "false-finish":
+                p["next_uri"] = "/api/v1/queries/query/pages/still-running"
+            elif case == "missing-terminal":
+                p.update(state="RUNNING", stats={"state": "RUNNING"})
+            elif case == "missing-schema":
+                p["columns"] = []
+            else:
+                p.pop("state")
+            with self.subTest(case=case), self.assertRaises(PublicError):
+                self.execute_pages(a, [p], name=case+".jsonl")
+
+    def test_full_mode_long_receipt_and_uri_cycles_and_typed_receipts(self):
+        for kind in ("receipt", "uri", "typed"):
+            a = self.full_adapter()
+            pages = [a.page("RUNNING", n) for n in range(1, 8)]
+            if kind == "receipt":
+                pages[-1]["result_page_id"] = pages[0]["result_page_id"]
+            elif kind == "uri":
+                pages[-1]["next_uri"] = pages[0]["next_uri"]
+            else:
+                pages[0]["result_page_id"] = 1
+                pages[1]["result_page_id"] = "1"
+                pages[-1].update(state="FINISHED", stats={"state": "FINISHED"}, next_uri=None)
+            with self.subTest(kind=kind):
+                if kind == "typed":
+                    self.execute_pages(a, pages, name=kind+".jsonl")
+                else:
+                    with self.assertRaisesRegex(PublicError, "PUBLIC_DUPLICATE_PAGE"):
+                        self.execute_pages(a, pages, name=kind+".jsonl")
+            self.assertEqual(list(self.root.glob("public-pages-*")), [])
+
+    def test_full_mode_many_pages_sqlite_bounds_checks_and_cleanup(self):
+        a = self.full_adapter()
+        count = 1200
+        connections = []
+        statements = []
+        connect = sqlite3.connect
+        checks = []
+        def capture(path, **kwargs):
+            self.assertEqual(Path(path).parent.parent, self.root)
+            db = connect(path, **kwargs)
+            connections.append(db)
+            db.set_trace_callback(statements.append)
+            return db
+        def pages():
+            for n in range(1, count+1):
+                p = a.page("FINISHED" if n == count else "RUNNING", n)
+                if n == count:
+                    p["next_uri"] = None
+                yield p
+        def check():
+            checks.append(1)
+            if connections:
+                db = connections[0]
+                self.assertIn("PRAGMA journal_mode = OFF", statements)
+                self.assertEqual(db.execute("PRAGMA synchronous").fetchone()[0], 0)
+                self.assertEqual(db.execute("PRAGMA cache_size").fetchone()[0], -1024)
+                self.assertEqual(db.execute("PRAGMA temp_store").fetchone()[0], 1)
+                self.assertIn("WITHOUT ROWID", db.execute("SELECT sql FROM sqlite_master WHERE name='duplicates'").fetchone()[0])
+        with patch("benchmarks.local_perf.public.sqlite3.connect", side_effect=capture):
+            self.execute_pages(a, pages(), check=check)
+        self.assertEqual(len(connections), 1)
+        self.assertGreaterEqual(len(checks), count*5)
+        with self.assertRaises(sqlite3.ProgrammingError):
+            connections[0].execute("SELECT 1")
+        self.assertEqual(list(self.root.glob("public-pages-*")), [])
+        for fail_at in (2, 5, 8):
+            a = self.full_adapter()
+            calls = 0
+            def stopped():
+                nonlocal calls
+                calls += 1
+                if calls == fail_at:
+                    raise RuntimeError("capacity exhausted")
+            with self.assertRaises(RuntimeError):
+                self.execute_pages(a, [a.page()], name=str(fail_at)+".jsonl", check=stopped)
+            self.assertEqual(list(self.root.glob("public-pages-*")), [])
+
+    def test_full_mode_lost_submission_recovers_without_resend(self):
+        a = ScriptedPublic("lost1", max_rows=None)
+        with self.assertRaises(OSError):
+            self.run_adapter(a)
+        intent = json.loads(self.receipt().read_text())
+        self.assertEqual(intent["adapter_identity"]["result_mode"], "all")
+        self.assertEqual(intent["status"], "FAILED")
+        self.assertTrue(a.cancelled)
+        self.assertEqual(a.posts, 1)
+        with patch.object(a, "request", side_effect=AssertionError("no HTTP")):
+            runner.reconcile(self.receipt(), a)
+        with patch.object(PublicAdapter, "request") as request, self.assertRaises(ValueError):
+            runner.reconcile(self.receipt(), ScriptedPublic())
+        request.assert_not_called()
+
+    def test_full_mode_legacy_history_recovery_preserves_identity_and_incomplete_status(self):
+        for case, status in (("lost1", "FAILED"), ("lost-finished", "FAILED"), ("lost2", "UNKNOWN"),
+                             ("lost-sql", "UNKNOWN"), ("lost-mode", "UNKNOWN")):
+            with self.subTest(case=case):
+                self.c = Campaign.create(self.root / ("campaign-" + case))
+                a = ScriptedPublic(case, max_rows=None)
+                frozen = copy.deepcopy(a.identity())
+                with self.assertRaises(OSError):
+                    self.run_adapter(a, case)
+                intent = json.loads(self.receipt(case).read_text())
+                self.assertEqual(intent["status"], status)
+                self.assertEqual(intent["adapter_identity"], frozen)
+                self.assertNotIn("result_mode", a.inspect())
+                self.assertEqual(a.posts, 1)
+                self.assertEqual(a.cancelled, case == "lost1")
+                runner.reconcile(self.receipt(case), a)
+                self.assertEqual(a.posts, 1)
+                retained = json.loads(self.receipt(case).read_text())
+                self.assertNotEqual(retained["status"], "SUCCESS")
+                self.assertEqual(retained["adapter_identity"], frozen)
+        a = self.full_adapter()
+        intent = dict(request_id=a.binding["request_id"], dispatch=copy.deepcopy(a.binding),
+                      adapter_identity=a.identity(), sql=a.sql, mode="read-only", handle=None)
+        legacy = a.inspect()
+        for field, value in (("sql", "SELECT other"), ("mode", "sandbox-write"),
+                             ("context", dict(CONTEXT, generation_id="other"))):
+            mismatch = dict(legacy, **{field: value})
+            for history in (True, False):
+                with self.subTest(field=field, history=history):
+                    intent["handle"] = None if history else dict(id="query", backend_query_id="backend")
+                    response = {"queries": [mismatch]} if history else mismatch
+                    with patch.object(a, "request", return_value=response) as request:
+                        self.assertEqual(a.recover(intent, lambda h: None), "UNKNOWN")
+                        self.assertEqual(request.call_count, 1)
+                        self.assertEqual(request.call_args.args[0], "GET")
+        intent["handle"] = None
+        with patch.object(a, "request", side_effect=[{"queries": [legacy]}, dict(legacy, state="FINISHED")]) as request:
+            self.assertEqual(a.recover(intent, lambda h: None), "FINISHED")
+            self.assertTrue(all(c.args[0] == "GET" for c in request.call_args_list))
+        self.assertEqual(intent["adapter_identity"], a.identity())
+
+    def test_cli_full_mode_freeze_run_reconcile_and_frozen_overrides(self):
+        from benchmarks.local_perf import __main__ as cli
+        from contextlib import redirect_stdout, redirect_stderr
+        import io
+        auth = self.root / "auth.json"
+        auth.write_text(json.dumps(dict(username="account", password="secret", selected_role="data_engineer")))
+        auth.chmod(0o600)
+        captured = self.root / "context.json"
+        captured.write_text(json.dumps(CONTEXT))
+        saved = self.root / "full-connection.json"
+        def invoke(args, code=0):
+            with patch("sys.argv", ["local-perf", *map(str, args)]), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                if code:
+                    with self.assertRaises(SystemExit) as caught:
+                        cli.main()
+                    self.assertEqual(caught.exception.code, code)
+                else:
+                    cli.main()
+        freeze = ["freeze-public-connection", saved, "--adapter", "public", "--auth-file", auth, "--context-file", captured]
+        with patch.object(PublicAdapter, "request") as request:
+            invoke([*freeze, "--all-results"])
+            full = json.loads(saved.read_text())
+            self.assertIsNone(full["max_rows"])
+            self.assertEqual(full["result_mode"], "all")
+            base = ["reconcile", "unused", "--adapter", "public", "--connection-file", saved]
+            for flags in ([], ["--all-results"]):
+                with patch.object(cli, "reconcile", return_value={}) as reconcile:
+                    invoke([*base, *flags])
+                    self.assertEqual(reconcile.call_args.args[1].identity(), {k: full[k] for k in ScriptedPublic(max_rows=None).identity()})
+            manifest = self.root / "queries.json"
+            manifest.write_text(json.dumps(MANIFEST))
+            for connection_flags in (["--connection-file", saved], ["--auth-file", auth, "--context-file", captured, "--all-results"]):
+                with patch.object(cli, "run", return_value="unused") as run:
+                    invoke(["run", self.c.root, "unused", manifest, "--adapter", "public", *connection_flags])
+                    self.assertIsNone(run.call_args.args[3].max_rows)
+            invoke([*base, "--max-rows", "10000"], code=1)
+            for bad in (dict(full, result_mode="unknown"), {k: v for k, v in full.items() if k != "result_mode"}, dict(full, max_rows=17)):
+                saved.write_text(json.dumps(bad))
+                invoke(base, code=1)
+            legacy = dict(full, max_rows=10000)
+            legacy.pop("result_mode")
+            saved.write_text(json.dumps(legacy))
+            invoke([*base, "--all-results"], code=1)
+            invoke([*base, "--all-results", "--max-rows", "17"], code=2)
+            for kind in ("duckdb", "trino"):
+                with patch.object(cli, "DuckDBAdapter") as duck, patch.object(cli, "TrinoAdapter") as trino:
+                    invoke(["run", self.c.root, "unused", manifest, "--adapter", kind, "--all-results"], code=1)
+                    duck.assert_not_called()
+                    trino.assert_not_called()
+            request.assert_not_called()
+
+    def test_cli_load_bulk_lazy_dispatch_and_parser_validation(self):
+        from benchmarks.local_perf import __main__ as cli
+        from contextlib import redirect_stdout, redirect_stderr
+        import io
+        import types
+        bulk = types.ModuleType("benchmarks.local_perf.bulk")
+        bulk.load_bulk = Mock(return_value=self.root / "bulk-result")
+        public = Mock()
+        base = ["load-bulk", str(self.c.root), "dataset-path", "bulk-name", "--adapter", "public"]
+        required = ["--prefix", "bench", "--bulk-auth-file", "bulk-auth.json"]
+        def invoke(args, valid=True):
+            output = io.StringIO()
+            with patch("sys.argv", ["local-perf", *args]), redirect_stdout(output), redirect_stderr(io.StringIO()):
+                if valid:
+                    cli.main()
+                else:
+                    with self.assertRaises(SystemExit) as caught:
+                        cli.main()
+                    self.assertEqual(caught.exception.code, 2)
+            return output.getvalue()
+        with patch.dict("sys.modules", {bulk.__name__: bulk}), patch.object(cli, "adapter", return_value=public) as adapter:
+            for extra, timeout, peak in (([], 600, None), (["--timeout", "900", "--peak-bytes", "12345"], 900, 12345)):
+                output = invoke([*base, *required, "--auth-file", "public-auth.json", *extra])
+                args = bulk.load_bulk.call_args.args
+                self.assertIsInstance(args[0], Campaign)
+                self.assertEqual(args[0].root, self.c.root)
+                self.assertEqual(args[1:], ("dataset-path", "bulk-name", "bench", public, "bulk-auth.json"))
+                self.assertEqual(bulk.load_bulk.call_args.kwargs, dict(timeout=timeout, peak_bytes=peak))
+                self.assertEqual(adapter.call_args.args[0].auth_file, "public-auth.json")
+                self.assertEqual(adapter.call_args.args[0].bulk_auth_file, "bulk-auth.json")
+                self.assertIn(str(self.root / "bulk-result"), output)
+            adapter.reset_mock()
+            bulk.load_bulk.reset_mock()
+            invalid = [[*base, "--bulk-auth-file", "bulk.json"], [*base, "--prefix", "bench"]]
+            invalid += [[*base, *required, "--peak-bytes", value] for value in ("0", "-1", "1.5", "bad")]
+            invalid += [[*base, *required, "--timeout", value] for value in ("0", "-1", "nan", "inf", "bad")]
+            invalid.append([*base[:-1], "trino", *required])
+            for args in invalid:
+                with self.subTest(args=args):
+                    invoke(args, valid=False)
+            adapter.assert_not_called()
+            bulk.load_bulk.assert_not_called()
 
     def test_normal_empty_and_cold_pending_durable_before_dispatch(self):
         for case in ("ok", "cold"):
@@ -544,9 +868,85 @@ class PublicTests(unittest.TestCase):
 
     # Only this test needs sockets; all other coverage stays active in sandbox.
     def test_real_public_loopback_headers_and_cold_pages(self):
+        self.real_public_loopback(10000)
+
+    def test_real_public_loopback_full_results(self):
         outer = self
         observed = []
-        a = PublicAdapter("http://127.0.0.1", "account", "never-record-password", "data_engineer", CONTEXT)
+        manifest = dict(format=1, dataset_id="generic-full-http", queries=[dict(
+            id="many", sql="SELECT n AS x, label FROM arbitrary_source ORDER BY n", ordered=True)])
+        reference = self.root / "http-reference"
+        (reference / "many-0").mkdir(parents=True)
+        columns = [dict(name="x", type="integer"), dict(name="label", type="varchar")]
+        writer = Writer(reference / "many-0/result.jsonl", columns,
+                        runner.result_metadata(manifest, manifest["queries"][0]))
+        for n in range(12000):
+            writer.row([n, None if n % 7 == 0 else "row-" + str(n)])
+        writer.finish()
+        a = PublicAdapter("http://127.0.0.1", "account", "never-record-password",
+                          "data_engineer", CONTEXT, max_rows=None)
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+            def send(self, page):
+                data = json.dumps(page).encode()
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            def do_POST(self):
+                observed.append((self.path, dict(self.headers)))
+                body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                outer.assertEqual(self.path, "/api/v1/queries")
+                outer.assertIsNone(body["max_rows"])
+                outer.assertEqual(body["result_mode"], "all")
+                outer.assertEqual(body["sql"], manifest["queries"][0]["sql"])
+                outer.assertEqual(body["request_id"], a.binding["request_id"])
+                outer.assertEqual(body["worksheet_id"], a.binding["worksheet_id"])
+                outer.assertEqual(body["mode"], "read-only")
+                outer.assertEqual(body["context"], {k: CONTEXT[k] for k in (
+                    "database_id", "schema_id", "warehouse_id", "binding_revision", "generation_id")})
+                self.send(dict(id="query", backend_query_id=None, **copy.deepcopy(a.binding),
+                    result_mode="all", state="QUEUED", stats={"state": "QUEUED"}, columns=[], data=[],
+                    next_uri="/api/v1/queries/query/pages/1"))
+            def do_GET(self):
+                observed.append((self.path, dict(self.headers)))
+                page = int(self.path.rsplit("/", 1)[1])
+                state = "FINISHED" if page == 4 else "RUNNING"
+                self.send(dict(id="query", backend_query_id="backend", **copy.deepcopy(a.binding),
+                    result_mode="all", state=state, stats={"state": state}, columns=columns,
+                    data=[[n, None if n % 7 == 0 else "row-" + str(n)]
+                          for n in range((page-1)*3000, page*3000)], result_page_id=page,
+                    next_uri=None if page == 4 else "/api/v1/queries/query/pages/" + str(page+1)))
+        try:
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        except PermissionError:
+            self.skipTest("sandbox denies loopback bind; Commander must run real HTTP tests")
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            a.url = "http://127.0.0.1:" + str(server.server_port)
+            a.origin = runner.origin(a.url)
+            root = runner.run(self.c, "http-full", manifest, a, references=reference)
+            intent = json.loads((root / "many-0/attempt.json").read_text())
+            self.assertEqual(intent["status"], "SUCCESS")
+            self.assertEqual(intent["validation"], "full comparison")
+            self.assertEqual(len(list(Reader(root / "many-0/result.jsonl"))), 12000)
+            self.assertEqual(len(observed), 5)
+            self.assertEqual(list(root.rglob("public-pages-*")), [])
+            for _, headers in observed:
+                self.assertEqual(headers["X-Shirokuma-Role"], "data_engineer")
+                self.assertEqual(headers["Content-Type"], "application/json")
+                self.assertEqual(headers["Authorization"], a.headers["Authorization"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join()
+
+    def real_public_loopback(self, max_rows):
+        outer = self
+        observed = []
+        a = PublicAdapter("http://127.0.0.1", "account", "never-record-password", "data_engineer", CONTEXT, max_rows=max_rows)
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
                 pass
@@ -560,12 +960,16 @@ class PublicTests(unittest.TestCase):
                 page = dict(id="query", backend_query_id=None if pending else "backend", **copy.deepcopy(a.binding),
                             columns=[] if pending else [dict(name="x", type="integer")], data=[] if pending else [[1]],
                             state="QUEUED" if pending else "FINISHED", stats={"state": "QUEUED" if pending else "FINISHED"}, next_uri="/api/v1/queries/query/pages/token" if pending else None)
+                if max_rows is None:
+                    page["result_mode"] = "all"
                 if not pending:
                     page["result_page_id"] = "receipt"
                 return page
             def do_POST(self):
                 observed.append(dict(self.headers))
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                outer.assertEqual(body["max_rows"], max_rows)
+                outer.assertEqual(body.get("result_mode"), "all" if max_rows is None else None)
                 outer.assertEqual(body["request_id"], json.loads(outer.receipt().read_text())["request_id"])
                 self.send(self.page(True))
             def do_GET(self):

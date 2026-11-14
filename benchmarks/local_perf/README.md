@@ -2,9 +2,11 @@
 
 Local-only preparation under ADR-0036. Python 3.9+ runs the stdlib suite;
 generation/reference execution uses a separate Python 3.12 venv and **DuckDB
-1.4.3**, pinned in `requirements.txt`. The toolkit uses no pandas/Arrow and does
-not change public API contracts, apply workload/VM settings, execute in the cloud,
-or install into global Python. Operator runtime changes are recorded separately.
+1.4.3**, pinned in `requirements.txt`. Generation/reference uses no pandas/Arrow.
+The optional native bulk loader isolates PyIceberg/PyArrow in `requirements-bulk.txt`;
+the public adapter supports the explicitly opted-in full-result API described below.
+Toolkit commands do not apply workload/VM settings, execute in the cloud, or
+install into global Python. Operator runtime changes are recorded separately.
 
 This initial toolkit prepares TPC-derived data and reference results and runs
 sequential qualification. It does not establish official compliant TPC scores,
@@ -326,11 +328,17 @@ schema or missing terminal completion fail. Native column types remain in the
 attempt audit; bounded VARCHAR is compared losslessly as VARCHAR. FINISHED alone
 does not prove all requested results were fetched.
 
-`max_rows` remains 1..10,000, default 10,000. The overflow example returns 10,001
-rows and must fail as `PUBLIC_TRUNCATED`; use its own prepared reference and
-run name. Never change it to `None` or bypass public authorization. Public
-qualification is recorded only after full result comparison succeeds through
-this adapter; direct-engine success never sets that flag.
+`max_rows` defaults to 10,000 and retains the existing 1..10,000 preview contract.
+The preview overflow example must still fail as `PUBLIC_TRUNCATED`. Explicit
+`--all-results` selects the reviewed public `result_mode="all"`, `max_rows=null`,
+read-only contract; it preserves ordinary authorization and context checks. Freeze
+a separate full-mode connection rather than overriding a saved preview identity.
+The server retains two replay pages; clients consume the next URI in order and
+persist every row. A bounded-cache temporary SQLite index detects old page cycles
+and is capacity-accounted and removed on every exit. Public qualification still
+requires complete comparison through this adapter; direct success never sets it.
+See [bulk and full-result API](../../docs/guides/performance-bulk-results-2026-11-14.md)
+for request fields, page limits, failure/recovery semantics and commands.
 
 If the initial POST response is lost, recovery searches public history for a
 unique match of request/worksheet IDs, all context fields, exact SQL and mode.
@@ -407,8 +415,9 @@ rtk proxy python3 -m benchmarks.local_perf verify-snapshots /tmp/local-tpch-uniq
 Use the direct Trino TLS/auth options above to run `tables-bound.json` against
 `tables-reference`, and `tpch-bound.json` against `query-reference`. Keep the
 same selected DB/schema and verify pins before/after each target run. Full-table
-validation uses the permitted direct stream; public SQL retains its 10,000-row
-ceiling. COUNT or profile statistics alone do not establish content equality.
+validation can use the direct stream or an explicitly frozen `--all-results`
+public connection. Preview mode retains its 10,000-row ceiling. COUNT or profile
+statistics alone do not establish content equality.
 
 For bound manifests, result metadata explicitly lists logical, target and
 reference SQL hashes plus the snapshot set. Each attempt retains the actual
@@ -547,7 +556,31 @@ Remaining P1/G1 work includes other-scale qualification, TPC-DS variants beyond
 the fixed 99-query corpus, engine telemetry unavailable through the current API,
 and cold/concurrent failure conditions. Initial generated manifests remain
 unordered; reviewed TPC-H/TPC-DS plans add explicit ordering/tie contracts without
-inferring them for arbitrary SQL. Public results beyond the
-10,000-row ceiling require a separate reviewed product change. No private
-bypass or `max_rows=None` is used. P2 resource/profile application, guest expansion, concurrent
-load, arrival-rate tests, SLO freezing and long runs are not implemented here.
+inferring them for arbitrary SQL. The reviewed opt-in public full-result mode
+removes the preview row ceiling while retaining authorization and bounded replay.
+Native bulk setup is a separate explicit-credential Parquet registration path,
+not public ingest API throughput. Its current one-file/table manifest is bounded
+to 104,857,600,000 bytes/file before hashing or writes; larger tables require
+sharded generation and multi-file registration first. P2 worker/VM profile application, guest expansion,
+concurrent load, arrival-rate tests, SLO freezing and long runs remain subsequent work.
+
+## Native bulk setup
+
+`load-bulk` copies validated source Parquet in 1MiB chunks to fresh Iceberg v2
+tables with explicit DB-consumer OAuth and table-vended STS, then commits via
+PyIceberg `add_files`. It avoids VALUES expansion and eager row loading.
+Install `requirements-bulk.txt` only in a dedicated environment; provide separate
+`--bulk-auth-file`, `--prefix`, deadline and peak budget. `freeze-snapshots` accepts
+successful owned bulk journals and checks the returned UUID/snapshot against
+public observations. Mutation uncertainty retains UNKNOWN evidence and blocks
+new bulk dispatch in that campaign; no remote cleanup or retry is automatic.
+See the [usage and verification guide](../../docs/guides/performance-bulk-results-2026-11-14.md).
+
+Commander qualification on 2026-11-14 matched complete public results for the
+existing 73,049-row table and a fresh native-loaded 54,256,183-byte / 200,006-row
+Parquet table against source references. Direct/public full comparisons, legacy
+truncation, cancellation and retained pins passed. The initial comparison timeout
+is retained; SQLite progress guard sampling was corrected without changing the
+600s deadline. This is correctness preparation with substantial client/validation
+overhead, not engine performance or large-scale acceptance. See the
+[implementation record](../../docs/guides/performance-bulk-results-2026-11-14.md).

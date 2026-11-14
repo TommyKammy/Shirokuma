@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.97"
+version: "1.98"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[性能試験のbulk取込と公開全件取得](../../guides/performance-bulk-results-2026-11-14.md)を整備した。DB限定OAuth/STSによるParquet登録、明示all/null/read-only APIと2ページ保持、native UUID/snapshot照合を追加した。
+54MB/200,006行と既存73,049行の全値・型・重複が直接/公開で一致し、取消・旧打切りも確認。初回の比較timeoutを保持し、200ms samplingへ修正後に同じ600秒期限で再検証した。
+Make定義158群をソース固定で4並列実行し、5,731成功・51 skip・失敗0。元56表/履歴と資源設定を保持し、新1表pins・OOM/再起動0・doctor healthy 46項目を確認した。
+次は1ファイル104.86GB制約に対するParquet分割/複数file、残るvariant/scaleと計測器負荷。L1/VM拡張・大規模性能の合否は後続。
 
 2026-11-14 JST、[coordinatorの正式資源設定](../../guides/performance-coordinator-profile-2026-11-14.md)を整備した。任意のCPU/memory/heap設定とPod更新digest、ACTIVE資源照合、旧登録証拠との互換性を追加し、未指定時のrender bytesを維持した。
 heap8GiB／limit12GiB・CPU request1／limit4を適用し、元構成への復元、再適用、停止中Workbench再起動と通常APIの停止再開を確認。worker/VM設定、既存32表pins、旧query履歴を保持した。

@@ -62,6 +62,15 @@ def main():
                 p.add_argument("--batch-size", type=ingest_batch_size, default=2000)
         elif command == "prepare-tpcds":
             p.add_argument("--timeout", type=positive_timeout, default=300)
+    p = commands.add_parser("load-bulk")
+    p.add_argument("campaign")
+    p.add_argument("dataset")
+    p.add_argument("name")
+    p.add_argument("--prefix", required=True)
+    p.add_argument("--bulk-auth-file", required=True)
+    p.add_argument("--timeout", type=positive_timeout, default=600)
+    p.add_argument("--peak-bytes", type=positive_int)
+    add_adapter(p, public_only=True)
     p = commands.add_parser("verify-snapshots")
     p.add_argument("campaign")
     p.add_argument("pins")
@@ -143,6 +152,10 @@ def main():
             from .ingest import load_public
             result = str(load_public(Campaign(args.campaign), args.input, args.name, adapter(args),
                                      batch_size=args.batch_size))
+        elif cmd == "load-bulk":
+            from .bulk import load_bulk
+            result = str(load_bulk(Campaign(args.campaign), args.dataset, args.name, args.prefix,
+                                   adapter(args), args.bulk_auth_file, timeout=args.timeout, peak_bytes=args.peak_bytes))
         elif cmd == "freeze-snapshots":
             from .snapshots import freeze_snapshots
             result = str(freeze_snapshots(Campaign(args.campaign), args.input, args.name, adapter(args)))
@@ -209,6 +222,13 @@ def ingest_batch_size(value):
     return size
 
 
+def positive_int(value):
+    number = int(value)
+    if number <= 0:
+        raise argparse.ArgumentTypeError("value must be a positive integer")
+    return number
+
+
 def positive_timeout(value):
     timeout = float(value)
     if not math.isfinite(timeout) or timeout <= 0:
@@ -241,7 +261,9 @@ def add_adapter(p, trino_only=False, public_only=False):
     p.add_argument("--context-file", help="full captured nine-field public context JSON")
     p.add_argument("--connection-file", help="frozen public connection and credential reference")
     p.add_argument("--database", help="explicit public database id or SQL catalog")
-    p.add_argument("--max-rows", type=int)
+    limits = p.add_mutually_exclusive_group()
+    limits.add_argument("--max-rows", type=int)
+    limits.add_argument("--all-results", action="store_true")
     p.add_argument("--sql-only", action="store_true", help="DuckDB without registered tables")
     p.add_argument("--password-env", help="environment variable name; never a credential argument")
     p.add_argument("--catalog")
@@ -249,6 +271,9 @@ def add_adapter(p, trino_only=False, public_only=False):
 
 
 def adapter(args):
+    all_results = getattr(args, "all_results", False)
+    if all_results and args.adapter != "public":
+        raise ValueError("all-results requires public adapter")
     if args.adapter == "duckdb":
         if bool(args.dataset) == bool(args.sql_only):
             raise ValueError("choose dataset or explicit SQL-only DuckDB")
@@ -259,13 +284,21 @@ def adapter(args):
         saved = json.loads(Path(args.connection_file).read_text()) if args.connection_file else None
         if saved and any((args.url, args.auth_file, args.runtime_profile, args.context_file, args.database, args.catalog, args.schema)):
             raise ValueError("saved connection cannot be overridden")
+        if saved:
+            if ("result_mode" in saved and saved["result_mode"] != "all"
+                    or (saved.get("max_rows") is None) != (saved.get("result_mode") == "all")):
+                raise ValueError("invalid saved result mode")
+            if (all_results and saved.get("result_mode") != "all"
+                    or args.max_rows is not None and args.max_rows != saved["max_rows"]):
+                raise ValueError("saved result mode cannot be overridden")
         auth_path = saved["auth_file"] if saved else client_auth_path(args.auth_file, args.runtime_profile)
         auth = private_auth(auth_path, public=True)
         captured = saved["context"] if saved else json.loads(Path(args.context_file).read_text()) if args.context_file else None
         if captured is not None and any((args.database, args.catalog, args.schema)):
             raise ValueError("captured context cannot be overridden")
+        max_rows = saved["max_rows"] if saved else None if all_results else args.max_rows if args.max_rows is not None else 10000
         public = PublicAdapter(saved["url"] if saved else args.url or "http://127.0.0.1:8888",
-                               auth["username"], auth["password"], auth["selected_role"], captured, max_rows=args.max_rows if args.max_rows is not None else saved["max_rows"] if saved else 10000)
+                               auth["username"], auth["password"], auth["selected_role"], captured, max_rows=max_rows)
         if captured is None:
             if bool(args.database) == bool(args.catalog) or not args.schema:
                 raise ValueError("explicit database or catalog and schema required")

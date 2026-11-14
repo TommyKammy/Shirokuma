@@ -24,6 +24,7 @@ from pathlib import Path
 import re
 import sqlite3
 import tempfile
+import time
 
 
 def dumps(value):
@@ -201,6 +202,8 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
     Otherwise tolerant rows use disk-backed augmenting-path matching, avoiding
     the false negatives of greedy float matching. Cost may be high for large
     all-float groups; deadlines/capacity callbacks also cover validation.
+    SQL progress samples the expensive guard every 200 ms. This is not a
+    filesystem quota; in-flight drain capacity must be reserved externally.
     """
     if any(not math.isfinite(t) or t < 0 for t in (abs_tol, rel_tol)):
         raise ValueError("invalid floating tolerance")
@@ -222,11 +225,16 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
         with tempfile.TemporaryDirectory(prefix="compare-", dir=scratch) as tmp:
             db = sqlite3.connect(str(Path(tmp) / "rows.db"))
             progress_errors = []
+            next_progress_check = None
             try:
                 db.execute("PRAGMA temp_store_directory=" + "'" + tmp.replace("'", "''") + "'")
                 def progress():
+                    nonlocal next_progress_check
                     try:
+                        if next_progress_check is not None and time.monotonic() < next_progress_check:
+                            return 0
                         check()
+                        next_progress_check = time.monotonic() + 0.2
                         return 0
                     except BaseException as exc:
                         progress_errors.append(exc)

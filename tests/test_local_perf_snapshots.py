@@ -106,6 +106,122 @@ class SnapshotTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def bulk_load(self, name='bulk', campaign=None):
+        campaign = campaign or self.c
+        root = campaign.own(name, 'bulk-load')
+        load = json.loads(self.load.read_text())
+        load['kind'] = 'bulk-load'
+        load['tables'][0].update(uuid=self.a.source['table_uuid'], snapshot=123)
+        write_json(root / 'load.json', load)
+        campaign.mark(root, 'SUCCESS')
+        return root / 'load.json'
+
+    def test_bulk_freeze_retains_native_files_and_exact_pins(self):
+        load = self.bulk_load()
+        # Native files remain the registered target data, not transient staging.
+        native = load.parent / 'native.parquet'
+        native.write_bytes(b'retained target data')
+        receipt = load.read_bytes()
+        path = freeze_snapshots(self.c, load.parent, 'bulk-pins', self.a)
+        original = path.read_bytes()
+        pins = json.loads(original)
+        self.assertEqual(pins['status'], 'SUCCESS')
+        self.assertEqual(pins['tables'][0]['table_uuid'], self.a.source['table_uuid'])
+        self.assertEqual(pins['tables'][0]['snapshot_id'], '123')
+        self.assertEqual(pins['source_dataset_id'], 'source')
+        verify_snapshots(self.c, path, self.a)
+        self.assertEqual(path.read_bytes(), original)
+        self.assertEqual(load.read_bytes(), receipt)
+        self.assertEqual(native.read_bytes(), b'retained target data')
+        self.assertNotIn('never-log-password', original.decode())
+
+    def test_bulk_rejects_missing_invalid_uuid_and_snapshot(self):
+        load = self.bulk_load()
+        valid = json.loads(load.read_text())
+        cases = [('uuid', value) for value in (None, '', 'not-uuid', 123,
+                 '00000000-0000-0000-0000-000000000000',
+                 self.a.source['table_uuid'].upper(), self.a.source['table_uuid'].replace('-', ''))]
+        cases += [('snapshot', value) for value in (None, 0, -1, True, 123.0, '', '0', '01', '+123', '123.0')]
+        for i, (field, value) in enumerate(cases):
+            bad = copy.deepcopy(valid)
+            if value is None:
+                del bad['tables'][0][field]
+            else:
+                bad['tables'][0][field] = value
+            write_json(load, bad)
+            a = SnapshotPublic()
+            with self.subTest(field=field, value=value), self.assertRaises(ValueError):
+                freeze_snapshots(self.c, load, 'invalid-pin-' + str(i), a)
+            self.assertEqual(a.profile_posts, 0)
+
+    def test_bulk_canonical_string_snapshot(self):
+        load = self.bulk_load()
+        receipt = json.loads(load.read_text())
+        receipt['tables'][0]['snapshot'] = '123'
+        write_json(load, receipt)
+        pins = json.loads(freeze_snapshots(self.c, load, 'string-pins', self.a).read_text())
+        self.assertEqual(pins['tables'][0]['snapshot_id'], '123')
+
+    def test_bulk_profile_identity_drift_and_unclean_load_blocked(self):
+        load = self.bulk_load()
+        valid = json.loads(load.read_text())
+        for field, value in [('table_uuid', 'c69a1029-a887-4675-8159-8bc142a7ef21'), ('snapshot', '124')]:
+            a = SnapshotPublic()
+            a.source[field] = value
+            name = 'drift-' + field
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                freeze_snapshots(self.c, load, name, a)
+            self.assertEqual(a.sql_posts, 0)
+            self.assertEqual(json.loads((self.c.root / name / 'snapshots.json').read_text())['status'], 'FAILED')
+        valid['tables'][0]['cleanup_clean'] = False
+        write_json(load, valid)
+        with self.assertRaises(ValueError):
+            freeze_snapshots(self.c, load, 'unclean', self.a)
+        self.assertEqual(self.a.profile_posts, 0)
+
+    def test_load_kind_format_status_and_ownership(self):
+        bulk = self.bulk_load()
+        for path in (self.load, bulk):
+            valid = json.loads(path.read_text())
+            own_kind = 'bulk-load' if path == bulk else 'public-load'
+            cases = [('kind', 'other'), ('kind', 'public-load' if path == bulk else 'bulk-load')]
+            if path == bulk:
+                cases.append(('kind', None))
+            cases += [('format', v) for v in (None, True, 1.0, '1', 2)]
+            cases += [('status', v) for v in ('FAILED', 'INCOMPLETE')]
+            for i, (field, value) in enumerate(cases):
+                bad = copy.deepcopy(valid)
+                if value is None:
+                    del bad[field]
+                else:
+                    bad[field] = value
+                write_json(path, bad)
+                with self.subTest(kind=own_kind, field=field, value=value), self.assertRaises(ValueError):
+                    freeze_snapshots(self.c, path, own_kind + '-bad-' + str(i), self.a)
+            write_json(path, valid)
+            for status in ('FAILED', 'INCOMPLETE'):
+                self.c.mark(path.parent, status)
+                with self.subTest(kind=own_kind, owned_status=status), self.assertRaises(ValueError):
+                    freeze_snapshots(self.c, path, own_kind + '-owned-' + status, self.a)
+            self.c.mark(path.parent, 'SUCCESS')
+        other = Campaign.create(Path(self.tmp.name).resolve() / 'other')
+        foreign = self.bulk_load(campaign=other)  # Same owned basename must not suffice.
+        with self.assertRaises(ValueError):
+            freeze_snapshots(self.c, foreign, 'foreign', self.a)
+        unknown = self.c.own('unknown', 'other-load')
+        write_json(unknown / 'load.json', json.loads(bulk.read_text()))
+        self.c.mark(unknown, 'SUCCESS')
+        with self.assertRaises(ValueError):
+            freeze_snapshots(self.c, unknown, 'unknown-pins', self.a)
+        self.assertEqual(self.a.profile_posts, 0)
+
+    def test_public_load_explicit_kind_compatibility(self):
+        load = json.loads(self.load.read_text())
+        load['kind'] = 'public-load'
+        write_json(self.load, load)
+        pins = json.loads(freeze_snapshots(self.c, self.load, 'explicit-public', self.a).read_text())
+        self.assertEqual(pins['status'], 'SUCCESS')
+
     def test_freeze_real_uuid_distinct_schema_and_verify_preserves_original(self):
         def saved():
             plan = json.loads((self.c.root / 'pins/snapshots.json').read_text())['operations'][-1]

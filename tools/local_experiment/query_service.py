@@ -27,6 +27,10 @@ import warehouse_admission as admission
 from query_context import QueryError, ResolvedQueryContext, resolve_context, _resolve_context, revalidate_admission
 
 
+FULL_RESPONSE_LIMIT = 16 * 1024 * 1024
+FULL_REQUEST_TIMEOUT = 30
+
+
 @dataclass(repr=False)
 class _Pin:
     context: ResolvedQueryContext
@@ -38,6 +42,9 @@ class _Pin:
     tokens: dict = field(default_factory=dict)
     cancel_urls: list = field(default_factory=list)
     max_rows: Optional[int] = 1000
+    full_results: bool = False
+    full_next_token: object = None
+    full_pending_token: object = None
     rows: int = 0
     columns: list = field(default_factory=list)
     lock: object = field(default_factory=threading.RLock, repr=False)
@@ -127,8 +134,28 @@ def _transport(url, method, pin, body=None):
             context=pin.tls, timeout=30) if parsed.scheme == 'https' else
             http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=30))
         timer = None
+        deadline = None
+        full_socket = None
+        response = None
         try:
-            if pin.plan is not None:
+            if pin.full_results:
+                deadline = time.monotonic() + FULL_REQUEST_TIMEOUT
+                connection.timeout = FULL_REQUEST_TIMEOUT
+                def expire_full():
+                    transport_socket = full_socket or connection.sock
+                    if transport_socket is not None:
+                        try:
+                            transport_socket.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                timer = threading.Timer(FULL_REQUEST_TIMEOUT, expire_full)
+                timer.daemon = True
+                timer.start()
+                connection.connect()
+                full_socket = connection.sock
+                if time.monotonic() >= deadline:
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+            elif pin.plan is not None:
                 import db_ai_plan
                 deadline = time.monotonic() + 10 if method == 'DELETE' else pin.plan.deadline
                 remaining = deadline - time.monotonic()
@@ -148,7 +175,28 @@ def _transport(url, method, pin, body=None):
             connection.request(method, parsed.path + ('?' + parsed.query if parsed.query else ''),
                                body=body, headers=pin.headers)
             response = connection.getresponse()
-            if pin.plan is None:
+            if pin.full_results:
+                expected_length = response.length
+                chunks, size = [], 0
+                while response.length != 0:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise QueryError('QUERY_BACKEND_FAILED', 502)
+                    if full_socket is not None:
+                        full_socket.settimeout(remaining)
+                    chunk = response.read1(min(8192, FULL_RESPONSE_LIMIT + 1 - size))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > FULL_RESPONSE_LIMIT:
+                        raise QueryError('QUERY_BACKEND_FAILED', 502)
+                    chunks.append(chunk)
+                if time.monotonic() >= deadline:
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+                if response.length not in (None, 0) or (expected_length is not None and size != expected_length):
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+                payload = b''.join(chunks)
+            elif pin.plan is None:
                 payload = response.read()
             else:
                 chunks, size = [], 0
@@ -178,6 +226,10 @@ def _transport(url, method, pin, body=None):
         finally:
             if timer is not None:
                 timer.cancel()
+                if pin.full_results:
+                    timer.join()
+            if pin.full_results and response is not None:
+                response.close()
             connection.close()
 
 
@@ -200,6 +252,8 @@ def _registered(pin, url, methods, backend_id):
     pin.tokens[token] = (url, frozenset(methods))
     if 'GET' in methods and 'DELETE' in methods and url not in pin.cancel_urls:
         pin.cancel_urls.append(url)
+        if pin.full_results:
+            pin.cancel_urls[:] = pin.cancel_urls[-1:]
     return token
 
 
@@ -412,6 +466,8 @@ def _page(query_id, page):
     if page.get('nextUri'):
         token = _registered(pin, page['nextUri'], ('GET', 'DELETE'), backend_id)
         next_uri = '/api/v1/queries/' + query_id + '/pages/' + token
+    if pin.full_results:
+        pin.full_next_token = token if next_uri else None
     if page.get('partialCancelUri'):
         _registered(pin, page['partialCancelUri'], ('DELETE',), backend_id)
     stats = page.get('stats', {})
@@ -460,6 +516,8 @@ def _page(query_id, page):
         result['error'] = {'code': 'QUERY_FAILED', 'message': 'Query execution failed'}
     if truncated:
         result['truncated'] = True
+    if pin.full_results:
+        result['result_mode'] = 'all'
     result['stats']['state'] = state
     return result
 
@@ -544,16 +602,28 @@ def _backend_statement(sql):
 
 
 def _pending_page(query_id, pin, *, state='QUEUED'):
+    # All callers may include the cold-start thread; serialize alias changes.
+    with pin.lock if pin.full_results else nullcontext():
+        return _pending_page_locked(query_id, pin, state=state)
+
+
+def _pending_page_locked(query_id, pin, *, state='QUEUED'):
     row = _row(query_id)
     next_uri = None
     if state == 'QUEUED':
         token = secrets.token_urlsafe(32)
         pin.pending_tokens.add(token)
+        if pin.full_results:
+            pin.full_pending_token = token
+            _prune_full(pin)
         next_uri = '/api/v1/queries/' + query_id + '/pages/' + token
-    return dict(id=query_id, backend_query_id=None, context=_metadata(row),
+    result = dict(id=query_id, backend_query_id=None, context=_metadata(row),
         request_id=row['request_id'], worksheet_id=row['worksheet_id'],
         columns=[], data=[], stats={'state': state}, state=state, next_uri=next_uri,
         cancel_uri='/api/v1/queries/' + query_id + '/cancel')
+    if pin.full_results:
+        result['result_mode'] = 'all'
+    return result
 
 
 def _wake_authorize(principal, query_id):
@@ -585,6 +655,9 @@ def _initial_failure(query_id, error):
         pin.initial_error = (error.code, error.status) if isinstance(error, QueryError) else (
             'QUERY_BACKEND_FAILED', 502)
         pin.initial_done.set()
+        if pin.full_results:
+            pin.initial_response = None
+            _prune_full(pin)
 
 
 def _cold_initial(principal, query_id, backend_sql):
@@ -619,10 +692,13 @@ def _cold_initial(principal, query_id, backend_sql):
         pin.initial_done.set()
 
 
-def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id):
+def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id, result_mode='preview'):
     global _origin
     import warehouse_resident as wr
     if not isinstance(context, ResolvedQueryContext):
+        raise QueryError('UNKNOWN_CONTEXT', 400)
+    if (result_mode not in ('preview', 'all') or
+            result_mode == 'all' and (max_rows is not None or mode != 'read-only')):
         raise QueryError('UNKNOWN_CONTEXT', 400)
     if (not isinstance(sql, str) or not sql.strip() or
             max_rows is not None and (type(max_rows) is not int or max_rows < 1)):
@@ -670,7 +746,7 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
                  context.binding_revision, context.grant_revision, headers['X-Trino-User'],
                  credential_ref, None, request_id, worksheet_id, sql))
         _pins[query_id] = _Pin(context, '', headers, tls, admission=handle, owner=owner,
-            max_rows=max_rows, initial_attempted=False)
+            max_rows=max_rows, full_results=result_mode == 'all', initial_attempted=False)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         owner.close()
         raise QueryError(error.code, error.status) from None
@@ -702,7 +778,8 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
             with _pins[query_id].lock:
                 _owned(principal, query_id, context.selected_role, cleanup=True)
                 response = _receive(query_id, origin.rstrip('/') + '/v1/statement', 'POST', backend_sql.encode('utf-8'))
-                _pins[query_id].initial_response = deepcopy(response)
+                if not _pins[query_id].full_results:
+                    _pins[query_id].initial_response = deepcopy(response)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         _initial_failure(query_id, error)
         raise QueryError(error.code, error.status) from None
@@ -948,6 +1025,77 @@ def _receive_accepted(query_id, url, method, body=None):
         raise QueryError('QUERY_BACKEND_FAILED', 502) from None
 
 
+def _prune_full(pin):
+    """Called with pin.lock held; advancement acknowledges evicted pages."""
+    for cache in (pin.responses, pin.failures):
+        while len(cache) > 2:
+            del cache[next(iter(cache))]
+    keep = set(pin.responses) | set(pin.failures) | {pin.full_next_token}
+    if pin.cancel_urls:
+        latest = pin.cancel_urls[-1]
+        cancellation = next((key for key in reversed(pin.tokens)
+                             if pin.tokens[key][0] == latest and 'DELETE' in pin.tokens[key][1]), None)
+        keep.add(cancellation)
+    pin.tokens = {key: value for key, value in pin.tokens.items() if key in keep}
+    pin.pending_tokens.intersection_update(set(pin.responses) | {pin.full_pending_token})
+
+
+def _remember_full(pin, token, response):
+    pin.responses[token] = deepcopy(response)
+    next_token = response['next_uri'].rsplit('/', 1)[1] if response.get('next_uri') else None
+    pin.full_pending_token = next_token if next_token in pin.pending_tokens else None
+    _prune_full(pin)
+    return deepcopy(response)
+
+
+def _fetch_full(principal, query_id, page_token, selected_role, pin):
+    if page_token in pin.pending_tokens:
+        pin.initial_done.wait(0.05)
+    with pin.lock:
+        row = _owned(principal, query_id, selected_role, cleanup=True)
+        if row['execution_closure']:
+            raise QueryError('EXECUTION_CLOSED', 409)
+        if page_token in pin.responses:
+            response = deepcopy(pin.responses[page_token])
+            if row['state'] in ('CANCELED', 'FAILED', 'UNKNOWN'):
+                response['state'] = response['stats']['state'] = row['state']
+                response['next_uri'] = None
+            return response
+        if page_token in pin.failures:
+            raise QueryError(*pin.failures[page_token])
+        if page_token in pin.pending_tokens:
+            if row['state'] == 'CANCELED':
+                response = _pending_page(query_id, pin, state='CANCELED')
+            elif pin.initial_error is not None:
+                pin.failures[page_token] = pin.initial_error
+                _prune_full(pin)
+                raise QueryError(*pin.initial_error)
+            elif pin.initial_response is not None:
+                response = pin.initial_response
+                pin.initial_response = None
+            else:
+                response = _pending_page(query_id, pin)
+            return _remember_full(pin, page_token, response)
+        registered = pin.tokens.get(page_token)
+        # Only the current backend cursor can dispatch. Replay keys are handled
+        # above, so a consumed cursor can never issue another backend request.
+        if page_token != pin.full_next_token or not registered or 'GET' not in registered[1]:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if row['state'] == 'UNKNOWN':
+            raise QueryError('ADMISSION_CONFLICT', 409)
+        if row['state'] in _TERMINAL:
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        pin.initial_response = None
+        try:
+            response = _receive(query_id, registered[0], 'GET')
+            _owned(principal, query_id, selected_role, cleanup=True)
+        except QueryError as error:
+            pin.failures[page_token] = (error.code, error.status)
+            _prune_full(pin)
+            raise
+        return _remember_full(pin, page_token, response)
+
+
 def fetch(principal, query_id, page_token, *, selected_role):
     pin = _pins.get(query_id)
     if pin is None:
@@ -955,6 +1103,8 @@ def fetch(principal, query_id, page_token, *, selected_role):
         if row['execution_closure']:
             raise QueryError('EXECUTION_CLOSED', 409)
         raise QueryError('QUERY_CONTEXT_LOST', 409)
+    if pin.full_results:
+        return _fetch_full(principal, query_id, page_token, selected_role, pin)
     if page_token in pin.pending_tokens:
         # Bounded wait outside the lock prevents tight pending-page polling and
         # lets cancellation proceed even while shared Wake is still running.
@@ -1049,7 +1199,7 @@ def _cancel_registered(principal, query_id, token, *, selected_role):
         registered = pin.tokens.get(token)
         if not registered or not {'GET', 'DELETE'}.issubset(registered[1]):
             raise QueryError('QUERY_NOT_FOUND', 404)
-        return _cancel_locked(query_id, pin, row, registered[0])
+        return _cancel_locked(query_id, pin, row, None if pin.full_results else registered[0])
 
 
 def inspect_query(principal, query_id, *, selected_role):

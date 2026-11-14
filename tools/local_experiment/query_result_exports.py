@@ -111,7 +111,7 @@ def export(principal, query_id, selected_role, body):
         context = qs._metadata(row)
         if (row['request_id'] != body['request_id'] or row['worksheet_id'] != body['worksheet_id']):
             raise QueryError('CONTEXT_MISMATCH', 409)
-        if pin.plan is not None or row['mode'] == 'dataops':
+        if pin.full_results or pin.plan is not None or row['mode'] == 'dataops':
             _unavailable()
         with control_store.connect() as db:
             if db.execute('SELECT 1 FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone():
