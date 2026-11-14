@@ -48,8 +48,8 @@ applyが中断した場合はinspectでphaseとrevisionを読み直し、reconci
 
 旧campaignのUNKNOWNは原本として保存し、実行終了とステージ清掃の補足receiptと合わせて読む。旧campaignへの自動再投入は行わず、採用済みの別campaignと固定snapshotを維持する。今回の清掃はcatalog登録解除であり、未参照data fileを残す。物理回収は別の処理とし、追加占有2TBの計上から除外しない。
 
-証拠はGit外の `shirokuma-ingest-recovery-2026-11-14` に保存した。`migration-preflight/receipt.json`、`operator/plan.json`・`reconcile.json`・`apply.json`・`inspect.json`、`oldstage-cleanup-*.json`、`failed-cleanup-acceptance-cea1a747`、`verification-summary.json` と全体回帰logを参照する。元のbenchmark入力・結果は保持した。検証時host空きは約3.102TBで、L1/VM拡張や正式な資源profile適用はまだ行っていない。
+証拠はGit外の `shirokuma-ingest-recovery-2026-11-14` に保存した。`migration-preflight/receipt.json`、`operator/plan.json`・`reconcile.json`・`apply.json`・`inspect.json`、`oldstage-cleanup-*.json`、`failed-cleanup-acceptance-cea1a747`、`verification-summary.json` と全体回帰logを参照する。元のbenchmark入力・結果は保持した。検証時host空きは約3.102TBで、この復旧作業時点ではL1/VM拡張や正式な資源profile適用は行っていなかった。
 
 ## 次の順序
 
-正式なcoordinator資源profile、bulk取込、公開全結果取得、残るTPC-DS variant/scaleを先に整え、大規模負荷・VM拡張へ進む。追加物理占有2TB・host予備256GiBを維持する。
+coordinatorの正式資源設定は[後続作業](performance-coordinator-profile-2026-11-14.md)で整備・適用した。次はbulk取込、公開全結果取得、残るTPC-DS variant/scaleを先に整え、大規模負荷・VM拡張へ進む。追加物理占有2TB・host予備256GiBを維持する。

@@ -52,6 +52,33 @@ NESTED = {
     'trino': {'endpoint', 'ca_file', 'provisioner_credentials_file', 'publisher_pod', 'publisher_container', 'compute_selector', 'workers', 'include_coordinator'},
     'artifacts': {'jar'},
 }
+COORDINATOR_KEYS = {'cpu_request_millicores', 'cpu_limit_millicores',
+                    'memory_request_mib', 'memory_limit_mib', 'heap_mib'}
+TRINO_JVM_CONFIG = '-server\n-Xmx2G\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n'
+
+
+def coordinator_profile(validated_config):
+    """Return coordinator overrides from validated settings without I/O or mutation."""
+    if 'coordinator' not in validated_config['trino']:
+        return None
+    coordinator = validated_config['trino']['coordinator']
+
+    def cpu(value):
+        return str(value // 1000) if value % 1000 == 0 else str(value)+'m'
+
+    def memory(value, whole, fraction):
+        return str(value // 1024)+whole if value % 1024 == 0 else str(value)+fraction
+
+    return {
+        'resources': {
+            'requests': {'cpu': cpu(coordinator['cpu_request_millicores']),
+                         'memory': memory(coordinator['memory_request_mib'], 'Gi', 'Mi')},
+            'limits': {'cpu': cpu(coordinator['cpu_limit_millicores']),
+                       'memory': memory(coordinator['memory_limit_mib'], 'Gi', 'Mi')}},
+        'jvm_config': TRINO_JVM_CONFIG.replace(
+            '-Xmx2G\n', '-Xmx'+memory(coordinator['heap_mib'], 'G', 'M')+'\n'),
+        'annotations': {'shirokuma.dev/coordinator-resources': hashlib.sha256(
+            json.dumps(coordinator, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}}
 
 
 class ConfigError(ValueError):
@@ -87,7 +114,15 @@ def validate(config):
             c['polaris'].setdefault('credential_duration_seconds', 900)
             c['polaris'].setdefault('credential_cache_duration_seconds', 450)
         for key, fields in NESTED.items():
-            _require(isinstance(c[key], dict) and set(c[key]) == fields)
+            allowed = fields | ({'coordinator'} if key == 'trino' and 'coordinator' in c[key] else set())
+            _require(isinstance(c[key], dict) and set(c[key]) == allowed)
+        if 'coordinator' in c['trino']:
+            coordinator = c['trino']['coordinator']
+            _require(isinstance(coordinator, dict) and set(coordinator) == COORDINATOR_KEYS)
+            _require(all(type(value) is int and value > 0 for value in coordinator.values()))
+            _require(coordinator['cpu_request_millicores'] <= coordinator['cpu_limit_millicores'])
+            _require(coordinator['memory_request_mib'] <= coordinator['memory_limit_mib'])
+            _require(1536 < coordinator['heap_mib'] < coordinator['memory_limit_mib'])
         for key in ('foundation_id', 'environment_id', 'warehouse_id'):
             _require(isinstance(c[key], str) and bool(ID.fullmatch(c[key])))
         _require(type(c['revision']) is int and c['revision'] > 0)
@@ -410,7 +445,7 @@ def render(config):
         'http-server.https.keystore.path=/etc/foundation/trino.pem', 'http-server.authentication.type=PASSWORD',
         'internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}', 'query.max-memory=1GB', 'query.max-memory-per-node=1GB', 'memory.heap-headroom-per-node=512MB'])+'\n',
         'catalog-store.properties': 'catalog.config-dir=/var/trino-catalogs\n',
-        'node.properties': 'node.environment=logical\nnode.data-dir=/tmp/trino\n', 'jvm.config': '-server\n-Xmx2G\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n',
+        'node.properties': 'node.environment=logical\nnode.data-dir=/tmp/trino\n', 'jvm.config': TRINO_JVM_CONFIG,
         'log.properties': 'io.trino=WARN\n', 'secrets.toml': 'secrets-plugins-dir="/usr/lib/trino/secrets-plugin"\n[env]\nsecrets-provider.name="env"\n[file]\nsecrets-provider.name="file"\n',
         'password-authenticator.properties': 'password-authenticator.name=file\nfile.password-file=/etc/trino-private-secrets/password.db\nfile.refresh-period=1s\nfile.auth-token-cache.max-size=0\n',
         'access-control.properties': 'access-control.name=file\nsecurity.config-file=/etc/trino-private-secrets/rules.json\nsecurity.refresh-period=1s\n',
@@ -427,9 +462,10 @@ def render(config):
         mount('catalogs', '/var/trino-catalogs', False), mount('code', '/opt/logical-secrets'),
         mount('code', '/usr/lib/trino/secrets-plugin/logical-file'), mount('config', '/etc/trino'), mount('private', '/etc/foundation')],
         envs=[env('TRINO_INTERNAL_SHARED_SECRET', secret_key='shared')])
-    public.append(workload('trino-local', [trino], [runtime, codevol, privatevol('trino.pem'),
+    coordinator_deployment = workload('trino-local', [trino], [runtime, codevol, privatevol('trino.pem'),
         volume('config', 'configMap', {'name': prefix+'-trino-config'}), volume('catalogs', 'persistentVolumeClaim', {'claimName': 'trino-catalogs'}),
-        volume('bootstrap', 'secret', {'secretName': prefix+'-bootstrap', 'defaultMode': 0o440})], [bootstrapper]))
+        volume('bootstrap', 'secret', {'secretName': prefix+'-bootstrap', 'defaultMode': 0o440})], [bootstrapper])
+    public.append(coordinator_deployment)
     worker_config = copy.deepcopy(config)
     del worker_config['catalog-store.properties']
     worker_config['config.properties'] = '\n'.join(line for line in config['config.properties'].replace(
@@ -437,6 +473,12 @@ def render(config):
             'catalog.store=', 'catalog.config-dir=', 'node-scheduler.include-coordinator=')))+'\n'
     public.append(doc('ConfigMap', prefix+'-trino-worker-config', data=worker_config))
     worker = copy.deepcopy(trino)
+    # Apply only after copying the legacy defaults for the worker.
+    profile = coordinator_profile(c)
+    if profile is not None:
+        coordinator_deployment['spec']['template']['metadata'].setdefault('annotations', {}).update(profile['annotations'])
+        trino['resources'] = profile['resources']
+        config['jvm.config'] = profile['jvm_config']
     worker['volumeMounts'] = [m for m in worker['volumeMounts'] if m['name'] != 'catalogs']
     next(m for m in worker['volumeMounts'] if m['name'] == 'runtime')['readOnly'] = True
     worker_deployment = workload('trino-local-worker', [worker], [runtime, codevol, privatevol('trino.pem'),

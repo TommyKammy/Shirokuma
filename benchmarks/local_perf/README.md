@@ -467,7 +467,7 @@ The initial 2GiB coordinator heap exhausted during public ingestion. The accepte
 pilot used a separately recorded temporary coordinator heap8GiB/container12GiB,
 with the worker unchanged at heap2GiB/container4GiB, and restored the baseline
 after verification. Apply an authorized, verified runtime configuration before
-loading; these toolkit commands do not provision that profile. Retain historical
+loading; these toolkit commands do not provision that profile. Select the [formal coordinator settings](../../docs/guides/performance-coordinator-profile-2026-11-14.md) through the resident foundation configuration before running this toolkit. Retain historical
 UNKNOWNs and execution-fence evidence separately; a new run must use ordinary
 admission and a fresh owned namespace rather than rewrite old outcomes.
 
@@ -540,7 +540,7 @@ and all 99 queries/3,928 output rows matching through direct Trino and the publi
 API. Both routes preserve all 27 empty results and version1 timings. The initial
 2GiB heap OOM/UNKNOWN cleanup, Q72 dialect failure and interrupted preflight check
 are retained; the accepted run uses the separately recorded temporary profile.
-The baseline was restored afterward without rewriting the historical UNKNOWN.
+The baseline was restored afterward without rewriting the historical UNKNOWN. The subsequent [formal coordinator resource profile](../../docs/guides/performance-coordinator-profile-2026-11-14.md) provides optional typed CPU/memory/heap settings, canonical rollout, rollback and normal stop/wake validation. The selected coordinator heap8GiB/container12GiB keeps worker and query-memory limits unchanged.
 See the [TPC-DS and timing record](../../docs/guides/performance-tpcds-timings-2026-11-14.md).
 
 Remaining P1/G1 work includes other-scale qualification, TPC-DS variants beyond

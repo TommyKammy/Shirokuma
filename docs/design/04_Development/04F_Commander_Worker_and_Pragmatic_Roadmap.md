@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.96"
+version: "1.97"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[coordinatorの正式資源設定](../../guides/performance-coordinator-profile-2026-11-14.md)を整備した。任意のCPU/memory/heap設定とPod更新digest、ACTIVE資源照合、旧登録証拠との互換性を追加し、未指定時のrender bytesを維持した。
+heap8GiB／limit12GiB・CPU request1／limit4を適用し、元構成への復元、再適用、停止中Workbench再起動と通常APIの停止再開を確認。worker/VM設定、既存32表pins、旧query履歴を保持した。
+新しい隔離prefixの取込43操作と全24表・277,976行の内容照合、直接/公開各99 SQL・3,928行が一致した。OOM/自動再起動0、重点56件成功。全体Make157群・5,645成功・既定39 skip・失敗0、設計整合も成功した。
+次はbulk取込／公開全結果取得とG1残件を整える。L1／VM拡張・大規模性能の合否は未実施。
 
 2026-11-14 JST、[旧取込の復旧と失敗時清掃](../../guides/performance-ingest-recovery-2026-11-14.md)を整備した。fresh分散fenceで旧親をFAILEDへ明示放棄し、元queryのUNKNOWN・receipt・claimを保持、所有stageだけを非purge解除した。
 公開APIで1行load後の既知SQL拒否、cleanup ACK204、同じ対象名への通常再取込成功を確認。採用24表pins・旧target・基準構成を保持し、Workbenchの正確な起動環境とdoctor healthy 46項目を確認した。

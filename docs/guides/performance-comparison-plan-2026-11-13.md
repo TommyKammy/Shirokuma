@@ -1,6 +1,6 @@
 # Mac Studio上のShirokuma大規模性能・安定性試験計画
 
-2026-11-14 JST改訂。状態: P0固定、P1のTPC-H実機照合、TPC-DS固定99 SQLの実機照合と計測境界を確認。TPC-DSは一時coordinator heap8GiBで24表・277,976行と両経路の各99本・3,928行が一致し、検証後に基準構成へ戻した。旧2GiB試行のOOM／UNKNOWN cleanupは[実行終了と失敗時清掃](performance-ingest-recovery-2026-11-14.md)を整備し、元queryのUNKNOWNを保持して親をFAILEDへ明示終結した。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。[初期準備](performance-preparation-2026-11-13.md)、[接続qualification](performance-connections-2026-11-13.md)、[TPC-H照合](performance-tpch-2026-11-14.md)、[TPC-DS・計測と実行条件](performance-tpcds-timings-2026-11-14.md)に証拠とG1残件を記録する。次は正式なcoordinator資源profile、bulk取込／全結果API・残るvariantを整えてからP2以降の大規模負荷・VM拡張へ進む。
+2026-11-14 JST改訂。状態: P0固定、P1のTPC-H実機照合、TPC-DS固定99 SQLの実機照合と計測境界を確認。TPC-DSは一時coordinator heap8GiBで24表・277,976行と両経路の各99本・3,928行が一致し、検証後に基準構成へ戻した。旧2GiB試行のOOM／UNKNOWN cleanupは[実行終了と失敗時清掃](performance-ingest-recovery-2026-11-14.md)を整備し、元queryのUNKNOWNを保持して親をFAILEDへ明示終結した。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。[初期準備](performance-preparation-2026-11-13.md)、[接続qualification](performance-connections-2026-11-13.md)、[TPC-H照合](performance-tpch-2026-11-14.md)、[TPC-DS・計測と実行条件](performance-tpcds-timings-2026-11-14.md)に証拠とG1残件を記録する。[coordinatorの正式資源設定](performance-coordinator-profile-2026-11-14.md)はheap8GiB／limit12GiBで適用・復元・通常停止再開を確認した。次はbulk取込／全結果API・残るvariantを整えてからP2以降の大規模負荷・VM拡張へ進む。
 
 ## 1. 目的・実施範囲・承認
 
@@ -38,6 +38,8 @@ Mac Studio M3 Ultra／512GB RAM／4TB SSD上で、Shirokumaが正しい結果・
 根拠: [構成検証・render](../../tools/local_experiment/logical_foundation.py)、[provider](../../tools/local_experiment/logical_provider.py)、[復旧identity](../../tools/local_experiment/logical_execution_recovery.py)、[公開SQL API](../../tools/local_experiment/workbench_server.py)、[query transport](../../tools/local_experiment/query_service.py)、[JSON](../../tools/local_experiment/database_http_json.py)、[Stage](../../tools/local_experiment/db_stages.py)、[Export](../../tools/local_experiment/query_result_exports.py)、[既存runner](../../tools/local_experiment/m1_small_load.py)、[小規模検証の限界](database-p6-7-small-load-2026-11-05.md)。過去のTPC-H記録は正解確認の参考とするが、現checkoutにない専用harnessを再実行可能な資産とは扱わない。
 
 ## 3. ホスト資源を使う構成
+
+2026-11-14のcoordinator設定では、CPU request 1／limit 4、memory request 8Gi／limit 12Gi、heap 8GiBを正式な任意設定として適用した。workerのheap2GiB／limit4GiB、query全体／node各1GB、VM16 vCPU／96GiBは維持し、下表のL1適用とは分けて記録する。設定・復元・検証は[専用手順](performance-coordinator-profile-2026-11-14.md)を参照する。
 
 単一Colima／単一k3s Node／coordinator 1＋worker 1を基本とする。storage・catalogも同じhostに置いた製品全体を測り、CPU／RAM／SSD／VM overheadを含めて報告する。複数workerや物理分散対応を開始条件にしない。
 

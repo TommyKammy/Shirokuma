@@ -959,6 +959,191 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertNotIn('package io.airlift', java)
         self.assertTrue(any(p.name == 'io.airlift.spi.secrets.SecretsPlugin' for p in folder.rglob('*')))
 
+    def coordinator_profile(self, cpu_request=100, cpu_limit=4000,
+                            memory_request=256, memory_limit=4096, heap=2048):
+        return dict(zip(('cpu_request_millicores', 'cpu_limit_millicores',
+                         'memory_request_mib', 'memory_limit_mib', 'heap_mib'),
+                        (cpu_request, cpu_limit, memory_request, memory_limit, heap)))
+
+    def test_coordinator_profile_is_pure_and_uses_validated_config(self):
+        for values, resources, heap in (
+                (self.coordinator_profile(),
+                 {'requests': {'cpu': '100m', 'memory': '256Mi'},
+                  'limits': {'cpu': '4', 'memory': '4Gi'}}, '2G'),
+                (self.coordinator_profile(125, 2750, 769, 5001, 1537),
+                 {'requests': {'cpu': '125m', 'memory': '769Mi'},
+                  'limits': {'cpu': '2750m', 'memory': '5001Mi'}}, '1537M'),
+                (self.coordinator_profile(1000, 8000, 2048, 8192, 3072),
+                 {'requests': {'cpu': '1', 'memory': '2Gi'},
+                  'limits': {'cpu': '8', 'memory': '8Gi'}}, '3G')):
+            with self.subTest(values=values):
+                config = copy.deepcopy(self.c)
+                config['trino']['coordinator'] = values
+                validated = f.validate(config)
+                before = copy.deepcopy(validated)
+                expected = {
+                    'resources': resources,
+                    'jvm_config': '-server\n-Xmx'+heap+'\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n',
+                    'annotations': {'shirokuma.dev/coordinator-resources': hashlib.sha256(
+                        json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}}
+                with patch.object(f, 'validate', side_effect=AssertionError('revalidation')), \
+                     patch.object(f, 'private_read', side_effect=AssertionError('private read')), \
+                     patch.object(Path, 'read_bytes', side_effect=AssertionError('jar read')), \
+                     patch.object(Path, 'read_text', side_effect=AssertionError('text read')), \
+                     patch('builtins.open', side_effect=AssertionError('file I/O')), \
+                     patch.object(f, 'render', side_effect=AssertionError('render')), \
+                     patch.object(f.base64, 'b64encode', side_effect=AssertionError('jar encoding')):
+                    actual = f.coordinator_profile(validated)
+                    self.assertEqual(actual, expected)
+                    self.assertEqual(validated, before)
+                    actual['resources']['requests']['cpu'] = 'changed'
+                    actual['annotations'].clear()
+                    self.assertEqual(f.coordinator_profile(validated), expected)
+                    self.assertEqual(validated, before)
+
+    def test_coordinator_profile_absent_is_none_without_io_or_validation(self):
+        validated = f.validate(self.c)
+        before = copy.deepcopy(validated)
+        with patch.object(f, 'validate', side_effect=AssertionError('revalidation')), \
+             patch.object(f, 'private_read', side_effect=AssertionError('private read')), \
+             patch.object(Path, 'read_bytes', side_effect=AssertionError('jar read')), \
+             patch.object(f, 'render', side_effect=AssertionError('render')):
+            self.assertIsNone(f.coordinator_profile(validated))
+        self.assertEqual(validated, before)
+
+    def test_coordinator_optional_legacy_shape_and_render_fixture(self):
+        self.fixture()
+        original = copy.deepcopy(self.c)
+        validated = f.validate(self.c)
+        expected = copy.deepcopy(self.c)
+        expected['polaris'].update(credential_duration_seconds=900, credential_cache_duration_seconds=450)
+        self.assertEqual(validated, expected)
+        self.assertEqual(json.dumps(validated), json.dumps(expected))
+        self.assertNotIn('coordinator', validated['trino'])
+        baseline = f.render(self.c)
+        # Recorded from the pre-coordinator renderer using this existing fixture.
+        serialized = json.dumps(baseline, sort_keys=True).replace(str(self.root), '<PRIVATE_DIR>')
+        self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
+                         '99958ca50a90f257e871661857371e7ca13de33aaf59b8ce115ea5f8ea1bf742')
+        self.assertNotIn('shirokuma.dev/coordinator-resources', serialized)
+        self.c['trino']['coordinator'] = self.coordinator_profile()
+        explicit = f.render(self.c)
+        coordinator = next(d for d in explicit[0] if d['kind'] == 'Deployment'
+                           and d['metadata']['name'] == 'trino-local')
+        self.assertEqual(coordinator['spec']['template']['metadata'].pop('annotations'), {
+            'shirokuma.dev/coordinator-resources': hashlib.sha256(json.dumps(
+                self.coordinator_profile(), sort_keys=True, separators=(',', ':')).encode()).hexdigest()})
+        self.assertEqual(explicit, baseline)
+        self.assertEqual(self.c, {**original, 'trino': {**original['trino'],
+                                                     'coordinator': self.coordinator_profile()}})
+
+    def test_coordinator_validation(self):
+        profiles = (self.coordinator_profile(), self.coordinator_profile(125, 2750, 769, 5001, 1537),
+                    self.coordinator_profile(1000, 1000, 8192, 8192, 3072),
+                    self.coordinator_profile(1000000, 2000000, 1048576, 2097152, 1048577))
+        for profile in profiles:
+            with self.subTest(profile=profile):
+                config = copy.deepcopy(self.c)
+                config['trino']['coordinator'] = profile
+                before = copy.deepcopy(config)
+                validated = f.validate(config)
+                self.assertEqual(validated['trino']['coordinator'], profile)
+                self.assertEqual(config, before)
+                validated['trino']['coordinator']['heap_mib'] += 1
+                self.assertEqual(config, before)
+        invalid = [None, [], 'profile', 1, {}, {**self.coordinator_profile(), 'extra': 1}]
+        for key in self.coordinator_profile():
+            missing = self.coordinator_profile()
+            del missing[key]
+            invalid.append(missing)
+            for value in (0, -1, True, False, 2.5, '2048', None):
+                invalid.append({**self.coordinator_profile(), key: value})
+        invalid += [self.coordinator_profile(4001), self.coordinator_profile(memory_request=4097),
+                    self.coordinator_profile(heap=1536), self.coordinator_profile(heap=1535),
+                    self.coordinator_profile(heap=4096), self.coordinator_profile(heap=4097)]
+        for profile in invalid:
+            with self.subTest(profile=profile):
+                config = copy.deepcopy(self.c)
+                config['trino']['coordinator'] = profile
+                before = copy.deepcopy(config)
+                with self.assertRaises(f.ConfigError):
+                    f.validate(config)
+                self.assertEqual(config, before)
+        for section in ('trino', 'polaris'):
+            config = copy.deepcopy(self.c)
+            config[section]['unexpected'] = 1
+            with self.assertRaises(f.ConfigError):
+                f.validate(config)
+
+    def test_coordinator_render_changes_only_main_resources_and_jvm(self):
+        self.fixture()
+        profiles = (
+            (self.coordinator_profile(), '100m', '4', '256Mi', '4Gi', '2G'),
+            (self.coordinator_profile(125, 2750, 769, 5001, 1537), '125m', '2750m', '769Mi', '5001Mi', '1537M'),
+            (self.coordinator_profile(1000, 8000, 2048, 8192, 3072), '1', '8', '2Gi', '8Gi', '3G'),
+            (self.coordinator_profile(1, 1, 1538, 1538, 1537), '1m', '1m', '1538Mi', '1538Mi', '1537M'))
+        for workers, include in ((0, True), (1, True), (1, False)):
+            self.c['trino'].update(workers=workers, include_coordinator=include)
+            baseline = f.render(self.c)
+            for profile, request_cpu, limit_cpu, request_memory, limit_memory, heap in profiles:
+                with self.subTest(workers=workers, include=include, profile=profile):
+                    config = copy.deepcopy(self.c)
+                    config['trino']['coordinator'] = profile
+                    before = copy.deepcopy(config)
+                    actual = f.render(config)
+                    self.assertEqual(config, before)
+                    expected = copy.deepcopy(baseline)
+                    coordinator = next(d for d in expected[0] if d['kind'] == 'Deployment'
+                                       and d['metadata']['name'] == 'trino-local')
+                    coordinator['spec']['template']['metadata']['annotations'] = {
+                        'shirokuma.dev/coordinator-resources': hashlib.sha256(json.dumps(
+                            profile, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}
+                    coordinator['spec']['template']['spec']['containers'][0]['resources'] = {
+                        'requests': {'cpu': request_cpu, 'memory': request_memory},
+                        'limits': {'cpu': limit_cpu, 'memory': limit_memory}}
+                    cm = next(d for d in expected[0] if d['kind'] == 'ConfigMap'
+                              and d['metadata']['name'] == 'owned-trino-config')
+                    cm['data']['jvm.config'] = '-server\n-Xmx'+heap+'\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n'
+                    self.assertEqual(actual, expected)
+                    self.assertEqual(json.dumps(actual), json.dumps(expected))
+                    self.assertEqual(yaml.safe_dump_all(actual[0]), yaml.safe_dump_all(expected[0]))
+                    self.assertEqual(yaml.safe_dump_all(actual[1]), yaml.safe_dump_all(baseline[1]))
+
+    def test_coordinator_digest_is_stable_and_changes_with_heap_only(self):
+        self.fixture()
+        annotation = 'shirokuma.dev/coordinator-resources'
+        baseline = f.render(self.c)
+        profile = self.coordinator_profile()
+        rendered = []
+        digests = []
+        for candidate in (profile, dict(reversed(list(profile.items()))),
+                          {**profile, 'heap_mib': 3072}):
+            config = copy.deepcopy(self.c)
+            config['trino']['coordinator'] = candidate
+            actual = f.render(config)
+            coordinator = next(d for d in actual[0] if d['kind'] == 'Deployment'
+                               and d['metadata']['name'] == 'trino-local')
+            digest = coordinator['spec']['template']['metadata']['annotations'][annotation]
+            self.assertEqual(digest, hashlib.sha256(json.dumps(
+                candidate, sort_keys=True, separators=(',', ':')).encode()).hexdigest())
+            self.assertNotIn(annotation, coordinator['metadata'].get('annotations', {}))
+            # All other objects, including worker and bootstrap, remain byte-identical.
+            others = [d for d in actual[0] if d is not coordinator
+                      and d['metadata']['name'] != 'owned-trino-config']
+            expected = [d for d in baseline[0] if not (d['kind'] == 'Deployment'
+                        and d['metadata']['name'] == 'trino-local')
+                        and d['metadata']['name'] != 'owned-trino-config']
+            self.assertEqual(json.dumps(others), json.dumps(expected))
+            baseline_coordinator = next(d for d in baseline[0] if d['kind'] == 'Deployment'
+                                        and d['metadata']['name'] == 'trino-local')
+            self.assertEqual(coordinator['spec']['template']['spec']['initContainers'],
+                             baseline_coordinator['spec']['template']['spec']['initContainers'])
+            rendered.append(coordinator['spec']['template']['spec']['containers'][0]['resources'])
+            digests.append(digest)
+        self.assertEqual(digests[0], digests[1])
+        self.assertNotEqual(digests[0], digests[2])
+        self.assertEqual(rendered[0], rendered[2])
+
     def test_fixed_worker_defaults_and_render_options(self):
         self.fixture()
         old = copy.deepcopy(self.c)
