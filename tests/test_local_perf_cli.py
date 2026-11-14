@@ -115,6 +115,20 @@ class CliTests(unittest.TestCase):
             self.invoke('prepare-supplement', self.campaign.root, 'dataset', 'plan', '--source-dir', 'private', code=2)
             module.prepare_supplement.assert_not_called()
 
+    def test_approved_alternative_cli_dispatch(self):
+        module = ModuleType('benchmarks.local_perf.tpcds_approved_variants')
+        module.prepare_approved = Mock(return_value='approved-plan')
+        with patch.dict(sys.modules, {module.__name__: module}):
+            out, err = self.invoke('prepare-tpcds-approved', self.campaign.root, 'dataset', 'plan',
+                                   '--source-dir', 'private', '--spark-reference', 'oracle')
+            self.assertEqual((json.loads(out), err), ('approved-plan', ''))
+            self.assertEqual(module.prepare_approved.call_args.args[1:], ('dataset', 'plan'))
+            self.assertEqual(module.prepare_approved.call_args.kwargs,
+                             dict(timeout=300, source_dir='private', spark_reference='oracle'))
+            module.prepare_approved.reset_mock()
+            self.invoke('prepare-tpcds-approved', self.campaign.root, 'dataset', 'plan', '--source-dir', 'private', code=2)
+            module.prepare_approved.assert_not_called()
+
     def test_prepare_dispatch_and_tpch_defaults_preserved(self):
         dataset = self.root / "dataset.json"
         for suite, flags, expected in (("tpch", [], {}), ("tpcds", [], {"timeout": 300}),

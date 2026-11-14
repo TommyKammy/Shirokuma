@@ -34,17 +34,22 @@ def metadata():
 
 def coverage():
     """Inventory denominators, never an official score or all-variant assertion."""
-    return dict(selected_execution_cases=103, official_tpc_score=False, all_variants_complete=False,
+    from .tpcds_approved_variants import IDS as APPROVED_IDS, SUITE as APPROVED_SUITE, metadata as approved_metadata
+    approved = approved_metadata()
+    return dict(selected_execution_cases=117, official_tpc_score=False, all_variants_complete=False,
         baseline=dict(count=99, suite=ds.SUITE, status="fixed contracts", generator_version="1.4.3",
                       iterations={"14": 1, "23": 2, "24": 1, "39": 1}),
         supplement=dict(count=4, ids=list(IDS), suite=SUITE, status="opt-in source/dataset qualification required",
                         provenance=metadata()["provenance"]),
-        approved_alternative_templates=dict(count=14, status="pending separate source/dialect/equivalence acceptance",
-            specification="https://www.tpc.org/TPC_Documents_Current_Versions/pdf/TPC-DS_v4.0.0.pdf",
-            distinction="Appendix C a.tpl alternatives are distinct from multi-iteration a/b statements",
-            candidates=[dict(id=str(n)+"a", url="https://github.com/apache/spark/blob/v4.0.1/sql/core/src/test/resources/tpcds-v2.7.0/q"+str(n)+"a.sql",
-                status="pending", reason="Spark parser exception; dialect adaptation unaccepted" if n == 77 else
-                "DuckDB parse observed; source provenance and equivalence unaccepted") for n in ALTERNATIVES]))
+        approved_alternative_templates=dict(count=14, ids=list(APPROVED_IDS), suite=APPROVED_SUITE,
+            status="pinned old Spark-derived source supported; independent raw Spark qualification required per dataset",
+            source_supported=True, dataset_qualified=False, current_v4_template_identity=False,
+            universal_algebraic_equivalence=False, provenance=approved["provenance"],
+            raw_pinned_source_fidelity=approved["raw_pinned_source_fidelity"],
+            base_template_equivalence=approved["base_template_equivalence"],
+            oracle_engine="Apache Spark 4.1.3 ANSI=true", oracle_profile=approved["oracle_profile"],
+            candidates=[dict(id=i, status="pending", source_supported=True,
+                qualification="per-dataset raw Spark qualification required") for i in APPROVED_IDS]))
 
 
 def read_sources(source_dir, check=lambda: None):

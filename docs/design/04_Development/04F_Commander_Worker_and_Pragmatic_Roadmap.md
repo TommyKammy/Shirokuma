@@ -4,13 +4,18 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-14
-version: "1.100"
+updated: 2026-11-15
+version: "1.101"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-15 JST、[TPC-DS承認variant14件の由来・方言・結果照合](../../guides/performance-tpcds-approved-variants-2026-11-15.md)を整備した。固定Spark sourceと原実行profileを記録し、元functional query全般との同値性とは分けてdatasetごとの資格確認を必須にした。
+原Spark/DuckDBは14本/903行、直接Trino/公開APIの個別監査は各13本/803行が一致した。14aは348 stagesが現上限150を超え、正式14本suite全体は未受入のまま失敗・未実行証拠を保持した。
+版管理exporterとmaterialized成功証拠をbind/新規runで検査するgateを追加し、既存の復旧・99/4契約と元59表・履歴・資源を維持した。Make162群は5,866成功・74 skip・失敗0、native OOM/再起動0・doctor healthy 46項目。
+次はcoordinator stage上限の正式設定・復元と14a/正式suite再検証、その後に別scale・計測器負荷。L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
 
 2026-11-14 JST、[TPC-DSの対応範囲と計測器負荷](../../guides/performance-tpcds-variants-instrumentation-2026-11-14.md)を整備した。既存99を維持し、固定Flink4 iteration補完を別suiteで準備・bindし、承認variant14件は別の未受入対象として明示した。
 既存24表pinsの4本/28行が参照・直接Trino・公開APIで一致。synthetic数値経路も別caseで確認し、runnerは全callbackの期限/local peakを維持して全体容量走査を200ms samplingし、attemptに負荷を記録する。

@@ -552,10 +552,12 @@ are retained; the accepted run uses the separately recorded temporary profile.
 The baseline was restored afterward without rewriting the historical UNKNOWN. The subsequent [formal coordinator resource profile](../../docs/guides/performance-coordinator-profile-2026-11-14.md) provides optional typed CPU/memory/heap settings, canonical rollout, rollback and normal stop/wake validation. The selected coordinator heap8GiB/container12GiB keeps worker and query-memory limits unchanged.
 See the [TPC-DS and timing record](../../docs/guides/performance-tpcds-timings-2026-11-14.md).
 
-The follow-up [variant and instrumentation record](../../docs/guides/performance-tpcds-variants-instrumentation-2026-11-14.md) distinguishes the unchanged 99-query corpus, four supplemental iteration cases and 14 separately pending approved variants. It also records offline observer-cost measurements and sampled global capacity checks in the runner, with deadline/local peak checks retained on every callback.
+The follow-up [variant and instrumentation record](../../docs/guides/performance-tpcds-variants-instrumentation-2026-11-14.md) distinguishes the unchanged 99-query corpus, four supplemental iteration cases and 14 approved-variant families. It also records offline observer-cost measurements and sampled global capacity checks in the runner, with deadline/local peak checks retained on every callback.
 
-Remaining P1/G1 work includes other-scale qualification, TPC-DS variants beyond
-the fixed 99-query corpus, engine telemetry unavailable through the current API,
+The [approved-variant qualification record](../../docs/guides/performance-tpcds-approved-variants-2026-11-15.md) pins 14 concrete Spark-source queries separately from current TPC template identity or general base-query equivalence. `prepare-tpcds-approved` requires `--source-dir` and a dataset-specific `--spark-reference` exported by `spark_reference.py` inside the recorded Spark runtime. Preparation, binding and new runs validate materialized successful qualification evidence; frozen recovery/cancellation remains available independently. Spark and DuckDB matched all 14 queries/903 rows at SF0.01. Individual Trino and public-API audits matched 13 queries/803 rows each; 14a exceeded the unchanged stage limit (348 > 150). The formal 14-query native suite remains incomplete. Coverage enumeration (99 + 4 + 14 = 117) is not an execution-success count.
+
+Remaining P1/G1 work includes formal coordinator stage-limit configuration and
+rerunning 14a/the full approved suite, other-scale qualification, engine telemetry unavailable through the current API,
 and cold/concurrent failure conditions. Initial generated manifests remain
 unordered; reviewed TPC-H/TPC-DS plans add explicit ordering/tie contracts without
 inferring them for arbitrary SQL. The reviewed opt-in public full-result mode

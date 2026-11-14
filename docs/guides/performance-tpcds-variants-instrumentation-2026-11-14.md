@@ -2,6 +2,8 @@
 
 2026-11-14 JST。[Parquet分割生成・複数ファイル登録](performance-parquet-shards-2026-11-14.md)の後続。既存99 SQLを維持し、iteration補完と承認variantの対応範囲を分け、全件取得・比較で繰り返す容量走査の負荷を整理する。
 
+2026-11-15 JST追記: [承認variant14件の由来・方言・結果照合](performance-tpcds-approved-variants-2026-11-15.md)で原Spark/移植14件・903行を確認した。nativeの個別監査は両経路13件・803行が一致し、14aは348 stagesが上限150を超えるため正式suite全体の受入を保留する。以下の未受入記述は本記録着手時点の状態である。
+
 ## TPC-DSの対応範囲
 
 | 分類 | 対象 | 位置付け |
@@ -101,4 +103,4 @@ Make完走後の最終差分は、新しいopt-in試験の証跡出力先2箇所
 
 prefreeze workerの全体Makeはsandboxのloopback EPERMで中断しており、最終集計へ含めない。元の失敗plan・harness失敗・制限環境logは保持する。今回のsource・専用venv・結果と旧artifactを合わせた元baselineからの物理占有を計上し、最終実機観測のhost空きは約3.097TBだった。所有一時DB/spillは清掃し、成功結果・固定pins・FAILED証拠を保持する。
 
-次は承認variant14件の由来・方言・oracle受入と別scaleの資格確認を整理する。計測器の観測負荷をpilotで再確認し、L1/guest disk拡張と100GB pilot、容量・生成/取込時間・spillの再見積りへ進む。
+本記録時点の次項目だった承認variant14件の由来・方言・oracle受入は上記の後続記録へ引き継いだ。現在はstage上限の正式設定と14a/正式suite再検証、その後に別scaleの資格確認・計測器負荷を進める。L1/guest disk拡張と100GB pilot、容量・生成/取込時間・spillの再見積りは後続とする。

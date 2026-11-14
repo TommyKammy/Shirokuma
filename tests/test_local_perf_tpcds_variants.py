@@ -33,7 +33,8 @@ class Inventory(unittest.TestCase):
     def test_categories_and_no_false_complete(self):
         c = variants.coverage()
         self.assertEqual((c['baseline']['count'], c['supplement']['count'], c['approved_alternative_templates']['count']), (99, 4, 14))
-        self.assertEqual(c['selected_execution_cases'], 103)
+        # Expanded corpus includes the fourteen pinned Spark alternatives.
+        self.assertEqual(c['selected_execution_cases'], 117)
         self.assertFalse(c['official_tpc_score'])
         self.assertFalse(c['all_variants_complete'])
         self.assertEqual(c['baseline']['iterations'], {'14': 1, '23': 2, '24': 1, '39': 1})

@@ -470,6 +470,12 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
     if (manifest.get("format") != 1 or not manifest.get("queries")
             or not isinstance(manifest.get("dataset_id"), str) or not manifest["dataset_id"]):
         raise ValueError("invalid query manifest")
+    from .tpcds_approved_variants import SUITE as APPROVED_SUITE, validate_manifest, validate_bound_manifest
+    if manifest.get("suite") == APPROVED_SUITE:
+        if bound_manifest(manifest):
+            validate_bound_manifest(manifest)
+        else:
+            validate_manifest(manifest)
     manifest = copy.deepcopy(manifest)
     queries = manifest["queries"]
     if sql_variant not in ("sql", "reference_sql") or (sql_variant != "sql" and not isinstance(adapter, DuckDBAdapter)):

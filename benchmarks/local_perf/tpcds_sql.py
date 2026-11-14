@@ -207,7 +207,7 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
 
 
 def _prepare_parity(campaign, dataset, name, meta, version, dataset_text, source_text,
-                    manifest, rules, timeout, abs_tol, rel_tol, recheck=lambda: None, source_bodies=None, *, absolute_deadline=None):
+                    manifest, rules, timeout, abs_tol, rel_tol, recheck=lambda: None, source_bodies=None, *, absolute_deadline=None, external_compare=None):
     """Shared full-result parity and owned scratch lifecycle for qualified suites."""
     from .runner import dataset_read
     campaign.check()
@@ -272,6 +272,8 @@ def _prepare_parity(campaign, dataset, name, meta, version, dataset_text, source
                         ties.append(exc)
                 if ties:
                     raise ties[0]
+                if external_compare is not None:
+                    audit["spark_reference"] = external_compare(out, q, audit, pair, check)
                 audit["status"] = "SUCCESS"
                 write_json(out / "plan.json", record)
         if absolute_deadline is not None:
@@ -285,6 +287,10 @@ def _prepare_parity(campaign, dataset, name, meta, version, dataset_text, source
         record.update(status="SUCCESS", query_count=len(record["queries"]),
                       nonempty_queries=sum(q["nonempty"] for q in record["queries"]),
                       result_rows=sum(q["rows"] for q in record["queries"]))
+        if external_compare is not None:
+            write_json(out / "queries.json", manifest)
+            record.update(dataset_qualified=True, qualification=manifest["spark_qualification"],
+                          equivalence="full source/cast/portable and independent raw Spark results; dataset-bound empirical qualification")
         campaign.mark(out, "SUCCESS")
         return out
     except BaseException as exc:
@@ -315,6 +321,9 @@ def bind_snapshots(manifest, pins):
         expected = validate_manifest(manifest)
     else:
         expected = None
+    from .tpcds_approved_variants import SUITE as APPROVED_SUITE, validate_manifest as validate_approved
+    if manifest.get("suite") == APPROVED_SUITE:
+        expected = validate_approved(manifest)
     from .public import context
     if pins.get("status") != "SUCCESS":
         raise ValueError("successful snapshot freeze required")
@@ -419,7 +428,7 @@ def normalize_date_integer_arithmetic(tree):
     return tree, changed
 
 
-def generate_contracts(inventory, table_schemas):
+def generate_contracts(inventory, table_schemas, order_overrides=None):
     """Offline regeneration only: SQLGlot 30.31.0, DuckDB 1.4.3 descriptions.
 
     inventory is tpcds_queries SQL plus native DESCRIBE rows; table_schemas is
@@ -467,6 +476,8 @@ def generate_contracts(inventory, table_schemas):
             "57": dict(op="subtract", left=6, right=5),
             "89": dict(op="subtract", left=6, right=7),
         }
+        if order_overrides is not None:
+            overrides.update(order_overrides)
         for o in original.args.get("order", exp.Order()).expressions:
             e = o.this
             while isinstance(e, exp.Paren):
