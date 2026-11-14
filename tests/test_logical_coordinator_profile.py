@@ -1,5 +1,6 @@
 """Canonical coordinator-profile attestation through the mock provider boundary."""
 import copy
+import hashlib
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -49,9 +50,11 @@ class CoordinatorProfileTests(unittest.TestCase):
             'cpu_request_millicores': 1500, 'cpu_limit_millicores': 3000,
             'memory_request_mib': 3072, 'memory_limit_mib': 5120, 'heap_mib': 2560}
 
-    def provider(self, workers=0, *, explicit=True):
+    def provider(self, workers=0, *, explicit=True, stage=None):
         config = copy.deepcopy(self.c)
         config['trino']['workers'] = workers
+        if stage is not None:
+            config['trino']['coordinator']['max_stage_count'] = stage
         if explicit:
             harness = ProfileHarness(config)
         else:
@@ -202,6 +205,80 @@ class CoordinatorProfileTests(unittest.TestCase):
                             result['data']['jvm.config'] += '\n'
                 harness.mutate = mutate
                 with self.assertRaisesRegex(p.Rejected, 'FOUNDATION_CONFIG_MISMATCH'):
+                    provider._compute()
+
+    def test_stage_limit_is_attested_and_not_a_new_pin(self):
+        provider, harness = self.provider(stage=400)
+        self.assertEqual(len(provider._compute()), 1)
+        deployment = harness.resource('deployment', 'trino-local')
+        profile = provider._coordinator_profile(deployment)
+        self.assertEqual(profile['stage_limit'], '400')
+        self.assertEqual(profile['annotations'][f.STAGE_LIMIT_ANNOTATION],
+                         hashlib.sha256(b'{"max_stage_count":400}').hexdigest())
+        self.assertNotIn('configmap/'+self.c['prefix']+'-trino-config', provider._incarnation)
+        self.bind(provider)
+        self.assertNotIn('configmap/'+self.c['prefix']+'-trino-config', provider._bound_pins)
+
+    def test_stage_limit_annotation_and_config_mismatch_rejected(self):
+        cases = ('deployment-annotation-wrong', 'deployment-annotation-missing',
+                 'pod-annotation-wrong', 'pod-annotation-missing', 'config-missing',
+                 'config-wrong', 'config-duplicate', 'config-malformed',
+                 'config-continuation', 'config-escaped-key')
+        for case in cases:
+            with self.subTest(case=case):
+                provider, harness = self.provider(stage=400)
+                def mutate(kind, name, result):
+                    if case.startswith('deployment') and kind == 'deployment' and name == 'trino-local':
+                        annotations = result['spec']['template']['metadata']['annotations']
+                        if case.endswith('-missing'):
+                            del annotations[f.STAGE_LIMIT_ANNOTATION]
+                        else:
+                            annotations[f.STAGE_LIMIT_ANNOTATION] = 'wrong'
+                    elif case.startswith('pod') and kind == 'pod' and name == 'trino-local-pod':
+                        if case.endswith('-missing'):
+                            del result['metadata']['annotations'][f.STAGE_LIMIT_ANNOTATION]
+                        else:
+                            result['metadata']['annotations'][f.STAGE_LIMIT_ANNOTATION] = 'wrong'
+                    elif case.startswith('config-') and kind == 'configmap' and name == self.c['prefix']+'-trino-config':
+                        text = result['data']['config.properties']
+                        if case == 'config-missing':
+                            result['data']['config.properties'] = text.replace('query.max-stage-count=400\n', '')
+                        elif case == 'config-wrong':
+                            result['data']['config.properties'] = text.replace('query.max-stage-count=400\n',
+                                                                                'query.max-stage-count=150\n')
+                        elif case == 'config-duplicate':
+                            result['data']['config.properties'] = text + 'query.max-stage-count=400\n'
+                        elif case == 'config-continuation':
+                            result['data']['config.properties'] = text + 'query.max-stage-\\\n count=900\n'
+                        elif case == 'config-escaped-key':
+                            result['data']['config.properties'] = text + 'query.max-stage-coun\\u0074=900\n'
+                        else:
+                            result['data']['config.properties'] = text.replace('query.max-stage-count=400\n',
+                                                                                'query.max-stage-count=abc\n')
+                harness.mutate = mutate
+                with self.assertRaisesRegex(p.Rejected, 'FOUNDATION_(COMPUTE|CONFIG)_MISMATCH'):
+                    provider._compute()
+
+    def test_omitted_stage_limit_rejects_stale_annotation_and_property(self):
+        cases = ('deployment-annotation', 'pod-annotation', 'config-property',
+                 'config-continuation', 'config-escaped-key')
+        for case in cases:
+            with self.subTest(case=case):
+                provider, harness = self.provider()
+                def mutate(kind, name, result):
+                    if case == 'deployment-annotation' and kind == 'deployment' and name == 'trino-local':
+                        result['spec']['template']['metadata']['annotations'][f.STAGE_LIMIT_ANNOTATION] = 'stale'
+                    elif case == 'pod-annotation' and kind == 'pod' and name == 'trino-local-pod':
+                        result['metadata']['annotations'][f.STAGE_LIMIT_ANNOTATION] = 'stale'
+                    elif case.startswith('config-') and kind == 'configmap' and name == self.c['prefix']+'-trino-config':
+                        if case == 'config-property':
+                            result['data']['config.properties'] += 'query.max-stage-count=400\n'
+                        elif case == 'config-continuation':
+                            result['data']['config.properties'] += 'query.max-stage-\\\n count=900\n'
+                        else:
+                            result['data']['config.properties'] += 'query.max-stage-coun\\u0074=900\n'
+                harness.mutate = mutate
+                with self.assertRaisesRegex(p.Rejected, 'FOUNDATION_(COMPUTE|CONFIG)_MISMATCH'):
                     provider._compute()
 
     def test_ready_status_does_not_bypass_profile_drift(self):

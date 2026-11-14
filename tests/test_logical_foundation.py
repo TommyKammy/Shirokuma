@@ -960,10 +960,14 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertTrue(any(p.name == 'io.airlift.spi.secrets.SecretsPlugin' for p in folder.rglob('*')))
 
     def coordinator_profile(self, cpu_request=100, cpu_limit=4000,
-                            memory_request=256, memory_limit=4096, heap=2048):
-        return dict(zip(('cpu_request_millicores', 'cpu_limit_millicores',
-                         'memory_request_mib', 'memory_limit_mib', 'heap_mib'),
-                        (cpu_request, cpu_limit, memory_request, memory_limit, heap)))
+                            memory_request=256, memory_limit=4096, heap=2048,
+                            max_stage_count=None):
+        profile = dict(zip(('cpu_request_millicores', 'cpu_limit_millicores',
+                            'memory_request_mib', 'memory_limit_mib', 'heap_mib'),
+                           (cpu_request, cpu_limit, memory_request, memory_limit, heap)))
+        if max_stage_count is not None:
+            profile['max_stage_count'] = max_stage_count
+        return profile
 
     def test_coordinator_profile_is_pure_and_uses_validated_config(self):
         for values, resources, heap in (
@@ -1074,6 +1078,142 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
             config[section]['unexpected'] = 1
             with self.assertRaises(f.ConfigError):
                 f.validate(config)
+
+    def test_stage_limit_validation_boundaries_and_required_keys(self):
+        for value in (1, 400, 2147483647):
+            with self.subTest(value=value):
+                config = copy.deepcopy(self.c)
+                config['trino']['coordinator'] = self.coordinator_profile(max_stage_count=value)
+                before = copy.deepcopy(config)
+                validated = f.validate(config)
+                self.assertEqual(validated['trino']['coordinator']['max_stage_count'], value)
+                self.assertEqual(config, before)
+        invalid = (0, -1, 2147483648, True, False, 1.0, '400', None, [], {})
+        for value in invalid:
+            with self.subTest(value=value):
+                config = copy.deepcopy(self.c)
+                config['trino']['coordinator'] = self.coordinator_profile()
+                config['trino']['coordinator']['max_stage_count'] = value
+                before = copy.deepcopy(config)
+                with self.assertRaises(f.ConfigError):
+                    f.validate(config)
+                self.assertEqual(config, before)
+        for key in ('cpu_request_millicores', 'cpu_limit_millicores',
+                    'memory_request_mib', 'memory_limit_mib', 'heap_mib'):
+            config = copy.deepcopy(self.c)
+            profile = self.coordinator_profile(max_stage_count=400)
+            del profile[key]
+            config['trino']['coordinator'] = profile
+            with self.assertRaises(f.ConfigError):
+                f.validate(config)
+        config = copy.deepcopy(self.c)
+        config['trino']['coordinator'] = {**self.coordinator_profile(max_stage_count=400), 'stage_limit': 400}
+        with self.assertRaises(f.ConfigError):
+            f.validate(config)
+        config = copy.deepcopy(self.c)
+        config['trino']['coordinator'] = self.coordinator_profile()
+        self.assertEqual(f.validate(config)['trino']['coordinator'], self.coordinator_profile())
+
+    def test_stage_limit_digests_are_separate_from_resource_digest(self):
+        profiles = []
+        for value in (400, 500):
+            config = copy.deepcopy(self.c)
+            config['trino']['coordinator'] = self.coordinator_profile(max_stage_count=value)
+            profiles.append(f.coordinator_profile(f.validate(config)))
+        self.assertEqual(profiles[0]['annotations']['shirokuma.dev/coordinator-resources'],
+                         profiles[1]['annotations']['shirokuma.dev/coordinator-resources'])
+        self.assertNotEqual(profiles[0]['annotations'][f.STAGE_LIMIT_ANNOTATION],
+                            profiles[1]['annotations'][f.STAGE_LIMIT_ANNOTATION])
+        self.assertEqual(profiles[0]['resources'], profiles[1]['resources'])
+        self.assertEqual(profiles[0]['jvm_config'], profiles[1]['jvm_config'])
+
+    def test_stage_limit_property_parser(self):
+        cases = (
+            ('', None),
+            ('# query.max-stage-count=400\n', None),
+            ('! query.max-stage-count=400\n', None),
+            ('# query.max-stage-count=400 \\\n', None),
+            ('! query.max-stage-count=400 \\\n', None),
+            ('# query.max-stage-count=400\nquery.max-stage-count=500\n', '500'),
+            ('query.max-stage-count=400\n', '400'),
+            (' query.max-stage-count = 400 \n', '400'),
+            ('query.max-stage-count:400\n', '400'),
+            ('query.max-stage-count 400\n', '400'),
+            ('query.max-stage-count\t=\t400\n', '400'),
+            ('query.max-memory=1GB\nquery.max-stage-count=400\n', '400'),
+        )
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual(f.stage_limit_property(text), expected)
+        for text in ('query.max-stage-count=abc\n', 'query.max-stage-count=\n',
+                     'query.max-stage-count=400\nquery.max-stage-count=400\n',
+                     'query.max-stage-count=400\nextra=1\nquery.max-stage-count=500\n',
+                     'query.max-stage-count=400\nquery.max-stage-\\\n count=900\n',
+                     'query.max-stage-count=400\nquery.max-stage-coun\\u0074=900\n',
+                     'extra=foo\\bar\n'):
+            with self.subTest(text=text):
+                with self.assertRaises(f.ConfigError):
+                    f.stage_limit_property(text)
+        with self.assertRaises(f.ConfigError):
+            f.stage_limit_property(None)
+
+    def test_stage_limit_render_is_coordinator_only_and_uses_separate_annotation(self):
+        self.fixture()
+        config = copy.deepcopy(self.c)
+        config['trino']['coordinator'] = self.coordinator_profile(max_stage_count=400)
+        before = copy.deepcopy(config)
+        public, _ = f.render(config)
+        self.assertEqual(config, before)
+        documents = {(d['kind'], d['metadata']['name']): d for d in public}
+        baseline_config = copy.deepcopy(self.c)
+        baseline_config['trino']['coordinator'] = self.coordinator_profile()
+        baseline, _ = f.render(baseline_config)
+        baseline_documents = {(d['kind'], d['metadata']['name']): d for d in baseline}
+        self.assertEqual(documents['ConfigMap', 'owned-trino-worker-config'],
+                         baseline_documents['ConfigMap', 'owned-trino-worker-config'])
+        self.assertEqual(documents['Deployment', 'trino-local-worker'],
+                         baseline_documents['Deployment', 'trino-local-worker'])
+        baseline_cm = baseline_documents['ConfigMap', 'owned-trino-config']['data']['config.properties']
+        coordinator_cm = documents['ConfigMap', 'owned-trino-config']['data']['config.properties']
+        self.assertEqual(coordinator_cm, baseline_cm.rstrip('\n') + '\nquery.max-stage-count=400\n')
+        worker_cm = documents['ConfigMap', 'owned-trino-worker-config']['data']['config.properties']
+        self.assertEqual(f.stage_limit_property(coordinator_cm), '400')
+        self.assertIsNone(f.stage_limit_property(worker_cm))
+        self.assertEqual(coordinator_cm.count('query.max-stage-count='), 1)
+        self.assertNotIn('query.max-stage-count=', worker_cm)
+        coordinator_annotations = documents['Deployment', 'trino-local']['spec']['template']['metadata']['annotations']
+        worker_annotations = documents['Deployment', 'trino-local-worker']['spec']['template']['metadata'].get('annotations', {})
+        self.assertIn(f.STAGE_LIMIT_ANNOTATION, coordinator_annotations)
+        self.assertNotIn(f.STAGE_LIMIT_ANNOTATION, worker_annotations)
+        self.assertEqual(coordinator_annotations['shirokuma.dev/coordinator-resources'],
+                         hashlib.sha256(json.dumps(self.coordinator_profile(), sort_keys=True,
+                             separators=(',', ':')).encode()).hexdigest())
+        self.assertEqual(coordinator_annotations[f.STAGE_LIMIT_ANNOTATION],
+                         hashlib.sha256(json.dumps({'max_stage_count': 400}, sort_keys=True,
+                             separators=(',', ':')).encode()).hexdigest())
+
+    def test_stage_limit_omission_preserves_render_and_rejects_stale_material(self):
+        self.fixture()
+        baseline_config = copy.deepcopy(self.c)
+        baseline_config['trino']['coordinator'] = self.coordinator_profile()
+        baseline, _ = f.render(baseline_config)
+        staged = copy.deepcopy(baseline_config)
+        staged['trino']['coordinator']['max_stage_count'] = 400
+        staged_public, _ = f.render(staged)
+        restored = copy.deepcopy(staged)
+        del restored['trino']['coordinator']['max_stage_count']
+        restored_public, _ = f.render(restored)
+        self.assertEqual(restored_public, baseline)
+        documents = {(d['kind'], d['metadata']['name']): d for d in staged_public}
+        self.assertEqual(f.stage_limit_property(
+            documents['ConfigMap', 'owned-trino-config']['data']['config.properties']), '400')
+        self.assertIn(f.STAGE_LIMIT_ANNOTATION, documents['Deployment', 'trino-local']
+                      ['spec']['template']['metadata']['annotations'])
+        restored_documents = {(d['kind'], d['metadata']['name']): d for d in restored_public}
+        self.assertIsNone(f.stage_limit_property(
+            restored_documents['ConfigMap', 'owned-trino-config']['data']['config.properties']))
+        self.assertNotIn(f.STAGE_LIMIT_ANNOTATION, restored_documents['Deployment', 'trino-local']
+                         ['spec']['template']['metadata']['annotations'])
 
     def test_coordinator_render_changes_only_main_resources_and_jvm(self):
         self.fixture()

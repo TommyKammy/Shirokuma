@@ -561,10 +561,13 @@ class Provider:
         profile = foundation.coordinator_profile(self._config)
         template = deployment.get('spec', {}).get('template', {})
         containers = template.get('spec', {}).get('containers', [])
+        annotations = template.get('metadata', {}).get('annotations', {})
         _require(len(containers) == 1 and containers[0].get('name') == 'trino' and
             self._matches_spec(containers[0].get('resources'), profile['resources']) and
-            all(template.get('metadata', {}).get('annotations', {}).get(key) == value
-                for key, value in profile['annotations'].items()), 'FOUNDATION_COMPUTE_MISMATCH')
+            all(annotations.get(key) == value for key, value in profile['annotations'].items()) and
+            (profile.get('stage_limit') is not None or
+                foundation.STAGE_LIMIT_ANNOTATION not in annotations),
+            'FOUNDATION_COMPUTE_MISMATCH')
         name = self._config['prefix']+'-trino-config'
         config = self._json(self._cmd(['get', 'configmap', name, '-o', 'json']))
         uid = self._labels(config)
@@ -579,6 +582,12 @@ class Provider:
                     _require(pins[key] == uid, 'FOUNDATION_INCARNATION_CHANGED')
         _require(config.get('data', {}).get('jvm.config') == profile['jvm_config'],
             'FOUNDATION_CONFIG_MISMATCH')
+        try:
+            actual_stage = foundation.stage_limit_property(
+                config.get('data', {}).get('config.properties'))
+        except foundation.ConfigError:
+            raise Rejected('FOUNDATION_CONFIG_MISMATCH') from None
+        _require(actual_stage == profile.get('stage_limit'), 'FOUNDATION_CONFIG_MISMATCH')
         return profile
 
     def _compute(self):
@@ -604,9 +613,12 @@ class Provider:
             _require(len(containers) == 1 and containers[0]['name'] == 'trino' and
                 containers[0]['image'] == self._config['images']['trino'], 'FOUNDATION_IMAGE_MISMATCH')
             if owner == 'trino-local' and coordinator_profile is not None:
+                annotations = pod['metadata'].get('annotations', {})
                 _require(self._matches_spec(containers[0].get('resources'), coordinator_profile['resources']) and
-                    all(pod['metadata'].get('annotations', {}).get(key) == value
-                        for key, value in coordinator_profile['annotations'].items()), 'FOUNDATION_COMPUTE_MISMATCH')
+                    all(annotations.get(key) == value
+                        for key, value in coordinator_profile['annotations'].items()) and
+                    (coordinator_profile.get('stage_limit') is not None or
+                        foundation.STAGE_LIMIT_ANNOTATION not in annotations), 'FOUNDATION_COMPUTE_MISMATCH')
             status = pod.get('status', {}).get('containerStatuses', [])
             _require(len(status) == 1 and status[0].get('ready') is True and
                 status[0].get('imageID', '').endswith(self._config['images']['trino'].split('@')[1]), 'FOUNDATION_IMAGE_MISMATCH')

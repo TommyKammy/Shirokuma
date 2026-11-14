@@ -4,7 +4,8 @@
   "experimental": {
     "policies": [
       { "action": "provider.use", "resource": "*", "effect": "deny" },
-      { "action": "provider.use", "resource": "openai", "effect": "allow" }
+      { "action": "provider.use", "resource": "openai", "effect": "allow" },
+      { "action": "provider.use", "resource": "opencode-go", "effect": "allow" }
     ]
   },
   "agents": {
