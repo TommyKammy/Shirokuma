@@ -54,4 +54,4 @@ ORDERには列位置のほか、出力列の減算と整数CASEの限定した�
 
 採用証拠はGit外の`shirokuma-tpcds-8g-2026-11-14/campaign`にある。`tpcds-source`、`portable-plan-v2`、`public-load`、`snapshot-pins`、`tables-direct`、`tpcds-reference-v2`／`tpcds-direct-v2`／`tpcds-public-v2`と、`qualification-summary.json`、`verify-restored-*.json`から追跡できる。旧失敗・監査・停止／復元証拠は`shirokuma-tpcds-live-2026-11-14`に保持し、成功runだけにしない。
 
-次は旧ingestのUNKNOWN cleanupについて実行終了証拠を使う復旧・放棄と、失敗時の非purge cleanupを整える。続いて正式なcoordinator資源profile、bulk取込と公開全結果取得を整備する。固定99本以外のvariant、別scale、cold／同時実行条件等のG1残件を確認してから、大規模試験へ進む。
+旧ingestのUNKNOWN cleanupは、後続の[復旧・失敗時清掃](performance-ingest-recovery-2026-11-14.md)で実行終了と親の明示放棄、stageの非purge解除を確認した。元queryのUNKNOWNと原journalは保持する。次は正式なcoordinator資源profile、bulk取込と公開全結果取得を整備する。固定99本以外のvariant、別scale、cold／同時実行条件等のG1残件を確認してから、大規模試験へ進む。

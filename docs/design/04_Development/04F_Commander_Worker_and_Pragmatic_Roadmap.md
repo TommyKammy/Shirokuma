@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.95"
+version: "1.96"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[旧取込の復旧と失敗時清掃](../../guides/performance-ingest-recovery-2026-11-14.md)を整備した。fresh分散fenceで旧親をFAILEDへ明示放棄し、元queryのUNKNOWN・receipt・claimを保持、所有stageだけを非purge解除した。
+公開APIで1行load後の既知SQL拒否、cleanup ACK204、同じ対象名への通常再取込成功を確認。採用24表pins・旧target・基準構成を保持し、Workbenchの正確な起動環境とdoctor healthy 46項目を確認した。
+復旧17件・失敗cleanup14件、v24移行と既存query/dbt/logical復旧の重点回帰を通過した。全体Makeは157群・5,626成功・既定39 skip・失敗0。設計整合も成功した。
+次は正式なcoordinator資源profile、bulk取込／公開全結果取得とG1残件を整える。L1／VM拡張・大規模性能の合否は未実施。
 
 2026-11-14 JST、[TPC-DS照合契約と計測境界](../../guides/performance-tpcds-timings-2026-11-14.md)を整備した。24表・277,976行の全内容と、直接／公開各99 SQL・3,928行がDuckDB参照と一致し、ORDER／LIMITと前後pinsを検証した。
 送信・取得・行観測・artifact・検証・復旧とengine報告値を分離し、空27件ずつも実機確認した。Q72の日付演算と重複preflightを修正し、最終重点203件全件成功。先行全体Makeは154群・5,577成功・37 skipで、その後の差分も再検証した。

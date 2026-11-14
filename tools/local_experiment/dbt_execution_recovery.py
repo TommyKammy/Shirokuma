@@ -325,8 +325,9 @@ class DbtAuditRecovery(LogicalQueryRecovery):
                 ','.join('?' for _ in terminal) + ') AND id!=?', (*terminal, excluded)).fetchone(), 'UNRELATED_UNRESOLVED_WORK')
         _require(not db.execute('''SELECT 1 FROM query_records q WHERE q.id!=? AND
             q.state NOT IN ('FINISHED','FAILED','CANCELED') AND NOT EXISTS (SELECT 1 FROM
-            warehouse_admissions a WHERE a.kind='query' AND a.subject_id=q.id AND a.execution_closure=?)''',
-            (q['id'], CLOSURE)).fetchone(), 'UNRELATED_UNRESOLVED_WORK')
+            warehouse_admissions a WHERE a.kind='query' AND a.subject_id=q.id
+                AND a.execution_closure IN ('FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))''',
+            (q['id'],)).fetchone(), 'UNRELATED_UNRESOLVED_WORK')
         _require(not db.execute("""SELECT 1 FROM dbt_runs WHERE id!=? AND
             (json_extract(record,'$.state') IN ('QUEUED','BUILDING','TESTING','AUDITING','PUBLISHING',
                 'CANCELING','COMPILING','UNKNOWN','COMMITTED_RECORDING_FAILED')) AND NOT EXISTS (

@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 
-VERSION = 23
+VERSION = 24
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -378,6 +378,23 @@ def _version(connection):
 def _bootstrap(connection):
     if _version(connection) == VERSION and not _v14_repairs(connection):
         return
+    # The admissions rebuild has inbound and self-referencing foreign keys.
+    # SQLite only changes this setting outside a transaction.
+    foreign_keys = connection.execute('PRAGMA foreign_keys').fetchone()[0]
+    connection.execute('PRAGMA foreign_keys=OFF')
+    try:
+        _migrate(connection)
+        if connection.execute('PRAGMA foreign_key_check').fetchone() is not None:
+            raise sqlite3.IntegrityError('control store migration foreign key violation')
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+    finally:
+        connection.execute(f'PRAGMA foreign_keys={foreign_keys}')
+
+
+def _migrate(connection):
     connection.execute('BEGIN IMMEDIATE')
     # Another first opener may have completed bootstrap while we waited.
     if _version(connection) == 0:
@@ -609,12 +626,37 @@ def _bootstrap(connection):
             payload TEXT NOT NULL, context TEXT NOT NULL, pins TEXT NOT NULL,
             record TEXT NOT NULL, UNIQUE(actor,idempotency_key))''')
         connection.execute('PRAGMA user_version=23')
-    connection.commit()
+    if _version(connection) == 23:
+        _migrate_admission_closures(connection)
+        connection.execute('PRAGMA user_version=24')
+
+
+def _migrate_admission_closures(db):
+    """Expand the typed closure constraint without changing retained history."""
+    schema = db.execute("SELECT sql FROM sqlite_master WHERE name='warehouse_admissions' AND type='table'").fetchone()[0]
+    objects = db.execute("""SELECT sql FROM sqlite_master
+        WHERE tbl_name='warehouse_admissions' AND type IN ('index','trigger')
+            AND sql IS NOT NULL ORDER BY type,name""").fetchall()
+    old = "CHECK(execution_closure IN ('','FENCED_READ_ONLY'))"
+    new = "CHECK(execution_closure IN ('','FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))"
+    if old not in schema and new not in schema:
+        raise sqlite3.IntegrityError('unexpected warehouse admission closure constraint')
+    schema = schema.replace(old, new)
+    schema = 'CREATE TABLE warehouse_admissions_v24 (' + schema.split('(', 1)[1]
+    db.execute(schema)
+    # Explicit rowids preserve ordering and any retained references to rowids.
+    columns = ','.join('"' + row['name'].replace('"', '""') + '"'
+                       for row in db.execute('PRAGMA table_info(warehouse_admissions)'))
+    db.execute(f'INSERT INTO warehouse_admissions_v24(rowid,{columns}) SELECT rowid,{columns} FROM warehouse_admissions')
+    db.execute('DROP TABLE warehouse_admissions')
+    db.execute('ALTER TABLE warehouse_admissions_v24 RENAME TO warehouse_admissions')
+    for row in objects:
+        db.execute(row[0])
 
 
 def _migrate_observed_effects(db):
     """Expand effect outcomes inside bootstrap's transaction, retaining authority."""
-    # No table references logical_effects, so it can be rebuilt with FKs enabled.
+    # No table references logical_effects; retain its indexes and triggers.
     objects = db.execute("""SELECT sql FROM sqlite_master
         WHERE tbl_name='logical_effects' AND type IN ('index','trigger')
             AND sql IS NOT NULL ORDER BY type,name""").fetchall()

@@ -1186,6 +1186,25 @@ class StandaloneQueryRecoveryTests(unittest.TestCase):
                     for table in ('query_records', 'query_execution_contexts', 'db_job_runs',
                                   'db_job_steps', 'db_job_operations', 'dataops_operations', 'dataops_queries')}
 
+    def test_unrelated_stage_cleanup_closure_exempts_unknown_query(self):
+        with control_store.connect() as db:
+            q = dict(db.execute('SELECT * FROM query_records WHERE id=?', (self.query_id,)).fetchone(),
+                     id='historical-cleanup-query')
+            a = dict(db.execute('SELECT * FROM warehouse_admissions WHERE subject_id=?',
+                                (self.query_id,)).fetchone(), id='historical-cleanup-admission',
+                     subject_id=q['id'], execution_closure='FENCED_STAGE_CLEANUP')
+            self.assertEqual((q['state'], a['state']), ('UNKNOWN', 'UNKNOWN'))
+            for table, row in (('query_records', q), ('warehouse_admissions', a)):
+                db.execute('INSERT INTO ' + table + ' (' + ','.join(row) + ') VALUES (' +
+                           ','.join('?' for _ in row) + ')', tuple(row.values()))
+        self.assertEqual(self.plan()['phase'], 'PLANNED')
+        # An UNKNOWN query without a closure-bearing admission still blocks.
+        with control_store.connect() as db:
+            db.execute('DELETE FROM warehouse_admissions WHERE id=?', (a['id'],))
+        with self.assertRaises(QueryError) as caught:
+            self.plan(key='unclosed-historical-query')
+        self.assertEqual(caught.exception.code, 'UNRELATED_UNRESOLVED_WORK')
+
     def test_terminal_delimiter_recovery_preserves_original_sql_and_graph(self):
         import warehouse_resident
         cases = [

@@ -47,7 +47,7 @@ TERMINAL = frozenset(('FINISHED', 'FAILED', 'CANCELED'))
 
 def execution_unresolved(row):
     return row['state'] not in TERMINAL and not (
-        row['kind'] == 'query' and row['execution_closure'] == 'FENCED_READ_ONLY')
+        row['kind'] == 'query' and row['execution_closure'] in ('FENCED_READ_ONLY', 'FENCED_STAGE_CLEANUP'))
 
 
 def query_closure(db, query_id):
@@ -238,7 +238,7 @@ def finish(db, handle, *, state, evidence_ref=None):
         raise AdmissionConflict('unknown outcome requires observed evidence')
     if state in TERMINAL and db.execute(
             """SELECT 1 FROM warehouse_admissions WHERE parent_id=? AND state IN ('ACTIVE','UNKNOWN')
-               AND NOT (kind='query' AND execution_closure='FENCED_READ_ONLY')""",
+               AND NOT (kind='query' AND execution_closure IN ('FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))""",
             (handle.id,)).fetchone():
         raise AdmissionConflict('child work is unresolved')
     db.execute('UPDATE warehouse_admissions SET state=?,finished_at=?,evidence_ref=? WHERE id=?',
@@ -248,7 +248,7 @@ def finish(db, handle, *, state, evidence_ref=None):
 def blockers(db, warehouse_id='LOCAL'):
     return tuple(dict(row) for row in db.execute(
         """SELECT * FROM warehouse_admissions WHERE warehouse_id=? AND state IN ('ACTIVE','UNKNOWN')
-           AND NOT (kind='query' AND execution_closure='FENCED_READ_ONLY') ORDER BY created_at,id""",
+           AND NOT (kind='query' AND execution_closure IN ('FENCED_READ_ONLY','FENCED_STAGE_CLEANUP')) ORDER BY created_at,id""",
         (warehouse_id,)))
 
 

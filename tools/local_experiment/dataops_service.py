@@ -1113,13 +1113,33 @@ class Execution:
 
     @_serialized
     def cleanup_committed_ingest_stage(self, ref):
+        return self._cleanup_ingest_stage(ref, committed=True)
+
+    @_serialized
+    def cleanup_failed_ingest_stage(self, ref):
+        return self._cleanup_ingest_stage(ref, committed=False)
+
+    def _cleanup_ingest_stage(self, ref, *, committed):
         row = self._row()
         receipt = json.loads(row['result']) if row['result'] else {}
-        if (row['route'] != 'manual-ingest' or not row['committed']
+        if (row['route'] != 'manual-ingest' or bool(row['committed']) != committed
                 or receipt.get('operation_id') != self.id or receipt.get('atomic') is not True
                 or receipt.get('cleanup') != 'pending' or 'cleanup_phase' in receipt
-                or 'cleanup_mode' in receipt):
+                or 'cleanup_mode' in receipt or (not committed and not receipt.get('error'))):
             raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+
+        def settled(db):
+            if not committed:
+                children = db.execute('''SELECT q.state,a.state AS admission_state
+                    FROM dataops_queries d LEFT JOIN query_records q ON q.id=d.query_id
+                    LEFT JOIN warehouse_admissions a ON a.kind='query' AND a.subject_id=q.id
+                        AND a.warehouse_id=q.warehouse_id WHERE d.operation_id=?''', (self.id,))
+                if any(c['state'] not in queries._TERMINAL or
+                       c['admission_state'] not in admission.TERMINAL for c in children):
+                    raise QueryError('UNRESOLVED_CHILD_QUERIES', 409)
+
+        with control_store.connect() as db:
+            settled(db)
 
         def save(db, previous, *, status, phase, error=None):
             result = dict(receipt, cleanup=status, cleanup_phase=phase,
@@ -1128,8 +1148,8 @@ class Execution:
                 result['cleanup_ack'] = 204
             encoded = _json(result)
             changed = db.execute("""UPDATE dataops_operations SET result=?,cleanup_error=?
-                WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=1 AND result=?""",
-                (encoded, error, self.id, previous)).rowcount
+                WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=? AND result=?""",
+                (encoded, error, self.id, int(committed), previous)).rowcount
             if changed != 1:
                 raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
             return encoded
@@ -1139,6 +1159,8 @@ class Execution:
             context = self._context()
             if type(ref) is not registry.ResourceRef or ref.database_id != context.database_id:
                 raise QueryError('CROSS_DATABASE_TARGET', 409)
+            if isinstance(receipt.get('target'), dict) and receipt['target'].get('object_id') == ref.object_id:
+                raise QueryError('OBJECT_NOT_OWNED', 403)
             schema = self._ingest_schema(ref.schema_id)
             if schema.sql_name != 'sandbox' or schema.purpose != 'sandbox':
                 raise QueryError('SQL_PERMISSION_DENIED', 403)
@@ -1155,6 +1177,7 @@ class Execution:
                     raise QueryError('STALE_RESOURCE', 409)
                 with control_store.connect() as db:
                     db.execute('BEGIN IMMEDIATE')
+                    settled(db)
                     if self._registered_ingest_stage(db, ref, schema) != obj:
                         raise QueryError('STALE_RESOURCE', 409)
                     marker = save(db, row['result'], status='unknown', phase='SENT',

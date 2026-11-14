@@ -63,6 +63,142 @@ def drop_recovery_schema(db):
 
 
 class ControlStoreTests(unittest.TestCase):
+    def v23_admission_history(self, version=23):
+        import data_management as dm
+        with store.connect() as db:
+            database = dm.create_database(db, 'closure_history', 'History', '', 'test')
+            db.execute("INSERT INTO warehouse_controls VALUES ('LOCAL','OPEN',NULL,1,NULL)")
+            for rowid, name, parent, closure in ((7, 'parent', None, ''),
+                    (19, 'child', 'parent', 'FENCED_READ_ONLY')):
+                db.execute('''INSERT INTO warehouse_admissions
+                    (rowid,id,warehouse_id,actor,kind,subject_id,parent_id,state,
+                     created_at,finished_at,evidence_ref,execution_closure,database_id)
+                    VALUES (?,?,'LOCAL','actor','query',?,?,'UNKNOWN',
+                            'created','finished','private-evidence',?,?)''',
+                    (rowid, name, name, parent, closure, database.id))
+            db.execute("INSERT INTO dbt_runs VALUES ('run',?,'{\"retained\":true}','child')", (database.id,))
+            db.execute("INSERT INTO operations VALUES ('recovery','actor','recover','[]',1,'UNKNOWN','[]',NULL,'{}','{}')")
+            db.execute("""INSERT INTO execution_recovery_requests VALUES
+                ('recovery','actor','recover','key','{}','{}',1,'CLOSED','{}',1)""")
+            db.execute('CREATE INDEX admission_history ON warehouse_admissions(database_id) WHERE state=\'UNKNOWN\'')
+            db.execute('''CREATE TRIGGER admission_history_guard BEFORE UPDATE OF actor ON warehouse_admissions
+                BEGIN SELECT RAISE(ABORT,'retained admission actor'); END''')
+        # Construct the actual old constraint without changing historical migrations.
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            db.row_factory = sqlite3.Row
+            db.execute('PRAGMA foreign_keys=OFF')
+            db.execute('BEGIN')
+            schema = db.execute("SELECT sql FROM sqlite_master WHERE name='warehouse_admissions'").fetchone()[0]
+            objects = db.execute("SELECT sql FROM sqlite_master WHERE tbl_name='warehouse_admissions' AND sql IS NOT NULL AND type!='table'").fetchall()
+            schema = schema.replace(
+                "CHECK(execution_closure IN ('','FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))",
+                "CHECK(execution_closure IN ('','FENCED_READ_ONLY'))")
+            db.execute('CREATE TABLE old_admissions (' + schema.split('(', 1)[1])
+            db.execute('INSERT INTO old_admissions SELECT * FROM warehouse_admissions')
+            for rowid, name in ((7, 'parent'), (19, 'child')):
+                db.execute('UPDATE old_admissions SET rowid=? WHERE id=?', (rowid, name))
+            db.execute('DROP TABLE warehouse_admissions')
+            db.execute('ALTER TABLE old_admissions RENAME TO warehouse_admissions')
+            for row in objects:
+                db.execute(row[0])
+            if version == 22:
+                db.execute('DROP TABLE ai_explanations')
+            db.execute(f'PRAGMA user_version={version}')
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            schema = db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall()
+            tables = [r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")]
+            history = {table: db.execute('SELECT rowid,* FROM '+table).fetchall() for table in tables}
+            columns = db.execute('PRAGMA table_info(warehouse_admissions)').fetchall()
+            foreign_keys = db.execute('PRAGMA foreign_key_list(warehouse_admissions)').fetchall()
+        return schema, history, columns, foreign_keys
+
+    def test_v23_closure_upgrade_preserves_rows_references_and_schema_objects(self):
+        schema, history, columns, foreign_keys = self.v23_admission_history()
+        with store.connect() as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+            self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0], 1)
+            for table, rows in history.items():
+                self.assertEqual([tuple(r) for r in db.execute('SELECT rowid,* FROM '+table)], rows, table)
+            after = [tuple(r) for r in db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name')]
+            old_table = next(r[3] for r in schema if r[1] == 'warehouse_admissions')
+            new_table = next(r[3] for r in after if r[1] == 'warehouse_admissions')
+            self.assertEqual(new_table, old_table.replace(
+                "CHECK(execution_closure IN ('','FENCED_READ_ONLY'))",
+                "CHECK(execution_closure IN ('','FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))"))
+            self.assertEqual([r for r in after if r[1] != 'warehouse_admissions'],
+                             [r for r in schema if r[1] != 'warehouse_admissions'])
+            self.assertEqual([tuple(r) for r in db.execute('PRAGMA table_info(warehouse_admissions)')], columns)
+            self.assertEqual([tuple(r) for r in db.execute('PRAGMA foreign_key_list(warehouse_admissions)')], foreign_keys)
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+            for closure in ('', 'FENCED_READ_ONLY', 'FENCED_STAGE_CLEANUP'):
+                db.execute('UPDATE warehouse_admissions SET execution_closure=? WHERE id=\'child\'', (closure,))
+            for closure in ('FENCED_OTHER', 'fenced_stage_cleanup', None):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    db.execute('UPDATE warehouse_admissions SET execution_closure=? WHERE id=\'child\'', (closure,))
+            with self.assertRaisesRegex(sqlite3.IntegrityError, 'retained admission actor'):
+                db.execute("UPDATE warehouse_admissions SET actor='changed'")
+            with self.assertRaises(sqlite3.IntegrityError):
+                db.execute("DELETE FROM warehouse_admissions WHERE id='child'")
+
+    def test_closure_upgrade_failure_rolls_back_entire_chain_and_retries(self):
+        for version in (22, 23):
+            with self.subTest(version=version):
+                if (self.root / 'jobs.sqlite3').exists():
+                    (self.root / 'jobs.sqlite3').unlink()
+                schema, history, _, _ = self.v23_admission_history(version)
+                migrate = store._migrate_admission_closures
+                def fail_after_rebuild(db):
+                    migrate(db)
+                    raise RuntimeError('injected after rebuild')
+                with patch.object(store, '_migrate_admission_closures', fail_after_rebuild):
+                    with self.assertRaisesRegex(RuntimeError, 'injected'):
+                        with store.connect():
+                            self.fail('failed migration accepted')
+                with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+                    self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], version)
+                    self.assertEqual(db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall(), schema)
+                    for table, rows in history.items():
+                        self.assertEqual(db.execute('SELECT rowid,* FROM '+table).fetchall(), rows, table)
+                with store.connect() as db:
+                    self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+                    self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
+    def test_closure_upgrade_checks_foreign_keys_before_commit_and_restores_enforcement(self):
+        schema, history, _, _ = self.v23_admission_history()
+        migrate = store._migrate_admission_closures
+        def corrupt_reference(db):
+            migrate(db)
+            db.execute("UPDATE warehouse_admissions SET database_id='missing'")
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            db.row_factory = sqlite3.Row
+            db.execute('PRAGMA foreign_keys=ON')
+            with patch.object(store, '_migrate_admission_closures', corrupt_reference):
+                with self.assertRaisesRegex(sqlite3.IntegrityError, 'migration foreign key violation'):
+                    store._bootstrap(db)
+            self.assertFalse(db.in_transaction)
+            self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0], 1)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 23)
+            self.assertEqual([tuple(r) for r in db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name')], schema)
+            for table, rows in history.items():
+                self.assertEqual([tuple(r) for r in db.execute('SELECT rowid,* FROM '+table)], rows, table)
+            store._bootstrap(db)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+
+    def test_current_version_connection_does_no_writer_work(self):
+        with store.connect():
+            pass
+        original = sqlite3.connect
+        statements = []
+        def traced(*args, **kwargs):
+            db = original(*args, **kwargs)
+            db.set_trace_callback(statements.append)
+            return db
+        with patch.object(store.sqlite3, 'connect', traced):
+            with store.connect() as db:
+                self.assertEqual(db.execute('PRAGMA foreign_keys').fetchone()[0], 1)
+        self.assertFalse(any(sql.upper().startswith(('BEGIN', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP'))
+                             or 'FOREIGN_KEYS=OFF' in sql.upper() for sql in statements), statements)
+
     def test_v22_ai_upgrade_is_additive_atomic_and_preserves_history(self):
         with store.connect() as db:
             db.execute("INSERT INTO jobs VALUES ('kept-v22','actor','{}','now','now')")
@@ -81,7 +217,7 @@ class ControlStoreTests(unittest.TestCase):
             self.assert_history(db, before)
             db.execute('DROP TABLE ai_explanations')
         with store.connect() as db:
-            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 23)
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
             self.assert_history(db, before)
             self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
                              set(before) | {'ai_explanations'})

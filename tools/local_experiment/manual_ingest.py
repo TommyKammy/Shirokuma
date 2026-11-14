@@ -399,7 +399,20 @@ def _ingest(principal, context, *, idempotency_key, mode, destination=None, targ
                 receipt = observed['result']
             receipt['error'] = getattr(error, 'code', type(error).__name__)
             if observed['state'] == 'ACTIVE':
-                if stage is not None and not (
+                if (stage is not None and not observed['committed']
+                        and execution._row()['route'] == 'manual-ingest'):
+                    try:
+                        # Persist the primary failure before cleanup takes receipt ownership.
+                        _persist(execution, receipt)
+                    except Exception:
+                        return execution._inspect()
+                    try:
+                        execution.cleanup_failed_ingest_stage(stage)
+                    except Exception:
+                        pass
+                    # Never overwrite a durable SENT/ACK with the pre-cleanup receipt.
+                    receipt = execution._inspect()['result']
+                elif stage is not None and not (
                         observed['committed'] and execution._row()['route'] == 'manual-ingest'):
                     try:
                         execution.cleanup(stage, step='failure-cleanup')

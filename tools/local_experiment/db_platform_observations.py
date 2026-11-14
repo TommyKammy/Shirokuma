@@ -124,7 +124,7 @@ def _saved_admissions():
             COUNT(CASE WHEN state='UNKNOWN' THEN 1 END) AS unknown
             FROM warehouse_admissions WHERE warehouse_id='LOCAL'
             AND state IN ('ACTIVE','UNKNOWN')
-            AND NOT (kind='query' AND execution_closure='FENCED_READ_ONLY')""").fetchone()
+            AND NOT (kind='query' AND execution_closure IN ('FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))""").fetchone()
         return dict(active=_integer(row['active']), unknown=_integer(row['unknown']))
 
 

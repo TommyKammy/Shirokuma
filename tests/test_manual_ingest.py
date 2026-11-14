@@ -86,8 +86,10 @@ class ManualIngestTests(unittest.TestCase):
             self.unregister_calls.append((database.sql_catalog, schema.sql_name, name))
             with control_store.connect() as db:
                 op = db.execute("SELECT state,committed,result FROM dataops_operations WHERE state='ACTIVE'").fetchone()
-                self.assertEqual(op['committed'], 1)
                 receipt = json.loads(op['result'])
+                self.assertEqual(op['committed'], int(receipt['committed_batches'] > 0))
+                if not op['committed']:
+                    self.assertTrue(receipt['error'])
                 self.assertEqual((receipt['cleanup'], receipt['cleanup_phase']), ('unknown', 'SENT'))
                 self.assertEqual(receipt['cleanup_mode'], 'CATALOG_UNREGISTER_KEEP_DATA')
             if self.unregister_error is not None:

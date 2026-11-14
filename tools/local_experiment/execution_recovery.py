@@ -1600,7 +1600,8 @@ class QueryRecovery(Recovery):
         _require(not db.execute("""SELECT 1 FROM query_records q WHERE q.id!=?
             AND q.state NOT IN ('FINISHED','FAILED','CANCELED') AND NOT EXISTS (
                 SELECT 1 FROM warehouse_admissions a WHERE a.kind='query' AND a.subject_id=q.id
-                AND a.execution_closure=?)""", (query_id, CLOSURE)).fetchone(), 'UNRELATED_UNRESOLVED_WORK')
+                AND a.execution_closure IN ('FENCED_READ_ONLY','FENCED_STAGE_CLEANUP'))""",
+            (query_id,)).fetchone(), 'UNRELATED_UNRESOLVED_WORK')
         pin = _query_pin(query_id)
         if pin is not None:
             resident = query_service._pins[query_id]
@@ -1683,6 +1684,9 @@ class QueryRecovery(Recovery):
 
 
 def run(args):
+    if args.command.startswith('recover-ingest-'):
+        import ingest_execution_recovery
+        return ingest_execution_recovery.run(args)
     if args.command.startswith('recover-dbt-audit-'):
         import dbt_execution_recovery
         return dbt_execution_recovery.run(args)

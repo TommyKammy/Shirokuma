@@ -434,7 +434,8 @@ class PlatformTests(unittest.TestCase):
             for warehouse in ('LOCAL', 'OTHER'):
                 for state in ('ACTIVE', 'UNKNOWN', 'FINISHED', 'FAILED', 'CANCELED'):
                     for kind, closure in (('query', ''), ('query', 'FENCED_READ_ONLY'),
-                                          ('ai', 'FENCED_READ_ONLY'), ('dbt', '')):
+                                          ('query', 'FENCED_STAGE_CLEANUP'), ('query', 'FENCED_OTHER'),
+                                          ('ai', 'FENCED_READ_ONLY'), ('ai', 'FENCED_STAGE_CLEANUP'), ('dbt', '')):
                         db.execute('INSERT INTO warehouse_admissions VALUES (?,?,?,?,?,?)',
                                    (warehouse, state, kind, closure, 'actor-secret', 'database-secret'))
         original = audit.snapshot
@@ -450,7 +451,7 @@ class PlatformTests(unittest.TestCase):
         with patch.object(audit, 'snapshot', checked):
             result = self.observe()
         self.closed(result)
-        self.assertEqual((result['saved_admissions']['active'], result['saved_admissions']['unknown']), (3, 3))
+        self.assertEqual((result['saved_admissions']['active'], result['saved_admissions']['unknown']), (5, 5))
         self.assertEqual(before, self.files())
         admission_reads = [sql for sql in statements if 'warehouse_admissions' in sql]
         self.assertEqual(len(admission_reads), 1)
