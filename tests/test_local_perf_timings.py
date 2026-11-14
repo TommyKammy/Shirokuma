@@ -5,11 +5,12 @@ from decimal import Decimal
 import json
 from pathlib import Path
 import tempfile
+import threading
 import unittest
 from unittest.mock import MagicMock, patch
 
 from benchmarks.local_perf import runner
-from benchmarks.local_perf.capacity import Campaign
+from benchmarks.local_perf.capacity import Campaign, CapacitySampler
 from benchmarks.local_perf.public import PublicAdapter
 
 
@@ -22,6 +23,131 @@ class Clock:
 
     def advance(self, seconds):
         self.now += seconds
+
+
+class CapacitySamplerTests(unittest.TestCase):
+    def test_initial_interval_completion_and_force(self):
+        clock = Clock()
+        sampler = CapacitySampler(clock=clock)
+        def scan():
+            clock.advance(1)
+            return 'proof'
+        self.assertEqual(sampler.sample(scan), 'proof')
+        clock.advance(.125)
+        self.assertIsNone(sampler.sample(scan))  # scan start + interval has passed
+        clock.advance(.125)
+        self.assertEqual(sampler.sample(scan), 'proof')
+        self.assertEqual(sampler.sample(scan, force=True), 'proof')
+        stats = sampler.snapshot()
+        self.assertEqual(stats['global_requests'], 4)
+        self.assertEqual(stats['global_scans'], 3)
+        self.assertEqual(stats['global_scan_s'], 3)
+        self.assertEqual(stats['global_failed_scans'], 0)
+        self.assertEqual(stats['interval_s'], .2)
+        stats['global_scans'] = 999
+        self.assertEqual(sampler.snapshot()['global_scans'], 3)
+
+    def test_failed_scan_propagates_and_next_request_retries_immediately(self):
+        for prior_success in (False, True):
+            with self.subTest(prior_success=prior_success):
+                clock = Clock()
+                sampler = CapacitySampler(clock=clock)
+                callback = MagicMock(return_value='proof')
+                if prior_success:
+                    sampler.sample(callback)
+                error = TimeoutError('scan failed')
+                def fail():
+                    clock.advance(.05)
+                    raise error
+                with self.assertRaises(TimeoutError) as raised:
+                    sampler.sample(fail, force=prior_success)
+                self.assertIs(raised.exception, error)
+                callback.reset_mock()
+                self.assertEqual(sampler.sample(callback), 'proof')
+                callback.assert_called_once()
+                self.assertIsNone(sampler.sample(callback))
+                callback.assert_called_once()
+                clock.advance(.25)
+                self.assertEqual(sampler.sample(callback), 'proof')
+                self.assertEqual(callback.call_count, 2)
+                stats = sampler.snapshot()
+                self.assertEqual(stats['global_requests'], 4 + int(prior_success))
+                self.assertEqual(stats['global_scans'], 3 + int(prior_success))
+                self.assertEqual(stats['global_failed_scans'], 1)
+                self.assertAlmostEqual(stats['global_scan_s'], .05)
+
+    def test_concurrent_requests_coalesce_without_racing_scans(self):
+        sampler = CapacitySampler(clock=Clock())
+        entered, release, requesting = threading.Event(), threading.Event(), threading.Event()
+        errors = []
+        def scan():
+            entered.set()
+            if not release.wait(2):
+                raise RuntimeError('test release timeout')
+        callback = MagicMock(side_effect=scan)
+        def request(waiter=False):
+            if waiter:
+                requesting.set()
+            try:
+                sampler.sample(callback)
+            except BaseException as exc:
+                errors.append(exc)
+        first = threading.Thread(target=request)
+        second = threading.Thread(target=request, args=(True,))
+        first.start()
+        try:
+            self.assertTrue(entered.wait(2))
+            second.start()
+            self.assertTrue(requesting.wait(2))
+        finally:
+            release.set()
+            first.join(2)
+            if second.ident is not None:
+                second.join(2)
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(errors, [])
+        callback.assert_called_once()
+        self.assertEqual(sampler.snapshot()['global_requests'], 2)
+
+    def test_waiting_request_retries_after_concurrent_scan_failure(self):
+        sampler = CapacitySampler(clock=Clock())
+        entered, release, requesting = threading.Event(), threading.Event(), threading.Event()
+        error = RuntimeError('capacity proof failed')
+        errors = []
+        def fail():
+            entered.set()
+            if not release.wait(2):
+                raise RuntimeError('test release timeout')
+            raise error
+        retry = MagicMock(return_value='proof')
+        def request(callback, waiter=False):
+            if waiter:
+                requesting.set()
+            try:
+                sampler.sample(callback)
+            except BaseException as exc:
+                errors.append(exc)
+        first = threading.Thread(target=request, args=(fail,))
+        second = threading.Thread(target=request, args=(retry, True))
+        first.start()
+        try:
+            self.assertTrue(entered.wait(2))
+            second.start()
+            self.assertTrue(requesting.wait(2))
+        finally:
+            release.set()
+            first.join(2)
+            if second.ident is not None:
+                second.join(2)
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(errors, [error])
+        retry.assert_called_once()
+        stats = sampler.snapshot()
+        self.assertEqual(stats['global_requests'], 2)
+        self.assertEqual(stats['global_scans'], 2)
+        self.assertEqual(stats['global_failed_scans'], 1)
 
 
 class TimingsTests(unittest.TestCase):
@@ -132,6 +258,185 @@ class TimingsTests(unittest.TestCase):
         campaign = Campaign.create(self.root / name)
         manifest = dict(format=1, dataset_id='d', queries=[dict(id='q', sql='SELECT 1')])
         return campaign, manifest
+
+    def test_capacity_forced_boundaries_local_every_callback_and_remaining_peak(self):
+        a = runner.TrinoAdapter('http://localhost:1234')
+        c, manifest = self.run_attempt(a)
+        phase = ['initial']
+        scans = []
+        def global_check(additional):
+            scans.append((phase[0], additional))
+        def execute(sql, out, metadata, deadline, save, check):
+            # Both initial and immediately-before-execute proofs precede dispatch.
+            self.assertEqual([p for p, _ in scans], ['initial'] * 3)  # includes run preflight
+            self.assertEqual(json.loads((out.parent / 'attempt.json').read_text())['status'], 'INTENT')
+            phase[0] = 'execute'
+            for _ in range(20):
+                check()
+            writer = runner.Writer(out, [dict(name='x', type='integer')], metadata)
+            writer.row([1])
+            writer.finish()
+            phase[0] = 'delivered'
+        def validate(path, order, check):
+            self.assertEqual(scans[-1][0], 'delivered')
+            phase[0] = 'validation'
+            for _ in range(10):
+                check()
+            phase[0] = 'validated'
+        local = MagicMock(side_effect=lambda path: self.clock.advance(.001) or
+                         (100 if phase[0] == 'initial' else 150))
+        with patch.object(c, 'check', side_effect=global_check), patch.object(a, 'execute', execute), \
+                patch.object(runner, 'validate_order', validate), patch.object(runner, 'allocated', local):
+            root = runner.run(c, 'result', manifest, a, reference_label='test')
+        guard = json.loads((root / 'q-0/attempt.json').read_text())['capacity_guard']
+        self.assertEqual([p for p, _ in scans], ['initial'] * 3 + ['delivered', 'validated'])
+        self.assertEqual(guard['check_calls'], 34)
+        self.assertEqual(local.call_count, guard['check_calls'] + 1)  # initial root baseline
+        self.assertEqual(guard['global_requests'], 34)
+        self.assertEqual(guard['global_scans'], 4)
+        self.assertAlmostEqual(guard['local_peak_check_s'], .034)
+        self.assertEqual([n for _, n in scans], [scans[0][1]] * 3 + [scans[0][1] - 50] * 2)
+
+    def test_capacity_each_forced_boundary_failure_stays_in_recovery(self):
+        for fail_at in (4, 5):  # delivery, final validation proof
+            with self.subTest(fail_at=fail_at):
+                a = runner.TrinoAdapter('http://localhost:1234')
+                c, manifest = self.run_attempt(a, f'boundary-{fail_at}')
+                scans = []
+                error = RuntimeError('boundary capacity')
+                def scan(additional):
+                    scans.append(additional)
+                    if len(scans) == fail_at:
+                        raise error
+                def execute(sql, out, metadata, deadline, save, check):
+                    writer = runner.Writer(out, [dict(name='x', type='integer')], metadata)
+                    writer.row([1])
+                    writer.finish()
+                    save({'id': 'q'})
+                with patch.object(c, 'check', side_effect=scan), patch.object(a, 'execute', side_effect=execute) as dispatch, \
+                        patch.object(a, 'cancel_reconcile', return_value='FINISHED') as recover:
+                    with self.assertRaises(RuntimeError) as raised:
+                        runner.run(c, 'result', manifest, a, reference_label='test')
+                self.assertIs(raised.exception, error)
+                dispatch.assert_called_once()
+                recover.assert_called_once_with({'id': 'q'})
+                intent = json.loads((c.root / 'result/q-0/attempt.json').read_text())
+                self.assertEqual(intent['status'], 'FAILED')
+                self.assertEqual(intent['capacity_guard']['global_scans'], fail_at - 1)
+                self.assertEqual(intent['capacity_guard']['global_failed_scans'], 1)
+                self.assertIsNone(intent['timings']['events']['validation_complete'])
+
+    def test_capacity_local_peak_and_deadline_are_not_sampled(self):
+        for failure in ('peak', 'deadline'):
+            with self.subTest(failure=failure):
+                a = runner.TrinoAdapter('http://localhost:1234')
+                c, manifest = self.run_attempt(a, failure)
+                growth = [0]
+                def execute(sql, out, metadata, deadline, save, check):
+                    for _ in range(10):
+                        check()
+                    if failure == 'peak':
+                        growth[0] = 10 ** 15
+                    else:
+                        self.clock.now = deadline
+                    check()
+                    self.fail('callback must fail immediately')
+                with patch.object(c, 'check') as scans, patch.object(a, 'execute', execute), \
+                        patch.object(a, 'cancel_reconcile', return_value='UNKNOWN'), \
+                        patch.object(runner, 'allocated', side_effect=lambda p: growth[0]):
+                    with self.assertRaisesRegex(RuntimeError if failure == 'peak' else TimeoutError,
+                                                'declared run peak' if failure == 'peak' else 'deadline'):
+                        runner.run(c, 'result', manifest, a, reference_label='test')
+                intent = json.loads((c.root / 'result/q-0/attempt.json').read_text())
+                self.assertEqual(intent['status'], 'UNKNOWN')
+                self.assertEqual(intent['capacity_guard']['check_calls'], 13)
+                self.assertEqual(intent['capacity_guard']['global_requests'], 12)
+                self.assertEqual(scans.call_count, 3)
+
+    def test_capacity_preflight_scan_failure_and_post_scan_deadline_are_unsubmitted(self):
+        for fail_at in (2, 3):  # initial and pre-dispatch; call 1 is run preflight
+            for failure in ('scan', 'deadline'):
+                with self.subTest(fail_at=fail_at, failure=failure):
+                    a = runner.TrinoAdapter('http://localhost:1234')
+                    c, manifest = self.run_attempt(a, f'{failure}-{fail_at}')
+                    calls = []
+                    error = RuntimeError('scan failure')
+                    def scan(additional):
+                        calls.append(additional)
+                        if len(calls) != fail_at:
+                            return
+                        self.assertFalse((c.root / 'result/q-0/attempt.json').exists())
+                        self.clock.advance(1000 if failure == 'deadline' else 2)
+                        if failure == 'scan':
+                            raise error
+                    with patch.object(c, 'check', side_effect=scan), patch.object(a, 'execute') as execute, \
+                            patch.object(a, 'cancel_reconcile') as cancel, patch.object(PublicAdapter, 'recover') as recover:
+                        with self.assertRaisesRegex(RuntimeError if failure == 'scan' else TimeoutError,
+                                                    'scan failure' if failure == 'scan' else 'deadline') as raised:
+                            runner.run(c, 'result', manifest, a, reference_label='test')
+                    if failure == 'scan':
+                        self.assertIs(raised.exception, error)
+                    execute.assert_not_called()
+                    cancel.assert_not_called()
+                    recover.assert_not_called()
+                    self.assertEqual(len(calls), fail_at)
+                    self.assertFalse((c.root / 'result/q-0/attempt.json').exists())
+                    report = json.loads((c.root / 'result/run.json').read_text())
+                    self.assertEqual(report['status'], 'FAILED')
+                    self.assertEqual(report['attempts'], [])
+                    self.assertEqual(report['planned_attempts'], 1)
+                    self.assertEqual(report['not_run_attempts'], 1)
+                    self.assertEqual(report['pending_attempts'], 0)
+                    self.assertEqual(c.state['owned']['result']['status'], 'FAILED')
+
+    def test_capacity_post_scan_deadline_after_dispatch_retains_instrumentation(self):
+        for phase in ('execute', 'delivered', 'validated'):
+            with self.subTest(phase=phase):
+                a = runner.TrinoAdapter('http://localhost:1234')
+                c, manifest = self.run_attempt(a, phase)
+                calls = []
+                current = ['preflight']
+                def scan(additional):
+                    calls.append(current[0])
+                    if current[0] == phase:
+                        self.clock.advance(1000)
+                def execute(sql, out, metadata, deadline, save, check):
+                    save({'id': 'q'})
+                    current[0] = 'execute'
+                    if phase == 'execute':
+                        self.clock.advance(.25)  # ordinary callback must perform a fresh scan
+                        check()
+                    writer = runner.Writer(out, [dict(name='x', type='integer')], metadata)
+                    writer.row([1])
+                    writer.finish()
+                    current[0] = 'delivered'
+                def validate(path, order, check):
+                    current[0] = 'validated'
+                with patch.object(c, 'check', side_effect=scan), patch.object(a, 'execute', side_effect=execute) as dispatch, \
+                        patch.object(a, 'cancel_reconcile', return_value='FINISHED') as cancel, \
+                        patch.object(runner, 'validate_order', validate):
+                    with self.assertRaisesRegex(TimeoutError, 'deadline'):
+                        runner.run(c, 'result', manifest, a, reference_label='test')
+                dispatch.assert_called_once()
+                cancel.assert_called_once_with({'id': 'q'})
+                intent = json.loads((c.root / 'result/q-0/attempt.json').read_text())
+                self.assertEqual(intent['status'], 'FAILED')
+                self.assertEqual(intent['error_type'], 'TimeoutError')
+                guard = intent['capacity_guard']
+                self.assertEqual(guard['global_scans'], len(calls) - 1)
+                self.assertEqual(guard['global_requests'], len(calls) - 1)
+                self.assertEqual(guard['check_calls'], len(calls) - 1)
+                self.assertEqual(guard['global_failed_scans'], 0)
+                self.assertEqual(guard['global_scan_s'], 1000)
+                events = intent['timings']['events']
+                self.assertIsNotNone(events['recovery_complete'])
+                self.assertIsNotNone(events['attempt_complete'])
+                self.assertIsNone(events['validation_complete'])
+                self.assertEqual(events['result_complete'] is None, phase == 'execute')
+                report = json.loads((c.root / 'result/run.json').read_text())
+                self.assertEqual(report['status'], 'FAILED')
+                self.assertEqual(report['not_run_attempts'], 0)
+                self.assertEqual(report['attempts'][0]['status'], 'FAILED')
 
     def test_page_boundaries_serialization_and_validation_independent(self):
         a = runner.TrinoAdapter('http://localhost:1234')

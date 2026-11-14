@@ -552,6 +552,8 @@ are retained; the accepted run uses the separately recorded temporary profile.
 The baseline was restored afterward without rewriting the historical UNKNOWN. The subsequent [formal coordinator resource profile](../../docs/guides/performance-coordinator-profile-2026-11-14.md) provides optional typed CPU/memory/heap settings, canonical rollout, rollback and normal stop/wake validation. The selected coordinator heap8GiB/container12GiB keeps worker and query-memory limits unchanged.
 See the [TPC-DS and timing record](../../docs/guides/performance-tpcds-timings-2026-11-14.md).
 
+The follow-up [variant and instrumentation record](../../docs/guides/performance-tpcds-variants-instrumentation-2026-11-14.md) distinguishes the unchanged 99-query corpus, four supplemental iteration cases and 14 separately pending approved variants. It also records offline observer-cost measurements and sampled global capacity checks in the runner, with deadline/local peak checks retained on every callback.
+
 Remaining P1/G1 work includes other-scale qualification, TPC-DS variants beyond
 the fixed 99-query corpus, engine telemetry unavailable through the current API,
 and cold/concurrent failure conditions. Initial generated manifests remain

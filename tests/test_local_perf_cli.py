@@ -102,6 +102,19 @@ class CliTests(unittest.TestCase):
                     load.assert_not_called()
                     adapter.assert_not_called()
 
+    def test_specific_supplement_cli_dispatch(self):
+        module = ModuleType('benchmarks.local_perf.tpcds_variants')
+        module.prepare_supplement = Mock(return_value='supplement-plan')
+        with patch.dict(sys.modules, {module.__name__: module}):
+            out, err = self.invoke('prepare-tpcds-supplement', self.campaign.root, 'dataset', 'plan',
+                                   '--source-dir', 'private', '--timeout', '12.5')
+            self.assertEqual((json.loads(out), err), ('supplement-plan', ''))
+            self.assertEqual(module.prepare_supplement.call_args.args[1:], ('dataset', 'plan'))
+            self.assertEqual(module.prepare_supplement.call_args.kwargs, dict(timeout=12.5, source_dir='private'))
+            module.prepare_supplement.reset_mock()
+            self.invoke('prepare-supplement', self.campaign.root, 'dataset', 'plan', '--source-dir', 'private', code=2)
+            module.prepare_supplement.assert_not_called()
+
     def test_prepare_dispatch_and_tpch_defaults_preserved(self):
         dataset = self.root / "dataset.json"
         for suite, flags, expected in (("tpch", [], {}), ("tpcds", [], {"timeout": 300}),

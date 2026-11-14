@@ -202,22 +202,34 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
                                       for t in meta["tables"]}:
         raise ValueError("dataset input schema contract mismatch")
     rules = contracts()
+    return _prepare_parity(campaign, dataset, name, meta, version, dataset_text, source_text,
+                           manifest, rules, timeout, abs_tol, rel_tol)
+
+
+def _prepare_parity(campaign, dataset, name, meta, version, dataset_text, source_text,
+                    manifest, rules, timeout, abs_tol, rel_tol, recheck=lambda: None, source_bodies=None, *, absolute_deadline=None):
+    """Shared full-result parity and owned scratch lifecycle for qualified suites."""
+    from .runner import dataset_read
     campaign.check()
     out = campaign.own(name, "tpcds-plan")
-    record = dict(format=1, suite=SUITE, status="INCOMPLETE", source_dataset_id=source["dataset_id"],
-                  source_manifest_sha256=digest(source_text), abs_tol=abs_tol, rel_tol=rel_tol,
+    record = dict(format=1, suite=manifest.get("suite", SUITE), status="INCOMPLETE", source_dataset_id=meta["dataset_id"],
+                  source_manifest_sha256=manifest["source_manifest_sha256"], abs_tol=abs_tol, rel_tol=rel_tol,
                   equivalence="same-engine full multiset source/cast/portable; independent engine required", queries=[])
     write_json(out / "plan.json", record)
     write_json(out / "queries.json", manifest)
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + timeout if absolute_deadline is None else absolute_deadline
     con = None
 
     def check():
         if time.monotonic() >= deadline:
             raise TimeoutError("TPC-DS plan deadline")
         campaign.check()
+        if absolute_deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("TPC-DS plan deadline")
 
     try:
+        if absolute_deadline is not None:
+            check()
         con = connect(out / "parity.duckdb", out / "spill")
         with bounded(con, check, deadline):
             for t in meta["tables"]:
@@ -235,10 +247,13 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
                 check()
                 rule = rules[q["id"]]
                 pair = dict(source_hash=q["source_sha256"], portable_hash=q["logical_sha256"],
-                            source_dataset_id=source["dataset_id"])
+                            source_dataset_id=manifest["source_dataset_id"])
                 audit = dict(id=q["id"], status="INCOMPLETE", equivalence_contract=pair)
+                if "source_normalization" in q:
+                    audit["source_normalization"] = q["source_normalization"]
                 record["queries"].append(audit)
-                variants = {"source": q["source_sql"], "source_cast": projection(q["source_sql"], rule), "portable": q["sql"]}
+                source_body = source_bodies[q["id"]] if source_bodies is not None else q["source_sql"]
+                variants = {"source": q["source_sql"], "source_cast": projection(source_body, rule), "portable": q["sql"]}
                 for label, sql in variants.items():
                     path = out / (q["id"] + "-" + label + ".jsonl")
                     audit[label] = _stream(con, sql, path, q["columns"], pair, check)
@@ -249,7 +264,7 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
                 audit.update(rows=audit["source"]["rows"], nonempty=audit["source"]["rows"] > 0)
                 # Audit both bodies, including when source already reports a tie.
                 ties = []
-                for label, sql in (("limit_audit", q["source_sql"]), ("portable_limit_audit", rule["portable_body"])):
+                for label, sql in (("limit_audit", source_body), ("portable_limit_audit", rule["portable_body"])):
                     try:
                         audit[label] = audit_limit(con, sql, rule, check)
                     except UnsupportedBoundaryTie as exc:
@@ -259,9 +274,14 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
                     raise ties[0]
                 audit["status"] = "SUCCESS"
                 write_json(out / "plan.json", record)
+        if absolute_deadline is not None:
+            check()
         if ((dataset / "dataset.json").read_text() != dataset_text
                 or (dataset / "queries.json").read_text() != source_text):
             raise ValueError("source manifest changed")
+        recheck()
+        if absolute_deadline is not None:
+            check()
         record.update(status="SUCCESS", query_count=len(record["queries"]),
                       nonempty_queries=sum(q["nonempty"] for q in record["queries"]),
                       result_rows=sum(q["rows"] for q in record["queries"]))
@@ -290,6 +310,11 @@ def prepare_tpcds(campaign, dataset, name, timeout=120, abs_tol=1e-8, rel_tol=1e
 
 def bind_snapshots(manifest, pins):
     """Bind all 24 relations through an outer CTE scope; preserve scalar names."""
+    from .tpcds_variants import SUITE as SUPPLEMENT_SUITE, validate_manifest
+    if manifest.get("suite") == SUPPLEMENT_SUITE:
+        expected = validate_manifest(manifest)
+    else:
+        expected = None
     from .public import context
     if pins.get("status") != "SUCCESS":
         raise ValueError("successful snapshot freeze required")
@@ -301,11 +326,12 @@ def bind_snapshots(manifest, pins):
         raise ValueError("exact source dataset and 24 snapshot tables required")
     if manifest.get("context") is not None and manifest["context"] != ctx:
         raise ValueError("snapshot context mismatch")
-    expected = logical_manifest(dict(format=1, dataset_id=manifest["source_dataset_id"], queries=[
-        dict(id=q["id"], sql=q["source_sql"], sql_sha256=q["source_sha256"]) for q in manifest["queries"]]))
+    if expected is None:
+        expected = logical_manifest(dict(format=1, dataset_id=manifest["source_dataset_id"], queries=[
+            dict(id=q["id"], sql=q["source_sql"], sql_sha256=q["source_sha256"]) for q in manifest["queries"]]))
     if (type(manifest.get("format")) is not int or manifest.get("format") != 1
             or manifest.get("dataset_id") != manifest["source_dataset_id"]
-            or manifest.get("source_hashes") != expected["source_hashes"] or manifest.get("suite") != SUITE):
+            or manifest.get("source_hashes") != expected["source_hashes"] or manifest.get("suite") != expected["suite"]):
         raise ValueError("source hash set/suite mismatch")
     for q, e in zip(manifest["queries"], expected["queries"]):
         for key in ("logical_sql", "logical_sha256", "columns", "order_by", "limit", "ordered", "rewrite_provenance"):

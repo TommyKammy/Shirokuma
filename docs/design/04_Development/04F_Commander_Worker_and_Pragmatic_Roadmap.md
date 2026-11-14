@@ -5,12 +5,18 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.99"
+version: "1.100"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[TPC-DSの対応範囲と計測器負荷](../../guides/performance-tpcds-variants-instrumentation-2026-11-14.md)を整備した。既存99を維持し、固定Flink4 iteration補完を別suiteで準備・bindし、承認variant14件は別の未受入対象として明示した。
+既存24表pinsの4本/28行が参照・直接Trino・公開APIで一致。synthetic数値経路も別caseで確認し、runnerは全callbackの期限/local peakを維持して全体容量走査を200ms samplingし、attemptに負荷を記録する。
+200,006行の型・全値・重複が両経路で一致し、比較込み約18.6秒/21.6秒を観測した。これは検証器改善でありengine性能の実績に使わない。既存99contract bytesと既存テストを保持した。
+Make160群は5,806成功・69 skip・失敗0。最終の試験出力先2箇所修正も対象17件を再確認し、元59表/履歴/資源・OOM/再起動0・doctor healthy 46項目を保持した。
+次は承認variantの由来/方言/oracle受入、別scaleと観測負荷を確認する。L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
 
 2026-11-14 JST、[Parquet分割生成・複数ファイル登録](../../guides/performance-parquet-shards-2026-11-14.md)を整備した。既存format 1を維持し、format 2の明示file一覧、source系譜、全内容照合と表単位1回commitを追加した。
 TPC-H SF0.01の8表/28file/22 SQL、TPC-DSの24表/65file/99 SQLの参照方言照合が成功。後者の300秒期限切れは保持し、別の600秒検証枠で再確認した。

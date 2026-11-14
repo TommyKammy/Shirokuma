@@ -69,4 +69,4 @@ TPC-DSの最初の参照方言照合は、84件完了後に300秒のplan期限�
 
 追加物理占有2TB、host予備256GiB、guest data予備 `max(64GiB,10%)` とroot予備 `max(4GiB,10%)` を維持する。元campaignのVM/state baselineを容量台帳として継続し、過去のartifact/SDK領域と新artifactを加算する。別campaignの参照方言照合を並行した間も、その次工程2GiB枠を追加予約した。最終実機観測のhost空きは約3.098TB。現在のcoordinator heap8GiB/container12GiB、worker heap2GiB/container4GiB、VM16 CPU/96GiB/400GiBは変更しない。
 
-次は残るTPC-DS variant/scaleと計測器負荷を整理し、L1/guest disk拡張、100GB pilotでサイズ・生成/取込時間・spillを再見積りする。
+後続の[TPC-DSの対応範囲と計測器負荷](performance-tpcds-variants-instrumentation-2026-11-14.md)で、iteration補完と承認variantを分け、runnerの全体容量走査を間引く改善を進めた。残る承認variant/scaleと観測負荷を確認し、L1/guest disk拡張、100GB pilotでサイズ・生成/取込時間・spillを再見積りする。

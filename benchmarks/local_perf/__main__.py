@@ -57,7 +57,7 @@ def main():
     p.add_argument("dataset")
     p.add_argument("reference")
     p.add_argument("name")
-    for command in ("prepare-ingest", "load-public", "freeze-snapshots", "prepare-tpch", "prepare-tpcds"):
+    for command in ("prepare-ingest", "load-public", "freeze-snapshots", "prepare-tpch", "prepare-tpcds", "prepare-tpcds-supplement"):
         p = commands.add_parser(command)
         p.add_argument("campaign")
         p.add_argument("input")
@@ -68,8 +68,11 @@ def main():
             add_adapter(p, public_only=True)
             if command == "load-public":
                 p.add_argument("--batch-size", type=ingest_batch_size, default=2000)
-        elif command == "prepare-tpcds":
+        elif command in ("prepare-tpcds", "prepare-tpcds-supplement"):
             p.add_argument("--timeout", type=positive_timeout, default=300)
+            if command == "prepare-tpcds-supplement":
+                p.add_argument("--source-dir", required=True)
+    commands.add_parser("tpcds-coverage")
     p = commands.add_parser("load-bulk")
     p.add_argument("campaign")
     p.add_argument("dataset")
@@ -181,12 +184,19 @@ def main():
         elif cmd == "verify-snapshots":
             from .snapshots import verify_snapshots
             result = str(verify_snapshots(Campaign(args.campaign), args.pins, adapter(args)))
-        elif cmd in ("prepare-tpch", "prepare-tpcds"):
-            if cmd == "prepare-tpcds":
+        elif cmd == "tpcds-coverage":
+            from .tpcds_variants import coverage
+            result = coverage()
+        elif cmd in ("prepare-tpch", "prepare-tpcds", "prepare-tpcds-supplement"):
+            if cmd == "prepare-tpcds-supplement":
+                from .tpcds_variants import prepare_supplement as prepare
+            elif cmd == "prepare-tpcds":
                 from .tpcds_sql import prepare_tpcds as prepare
             else:
                 from .tpch_sql import prepare_tpch as prepare
-            options = {"timeout": args.timeout} if cmd == "prepare-tpcds" else {}
+            options = {"timeout": args.timeout} if cmd in ("prepare-tpcds", "prepare-tpcds-supplement") else {}
+            if cmd == "prepare-tpcds-supplement":
+                options["source_dir"] = args.source_dir
             result = str(prepare(Campaign(args.campaign), args.input, args.name, **options))
         elif cmd in ("bind-tpch", "bind-tpcds", "table-manifest"):
             from .snapshots import table_manifest

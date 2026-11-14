@@ -1,11 +1,58 @@
 """Campaign-wide physical accounting. Guest files are image contents, not additions."""
 import json
 import os
+import math
 from pathlib import Path
 import shutil
+import threading
+import time
 import uuid
 
 from .protocol import GIB, LIMIT, protocol
+
+
+class CapacitySampler:
+    """Serialize scans; ordinary requests coalesce until interval after completion.
+
+    sample returns the callback result for an actual scan, otherwise None.
+    Forced requests always scan. Only successful scans defer ordinary requests;
+    failures clear the deadline and propagate the callback exception unchanged.
+    """
+    def __init__(self, interval_s=0.2, clock=None):
+        if not math.isfinite(interval_s) or interval_s < 0:
+            raise ValueError("finite nonnegative sampling interval required")
+        self.interval_s = interval_s
+        self.clock = clock if clock is not None else time.monotonic
+        self._lock = threading.Lock()
+        self._next = None
+        self._requests = self._scans = self._failures = 0
+        self._seconds = 0.
+
+    def sample(self, callback, *, force=False):
+        with self._lock:
+            self._requests += 1
+            if not force and self._next is not None and self.clock() < self._next:
+                return None
+            started = self.clock()
+            self._scans += 1
+            try:
+                result = callback()
+            except BaseException:
+                self._failures += 1
+                self._next = None
+                raise
+            finally:
+                completed = self.clock()
+                self._seconds += completed - started
+            self._next = completed + self.interval_s
+            return result
+
+    def snapshot(self):
+        with self._lock:
+            return dict(version=1, units="seconds", interval_s=self.interval_s,
+                        global_requests=self._requests, global_scans=self._scans,
+                        global_failed_scans=self._failures, global_scan_s=self._seconds,
+                        semantics="serialized scans; interval from successful completion; failures clear deadline; force always scans")
 
 
 def write_json(path, value):

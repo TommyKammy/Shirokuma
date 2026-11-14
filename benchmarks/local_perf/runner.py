@@ -18,7 +18,7 @@ import time
 import urllib.parse
 import uuid
 
-from .capacity import Campaign, allocated, write_json
+from .capacity import Campaign, CapacitySampler, allocated, write_json
 from .engine import bounded, connect, ident, quote
 from .protocol import settings
 from .results import Reader, Writer, column, compare, validate_order
@@ -561,16 +561,33 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                 started = time.monotonic()
                 timing = Timings(started)
                 deadline = started + cfg["timeout_s"]
+                sampler = CapacitySampler()
+                guard_lock = threading.Lock()
+                guard = dict(check_calls=0, local_peak_check_s=0.,
+                             local_semantics="deadline and run allocated growth/declared peak checked on every callback; deadline rechecked after global sampling")
 
-                def check():
+                def check(*, force=False):
+                    with guard_lock:
+                        guard["check_calls"] += 1
                     if time.monotonic() >= deadline:
                         raise TimeoutError("fetch/validation deadline")
-                    growth = max(0, allocated(root) - initial)
-                    if growth > cfg["peak_bytes"]:
-                        raise RuntimeError("declared run peak exceeded")
-                    campaign.check(max(0, cfg["peak_bytes"] - growth))
+                    local_started = time.monotonic()
+                    try:
+                        growth = max(0, allocated(root) - initial)
+                        if growth > cfg["peak_bytes"]:
+                            raise RuntimeError("declared run peak exceeded")
+                    finally:
+                        local_seconds = time.monotonic() - local_started
+                        with guard_lock:
+                            guard["local_peak_check_s"] += local_seconds
+                    sampler.sample(lambda: campaign.check(max(0, cfg["peak_bytes"] - growth)), force=force)
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("fetch/validation deadline")
 
-                check()
+                check(force=True)
+                metadata = result_metadata(manifest, q)
+                check(force=True)
+
                 intent = dict(status="INTENT", request_id=str(uuid.uuid4()), query_id=q["id"], sql=q[sql_variant],
                               adapter=adapter.name, adapter_identity=identity, sql_sha256=sql_identity(q[sql_variant]), handle=None, elapsed_s=None, dataset_id=manifest.get("dataset_id"),
                               timeout_s=cfg["timeout_s"], wall_started=time.time(),
@@ -602,9 +619,9 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                 adapter.timings = timing
                 adapter.request_kind = None
                 try:
-                    metadata = result_metadata(manifest, q)
                     adapter.execute(q[sql_variant], attempt / "result.jsonl", metadata, deadline, save, check)
                     timing.mark("result_complete")
+                    check(force=True)
                     timing.mark("validation_started")
                     if "columns" in q:
                         reader = Reader(attempt / "result.jsonl")
@@ -619,7 +636,7 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                         reference = Path(references) / query_path(q["id"], 0) / "result.jsonl"
                         compare(reference, attempt / "result.jsonl", ordered=q.get("ordered", False),
                                 abs_tol=abs_tol, rel_tol=rel_tol, scratch=attempt, check=check)
-                    check()
+                    check(force=True)  # Final capacity proof after full validation.
                     timing.mark("validation_complete")
                     intent.update(status="SUCCESS", fetch_s=fetched - started,
                                   validation_s=time.monotonic() - fetched,
@@ -645,6 +662,9 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
                 finally:
                     timing.mark("attempt_complete")
                     intent["timings"] = timing.snapshot()
+                    intent["capacity_guard"] = sampler.snapshot()
+                    with guard_lock:
+                        intent["capacity_guard"].update(guard)
                     adapter.timings = previous_timing
                     adapter.request_kind = None
                     intent["elapsed_s"] = time.monotonic() - started
