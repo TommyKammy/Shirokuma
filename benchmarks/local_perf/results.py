@@ -1,6 +1,21 @@
-"""Typed JSONL stream with mandatory terminal footer and disk-backed full comparison."""
+"""Typed JSONL streams, full comparison, and projected ORDER BY validation.
+
+ORDER BY is a list of flat contracts (indices are zero-based projected columns):
+    {"index": INT, "descending": BOOL, "nulls": "first" | "last"}
+    {"expression": {"op": "subtract", "left": INT, "right": INT},
+     "descending": BOOL, "nulls": "first" | "last"}
+    {"expression": {"op": "case_equal", "condition": INT, "value": INT, "then": INT},
+     "descending": BOOL, "nulls": "first" | "last"}
+
+Subtract accepts numeric columns; CASE compares an integer column with an exact
+integer literal and returns the projected ``then`` column, otherwise NULL.
+No SQL text, nested expressions, or additional keys are accepted. Duplicate keys
+are rejected regardless of direction/null placement. validate_order_contract
+validates this schema; order_values decodes Reader-validated typed cells using a
+validated contract. NULL subtraction and a NULL CASE condition produce NULL.
+"""
 import datetime as dt
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import hashlib
 import itertools
 import json
@@ -182,28 +197,33 @@ def exact_key(row):
 def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=None, check=lambda: None):
     """Full values, duplicates and footer verified; SQLite cache limited to 8 MiB.
 
-    Tolerant unordered rows use disk-backed augmenting-path matching, avoiding
+    Exact unordered multisets bypass tolerance matching after full validation.
+    Otherwise tolerant rows use disk-backed augmenting-path matching, avoiding
     the false negatives of greedy float matching. Cost may be high for large
     all-float groups; deadlines/capacity callbacks also cover validation.
     """
     if any(not math.isfinite(t) or t < 0 for t in (abs_tol, rel_tol)):
         raise ValueError("invalid floating tolerance")
-    a, b = Reader(left), Reader(right)
+    check()
+    a, b = Reader(left), None
     try:
+        b = Reader(right)
         if a.header != b.header:
             raise ValueError("metadata/schema/columns mismatch")
         if ordered:
             sentinel = object()
-            for x, y in itertools.zip_longest(a, b, fillvalue=sentinel):
-                check()
+            for n, (x, y) in enumerate(itertools.zip_longest(a, b, fillvalue=sentinel), 1):
+                if n % 256 == 0:
+                    check()
                 if x is sentinel or y is sentinel or not equal(x, y, abs_tol, rel_tol):
                     raise ValueError("ordered result mismatch")
+            check()
             return True
         with tempfile.TemporaryDirectory(prefix="compare-", dir=scratch) as tmp:
             db = sqlite3.connect(str(Path(tmp) / "rows.db"))
+            progress_errors = []
             try:
                 db.execute("PRAGMA temp_store_directory=" + "'" + tmp.replace("'", "''") + "'")
-                progress_errors = []
                 def progress():
                     try:
                         check()
@@ -229,14 +249,21 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
                 db.commit()
                 if counts[0] != counts[1]:
                     raise ValueError("row count/duplicate loss")
-                if abs_tol == rel_tol == 0:
-                    diff = db.execute("SELECT v,count(*) FROM a GROUP BY v EXCEPT SELECT v,count(*) FROM b GROUP BY v").fetchone()
-                    check()
-                    if diff:
-                        raise ValueError("multiset value/duplicate mismatch")
+                # Equal total counts make this whole-multiset proof sufficient.
+                # Do not remove partial exact pairs: approximate matching may
+                # need to reassign them along an augmenting path.
+                diff = db.execute("SELECT v,count(*) FROM a GROUP BY v EXCEPT SELECT v,count(*) FROM b GROUP BY v").fetchone()
+                check()
+                if diff is None:
                     return True
+                if abs_tol == rel_tol == 0:
+                    raise ValueError("multiset value/duplicate mismatch")
+                operations = 0
+                check()
                 for (start,) in db.execute("SELECT id FROM a"):
-                    check()
+                    operations += 1
+                    if operations % 256 == 0:
+                        check()
                     db.execute("DELETE FROM seen")
                     db.execute("INSERT INTO seen VALUES(?,NULL,NULL,0)", (start,))
                     found = False
@@ -249,7 +276,9 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
                         key, text = db.execute("SELECT k,v FROM a WHERE id=?", (node,)).fetchone()
                         row = json.loads(text)
                         for bid, other, matched in db.execute("SELECT id,v,matched FROM b WHERE k=?", (key,)):
-                            check()
+                            operations += 1
+                            if operations % 256 == 0:
+                                check()
                             if not equal(row, json.loads(other), abs_tol, rel_tol):
                                 continue
                             if matched is None:
@@ -263,6 +292,7 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
                                 break
                             db.execute("INSERT OR IGNORE INTO seen VALUES(?,?,?,0)", (matched, node, bid))
                     db.commit()
+                check()
                 return True
             except sqlite3.OperationalError as exc:
                 if progress_errors:
@@ -272,7 +302,8 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
                 db.close()
     finally:
         a.f.close()
-        b.f.close()
+        if b is not None:
+            b.f.close()
 
 
 def decoded(value):
@@ -284,25 +315,100 @@ def decoded(value):
             "ts": dt.datetime.fromisoformat, "s": str, "b": lambda x: x}[tag](raw)
 
 
+_INTEGER_TYPES = {"tinyint", "smallint", "integer", "bigint", "hugeint", "ubigint"}
+
+
+def validate_order_contract(columns, order_by):
+    """Reject unsupported types, non-flat contracts, and repeated ORDER keys."""
+    kinds = [column(c["name"], c["type"])["type"] for c in columns]
+    if not isinstance(order_by, list):
+        raise ValueError("order_by list required")
+
+    def index(value):
+        if type(value) is not int or not 0 <= value < len(kinds):
+            raise ValueError("invalid ORDER BY column index")
+        return kinds[value]
+
+    seen = set()
+    for key in order_by:
+        if (not isinstance(key, dict)
+                or set(key) not in ({"index", "descending", "nulls"},
+                                    {"expression", "descending", "nulls"})
+                or type(key["descending"]) is not bool
+                or key["nulls"] not in ("first", "last")):
+            raise ValueError("invalid ORDER BY contract")
+        if "index" in key:
+            index(key["index"])
+            identity = ("index", key["index"])
+        else:
+            expr = key["expression"]
+            if not isinstance(expr, dict):
+                raise ValueError("invalid ORDER BY expression")
+            if expr.get("op") == "subtract" and set(expr) == {"op", "left", "right"}:
+                for operand in ("left", "right"):
+                    kind = index(expr[operand])
+                    if kind not in _INTEGER_TYPES | {"real", "double"} and not kind.startswith("decimal("):
+                        raise ValueError("ORDER BY subtraction requires numeric columns")
+                identity = ("subtract", expr["left"], expr["right"])
+            elif expr.get("op") == "case_equal" and set(expr) == {"op", "condition", "value", "then"}:
+                if index(expr["condition"]) not in _INTEGER_TYPES or type(expr["value"]) is not int:
+                    raise ValueError("ORDER BY CASE requires integer condition and value")
+                index(expr["then"])
+                identity = ("case_equal", expr["condition"], expr["value"], expr["then"])
+            else:
+                raise ValueError("invalid ORDER BY expression")
+        if identity in seen:
+            raise ValueError("duplicate ORDER BY key")
+        seen.add(identity)
+
+
+def order_values(row, columns, order_by):
+    """Evaluate a validated contract on Reader-validated typed cells.
+
+    Decimal/integer subtraction is exact regardless of the ambient decimal
+    context. Any floating operand instead selects SQL DOUBLE-style coercion.
+    ``columns`` is the projected schema used by validate_order_contract.
+    """
+    values = []
+    for key in order_by:
+        if "index" in key:
+            value = decoded(row[key["index"]])
+        else:
+            expr = key["expression"]
+            if expr["op"] == "case_equal":
+                condition = decoded(row[expr["condition"]])
+                value = decoded(row[expr["then"]]) if condition == expr["value"] else None
+            else:
+                left, right = (decoded(row[expr[k]]) for k in ("left", "right"))
+                if left is None or right is None:
+                    value = None
+                elif isinstance(left, float) or isinstance(right, float):
+                    value = float(left) - float(right)
+                elif isinstance(left, Decimal) or isinstance(right, Decimal):
+                    left, right = Decimal(left), Decimal(right)
+                    # Align fractional places and allow a carry, including
+                    # hugeint mixed with a scale-38 decimal.
+                    precision = max(left.adjusted(), right.adjusted(), 0) + 1
+                    precision += max(-left.as_tuple().exponent, -right.as_tuple().exponent, 0) + 2
+                    with localcontext() as context:
+                        context.prec = max(40, precision)
+                        value = left - right
+                else:
+                    value = left - right
+        values.append(value)
+    return values
+
+
 def validate_order(path, order_by, check=lambda: None):
     """Validate every row/footer and ORDER key; batch expensive budget checks."""
     check()
     reader = Reader(path)
     try:
         columns = reader.header["columns"]
-        if not isinstance(order_by, list):
-            raise ValueError("order_by list required")
-        seen = set()
-        for key in order_by:
-            if (not isinstance(key, dict) or set(key) != {"index", "descending", "nulls"}
-                    or type(key["index"]) is not int or not 0 <= key["index"] < len(columns)
-                    or key["index"] in seen or type(key["descending"]) is not bool
-                    or key["nulls"] not in ("first", "last")):
-                raise ValueError("invalid ORDER BY contract")
-            seen.add(key["index"])
+        validate_order_contract(columns, order_by)
         previous = None
         for count, row in enumerate(reader, 1):
-            values = [decoded(row[k["index"]]) for k in order_by]
+            values = order_values(row, columns, order_by)
             if previous is not None:
                 for a, b, key in zip(previous, values, order_by):
                     if a == b:

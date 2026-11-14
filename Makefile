@@ -154,6 +154,12 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_ingest.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_snapshots.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bindings.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpcds_sql.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_timings.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_order.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_cli.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_comparison.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_preflight.py'
 
 .PHONY: test-local-perf qualify-local-perf
 test-local-perf:
@@ -167,6 +173,12 @@ test-local-perf:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_ingest.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_snapshots.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bindings.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpcds_sql.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_timings.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_order.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_cli.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_comparison.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_preflight.py'
 
 # Explicit opt-in; never pulled into verify/test-resident-core.
 qualify-local-perf:

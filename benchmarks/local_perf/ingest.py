@@ -75,19 +75,25 @@ def simple(value):
     return value
 
 
+def physical_identifier(value):
+    if not isinstance(value, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,30}", value):
+        raise ValueError("physical table name must be lowercase, letter-leading, and at most 31 characters")
+    return value
+
+
 def target_name(prefix, canonical):
-    simple(prefix)
+    physical_identifier(prefix)
     if not isinstance(canonical, str) or not canonical or "\x00" in canonical:
         raise ValueError("valid source table name required")
     stem = re.sub(r"[^a-z0-9_]", "_", canonical.lower()).strip("_") or "table"
     suffix = "_" + digest(canonical.encode("utf8"))[:12]
     candidate = prefix + "_" + stem
-    if canonical == stem and len(candidate) <= 127:
-        return simple(candidate)
-    available = 127 - len(prefix) - 1 - len(suffix)
+    if canonical == stem and len(candidate) <= 31:
+        return physical_identifier(candidate)
+    available = 31 - len(prefix) - 1 - len(suffix)
     if available < 1:
         raise ValueError("prefix leaves no room for target identity")
-    return simple(prefix + "_" + stem[:available] + suffix)
+    return physical_identifier(prefix + "_" + stem[:available] + suffix)
 
 
 def hints_for(schema):
@@ -433,7 +439,7 @@ def load_public(campaign, prepared, name, adapter, timeout=600, batch_size=2000)
         # ALL input bytes/rows/schema/source hashes and worst-case encoded bodies before mutation.
         names = set()
         for t in meta["tables"]:
-            physical = simple(t["physical_name"])
+            physical = physical_identifier(t["physical_name"])
             if physical != target_name(meta["prefix"], t["name"]) or physical in names:
                 raise ValueError("invalid fresh target")
             names.add(physical)

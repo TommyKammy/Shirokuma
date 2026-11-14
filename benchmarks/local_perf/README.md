@@ -2,8 +2,9 @@
 
 Local-only preparation under ADR-0036. Python 3.9+ runs the stdlib suite;
 generation/reference execution uses a separate Python 3.12 venv and **DuckDB
-1.4.3**, pinned in `requirements.txt`. No pandas/Arrow, public API contract changes,
-workload changes, VM application, cloud execution, or global Python installation.
+1.4.3**, pinned in `requirements.txt`. The toolkit uses no pandas/Arrow and does
+not change public API contracts, apply workload/VM settings, execute in the cloud,
+or install into global Python. Operator runtime changes are recorded separately.
 
 This initial toolkit prepares TPC-derived data and reference results and runs
 sequential qualification. It does not establish official compliant TPC scores,
@@ -37,12 +38,14 @@ the printed artifact directory, including FAILED metadata on exceptions.
 References are same-engine Parquet roundtrips, **not independent verification**.
 
 The stdlib suite keeps scripted transport/lifecycle tests separate from real
-loopback fake-server tests. The Commander host runs on 2026-11-14 passed 123 of
-126 discovered tests on both Python 3.9.6 and 3.12.12, with three explicit real-data
-tests skipped. Ten real loopback cases cover public context/auth/pages, safe HTTP
+loopback fake-server tests. The Commander host run on 2026-11-14 passed 197 of
+203 discovered tests on Python 3.9.6, with four explicit real-data and two offline
+generator tests skipped. A separate verification venv enabled real generation,
+both TPC datasets and pinned SQLGlot regeneration and passed all 203. SQLGlot
+remains outside the ordinary benchmark runtime. Ten real loopback cases cover public context/auth/pages, safe HTTP
 rejection receipts, slow-drip status/headers, incomplete Content-Length and query
-lifecycle. Dedicated Parquet export and TPC-H parity checks separately passed all
-23 tests. Fresh-cache/install failures are also mocked
+lifecycle. The same suite also covers timing failures, complete TPC-DS parity,
+ORDER expressions and duplicate-preserving comparison. Fresh-cache/install failures are mocked
 without network in the ordinary suite. Real generation remains an explicit step.
 
 Focused review regressions (stdlib, no downloads):
@@ -268,9 +271,8 @@ Performance mode requires explicit `--scale`, `--peak`, `--timeout`, and bounded
 deadlines, concurrency 1/4/8/16/32/64, warmup, repetitions and block plan are
 planning inputs. This runner remains sequential and does not generate a final
 SLO verdict. Do not execute SF100+ until Commander reviews capacity/pilot evidence.
-Current qualification timers include capacity checks and durable receipt IO
-before dispatch. Send/queue/engine/first-row/last-row timing boundaries must be
-instrumented separately before these records are used for performance comparison.
+The legacy `fetch_s`, `validation_s` and `elapsed_s` retain their original
+boundaries. Use the versioned `timings` record below for phase measurements.
 
 ## Public API and portable connection qualification
 
@@ -423,6 +425,99 @@ request/context/SQL and linked historical evidence. Observed status and a
 source-derived code stay distinct. This creates a supplemental record, sends no
 HTTP and never changes the original failure into a result success.
 
+## Persisted TPC-DS qualification
+
+`prepare-tpcds` qualifies the pinned DuckDB 1.4.3 **99 single-statement** corpus.
+All 24 tables and all query IDs are required. This older fixed-parameter corpus
+does not cover every TPC-DS variant or TPC-DS 4. See the
+[DuckDB extension documentation](https://duckdb.org/docs/lts/core_extensions/tpcds).
+The static contracts retain canonical and portable SQL hashes, explicit output
+types, ORDER keys and transformation provenance. SQLGlot is used only for
+offline regeneration; ordinary preparation and execution need no SQL parser
+dependency beyond the isolated DuckDB environment.
+
+Use the same fresh-campaign, public connection, snapshot verification and
+full-table procedure as TPC-H, with a short unique prefix. Public physical names
+are limited to 31 characters; preparation shortens eligible source names with a
+stable hash and rejects a prefix that leaves no room. The wide TPC-DS tables
+need smaller INSERT batches under the current Trino query-text ceiling:
+
+```sh
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf generate /tmp/local-tpcds-unique tpcds --suite tpcds --scale 0.01 --timeout 300
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-tpcds /tmp/local-tpcds-unique /tmp/local-tpcds-unique/tpcds portable --timeout 300
+rtk proxy benchmarks/local_perf/.venv/bin/python -m benchmarks.local_perf prepare-ingest /tmp/local-tpcds-unique /tmp/local-tpcds-unique/tpcds inputs --prefix ds_sample
+rtk proxy python3 -m benchmarks.local_perf load-public /tmp/local-tpcds-unique /tmp/local-tpcds-unique/inputs load --adapter public --connection-file /tmp/local-tpcds-unique/public.json --batch-size 500
+rtk proxy python3 -m benchmarks.local_perf freeze-snapshots /tmp/local-tpcds-unique /tmp/local-tpcds-unique/load pins --adapter public --connection-file /tmp/local-tpcds-unique/public.json
+rtk proxy python3 -m benchmarks.local_perf bind-tpcds /tmp/local-tpcds-unique/portable/queries.json /tmp/local-tpcds-unique/pins/snapshots.json /tmp/local-tpcds-unique/tpcds-bound.json
+```
+
+Initialize that campaign and freeze `public.json` first using the earlier
+commands. Prepare `tables-bound.json` and both DuckDB references, then run the
+bound manifest through direct Trino and the public adapter as above. Retain
+`--abs-tol 1e-8 --rel-tol 1e-8` for floating outputs; exact types stay exact.
+For the full 24-table reference/comparison pilot, allow `--peak 1073741824
+--timeout 600` for typed output, SQLite comparison and capacity checks; this is
+separate from the 300-second per-query SQL qualification setting.
+Requalify every scale with its own full source/cast/portable parity and pins.
+The default ingest batch remains 2,000; `--batch-size` explicitly selects
+1..10,000. A 500-row batch is a measured setting for this corpus, not a guarantee
+that every arbitrary input fits the server's SQL-text limit.
+
+The initial 2GiB coordinator heap exhausted during public ingestion. The accepted
+pilot used a separately recorded temporary coordinator heap8GiB/container12GiB,
+with the worker unchanged at heap2GiB/container4GiB, and restored the baseline
+after verification. Apply an authorized, verified runtime configuration before
+loading; these toolkit commands do not provision that profile. Retain historical
+UNKNOWNs and execution-fence evidence separately; a new run must use ordinary
+admission and a fresh owned namespace rather than rewrite old outcomes.
+
+ORDER validation supports projected numeric subtraction and integer CASE keys
+in addition to column positions. LIMIT audits examine N+1 rows. If the boundary
+ties, preparation scans the complete unlimited result: every row in that ORDER
+group must have the identical complete typed output row. It retains the group's
+multiplicity and SQL hash. Distinct rows within a cutoff tie fail qualification.
+Full exact multiset equality is proved before expensive tolerant matching;
+partial exact pairs are never removed from the augmenting-path fallback.
+
+## Timing boundaries
+
+Each `attempt.json.timings` has `version: 1`, monotonic offsets in seconds from
+the attempt start, and nullable events. The start precedes durable intent and
+adapter setup; `attempt_complete` precedes the final attempt JSON write.
+
+| Field | Measured boundary |
+|---|---|
+| `dispatch_started` | Initial HTTP request entry; DuckDB SQL execution after connection and VIEW setup |
+| `initial_response_complete` | Initial HTTP request returns decoded JSON successfully; HTTP error responses retain phase/rejection evidence instead |
+| `first_row` / `last_row` | Decoded page/batch observed after identity and schema checks, before typed row serialization; empty results keep both null |
+| `terminal_observed` | Latest recognized terminal protocol state observed; not the backend completion timestamp, and may precede `result_complete` |
+| `result_complete` | All result pages consumed and successful typed artifact footer written |
+| `validation_started` / `validation_complete` | Manifest schema, ORDER and full reference comparison; failure keeps the incomplete event null |
+| `recovery_started` / `recovery_complete` | Separate cancellation/inspection window after failure |
+
+HTTP aggregates split `initial` and `follow_up` requests into connection (including
+TLS), socket send, header wait, body read, JSON decode and total seconds.
+Header wait includes server processing and network delay; it is not engine queue
+time. `client_poll_wait_s` is deliberate client sleep. Artifact processing
+includes guards, receipts, capacity checks and typed output; it is not disk time
+alone. DuckDB also records SQL execution and local fetch durations. These
+overlapping observations are not additive components of end-to-end time.
+
+`backend_report` preserves only the latest observed `response.stats` snapshot:
+queued, CPU, wall and elapsed milliseconds, with its page state. Missing or
+invalid values stay null; reported zero remains zero. No client interval is
+converted into engine queue/execution time. See the
+[Trino 483 protocol source](https://github.com/trinodb/trino/blob/483/docs/src/main/sphinx/develop/client-protocol.md).
+Failures retain partial timings and original outcome; recovery HTTP is excluded
+from result-fetch aggregates. Single qualification observations do not establish
+latency percentiles or a performance SLO.
+
+Before dispatch, prior owned runs are inspected with a fresh per-call manifest
+and query map. The complete manifest, snapshot binding and every query contract
+are checked once per saved run; every attempt, rejection, reconciliation and
+uncertain status is still checked. Standalone validators perform full checks.
+There is no persistent cache or caller-controlled validation bypass.
+
 ## Ownership, cleanup and remaining gates
 
 `cleanup campaign name` only removes successful owned dataset/comparison/ingest
@@ -440,11 +535,19 @@ Trino and the public API, and an independent owned-table append demonstrates
 AS OF reads plus drift rejection. See the
 [TPC-H verification record](../../docs/guides/performance-tpch-2026-11-14.md).
 
-Remaining P1/G1 work includes other-scale qualification, TPC-DS query execution
-and all variants, transfer/queue/engine/validation telemetry, and cold/concurrent
-failure conditions. Initial generated manifests remain unordered; the reviewed
-TPC-H plan adds explicit ordering/tie contracts without inferring them for arbitrary
-SQL. Public results beyond the
+TPC-DS SF0.01 now has all 24 persisted tables/277,976 rows fully matching Parquet,
+and all 99 queries/3,928 output rows matching through direct Trino and the public
+API. Both routes preserve all 27 empty results and version1 timings. The initial
+2GiB heap OOM/UNKNOWN cleanup, Q72 dialect failure and interrupted preflight check
+are retained; the accepted run uses the separately recorded temporary profile.
+The baseline was restored afterward without rewriting the historical UNKNOWN.
+See the [TPC-DS and timing record](../../docs/guides/performance-tpcds-timings-2026-11-14.md).
+
+Remaining P1/G1 work includes other-scale qualification, TPC-DS variants beyond
+the fixed 99-query corpus, engine telemetry unavailable through the current API,
+and cold/concurrent failure conditions. Initial generated manifests remain
+unordered; reviewed TPC-H/TPC-DS plans add explicit ordering/tie contracts without
+inferring them for arbitrary SQL. Public results beyond the
 10,000-row ceiling require a separate reviewed product change. No private
 bypass or `max_rows=None` is used. P2 resource/profile application, guest expansion, concurrent
 load, arrival-rate tests, SLO freezing and long runs are not implemented here.

@@ -1,6 +1,7 @@
 """Explicit local commands; none apply VM/workload changes."""
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 
@@ -48,7 +49,7 @@ def main():
     p.add_argument("dataset")
     p.add_argument("reference")
     p.add_argument("name")
-    for command in ("prepare-ingest", "load-public", "freeze-snapshots", "prepare-tpch"):
+    for command in ("prepare-ingest", "load-public", "freeze-snapshots", "prepare-tpch", "prepare-tpcds"):
         p = commands.add_parser(command)
         p.add_argument("campaign")
         p.add_argument("input")
@@ -57,6 +58,10 @@ def main():
             p.add_argument("--prefix", required=True)
         elif command in ("load-public", "freeze-snapshots"):
             add_adapter(p, public_only=True)
+            if command == "load-public":
+                p.add_argument("--batch-size", type=ingest_batch_size, default=2000)
+        elif command == "prepare-tpcds":
+            p.add_argument("--timeout", type=positive_timeout, default=300)
     p = commands.add_parser("verify-snapshots")
     p.add_argument("campaign")
     p.add_argument("pins")
@@ -64,10 +69,11 @@ def main():
     p = commands.add_parser("table-manifest")
     p.add_argument("pins")
     p.add_argument("output")
-    p = commands.add_parser("bind-tpch")
-    p.add_argument("plan_manifest")
-    p.add_argument("pins")
-    p.add_argument("output")
+    for command in ("bind-tpch", "bind-tpcds"):
+        p = commands.add_parser(command)
+        p.add_argument("plan_manifest")
+        p.add_argument("pins")
+        p.add_argument("output")
     p = commands.add_parser("run")
     p.add_argument("campaign")
     p.add_argument("name")
@@ -135,24 +141,32 @@ def main():
             result = str(prepare_ingest(Campaign(args.campaign), args.input, args.name, args.prefix))
         elif cmd == "load-public":
             from .ingest import load_public
-            result = str(load_public(Campaign(args.campaign), args.input, args.name, adapter(args)))
+            result = str(load_public(Campaign(args.campaign), args.input, args.name, adapter(args),
+                                     batch_size=args.batch_size))
         elif cmd == "freeze-snapshots":
             from .snapshots import freeze_snapshots
             result = str(freeze_snapshots(Campaign(args.campaign), args.input, args.name, adapter(args)))
         elif cmd == "verify-snapshots":
             from .snapshots import verify_snapshots
             result = str(verify_snapshots(Campaign(args.campaign), args.pins, adapter(args)))
-        elif cmd == "prepare-tpch":
-            from .tpch_sql import prepare_tpch
-            result = str(prepare_tpch(Campaign(args.campaign), args.input, args.name))
-        elif cmd in ("bind-tpch", "table-manifest"):
+        elif cmd in ("prepare-tpch", "prepare-tpcds"):
+            if cmd == "prepare-tpcds":
+                from .tpcds_sql import prepare_tpcds as prepare
+            else:
+                from .tpch_sql import prepare_tpch as prepare
+            options = {"timeout": args.timeout} if cmd == "prepare-tpcds" else {}
+            result = str(prepare(Campaign(args.campaign), args.input, args.name, **options))
+        elif cmd in ("bind-tpch", "bind-tpcds", "table-manifest"):
             from .snapshots import table_manifest
             target = Path(args.output).resolve()
             repo = Path(__file__).resolve().parents[2]
             if target == repo or repo in target.parents or target.exists():
                 raise ValueError("fresh manifest output outside Git required")
-            if cmd == "bind-tpch":
-                from .tpch_sql import bind_snapshots
+            if cmd != "table-manifest":
+                if cmd == "bind-tpcds":
+                    from .tpcds_sql import bind_snapshots
+                else:
+                    from .tpch_sql import bind_snapshots
                 result = bind_snapshots(json.loads(Path(args.plan_manifest).read_text()), json.loads(Path(args.pins).read_text()))
             else:
                 result = table_manifest(json.loads(Path(args.pins).read_text()))
@@ -186,6 +200,20 @@ def main():
     except Exception as exc:
         # No backend exception strings: these can contain Authorization or SQL data.
         parser.exit(1, "local-perf failed: " + type(exc).__name__ + "; inspect owned metadata\n")
+
+
+def ingest_batch_size(value):
+    size = int(value)
+    if not 1 <= size <= 10000:
+        raise argparse.ArgumentTypeError("batch size must be an integer from 1 to 10000")
+    return size
+
+
+def positive_timeout(value):
+    timeout = float(value)
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise argparse.ArgumentTypeError("timeout must be a finite positive number")
+    return timeout
 
 
 def add_settings(p):

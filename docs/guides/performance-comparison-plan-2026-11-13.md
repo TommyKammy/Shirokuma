@@ -1,6 +1,6 @@
 # Mac Studio上のShirokuma大規模性能・安定性試験計画
 
-2026-11-14 JST改訂。状態: P0固定・P1のTPC-H小規模実データ照合まで確認。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。所有者がSSDの空きを約3TBへ確保したため実容量を更新し、条件・資源・容量を固定した。[初期準備](performance-preparation-2026-11-13.md)、[接続qualification](performance-connections-2026-11-13.md)、[TPC-Hの隔離登録・snapshot・22 SQL照合](performance-tpch-2026-11-14.md)に証拠と残るG1条件を記録する。TPC-DS・全結果API・計測の整備を継続し、大規模負荷・VM拡張はP2以降とする。
+2026-11-14 JST改訂。状態: P0固定、P1のTPC-H実機照合、TPC-DS固定99 SQLの実機照合と計測境界を確認。TPC-DSは一時coordinator heap8GiBで24表・277,976行と両経路の各99本・3,928行が一致し、検証後に基準構成へ戻した。旧2GiB試行のOOM／UNKNOWN cleanupは履歴と停止証拠を保持する。Mac Studio内の実測を主目的とし、Snowflake／Databricksは公開値による粗い参考比較とする。[初期準備](performance-preparation-2026-11-13.md)、[接続qualification](performance-connections-2026-11-13.md)、[TPC-H照合](performance-tpch-2026-11-14.md)、[TPC-DS・計測と実行条件](performance-tpcds-timings-2026-11-14.md)に証拠とG1残件を記録する。次は旧UNKNOWNの復旧、正式なcoordinator資源profile、bulk取込／全結果API・残るvariantを整えてからP2以降の大規模負荷・VM拡張へ進む。
 
 ## 1. 目的・実施範囲・承認
 

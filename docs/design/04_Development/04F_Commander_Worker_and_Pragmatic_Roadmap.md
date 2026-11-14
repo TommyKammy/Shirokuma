@@ -5,12 +5,17 @@ title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
 updated: 2026-11-14
-version: "1.94"
+version: "1.95"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-14 JST、[TPC-DS照合契約と計測境界](../../guides/performance-tpcds-timings-2026-11-14.md)を整備した。24表・277,976行の全内容と、直接／公開各99 SQL・3,928行がDuckDB参照と一致し、ORDER／LIMITと前後pinsを検証した。
+送信・取得・行観測・artifact・検証・復旧とengine報告値を分離し、空27件ずつも実機確認した。Q72の日付演算と重複preflightを修正し、最終重点203件全件成功。先行全体Makeは154群・5,577成功・37 skipで、その後の差分も再検証した。
+旧heap 2GiBのOOM／UNKNOWNは履歴と実行終了証拠を保持し、一時coordinator heap8GiBの新campaignで通常APIを検証した。完了後は基準2GiB／4GiBへ復元し、context・全24表pins・doctor healthyを確認した。
+G1全体の受入は旧UNKNOWN復旧・正式な資源profile・bulk／全結果API・残るvariant等を後続に残す。L1／VM拡張・大規模性能の合否は未実施。
 
 2026-11-14 JST、[TPC-H実データの隔離登録・snapshot固定・22 SQL照合](../../guides/performance-tpch-2026-11-14.md)を整備した。SF0.01の8表・86,805行を通常公開APIで登録し、固定snapshotの全値がParquet参照と一致した。
 直接Trinoと公開APIで全22本・各932行を照合し、ORDER／LIMIT tieと前後の不変性を検証した。別表のhead変更では旧snapshotの読取とdrift拒否を実証した。

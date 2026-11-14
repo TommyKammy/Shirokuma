@@ -9,7 +9,7 @@ import time
 import urllib.parse
 import uuid
 
-from .runner import HTTPFailure, SERVER_ERROR_ID, TrinoAdapter, sql_identity
+from .runner import HTTPFailure, SERVER_ERROR_ID, TrinoAdapter, adapter_timings, sql_identity
 from .results import Writer, column
 
 CONTEXT = ("database_id", "schema_id", "warehouse_id", "sql_catalog", "sql_schema",
@@ -183,19 +183,24 @@ class PublicAdapter(TrinoAdapter):
         return url
 
     def execute(self, sql, out, metadata, deadline, save, check):
-        b = self.binding
-        if sql != self.sql:
-            raise PublicError("PUBLIC_CONTEXT")
-        body = dict(sql=sql, request_id=b["request_id"], worksheet_id=b["worksheet_id"],
-                    context={k: b["context"][k] for k in WIRE_CONTEXT}, mode="read-only", max_rows=self.max_rows)
-        page = self.request("POST", self.url + "/api/v1/queries", deadline, json.dumps(body).encode())
+        timing = adapter_timings(self)
+        timing.durations["client_poll_wait_s"] = 0
         writer, columns, native, handle = None, None, None, None
         seen, receipts = set(), set()
         try:
+            b = self.binding
+            if sql != self.sql:
+                raise PublicError("PUBLIC_CONTEXT")
+            body = dict(sql=sql, request_id=b["request_id"], worksheet_id=b["worksheet_id"],
+                        context={k: b["context"][k] for k in WIRE_CONTEXT}, mode="read-only", max_rows=self.max_rows)
+            self.request_kind = "initial"
+            timing.mark("dispatch_started")
+            page = self.request("POST", self.url + "/api/v1/queries", deadline, json.dumps(body).encode())
+            timing.mark("initial_response_complete")
+            self.request_kind = "follow_up"
             while True:
                 handle = self.validate(page, handle)
                 save(handle)
-                check()
                 # query_service._page maps backend states, then overwrites stats.state
                 # with the exposed state, including cancellation after truncation.
                 state, stats = page.get("state"), page.get("stats")
@@ -203,34 +208,40 @@ class PublicAdapter(TrinoAdapter):
                         or not isinstance(stats, dict) or stats.get("state") != state
                         or state == "FINISHED" and page.get("next_uri") is not None):
                     raise PublicError("PUBLIC_STATE")
+                if state in ("FAILED", "CANCELED"):
+                    timing.page({"stats": stats}, state)
                 if page.get("truncated"):
                     raise PublicError("PUBLIC_TRUNCATED")
                 if page.get("error") or state not in ("QUEUED", "RUNNING", "FINISHED"):
                     raise PublicError("PUBLIC_QUERY_UNMET")
-                data, incoming = page.get("data"), page.get("columns")
-                if not isinstance(data, list) or not isinstance(incoming, list):
-                    raise PublicError("PUBLIC_SCHEMA")
-                pending = (handle["backend_query_id"] is None and incoming == [] and data == []
-                           and state == "QUEUED" and "result_page_id" not in page and native is None
-                           and bool(page.get("next_uri")))
-                if not pending:
-                    pid = page.get("result_page_id")
-                    if not (isinstance(pid, str) and re.fullmatch(TOKEN, pid) or type(pid) is int and pid > 0) or pid in receipts:
-                        raise PublicError("PUBLIC_DUPLICATE_PAGE")
-                    receipts.add(pid)
-                    if (not handle["backend_query_id"] or not incoming and
-                            (native is not None or data or state not in ("QUEUED", "RUNNING") or not page.get("next_uri"))):
+                with timing.measure(timing.durations, "artifact_processing_s"):
+                    data, incoming = page.get("data"), page.get("columns")
+                    if not isinstance(data, list) or not isinstance(incoming, list):
                         raise PublicError("PUBLIC_SCHEMA")
-                    if incoming:
-                        raw = [{"name": c["name"], "type": c["type"]} for c in incoming]
-                        if native is not None and raw != native:
+                    pending = (handle["backend_query_id"] is None and incoming == [] and data == []
+                               and state == "QUEUED" and "result_page_id" not in page and native is None
+                               and bool(page.get("next_uri")))
+                    if not pending:
+                        pid = page.get("result_page_id")
+                        if not (isinstance(pid, str) and re.fullmatch(TOKEN, pid) or type(pid) is int and pid > 0) or pid in receipts:
+                            raise PublicError("PUBLIC_DUPLICATE_PAGE")
+                        receipts.add(pid)
+                        if (not handle["backend_query_id"] or not incoming and
+                                (native is not None or data or state not in ("QUEUED", "RUNNING") or not page.get("next_uri"))):
                             raise PublicError("PUBLIC_SCHEMA")
-                        native = raw
-                        columns = [column(c["name"], c["type"]) for c in incoming]
-                        if writer is None:
-                            # Native type contracts remain in attempt evidence, outside equality metadata.
-                            save(dict(handle, native_columns=native))
-                            writer = Writer(out, columns, metadata)
+                        if incoming:
+                            raw = [{"name": c["name"], "type": c["type"]} for c in incoming]
+                            if native is not None and raw != native:
+                                raise PublicError("PUBLIC_SCHEMA")
+                            native = raw
+                            columns = [column(c["name"], c["type"]) for c in incoming]
+                    timing.page(page, state)
+                    if incoming and writer is None:
+                        # Native type contracts remain in attempt evidence, outside equality metadata.
+                        save(dict(handle, native_columns=native))
+                        writer = Writer(out, columns, metadata)
+                    check()
+                    if incoming:
                         for n, row in enumerate(data):
                             if n % 256 == 0:
                                 check()
@@ -239,7 +250,9 @@ class PublicAdapter(TrinoAdapter):
                 if uri is None:
                     if page["state"] != "FINISHED" or writer is None:
                         raise PublicError("PUBLIC_INCOMPLETE")
-                    writer.finish()
+                    with timing.measure(timing.durations, "artifact_processing_s"):
+                        writer.finish()
+                    timing.mark("result_complete")
                     return
                 url = self.page_url(uri, handle["id"])
                 if url in seen:
@@ -248,6 +261,7 @@ class PublicAdapter(TrinoAdapter):
                 check()
                 page = self.request("GET", url, deadline)
         finally:
+            self.request_kind = None
             if writer is not None and not writer.f.closed:
                 writer.close()
 
@@ -266,6 +280,7 @@ class PublicAdapter(TrinoAdapter):
         return captured
 
     def recover(self, intent, save, timeout=5):
+        self.request_kind = None  # history/inspect/cancel are recovery, not delivery
         self.bind(intent)
         deadline = time.monotonic() + timeout
         handle = intent.get("handle")

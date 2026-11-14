@@ -12,7 +12,7 @@ import urllib.parse
 
 from benchmarks.local_perf.capacity import Campaign, write_json
 from benchmarks.local_perf.ingest import (digest, dumps, file_hash, hints_for, load_public,
-                                          operation, prepare_ingest, target_name)
+                                          operation, prepare_ingest, simple, target_name)
 from benchmarks.local_perf.public import PublicAdapter
 
 CTX = dict(database_id='db', schema_id='schema', warehouse_id='LOCAL', sql_catalog='iceberg',
@@ -284,6 +284,57 @@ class IngestTests(unittest.TestCase):
         self.assertTrue(all(re.fullmatch('[a-z_][a-z0-9_]*', n) for n in targets))
         self.assertEqual(targets, [target_name('pilot', n) for n in names])
         self.assertEqual(target_name('pilot', 'events'), 'pilot_events')
+
+
+    def test_long_targets_keep_stable_source_identity_within_physical_limit(self):
+        import re
+        prefix = 'qualification'
+        names = ['catalog_sales', 'catalog_returns', 'customer_address', 'customer_demographics',
+                 'income_band', 'inventory', 'web_sales', 'web_returns',
+                 'a' * 80 + 'x', 'a' * 80 + 'y', 'Sales Data', 'sales-data']
+        targets = [target_name(prefix, n) for n in names]
+        self.assertEqual(len(set(targets)), len(names))
+        self.assertEqual(targets, [target_name(prefix, n) for n in names])
+        for source, target in zip(names, targets):
+            with self.subTest(source=source):
+                self.assertRegex(target, r'^[a-z][a-z0-9_]{0,30}$')
+                if source != re.sub(r'[^a-z0-9_]', '_', source.lower()).strip('_') or len(prefix + '_' + source) > 31:
+                    self.assertTrue(target.endswith('_' + digest(source.encode('utf8'))[:12]))
+        self.assertEqual(len(target_name('p' * 16, 'customer_demographics')), 31)
+        self.assertEqual(target_name('p' * 16, 'customer_demographics'),
+                         'p' * 16 + '_c_' + digest(b'customer_demographics')[:12])
+
+    def test_prefix_boundary_and_existing_tpch_targets(self):
+        prefix = 'p' * 17
+        self.assertEqual(target_name(prefix, 'part'), prefix + '_part')
+        for source in ('Customer', 'customer_demographics'):
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, 'no room'):
+                target_name(prefix, source)
+        with self.assertRaises(ValueError):
+            target_name('_pilot', 'events')
+        with self.assertRaisesRegex(ValueError, 'no room'):
+            target_name('p' * 21, 'call_center')
+        for source in ('region', 'nation', 'supplier', 'customer', 'part', 'partsupp', 'orders', 'lineitem'):
+            self.assertEqual(target_name('pilot', source), 'pilot_' + source)
+        self.assertEqual(simple('_' + 'a' * 126), '_' + 'a' * 126)
+
+    def test_invalid_legacy_physical_name_blocks_all_adapter_requests(self):
+        prepared = self.prepared()
+        path = prepared / 'input.json'
+        original = json.loads(path.read_text())
+        for index, physical in enumerate(('p_customer_demographics_too_long', '_p_events', 'p_Events', 'p_other', 'p_events')):
+            meta = copy.deepcopy(original)
+            invalid = copy.deepcopy(meta['tables'][0])
+            invalid.update(name='events' if physical == 'p_events' else 'customer_demographics',
+                           physical_name=physical)
+            meta['tables'].append(invalid)  # A valid first table must not start preview/create.
+            write_json(path, meta)
+            a = FakePublic()
+            with self.subTest(physical=physical), self.assertRaises(ValueError):
+                load_public(self.c, prepared, 'invalid-' + str(index), a)
+            self.assertEqual(a.calls, [])
+            self.assertEqual(a.posts, 0)
+            self.assertEqual(json.loads(path.read_text()), meta)
 
 
     @staticmethod
