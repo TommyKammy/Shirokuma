@@ -77,6 +77,10 @@ raw pairs（checked / no-op / ratio / scans / per-scan）:
 - 先行passのparser 28件・scheduler/accounting 7件・mixed file+directory root・lazy symlink path・失敗時のcloseは変更していない（control binaryは先行と同一hash）。
 - 独立reviewは**actual unchanged control**に対してscheduler/accounting 7件を再実行してPASS、current `parse_test4`でparser 28件PASS、39 rootの全map一致を確認した。reviewerの初回実行はtest側のctypes `Stats` class型不一致で7 ERRORとなり、reviewer側で同一classに揃えて再実行している（prototypeの欠陥ではない）。12 measured rawのmedianも独立再計算され、baseline 84.8923% / control 15.5407%、scan max 197.969ms / 28.891msだった。
 
+## 後続pass（内部コスト調査と41 root再測定）
+
+2026-11-15 JST追記。本記録の39 root値（baseline 84.89%、control 15.54%）はそのscopeの記録として有効である。[内部コスト調査pass](performance-capacity-internal-2026-11-15.md)は新候補なしで41 rootを再測定し、baseline 83.17% / control 18.28%で10%未達だった。同passは先行のattribute/buffer比較にfd再利用の不備を認めて撤回し、fresh fdの修正版でもvariant差を分離できなかった。
+
 ## 限界
 
 - interleaved A/B（n=10）でcontrol 29.90ms / 再build baseline 29.46msは「観測された明確な差が無い」ことを示すだけで、形式的な同等性検証ではない。
