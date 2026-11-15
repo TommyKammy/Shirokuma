@@ -52,3 +52,16 @@ reviewerは58 focused tests（12+25+10+6+5）、6 native large-result sets（各
 ## 次
 
 full-global scanは200msを満たしたが、offline 10% screenは未達（current 78.4%）。次はdeadline/local peak/stop保証とroot coverageを維持したまま、per-scan costをさらに下げるOS bulk-attribute取得等を検討する。sampling interval延長、cache、root除外、threshold変更は行わない。G1/性能/SLOの受入とはしない。
+
+## 追記: OS bulk属性取得prototypeのscreen再測定
+
+2026-11-15 JST。`getattrlistbulk(2)`をctypes経由でin-process実行するGit外prototypeを、直前31 rootのbaseline値をcarry forwardした33 root campaign（Python 3.12.12、manifest `223b0b57…`）で同じfrozen screenにかけた。詳細は[bulk取得prototype](performance-capacity-bulk-2026-11-15.md)。
+
+| 指標 | 現行scandir | bulk 8-thread |
+|---|---:|---:|
+| 10-sample scan median / max | 147.7ms / 174.3ms | 36.8ms / **42.7ms** |
+| in-situ per-scan | 153.0ms | **39.3ms** |
+| 1M checked / no-op median | 137.14s / 75.37s | **90.33s** / 75.28s |
+| per-pair overhead median | 81.96% | **19.99%** |
+
+max scan <200msはPASSしたがoffline ≤10%はFAIL。10%に必要な差は約7.5秒で、candidateの実測差は約15.0秒だった。したがってnative helper・build dependencyはproductionへ入れず、`allocated`は`os.scandir`のまま据え置く。Python 3.9.6で先行実施した同scopeのrunはcharacterizationとして保持し、frozen比較には使わない。
