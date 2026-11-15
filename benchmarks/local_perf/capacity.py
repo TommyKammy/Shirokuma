@@ -4,6 +4,7 @@ import os
 import math
 from pathlib import Path
 import shutil
+import stat
 import threading
 import time
 import uuid
@@ -67,17 +68,42 @@ def write_json(path, value):
 
 
 def allocated(path):
-    """Allocated blocks, not apparent sparse image size; count hardlinks once."""
+    """Allocated blocks, not apparent sparse image size; count hardlinks once.
+
+    A fresh directory traversal is performed on every call. Symlinked files are
+    counted by their regular-file target, symlinked directories are not
+    descended, and any traversal/stat error propagates. The seen set is local to
+    this root; accounting is independent per root.
+    """
     path = Path(path)
-    paths = path.rglob("*") if path.is_dir() else [path]
     total, seen = 0, set()
-    for p in paths:
-        if p.is_file():
-            s = p.stat()
-            key = (s.st_dev, s.st_ino)
-            if key not in seen:
-                total += getattr(s, "st_blocks", (s.st_size + 511) // 512) * 512
-                seen.add(key)
+
+    def count(entry_stat):
+        nonlocal total
+        key = (entry_stat.st_dev, entry_stat.st_ino)
+        if key not in seen:
+            total += getattr(entry_stat, "st_blocks", (entry_stat.st_size + 511) // 512) * 512
+            seen.add(key)
+
+    def visit(directory):
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                entry_stat = entry.stat(follow_symlinks=False)
+                if stat.S_ISREG(entry_stat.st_mode):
+                    count(entry_stat)
+                elif stat.S_ISDIR(entry_stat.st_mode):
+                    visit(entry.path)
+                elif entry.is_symlink():
+                    target = entry.stat(follow_symlinks=True)
+                    if stat.S_ISREG(target.st_mode):
+                        count(target)
+
+    if path.is_dir():
+        visit(path)
+    else:
+        entry_stat = path.stat()
+        if stat.S_ISREG(entry_stat.st_mode):
+            count(entry_stat)
     return total
 
 

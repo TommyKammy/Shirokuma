@@ -14,8 +14,8 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 
 2026-11-15 JST、[SF0.1 scale・計測器characterization](../../guides/performance-scale-meter-2026-11-15.md)を完了した。新24表/1,175,873行、fresh Spark reference 14件/1,113行、24表全部と288,464行large resultを直接/公開all-resultsで照合した。
 stage400のcoordinator/worker peakは3.59GB/4.04GB、OOM/restart 0。復元後は設定bytes・UID・CM/Deployment template・worker identity・59表pins・fenced UNKNOWN 5件を保持し、doctor healthy 46。
-初回計測はunsampled guard・不完全baseline等で不採用。corrected production guardでも最大global scan約332ms（median302ms/p95 316ms）、1M行offline checked/no-op per-pair overhead median約155.7%（ratio-of-medians158.9%）でobserver-readinessは不合格。計測器再設計まで大規模性能の判断に使わない。Make162群は5,874成功・74 skip・失敗0。
-次はdeadline/local peak/stop保証を維持したままfull-global scanの回数/per-scan costを減らして同じreadiness screenを再実行する。その後99/4 native coverage、別scale・同時実行。L1/guest拡張・100GB pilot・SLOは後続。
+初回計測はunsampled guard・不完全baseline等で不採用。corrected production guardでも最大global scan約332ms（median302ms/p95 316ms）、1M行offline checked/no-op per-pair overhead median約155.7%（ratio-of-medians158.9%）でobserver-readinessは不合格。計測器再設計まで大規模性能の判断に使わない。後続のcapacity scan最適化で`os.scandir`化しmax393.7→170.6ms、offline overhead median150.7→78.4%としたが10% screenは未達。Make162群は再実行し5,876成功・74 skip・失敗0。
+次はdeadline/local peak/stop保証を維持したままOS bulk-attribute等でper-scan costをさらに下げ、同じreadiness screenを再実行する。その後99/4 native coverage、別scale・同時実行。L1/guest拡張・100GB pilot・SLOは後続。
 
 2026-11-15 JST、[coordinator stage上限の正式適用](../../guides/performance-stage-limit-2026-11-15.md)を完了した。任意の `max_stage_count=400` をcoordinatorだけに適用し、14a standaloneと承認14件suiteを直接Trino/公開APIの両経路で再検証した。
 14aは両経路100行、正式14件は各14/14・903行が固定参照と一致。適用/復元でDeployment UIDを保持し、設定bytes・59表pins・fenced UNKNOWN 5件・worker/資源を維持した。OOM/再起動0、doctor healthy 46項目。

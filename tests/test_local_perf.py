@@ -1,6 +1,7 @@
 import datetime as dt
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -74,6 +75,53 @@ class CapacityTests(unittest.TestCase):
             self.c.own("d1", "dataset")
         with self.assertRaises(ValueError):
             self.c.cleanup("unowned")
+
+    def test_scandir_live_add_delete_sparse_hardlink_and_symlink(self):
+        tree = self.base / "tree"
+        tree.mkdir()
+        target = tree / "target"
+        target.write_bytes(b"x" * 8192)
+        (tree / "dir").mkdir()
+        child = tree / "dir" / "child"
+        child.write_bytes(b"y" * 4096)
+        os.link(target, tree / "hard")
+        (tree / "file-link").symlink_to(target)
+        (tree / "dir-link").symlink_to(tree / "dir")
+        expected = allocated(target) + allocated(child)
+        self.assertEqual(allocated(tree), expected)
+
+        added = tree / "added"
+        added.write_bytes(b"z" * 4096)
+        self.assertGreater(allocated(tree), expected)
+        added.unlink()
+        self.assertEqual(allocated(tree), expected)
+
+        a, b = self.base / "a", self.base / "b"
+        a.mkdir(); b.mkdir()
+        campaign = Campaign.create(self.base / "cross-root", host_paths=[a, b])
+        initial = campaign.check()["used_bytes"]
+        source = a / "source"
+        source.write_bytes(b"q" * 8192)
+        one = allocated(source)
+        self.assertEqual(campaign.check()["used_bytes"], initial + one)
+        os.link(source, b / "linked")
+        self.assertEqual(campaign.check()["used_bytes"], initial + 2 * one)
+
+    def test_scandir_fails_closed_on_broken_symlink_and_unreadable_directory(self):
+        bad = self.base / "bad"
+        bad.mkdir()
+        (bad / "broken").symlink_to(bad / "missing")
+        with self.assertRaises(OSError):
+            allocated(bad)
+        (bad / "broken").unlink()
+        unreadable = bad / "unreadable"
+        unreadable.mkdir()
+        os.chmod(unreadable, 0)
+        try:
+            with self.assertRaises(OSError):
+                allocated(bad)
+        finally:
+            os.chmod(unreadable, 0o700)
 
     def test_guards_peak_drain_and_hostfree(self):
         with self.assertRaises(RuntimeError):

@@ -39,6 +39,10 @@ Corrected measurementは、sourceの `CapacitySampler(0.2)`、毎callbackのloca
 
 独立評価は6 formal suite（84 query）、standalone 14a、24表両経路（各1,175,873行）、6 large run（各288,464行）の型/全値/重複/ORDERを再計算し、全件一致を確認した。reviewer evidenceは `reviewer-results.json` / `reviewer-corrected-results.json`。corrected capacity manifestはlocal SDK/venv・artifact rootsも明示rootとして含み、root間の重複を避けている。初期invalid measurementと1800s timeout runsは履歴として保持し、production claimに使わない。
 
+## Capacity scan optimization（2026-11-15追記）
+
+`allocated`を`os.scandir`へ置換し、31-root full scanはmax **393.7ms -> 170.6ms**、median **332.3ms -> 145.6ms**となった。max<200msは満たしたが、1M offline checked/no-op per-pair overhead medianは **150.7% -> 78.4%** で10% criterionは未達。`CapacitySampler(0.2)`、local/deadline/forced boundaries、root coverage、2TB/512MiBは不変。詳細は[capacity scan最適化](performance-capacity-scan-2026-11-15.md)。
+
 ## Protocol deviations / errata
 
 - 初回のtables/large runsのtimeout1800sはprotocolの600sからの逸脱。correctness evidenceとして残し、600s deadline達成とは扱わない。corrected native large runsは600sで成功した。
@@ -57,4 +61,4 @@ Corrected measurementは、sourceの `CapacitySampler(0.2)`、毎callbackのloca
 
 Make162/162 commandを4並列で実行し、**5,948件中5,874成功・74 skip・失敗0**、source unchanged。設計整合・改行・空白・秘密情報filename・diff checkは成功。
 
-残り: SF0.1の99/4 native qualificationは未実施。observer-readinessの再設計、別scale、同時実行/到着率、計測器を含むSLO、L1/guest disk拡張、100GB pilotは後続。SF0.1の結果を大規模性能・TPC公式score・G1完了へ読み替えない。
+残り: SF0.1の99/4 native qualificationは未実施。capacity scanはmax<200msを満たしたがoffline10%は未達であり、OS bulk-attribute等でper-scan costをさらに下げる必要がある。別scale、同時実行/到着率、計測器を含むSLO、L1/guest disk拡張、100GB pilotは後続。SF0.1の結果を大規模性能・TPC公式score・G1完了へ読み替えない。
