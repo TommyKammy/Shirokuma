@@ -4,6 +4,8 @@
 
 2026-11-15 JST追記: [承認variant14件の由来・方言・結果照合](performance-tpcds-approved-variants-2026-11-15.md)で原Spark/移植14件・903行を確認した。nativeの個別監査は両経路13件・803行が一致し、14aは348 stagesが上限150を超えるため正式suite全体の受入を保留する。以下の未受入記述は本記録着手時点の状態である。
 
+2026-11-15 JST追記: [SF0.1 scale・計測器characterization](performance-scale-meter-2026-11-15.md)の初回計測は、production `CapacitySampler(0.2)`ではなく毎callbackのunsampled guard、Writer前計測、累積maxrss、不完全なVM/state baseline、同一状態のsubtree scan、sampling childを含むCPU測定という欠陥のため不採用とした。corrected production guardでは最大global scanがmedian302ms/p95 316ms/max332ms、1M行offline full-checkのchecked/no-op per-pair overheadがmedian約155.7%（range154.4–162.1%、ratio-of-medians158.9%）だった。task-local observer-readiness screenは不合格であり、sampling intervalや閾値を結果後に変更せず、absolute timesを保持し、deadline/local peak/stop保証を維持したままfull-global scan回数/per-scan costを減らして同じscreenを再実行する。以下の200ms samplingと6.9–7.7秒の観測はSF0.01時点の履歴である。
+
 ## TPC-DSの対応範囲
 
 | 分類 | 対象 | 位置付け |

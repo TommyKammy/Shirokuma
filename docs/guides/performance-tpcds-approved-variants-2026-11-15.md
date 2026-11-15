@@ -4,6 +4,8 @@
 
 2026-11-15 追記: 後続の[stage上限の正式適用](performance-stage-limit-2026-11-15.md)でcoordinatorの `max_stage_count=400` を正式設定へ適用し、14a standaloneは直接Trino/公開APIとも100行、正式14件suiteは両経路とも14/14・903行で参照と一致した。以下の348>150と11件未実行は当時の失敗証拠として保持し、成功へ読み替えない。適用後は設定bytesを復元し、stage annotation/propertyを除去した。
 
+2026-11-15 追記: [SF0.1 scale・計測器characterization](performance-scale-meter-2026-11-15.md)でfresh 24表/1,175,873行とfresh Spark referenceを作成し、14件は1,113行で独立に一致した。24表全部と288,464行large resultも直接/公開all-resultsで一致したが、99/4 native coverageとobserver-readinessは未達である。SF0.01の903行・旧referenceを新scaleの期待値へ再利用していない。
+
 ## 採用sourceと検証の範囲
 
 対象は5a / 10a / 14a / 18a / 22a / 27a / 35a / 36a / 51a / 67a / 70a / 77a / 80a / 86a。Apache Spark v4.0.1、commit `29434ea766b0fc3c3bf6eaadb43a8f931133649e` の `sql/core/src/test/resources/tpcds-v2.7.0` を固定し、14 raw fileのhash・URL・由来を保存した。[固定source](https://github.com/apache/spark/tree/29434ea766b0fc3c3bf6eaadb43a8f931133649e/sql/core/src/test/resources/tpcds-v2.7.0)
