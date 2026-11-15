@@ -71,6 +71,10 @@ raw pairs（checked / no-op / ratio / scans / per-scan）:
 
 独立reviewはparser 28件 × 4 build = **112 check**とscheduler/accounting 7件を再実行し、37 root whole-map、旧35 baseline・host baseline・新規0 baselineのdisjoint 37 rootを確認した。18 raw run / 9 pairすべてでinterpreter 3.12.12、source/control/primary binary、manifestのfingerprint一致、0.2 intervalで7819 guard check、実worker 6（≤8）を確認し、baseline 79.261519%、control 16.552184%、primary 17.350496%、primary max 38.549916msを再計算した。sessionのmodelも実測で確認している。
 
+## 後続pass（繰り返しqualification）
+
+2026-11-15 JST追記。本記録の37 root測定（primary 17.35%、control 16.55%）はそのscopeで有効なまま変更しない。後続の[dispatch/merge分解pass](performance-capacity-dispatch-2026-11-15.md)は新候補を作らず、変更していないcontrolで39 rootの同一screenを再測定し、baseline 84.89% / control 15.54%で10%未達だった。残差（merge/dedup 1.08ms、queue系）は小さく、次のevidence gapはkernel側のper-call costである。
+
 ## 限界
 
 - prototype限定で、全保証のqualifiedを主張しない。productionのdeadline/local peak/stop/cancelコードは変更していない。
