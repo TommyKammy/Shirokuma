@@ -60,6 +60,10 @@ raw pairs（checked / no-op / ratio / scans / per-scan）:
 
 **判定: max scan <200ms は両候補PASS、offline paired overhead ≤10% はFAIL（best 18.62%）。** 10%に必要な差は約7.44秒で、subtree6の実測差は約13.87秒。native helper・build dependency・Makefile変更はproductionへ入れず、`allocated`は`os.scandir`のまま据え置く。
 
+## 後続pass
+
+2026-11-15 JST追記。本記録の数値（subtree6 18.62%、subtree8 20.08%）はそのまま有効である。後続の[syscall分解pass](performance-capacity-syscall-2026-11-15.md)は37 root scopeでper-directory costを分解し、新候補をcontrol（本記録のproto3 6 worker）と比較したが、新候補17.35% / control 16.55%で有意差は無く、10%は未達だった。
+
 ## 計測上の限界
 
 - 6 workerが8 workerより速い逆転は本hostで再現した（scan 29.0 vs 38.4ms、offline 18.62% vs 20.08%）。system CPUが6 worker 64–65s、8 worker 101–102sと増えており、kernel側のmetadata競合として整合するが、原因の切り分けは未実施。
