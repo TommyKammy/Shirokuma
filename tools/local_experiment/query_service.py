@@ -1040,18 +1040,35 @@ def _prune_full(pin):
     pin.pending_tokens.intersection_update(set(pin.responses) | {pin.full_pending_token})
 
 
+def _page_copy(value):
+    """Copy one page response, which is always JSON-domain by construction.
+
+    Pages are assembled from json.loads of the backend body plus registry strings
+    and integers (see _page/_pending_page/_metadata), so the value is limited to
+    str/int/float/bool/None/list and str-keyed dict. A JSON round-trip is
+    materially cheaper than copy.deepcopy for the ~1 MB pages served here and is
+    value-preserving over exactly that domain. It is not a general replacement
+    for deepcopy: tuples, non-string keys, shared aliases or cycles would change.
+    Only a JSON serialization TypeError/ValueError triggers the deepcopy fallback;
+    other non-JSON values are not protected and may be coerced.
+    """
+    try:
+        return json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return deepcopy(value)
+
+
 def _remember_full(pin, token, response):
     # Ownership of the freshly built response moves into the replay cache: the
     # caller passes a value it no longer uses (a just-received backend page or a
     # cleared initial_response), so the cache keeps the original object and the
-    # caller receives exactly one deep copy. Payload cells are arbitrarily nested
-    # and mutable, so the copy is deep; it is what keeps cached replays immune to
-    # caller mutations.
+    # caller receives exactly one copy (deep, so cached replays stay immune to
+    # caller mutations).
     pin.responses[token] = response
     next_token = response['next_uri'].rsplit('/', 1)[1] if response.get('next_uri') else None
     pin.full_pending_token = next_token if next_token in pin.pending_tokens else None
     _prune_full(pin)
-    return deepcopy(response)
+    return _page_copy(response)
 
 
 def _fetch_full(principal, query_id, page_token, selected_role, pin):

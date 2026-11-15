@@ -159,6 +159,26 @@ class FullResultTests(unittest.TestCase):
                 self.assertEqual(page.get('result_mode'), value.get('result_mode'))
             self.assertEqual(transport.call_count, 2)
 
+    def test_json_domain_page_values_survive_the_return_copy(self):
+        # The page fast path copies through JSON; the JSON value domain must be
+        # preserved exactly (bigint, decimal-as-string, UTF-8 and empty strings,
+        # bool, None, nested list/map, negative zero).
+        values = [[2**63 + 7, '12345678901234567890.123456789', '雪', '', True, None,
+                   {'k': [1, [2, {'deep': -0.0}]]}, -0.0, 1.5, False]]
+        page = self.backend_page(1, 2, values)
+        page['stats'] = {'state': 'RUNNING', 'processedRows': 2**53 + 1,
+                         'cpuTimeMillis': 7, 'queuedTimeMillis': 0}
+        with patch.object(qs, '_transport', side_effect=[self.backend_page(0, 2), page]):
+            first = self.submit()
+            delivered = self.fetch(first)
+        self.assertEqual(delivered['data'], values)
+        self.assertEqual(delivered['stats']['processedRows'], 2**53 + 1)
+        self.assertIs(type(delivered['data'][0][0]), int)
+        self.assertIs(type(delivered['data'][0][6]['k'][1][1]['deep']), float)
+        self.assertEqual(str(delivered['data'][0][6]['k'][1][1]['deep']), '-0.0')
+        pin = qs._pins[first['id']]
+        self.assertIn(deepcopy(values), [r['data'] for r in pin.responses.values()])
+
     def test_caller_mutation_of_delivered_page_does_not_corrupt_cached_replay(self):
         # The cache owns the freshly received response and the caller receives a
         # deep copy, so arbitrary nested mutation of the delivered payload must

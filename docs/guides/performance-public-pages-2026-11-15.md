@@ -64,3 +64,7 @@ reviewer は raw 80件（before 40 + after 40）の run/attempt を確認し、`
 ## 採否
 
 コードは**採用**（挙動不変・テスト追加）。C6 public の header_wait はこの同一hostの warm 3回で 4.449→3.297s と観測したが、before/after は別phase・server restart・cache状態未知の条件下で、**「4秒削減」ではなく約1.1秒**、体感wallの改善は未確認。次の本体課題は公開APIに残る転送・ページ処理の切り分けであり、計測器の追加チューニングは再開しない。
+
+## 追記（2026-11-16）: 返却copyのJSON経路化
+
+cache への ownership 移譲はそのままに、呼出元へ返す copy を JSON round-trip（値域はページ応答の JSON domain に限定。JSON serialization が `TypeError`/`ValueError` のときのみ `deepcopy` し、他の非 JSON 値は保護しない）へ置換した。同一 frozen 47 root・同一条件の再測定で **C6 public の followup header_wait 3.344 → 2.814s（−0.530s / −15.85%）**、CLI wall は 84.163 → 83.454s、`_remember_full` は 27.1 → 11.8ms/page（profile 未較正）。direct は 79.843 → 80.585s、小caseの +0.5–0.7s は原因未特定。before/after は別 phase・restart・cache 状態未知で、因果や一般 wall 改善の証明ではない。詳細は[ページ転送の改善](performance-page-transport-2026-11-16.md)。
