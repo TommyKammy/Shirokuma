@@ -48,6 +48,12 @@ raw pairs（checked / no-op / ratio / scans / per-scan）:
 
 **判定: max scan <200ms はPASS、offline paired overhead ≤10% はFAIL（19.99%）。** 10%に必要なのは約7.5秒で、candidateの実測差は約15.0秒。scan costはscandir比で約3.9倍改善したがscreenは未達のため、native helper・build dependency・Makefile変更はproductionへ入れず、`allocated`は`os.scandir`のまま据え置く。
 
+## 後続passとの関係
+
+2026-11-15 JST追記。本記録のv3 prototypeは`ca_allocated_many`でroot単位にworkerを割り当てる実装で、混合rootの会計欠陥を持たない。したがって本記録のparity、19.99%を含む計測値、結論は**そのまま有効**であり、変更しない。
+
+後続の[subtree work queue試験](performance-capacity-subtree-2026-11-15.md)は別実装の`ca_scan`を新規に書き、その初期版に「directory root用のmerge loopを全rootへ適用し、混合batchでfile rootの直接測定値を0で上書きする」会計bugと、失敗経路でdescriptorを閉じないcleanup欠陥があった。いずれも後続passのprototype固有の欠陥で、本記録の測定・parity・結論には影響しない。経緯と修正は後続記録に記す。
+
 ## 計測上の限界
 
 - 最遅単一root（TPC-DS 8GBのdataset tree、2,908 files）は単独で18.84ms（in-process、spawnなし）を要した。これは観測値であり、root並列の理論的下限ではない。
