@@ -1041,7 +1041,13 @@ def _prune_full(pin):
 
 
 def _remember_full(pin, token, response):
-    pin.responses[token] = deepcopy(response)
+    # Ownership of the freshly built response moves into the replay cache: the
+    # caller passes a value it no longer uses (a just-received backend page or a
+    # cleared initial_response), so the cache keeps the original object and the
+    # caller receives exactly one deep copy. Payload cells are arbitrarily nested
+    # and mutable, so the copy is deep; it is what keeps cached replays immune to
+    # caller mutations.
+    pin.responses[token] = response
     next_token = response['next_uri'].rsplit('/', 1)[1] if response.get('next_uri') else None
     pin.full_pending_token = next_token if next_token in pin.pending_tokens else None
     _prune_full(pin)

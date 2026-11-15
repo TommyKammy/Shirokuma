@@ -159,6 +159,35 @@ class FullResultTests(unittest.TestCase):
                 self.assertEqual(page.get('result_mode'), value.get('result_mode'))
             self.assertEqual(transport.call_count, 2)
 
+    def test_caller_mutation_of_delivered_page_does_not_corrupt_cached_replay(self):
+        # The cache owns the freshly received response and the caller receives a
+        # deep copy, so arbitrary nested mutation of the delivered payload must
+        # not leak into the replay window.
+        payload = [[{'id': 1, 'details': {'tags': ['a', 'b'], 'nested': [{'k': None}]}},
+                    {'id': 2, 'details': {'tags': [], 'nested': []}}]]
+        with patch.object(qs, '_transport',
+                          side_effect=[self.backend_page(0, 2), self.backend_page(1, 2, payload[0])]) as transport:
+            first = self.submit()
+            delivered = self.fetch(first)          # page 1 is stored in the replay cache
+            expected = deepcopy(payload[0])
+            self.assertEqual(delivered['data'], expected)
+            pin = qs._pins[first['id']]
+            self.assertIn(expected, [response['data'] for response in pin.responses.values()])
+
+            delivered['data'][0]['id'] = -1
+            delivered['data'][0]['details']['tags'].append('mutated')
+            delivered['data'][0]['details']['nested'][0]['k'] = 'mutated'
+            delivered['data'].append({'id': 99})
+
+            before = transport.call_count
+            replay = self.fetch(first)             # same token: cache hit, no backend call
+            self.assertEqual(transport.call_count, before)
+            self.assertEqual(replay['data'], expected)
+            cached = [response['data'] for response in pin.responses.values()]
+            self.assertIn(expected, cached)
+            self.assertNotIn(99, [row.get('id') for data in cached for row in data])
+            self.assertNotIn('mutated', json.dumps(cached))
+
     def test_many_pages_replay_two_evict_without_backend_and_release_initial(self):
         with patch.object(qs, '_transport', side_effect=[self.backend_page(i, 80) for i in range(80)]) as transport:
             page = self.submit()

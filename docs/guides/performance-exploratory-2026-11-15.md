@@ -50,6 +50,10 @@ SQLは明示的な `FOR VERSION AS OF` でpinned snapshotを参照し、`validat
 
 **本体の改善対象から除外**（計測器側であり、打ち切り済みの追加チューニングに属する）: validation window 59.4s / full compare 47.4s、artifact processing 13.6–15.0s（guard・serialization・fsync混在）、CLI wallに含まれるguard・照合時間。原因未確定の列指向化・キャッシュ導入などの実装推奨は行わない。
 
+## 後続（公開APIページ受渡の改善）
+
+C6 public の followup `header_wait` 4.449s の原因を server 内で計測し、`_remember_full` の二重 `deepcopy`（53ms/page、100% CPU）を1回に削減した。同一 frozen 45 root・同一条件の再測定で **header_wait 4.449 → 3.297s**、C6 public wall 84.37 → 83.89s。小caseはsession driftで比較不能。詳細は[公開APIページ受渡の改善](performance-public-pages-2026-11-15.md)。
+
 ## 制約・未確認（隠さない）
 
 - **live table UUID/head/snapshotの照合は before/post とも未取得**。`verify_snapshots` はcampaign所有pinsを要求して拒否、`observe` はpublic APIが`PUBLIC_QUERY_UNMET`で拒否した。run時のSQLは明示`FOR VERSION AS OF`で、完全比較は成功しているが、それは上記の範囲の実証にとどまる。
