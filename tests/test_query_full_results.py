@@ -2,6 +2,8 @@
 from copy import deepcopy
 import io
 import json
+import http.client
+import ssl
 from pathlib import Path
 import sys
 import threading
@@ -178,6 +180,121 @@ class FullResultTests(unittest.TestCase):
         self.assertEqual(str(delivered['data'][0][6]['k'][1][1]['deep']), '-0.0')
         pin = qs._pins[first['id']]
         self.assertIn(deepcopy(values), [r['data'] for r in pin.responses.values()])
+
+    def test_real_http11_loopback_reuses_get_connection_and_closes_at_terminal(self):
+        import http.server
+
+        pages = [json.dumps(self.backend_page(i, 4, data=[[i]])).encode() for i in range(4)]
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+        server.pages, server.next_page, server.requests = pages, 0, 0
+        server.connections = 0
+        server.lock = threading.Lock()
+        class Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+            def setup(self):
+                super().setup()
+                with server.lock:
+                    server.connections += 1
+            def do_POST(self):
+                self._send()
+            def do_GET(self):
+                self._send()
+            def _send(self):
+                with server.lock:
+                    index = server.next_page
+                    server.next_page += 1
+                    server.requests += 1
+                body = server.pages[index]
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Connection', 'keep-alive')
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+            def log_message(self, *args):
+                pass
+        server.RequestHandlerClass = Handler
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        real_connection = http.client.HTTPConnection
+        def factory(host, port, timeout=30):
+            return real_connection('127.0.0.1', server.server_port, timeout=timeout)
+        try:
+            with patch.object(qs, '_transport', wraps=self.real_transport), \
+                    patch.object(qs.http.client, 'HTTPConnection', new=factory):
+                page = self.submit()
+                rows = []
+                while True:
+                    rows.extend(page['data'])
+                    if not page['next_uri']:
+                        break
+                    page = self.fetch(page)
+            self.assertEqual(rows, [[0], [1], [2], [3]])
+            self.assertEqual((server.requests, server.connections), (4, 2))
+            pin = qs._pins[page['id']]
+            self.assertIsNone(pin.transport)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_real_http11_peer_silent_close_does_not_retry(self):
+        import http.server
+
+        pages = [json.dumps(self.backend_page(i, 3, data=[[i]])).encode() for i in range(3)]
+        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
+        server.pages, server.next_page, server.requests = pages, 0, 0
+        server.lock = threading.Lock()
+        class Handler(http.server.BaseHTTPRequestHandler):
+            protocol_version = 'HTTP/1.1'
+            def do_POST(self):
+                self._send()
+            def do_GET(self):
+                self._send()
+            def _send(self):
+                with server.lock:
+                    index = server.next_page
+                    server.next_page += 1
+                    server.requests += 1
+                if index >= 2:
+                    self.close_connection = True
+                    return
+                body = server.pages[index]
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(body)))
+                self.send_header('Connection', 'keep-alive')
+                self.end_headers()
+                self.wfile.write(body)
+                self.wfile.flush()
+            def log_message(self, *args):
+                pass
+        server.RequestHandlerClass = Handler
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        real_connection = http.client.HTTPConnection
+        def factory(host, port, timeout=30):
+            return real_connection('127.0.0.1', server.server_port, timeout=timeout)
+        try:
+            with patch.object(qs, '_transport', wraps=self.real_transport), \
+                    patch.object(qs.http.client, 'HTTPConnection', new=factory):
+                page = self.submit()
+                page = self.fetch(page)
+                failed_token = self.token(page)
+                with self.assertRaises(qs.QueryError) as caught:
+                    self.fetch(page)
+                self.assertEqual(caught.exception.code, 'QUERY_BACKEND_FAILED')
+                with self.assertRaises(qs.QueryError):
+                    self.fetch(page)
+            self.assertEqual(server.requests, 3)
+            pin = qs._pins[page['id']]
+            self.assertIsNone(pin.transport)
+            self.assertIn(failed_token, pin.failures)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
     def test_caller_mutation_of_delivered_page_does_not_corrupt_cached_replay(self):
         # The cache owns the freshly received response and the caller receives a
@@ -448,6 +565,7 @@ class FullTransportTests(unittest.TestCase):
                     self.assertEqual(caught.exception.status, 502)
                     self.assertNotIn('xxxx', str(caught.exception))
                     decode.assert_not_called()
+                    self.assertIsNone(self.pin.transport)
                 connection.close.assert_called_once()
 
     def test_premature_eof_with_valid_json_precedes_decode(self):
@@ -466,6 +584,7 @@ class FullTransportTests(unittest.TestCase):
         self.assertEqual(response.length, 5)
         response.close.assert_called_once()
         connection.close.assert_called_once()
+        self.assertIsNone(self.pin.transport)
 
     def test_deadline_interrupts_blocked_body_after_socket_detaches(self):
         interrupted = threading.Event()
@@ -504,6 +623,7 @@ class FullTransportTests(unittest.TestCase):
         connected_socket.shutdown.assert_called_once_with(qs.socket.SHUT_RDWR)
         response.close.assert_called_once()
         connection.close.assert_called_once()
+        self.assertIsNone(self.pin.transport)
         self.assertEqual(len(timers), 1)
         self.assertFalse(timers[0].is_alive())
 
@@ -558,6 +678,215 @@ class FullTransportTests(unittest.TestCase):
                 self.assertTrue(connection.closed)
                 self.assertNotIn('private', str(caught.exception))
                 self.assertIn(caught.exception.status, (502, 504))
+
+    def test_post_and_delete_never_retain_a_transport(self):
+        response = http_response(b'{"id":"page"}', 13)
+        response.will_close = False
+        post_connection = Mock(sock=Mock())
+        post_connection.getresponse.return_value = response
+        post_connection.close = Mock()
+        with patch.object(qs.http.client, 'HTTPConnection', return_value=post_connection):
+            self.assertEqual(self.call(), {'id': 'page'})
+        self.assertIsNone(self.pin.transport)
+        post_connection.close.assert_called_once()
+        delete_url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        qs._registered(self.pin, delete_url, ('GET', 'DELETE'), 'backend')
+        delete_response = http_response(b'{"id":"deleted"}', 16)
+        delete_response.will_close = False
+        delete_connection = Mock(sock=Mock())
+        delete_connection.getresponse.return_value = delete_response
+        delete_connection.close = Mock()
+        with patch.object(qs.http.client, 'HTTPConnection', return_value=delete_connection):
+            self.assertEqual(self.transport(delete_url, 'DELETE', self.pin), {'id': 'deleted'})
+        self.assertIsNone(self.pin.transport)
+        delete_connection.close.assert_called_once()
+
+    def test_reused_socket_timeout_is_reset_for_a_new_absolute_deadline(self):
+        first_response = http_response(b'{"id":"page"}', 13)
+        first_response.will_close = False
+        second_response = http_response(b'{"id":"page"}', 13)
+        second_response.will_close = False
+        connection = Mock(sock=Mock())
+        connection.getresponse.side_effect = [first_response, second_response]
+        connection.request = Mock()
+        connection.close = Mock()
+        url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        qs._registered(self.pin, url, ('GET',), 'backend')
+        with patch.object(qs.http.client, 'HTTPConnection', return_value=connection):
+            self.transport(url, 'GET', self.pin)
+            self.assertIs(self.pin.transport, connection)
+            self.transport(url, 'GET', self.pin)
+        self.assertEqual(connection.request.call_count, 2)
+        self.assertGreaterEqual(connection.sock.settimeout.call_count, 3)
+        # The second call is the pre-request timeout for the retained socket;
+        # it must be near the new full-request deadline, not a leftover short
+        # body-read timeout from the prior page.
+        self.assertGreater(connection.sock.settimeout.call_args_list[1].args[0], 1.0)
+        qs._close_query_owner(self.pin)
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called()
+
+    def test_will_close_closes_and_next_get_uses_a_new_connection(self):
+        first, second = Mock(sock=Mock()), Mock(sock=Mock())
+        first_response = http_response(b'{"id":"one"}', 12)
+        first_response.will_close = True
+        second_response = http_response(b'{"id":"two"}', 12)
+        second_response.will_close = False
+        first.getresponse.return_value = first_response
+        second.getresponse.return_value = second_response
+        first.close, second.close = Mock(), Mock()
+        url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        qs._registered(self.pin, url, ('GET',), 'backend')
+        with patch.object(qs.http.client, 'HTTPConnection', side_effect=[first, second]) as constructor:
+            self.transport(url, 'GET', self.pin)
+            self.assertIsNone(self.pin.transport)
+            self.transport(url, 'GET', self.pin)
+        self.assertEqual(constructor.call_count, 2)
+        first.close.assert_called_once()
+        self.assertIs(self.pin.transport, second)
+        qs._close_query_owner(self.pin)
+        second.close.assert_called_once()
+
+    def test_reuse_is_pin_scoped_and_preserves_the_pin_tls_context(self):
+        tls_one, tls_two = ssl.create_default_context(), ssl.create_default_context()
+        one = qs._Pin(None, 'https://127.0.0.1:1234', {}, tls_one,
+                      max_rows=None, full_results=True)
+        two = qs._Pin(None, 'https://127.0.0.1:5678', {}, tls_two,
+                      max_rows=None, full_results=True)
+        one_url = 'https://127.0.0.1:1234/v1/statement/backend/1'
+        two_url = 'https://127.0.0.1:5678/v1/statement/backend/1'
+        qs._registered(one, one_url, ('GET',), 'backend')
+        qs._registered(two, two_url, ('GET',), 'backend')
+        first_connection, second_connection = Mock(sock=Mock()), Mock(sock=Mock())
+        first_response = http_response(b'{"id":"one"}', 12)
+        first_response.will_close = False
+        second_response = http_response(b'{"id":"two"}', 12)
+        second_response.will_close = False
+        first_connection.getresponse.return_value = first_response
+        second_connection.getresponse.return_value = second_response
+        with patch.object(qs.http.client, 'HTTPSConnection',
+                          side_effect=[first_connection, second_connection]) as constructor:
+            self.transport(one_url, 'GET', one)
+            self.transport(two_url, 'GET', two)
+        self.assertIs(constructor.call_args_list[0].kwargs['context'], tls_one)
+        self.assertIs(constructor.call_args_list[1].kwargs['context'], tls_two)
+        self.assertTrue(tls_one.check_hostname and tls_two.check_hostname)
+        self.assertEqual(tls_one.verify_mode, ssl.CERT_REQUIRED)
+        self.assertEqual(tls_two.verify_mode, ssl.CERT_REQUIRED)
+        self.assertIs(one.transport, first_connection)
+        self.assertIs(two.transport, second_connection)
+        self.assertIsNot(one.transport, two.transport)
+        qs._close_query_owner(one)
+        qs._close_query_owner(two)
+
+    def test_error_on_reused_connection_closes_and_does_not_retry(self):
+        response = http_response(b'{"id":"page"}', 13)
+        response.will_close = False
+        connection = Mock(sock=Mock())
+        connection.getresponse.return_value = response
+        connection.request = Mock(side_effect=[None, OSError('private write detail')])
+        connection.close = Mock()
+        url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        qs._registered(self.pin, url, ('GET',), 'backend')
+        with patch.object(qs.http.client, 'HTTPConnection', return_value=connection):
+            self.transport(url, 'GET', self.pin)
+            with self.assertRaises(qs.QueryError) as caught:
+                self.transport(url, 'GET', self.pin)
+        self.assertEqual(caught.exception.code, 'QUERY_BACKEND_FAILED')
+        self.assertEqual(connection.request.call_count, 2)
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
+        self.assertNotIn('private', str(caught.exception))
+
+    def test_closed_execution_closes_retained_transport_without_dispatch(self):
+        connection = Mock()
+        self.pin.transport = connection
+        with patch.object(qs, '_owned', return_value={'execution_closure': 'closed'}), \
+                patch.object(qs, '_receive') as receive, \
+                patch.object(qs, '_transport') as transport:
+            with self.assertRaises(qs.QueryError) as caught:
+                qs._fetch_full(self.f.principal, 'query', 'token',
+                               self.context.selected_role, self.pin)
+        self.assertEqual(caught.exception.code, 'EXECUTION_CLOSED')
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
+        receive.assert_not_called()
+        transport.assert_not_called()
+
+    def test_cancel_closed_execution_closes_retained_transport(self):
+        connection = Mock()
+        self.pin.transport = connection
+        with patch.object(qs, '_reconcile_result', return_value={'id': 'query'}):
+            result = qs._cancel_locked('query', self.pin, {'execution_closure': 'closed'})
+        self.assertEqual(result, {'id': 'query'})
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
+
+    def test_retirement_only_revocation_closes_retained_transport(self):
+        query_id = 'retirement-query'
+        connection = Mock()
+        self.pin.transport = connection
+        row = {'actor': self.f.principal.principal_id,
+               'selected_role': self.context.selected_role,
+               'backend_username': 'backend', 'database_id': 'database',
+               'schema_id': 'schema', 'warehouse_id': 'LOCAL',
+               'sql_catalog': 'catalog', 'sql_schema': 'schema',
+               'binding_revision': 1, 'generation_id': 'generation',
+               'grant_revision': 1}
+        qs._pins[query_id] = self.pin
+        try:
+            with patch.object(qs, '_row', return_value=row), \
+                    patch.object(qs.request_auth, '_principal_accounts',
+                                 return_value={self.f.principal.principal_id: object()}), \
+                    patch.object(qs, 'resolve_context', side_effect=PermissionError), \
+                    patch.object(qs, '_retirement_only_denial', return_value=True), \
+                    patch.object(qs, '_best_cancel') as best_cancel:
+                with self.assertRaises(qs.QueryError) as caught:
+                    qs._owned(self.f.principal, query_id,
+                              self.context.selected_role, cleanup=True)
+        finally:
+            qs._pins.pop(query_id, None)
+        self.assertEqual(caught.exception.code, 'DB_ACCESS_REVOKED')
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
+        best_cancel.assert_not_called()
+
+    def test_cached_failure_does_not_retry_and_closes_transport(self):
+        connection = Mock()
+        self.pin.transport = connection
+        self.pin.full_next_token = 'token'
+        url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        self.pin.tokens = {'token': (url, frozenset({'GET'}))}
+        row = {'execution_closure': '', 'state': 'RUNNING'}
+        error = qs.QueryError('QUERY_BACKEND_FAILED', 502)
+        with patch.object(qs, '_owned', return_value=row), \
+                patch.object(qs, '_receive', side_effect=error) as receive:
+            with self.assertRaises(qs.QueryError) as first:
+                qs._fetch_full(self.f.principal, 'query', 'token',
+                               self.context.selected_role, self.pin)
+            self.assertIsNone(self.pin.transport)
+            with self.assertRaises(qs.QueryError) as second:
+                qs._fetch_full(self.f.principal, 'query', 'token',
+                               self.context.selected_role, self.pin)
+        self.assertEqual((first.exception.code, second.exception.code),
+                         ('QUERY_BACKEND_FAILED', 'QUERY_BACKEND_FAILED'))
+        self.assertEqual(receive.call_count, 1)
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
+
+    def test_transport_early_admission_rejection_closes_retained_socket(self):
+        connection = Mock()
+        self.pin.transport = connection
+        self.pin.admission = Mock()
+        url = 'http://127.0.0.1:1234/v1/statement/backend/1'
+        qs._registered(self.pin, url, ('GET', 'DELETE'), 'backend')
+        with patch.object(qs.admission, '_row',
+                          return_value={'execution_closure': 'closed'}):
+            with self.assertRaises(qs.QueryError) as caught:
+                self.transport(url, 'DELETE', self.pin)
+        self.assertEqual(caught.exception.code, 'EXECUTION_CLOSED')
+        self.assertIsNone(self.pin.transport)
+        connection.close.assert_called_once()
 
     def test_legacy_transport_keeps_unbounded_read_and_no_explicit_connect(self):
         self.pin.full_results = False

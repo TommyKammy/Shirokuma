@@ -80,3 +80,7 @@ warm median [min–max] 秒。`header_wait` は各 run の followup 全 call 累
 **採用**: JSON 値域のページ返却 copy 改善。C6 public の warm hdr は 3.344 → 2.814s（−0.530s / −15.85%）、CLI wall は 84.163 → 83.454s。ただし before/after は別 phase・server restart・cache 状態未知で、この差の因果や一般的な wall 改善を証明したものではない。direct は 79.843 → 80.585s、小 case の +0.5–0.7s は原因未特定。
 
 次の優先課題は `_transport` 内部の実 connect / TLS / response / read / decode を実処理境界で限定診断し、改善候補の有無を判断すること。今回の inclusive 39.1ms は内訳未分離で、サーバ側 copy 以外と断定しない。計測器の追加チューニングは再開しない。SLO・一般性能・他製品比較は引き続き未受入。
+
+## 追記（2026-11-16）: full-result GETの接続再利用
+
+`_transport` の実boundary診断で、C6 publicの40 pagesあたりTLS handshakeが40回、合計約1.07秒（2診断/80 pages、35.2%）と分かった。`_Pin` 末尾の`transport` fieldにfull-results follow-up GETのHTTPS connectionを1本だけ保持し、最初のGET以外を再利用する最小変更を実装した。before/afterは同じ49-root/campaign2、C6 public follow-up hdr **2.655→2.409秒（−0.246秒/−9.3%）**、変更後診断は2.296秒、handshakeは40→2回。C6 public CLI wallは83.863→84.643秒（+0.780秒）で、validation/artifactの差とhost/backend drift仮説を含み、wall増加原因は未特定のため一般wall改善は未確認。詳細は[接続再利用の記録](performance-transport-phases-2026-11-16.md)。
