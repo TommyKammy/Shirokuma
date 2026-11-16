@@ -21,6 +21,7 @@ from typing import Optional
 
 import control_store
 import data_management as registry
+import database_http_json
 import request_auth
 import trino_auth
 import warehouse_admission as admission
@@ -57,6 +58,7 @@ class _Pin:
     initial_attempted: bool = True
     plan: object = field(default=None, repr=False)
     transport: object = field(default=None, repr=False)
+    payloads: dict = field(default_factory=dict, repr=False)
 
 
 _pins = {}
@@ -1077,48 +1079,31 @@ def _receive_accepted(query_id, url, method, body=None):
 
 def _prune_full(pin):
     """Called with pin.lock held; advancement acknowledges evicted pages."""
-    for cache in (pin.responses, pin.failures):
+    for cache in (pin.responses, pin.failures, pin.payloads):
         while len(cache) > 2:
             del cache[next(iter(cache))]
-    keep = set(pin.responses) | set(pin.failures) | {pin.full_next_token}
+    keep = set(pin.responses) | set(pin.payloads) | set(pin.failures) | {pin.full_next_token}
     if pin.cancel_urls:
         latest = pin.cancel_urls[-1]
         cancellation = next((key for key in reversed(pin.tokens)
                              if pin.tokens[key][0] == latest and 'DELETE' in pin.tokens[key][1]), None)
         keep.add(cancellation)
     pin.tokens = {key: value for key, value in pin.tokens.items() if key in keep}
-    pin.pending_tokens.intersection_update(set(pin.responses) | {pin.full_pending_token})
-
-
-def _page_copy(value):
-    """Copy one page response, which is always JSON-domain by construction.
-
-    Pages are assembled from json.loads of the backend body plus registry strings
-    and integers (see _page/_pending_page/_metadata), so the value is limited to
-    str/int/float/bool/None/list and str-keyed dict. A JSON round-trip is
-    materially cheaper than copy.deepcopy for the ~1 MB pages served here and is
-    value-preserving over exactly that domain. It is not a general replacement
-    for deepcopy: tuples, non-string keys, shared aliases or cycles would change.
-    Only a JSON serialization TypeError/ValueError triggers the deepcopy fallback;
-    other non-JSON values are not protected and may be coerced.
-    """
-    try:
-        return json.loads(json.dumps(value))
-    except (TypeError, ValueError):
-        return deepcopy(value)
+    pin.pending_tokens.intersection_update(set(pin.responses) | set(pin.payloads) | {pin.full_pending_token})
 
 
 def _remember_full(pin, token, response):
-    # Ownership of the freshly built response moves into the replay cache: the
-    # caller passes a value it no longer uses (a just-received backend page or a
-    # cleared initial_response), so the cache keeps the original object and the
-    # caller receives exactly one copy (deep, so cached replays stay immune to
-    # caller mutations).
-    pin.responses[token] = response
+    # The replay cache owns an immutable UTF-8 JSON encoding of the fresh page,
+    # not the mapping itself.  The caller receives the freshly built mapping in
+    # a dict subclass that carries that same encoding, so the HTTP layer writes
+    # the bytes without serializing the page again.  A caller mutating its
+    # mapping cannot change the cache; cached replays decode a fresh object.
+    payload = database_http_json.encode(response)
+    pin.payloads[token] = payload
     next_token = response['next_uri'].rsplit('/', 1)[1] if response.get('next_uri') else None
     pin.full_pending_token = next_token if next_token in pin.pending_tokens else None
     _prune_full(pin)
-    return _page_copy(response)
+    return database_http_json.JSONResponse(response, payload)
 
 
 def _fetch_full(principal, query_id, page_token, selected_role, pin):
@@ -1129,8 +1114,8 @@ def _fetch_full(principal, query_id, page_token, selected_role, pin):
         if row['execution_closure']:
             _close_transport(pin)
             raise QueryError('EXECUTION_CLOSED', 409)
-        if page_token in pin.responses:
-            response = deepcopy(pin.responses[page_token])
+        if page_token in pin.payloads:
+            response = json.loads(pin.payloads[page_token])
             if row['state'] in ('CANCELED', 'FAILED', 'UNKNOWN'):
                 _close_transport(pin)
                 response['state'] = response['stats']['state'] = row['state']

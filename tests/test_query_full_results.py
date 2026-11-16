@@ -161,10 +161,41 @@ class FullResultTests(unittest.TestCase):
                 self.assertEqual(page.get('result_mode'), value.get('result_mode'))
             self.assertEqual(transport.call_count, 2)
 
-    def test_json_domain_page_values_survive_the_return_copy(self):
-        # The page fast path copies through JSON; the JSON value domain must be
-        # preserved exactly (bigint, decimal-as-string, UTF-8 and empty strings,
-        # bool, None, nested list/map, negative zero).
+    def test_first_delivery_carries_preencoded_body_and_replay_is_independent(self):
+        # A fresh full-result page is encoded once for the replay cache and the
+        # HTTP layer writes those bytes; replay decodes a fresh mapping.
+        with patch.object(qs, '_transport',
+                          side_effect=[self.backend_page(0, 2), self.backend_page(1, 2, [[7, 'x']])]):
+            first = self.submit()
+            delivered = self.fetch(first)
+        pin = qs._pins[first['id']]
+        token = self.token(first)
+        self.assertIsInstance(delivered, qs.database_http_json.JSONResponse)
+        self.assertEqual(delivered.body, json.dumps(dict(delivered), default=str).encode())
+        self.assertEqual(pin.payloads[token], delivered.body)
+        self.assertNotIn(token, pin.responses)
+        expected = deepcopy(delivered['data'])
+        delivered['data'][0][0] = -1
+        delivered['data'].append([99, 'mutated'])
+        replay = self.fetch(first)
+        self.assertEqual(replay['data'], expected)
+        self.assertEqual(json.loads(pin.payloads[token])['data'], expected)
+
+    def test_respond_writes_preencoded_jsonresponse_without_reserializing(self):
+        import database_http_json
+        handler = Mock(_creation_location=None)
+        value = database_http_json.JSONResponse({'a': 1}, b'{"a":1}\n')
+        with patch.object(database_http_json.json, 'dumps',
+                          side_effect=AssertionError('must not re-encode')):
+            database_http_json.respond(handler, value)
+        handler.wfile.write.assert_called_once_with(b'{"a":1}\n')
+        handler.send_header.assert_any_call('Content-Length', '8')
+
+    def test_json_domain_page_values_survive_first_delivery_and_replay(self):
+        # The page replay cache is JSON bytes; the first delivery is decoded on
+        # replay.  The JSON value domain must be preserved exactly (bigint,
+        # decimal-as-string, UTF-8 and empty strings, bool, None, nested
+        # list/map, negative zero).
         values = [[2**63 + 7, '12345678901234567890.123456789', '雪', '', True, None,
                    {'k': [1, [2, {'deep': -0.0}]]}, -0.0, 1.5, False]]
         page = self.backend_page(1, 2, values)
@@ -179,7 +210,7 @@ class FullResultTests(unittest.TestCase):
         self.assertIs(type(delivered['data'][0][6]['k'][1][1]['deep']), float)
         self.assertEqual(str(delivered['data'][0][6]['k'][1][1]['deep']), '-0.0')
         pin = qs._pins[first['id']]
-        self.assertIn(deepcopy(values), [r['data'] for r in pin.responses.values()])
+        self.assertIn(deepcopy(values), [json.loads(payload)['data'] for payload in pin.payloads.values()])
 
     def test_real_http11_loopback_reuses_get_connection_and_closes_at_terminal(self):
         import http.server
@@ -309,7 +340,7 @@ class FullResultTests(unittest.TestCase):
             expected = deepcopy(payload[0])
             self.assertEqual(delivered['data'], expected)
             pin = qs._pins[first['id']]
-            self.assertIn(expected, [response['data'] for response in pin.responses.values()])
+            self.assertIn(expected, [json.loads(payload)['data'] for payload in pin.payloads.values()])
 
             delivered['data'][0]['id'] = -1
             delivered['data'][0]['details']['tags'].append('mutated')
@@ -320,7 +351,7 @@ class FullResultTests(unittest.TestCase):
             replay = self.fetch(first)             # same token: cache hit, no backend call
             self.assertEqual(transport.call_count, before)
             self.assertEqual(replay['data'], expected)
-            cached = [response['data'] for response in pin.responses.values()]
+            cached = [json.loads(payload)['data'] for payload in pin.payloads.values()]
             self.assertIn(expected, cached)
             self.assertNotIn(99, [row.get('id') for data in cached for row in data])
             self.assertNotIn('mutated', json.dumps(cached))
@@ -393,7 +424,7 @@ class FullResultTests(unittest.TestCase):
         pin = qs._Pin(context, '', {}, None, max_rows=None, full_results=True)
         cached = dict(id='full-logical', result_mode='all', data=[[42]], columns=[],
                       state='FINISHED', stats={'state':'FINISHED'}, next_uri=None)
-        pin.responses['replay'] = cached
+        pin.payloads['replay'] = json.dumps(cached).encode()
         fetch = lambda: qs.fetch(fixture.alice, 'full-logical', 'replay', selected_role='bi_viewer')
         with patch.dict(qs._pins, {'full-logical': pin}), patch.object(qs, '_transport') as transport, \
                 patch.object(qs, '_best_cancel'):

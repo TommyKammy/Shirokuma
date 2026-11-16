@@ -2,6 +2,29 @@
 import json
 
 
+class JSONResponse(dict):
+    """A mapping whose exact UTF-8 JSON body was already encoded once.
+
+    First-delivery pages carry their encoded body so the HTTP layer does not
+    serialize the same ~2 MiB mapping a second time.  The mapping stays a real
+    dict for callers; its ``body`` slot is internal.  It is constructed from the
+    freshly built page and the caller's object is not the replay cache (the
+    cache holds the encoded bytes), so later mutation of the mapping cannot
+    change replay data.
+    """
+    __slots__ = ("body",)
+
+    def __init__(self, value, body):
+        if not isinstance(value, dict) or not isinstance(body, (bytes, bytearray)):
+            raise TypeError("JSONResponse requires a mapping and encoded bytes")
+        super().__init__(value)
+        self.body = bytes(body)
+
+
+def encode(value):
+    return json.dumps(value, default=str).encode("utf-8")
+
+
 def database_body(handler):
     def pairs(items):
         result = {}
@@ -23,7 +46,7 @@ def database_body(handler):
 
 
 def respond(handler, value, status=200):
-    data = json.dumps(value, default=str).encode("utf-8")
+    data = value.body if isinstance(value, JSONResponse) else encode(value)
     handler.send_response(status)
     creation_location = getattr(handler, '_creation_location', None)
     if creation_location:
