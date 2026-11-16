@@ -413,6 +413,62 @@ class FullResultTests(unittest.TestCase):
                 self.assert_code('DB_ACCESS_REVOKED', lambda: self.fetch(first), 403)
             self.assertEqual(transport.call_count, 2)
 
+    def test_grant_revocation_after_inflight_page_never_delivers_its_data(self):
+        calls = [0]
+        def backend(url, method, pin, body=None):
+            if method == 'DELETE':
+                return {}
+            if calls[0] == 0:
+                calls[0] = 1
+                return self.backend_page(0)
+            with control_store.connect() as db:
+                db.execute("UPDATE grants SET maximum_role='bi_viewer',revision=revision+1 "
+                           "WHERE principal_id=? AND database_id=?",
+                           (self.f.principal.principal_id, self.context.database_id))
+            return self.backend_page(1, data=[[987654321]])
+        with patch.object(qs, '_transport', side_effect=backend) as transport, \
+                patch.object(qs, '_best_cancel'):
+            first_page = self.submit()
+            with self.assertRaises(qs.QueryError) as caught:
+                self.fetch(first_page)
+        self.assertEqual(caught.exception.code, 'DB_ACCESS_REVOKED')
+        self.assertEqual(caught.exception.status, 403)
+        self.assertNotIn('987654321', str(caught.exception))
+        # The failed page is cached as a typed failure, never replayed as data.
+        with patch.object(qs, '_transport') as retry, patch.object(qs, '_best_cancel'):
+            with self.assertRaises(qs.QueryError) as cached:
+                self.fetch(first_page)
+        self.assertEqual(cached.exception.code, 'DB_ACCESS_REVOKED')
+        retry.assert_not_called()
+        self.assertEqual(transport.call_count, 2)  # POST + one GET
+
+    def test_closure_during_inflight_page_never_delivers_its_data(self):
+        query_id = [None]
+        calls = [0]
+        def backend(url, method, pin, body=None):
+            if method == 'DELETE':
+                return {}
+            if calls[0] == 0:
+                calls[0] = 1
+                return self.backend_page(0)
+            with control_store.connect() as db:
+                db.execute("UPDATE warehouse_admissions SET execution_closure='FENCED_READ_ONLY' "
+                           "WHERE kind='query' AND subject_id=?", (query_id[0],))
+            return self.backend_page(1, data=[[123456789]])
+        with patch.object(qs, '_transport', side_effect=backend):
+            first_page = self.submit()
+            query_id[0] = first_page['id']
+            with self.assertRaises(qs.QueryError) as caught:
+                self.fetch(first_page)
+        self.assertEqual(caught.exception.code, 'EXECUTION_CLOSED')
+        self.assertEqual(caught.exception.status, 409)
+        self.assertNotIn('123456789', str(caught.exception))
+        with patch.object(qs, '_transport') as retry:
+            with self.assertRaises(qs.QueryError) as cached:
+                self.fetch(first_page)
+        self.assertEqual(cached.exception.code, 'EXECUTION_CLOSED')
+        retry.assert_not_called()
+
     def test_cached_logical_identity_revocation_blocks_replay_before_data(self):
         import test_logical_access as logical_fixtures
         import logical_registry

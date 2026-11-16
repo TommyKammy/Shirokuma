@@ -59,6 +59,7 @@ class _Pin:
     plan: object = field(default=None, repr=False)
     transport: object = field(default=None, repr=False)
     payloads: dict = field(default_factory=dict, repr=False)
+    dataops_link: object = field(default=None, repr=False)
 
 
 _pins = {}
@@ -305,15 +306,19 @@ def _registered(pin, url, methods, backend_id):
     return token
 
 
-def _row(query_id):
+def _row(query_id, db=None):
     if not isinstance(query_id, str) or not query_id:
         raise QueryError('QUERY_NOT_FOUND', 404)
-    with control_store.connect() as db:
-        row = db.execute('''SELECT q.*, e.*,
+    query = '''SELECT q.*, e.*,
             COALESCE((SELECT execution_closure FROM warehouse_admissions a
                 WHERE a.kind='query' AND a.subject_id=q.id),'') AS execution_closure
             FROM query_records q JOIN query_execution_contexts e
-            ON q.id=e.query_id WHERE q.id=?''', (query_id,)).fetchone()
+            ON q.id=e.query_id WHERE q.id=?'''
+    if db is not None:
+        row = db.execute(query, (query_id,)).fetchone()
+        return dict(row) if row else None
+    with control_store.connect() as db:
+        row = db.execute(query, (query_id,)).fetchone()
         return dict(row) if row else None
 
 
@@ -366,24 +371,58 @@ def _retirement_only_denial(principal, context, *, backend_username=None):
 
 
 def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
-    row = _row(query_id)
-    if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
-        raise QueryError('QUERY_NOT_FOUND', 404)
-    if selected_role != row['selected_role']:
-        raise QueryError('CONTEXT_MISMATCH', 409)
-    try:
-        account = request_auth._principal_accounts().get(principal.principal_id)
-    except PermissionError:
-        if cleanup:
-            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-        _close_transport(_pins.get(query_id))
-        raise QueryError('DB_ACCESS_REVOKED', 403) from None
-    if account is None:
-        if cleanup:
-            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-        _close_transport(_pins.get(query_id))
-        raise QueryError('DB_ACCESS_REVOKED', 403)
-    if grants:
+    if not grants:
+        row = _row(query_id)
+        if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if selected_role != row['selected_role']:
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        try:
+            account = request_auth._principal_accounts().get(principal.principal_id)
+        except PermissionError:
+            if cleanup:
+                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+            _close_transport(_pins.get(query_id))
+            raise QueryError('DB_ACCESS_REVOKED', 403) from None
+        if account is None:
+            if cleanup:
+                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+            _close_transport(_pins.get(query_id))
+            raise QueryError('DB_ACCESS_REVOKED', 403)
+        return row
+
+    account_revoked = denied = False
+    logical_mode = False
+    with control_store.connect() as db:
+        db.execute('BEGIN')
+        row = _row(query_id, db=db)
+        if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if selected_role != row['selected_role']:
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        try:
+            account = request_auth._principal_accounts().get(principal.principal_id)
+        except PermissionError:
+            account = None
+        if account is None:
+            account_revoked = True
+        else:
+            try:
+                import logical_registry
+                logical_mode = logical_registry.creation_mode(db, row['database_id']) == 'logical_v1'
+                if logical_mode:
+                    context = _resolve_context(principal, row['database_id'], row['schema_id'], selected_role,
+                        warehouse_id=row['warehouse_id'], expected_binding_revision=row['binding_revision'],
+                        db=db, backend_username=row['backend_username'])
+                    if (context.generation_id != row['generation_id'] or context.sql_catalog != row['sql_catalog']
+                            or context.sql_schema != row['sql_schema']
+                            or context.grant_revision != row['grant_revision']):
+                        raise QueryError('CONTEXT_MISMATCH', 409)
+            except (QueryError, PermissionError):
+                denied = True
+    if not account_revoked and not denied and not logical_mode:
+        # Legacy contexts keep their existing short context/final-authority
+        # connections; only logical mode shares the row transaction.
         try:
             context = resolve_context(principal, row['database_id'], row['schema_id'], selected_role,
                 warehouse_id=row['warehouse_id'], expected_binding_revision=row['binding_revision'])
@@ -391,25 +430,19 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
                     or context.sql_schema != row['sql_schema']
                     or context.grant_revision != row['grant_revision']):
                 raise QueryError('CONTEXT_MISMATCH', 409)
-            import logical_registry
-            with control_store.connect() as db:
-                db.execute('BEGIN')
-                if logical_registry.creation_mode(db, context.database_id) == 'logical_v1':
-                    decision = request_auth.authorize_database(principal, context.database_id, selected_role,
-                        expected_generation_id=context.generation_id, db=db)
-                    try:
-                        identity = logical_registry.resolve_identity(db, principal.principal_id, context.database_id,
-                            selected_role, context.grant_revision, decision.platform_admin)
-                    except ValueError:
-                        raise PermissionError('Query identity is no longer current') from None
-                    if identity['backend_username'] != row['backend_username']:
-                        raise PermissionError('Query identity is no longer current')
         except (QueryError, PermissionError):
-            frozen = ResolvedQueryContext(**_metadata(row))
-            if cleanup and not _retirement_only_denial(principal, frozen, backend_username=row['backend_username']):
-                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-            _close_transport(_pins.get(query_id))
-            raise QueryError('DB_ACCESS_REVOKED', 403) from None
+            denied = True
+    if account_revoked:
+        if cleanup:
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+        _close_transport(_pins.get(query_id))
+        raise QueryError('DB_ACCESS_REVOKED', 403) from None
+    if denied:
+        frozen = ResolvedQueryContext(**_metadata(row))
+        if cleanup and not _retirement_only_denial(principal, frozen, backend_username=row['backend_username']):
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+        _close_transport(_pins.get(query_id))
+        raise QueryError('DB_ACCESS_REVOKED', 403) from None
     return row
 
 
@@ -418,10 +451,10 @@ def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=N
         db.execute('BEGIN IMMEDIATE')
         if admission.query_closure(db, query_id):
             raise QueryError('EXECUTION_CLOSED', 409)
-        registry.set_query_state(db, query_id, state)
+        registry.set_query_state(db, query_id, state, closure_checked=True)
         if backend_id is not None:
             try:
-                registry.set_query_backend_id(db, query_id, backend_id)
+                registry.set_query_backend_id(db, query_id, backend_id, closure_checked=True)
             except registry.RevisionConflict:
                 raise QueryError('CONTEXT_MISMATCH', 409)
         handle = _pins[query_id].admission
@@ -433,7 +466,9 @@ def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=N
             db_ai_plan.query_state(db, pin.plan, pin.context, query_id, state, backend_id, plan_result)
             if state in _TERMINAL or state == 'UNKNOWN':
                 pin.plan.raw = None
-        child = db.execute('SELECT operation_id,commit_result FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
+        child = None
+        if pin.dataops_link is not False:
+            child = db.execute('SELECT operation_id,commit_result FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
         if child is not None and state == 'FINISHED' and child['commit_result'] is not None:
             db.execute('UPDATE dataops_operations SET committed=1,result=? WHERE id=?',
                        (child['commit_result'], child['operation_id']))
@@ -547,15 +582,16 @@ def _page(query_id, page):
         truncated = len(data) > remaining or len(data) >= remaining and bool(next_uri)
         data = data[:remaining]
     pin.rows += len(data)
+    persist_backend = backend_id if row['backend_query_id'] is None else None
     if truncated and next_uri and state not in _TERMINAL:
-        _state(query_id, row['state'], backend_id)
+        _state(query_id, row['state'], persist_backend)
         try:
             state = _cancel_locked(query_id, pin, _row(query_id))['state']
         except QueryError:
             state = 'UNKNOWN'
         next_uri = None
     else:
-        _state(query_id, state, backend_id)
+        _state(query_id, state, persist_backend)
     result = dict(id=query_id, result_page_id=secrets.token_urlsafe(24), backend_query_id=backend_id, request_id=row['request_id'],
         worksheet_id=row['worksheet_id'], context=_metadata(row), columns=deepcopy(pin.columns),
         data=data, stats={key: value for key, value in stats.items() if key in {
@@ -982,7 +1018,8 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
             db.execute('INSERT INTO dataops_queries (operation_id,step,query_id,action,commit_result) VALUES (?,?,?,?,?)',
                        (operation_id, step, query_id, statement.action, statement.commit_result))
         _pins[query_id] = _Pin(context, frozen.origin, headers, frozen.tls,
-            admission=handle, owner=owner, max_rows=None, initial_attempted=False)
+            admission=handle, owner=owner, max_rows=None, initial_attempted=False,
+            dataops_link=operation_id)
     except BaseException:
         owner.close()
         raise
@@ -1021,20 +1058,26 @@ def _receive(query_id, url, method, body=None):
 
 
 def _receive_accepted(query_id, url, method, body=None):
+    pin = _pins[query_id]
     # A durable dbt cancel/phase fence is checked outside transport uncertainty.
-    # No POST has happened when this check rejects the initial send.
-    if method in ('POST', 'GET'):
+    # No POST has happened when this check rejects the initial send.  Ordinary
+    # public queries have no dataops link: one fresh read proves that, and the
+    # immutable absence is reused for later pages.  A linked query is rechecked
+    # on every page and is never cached as absent.
+    if method in ('POST', 'GET') and pin.dataops_link is not False:
         try:
             with control_store.connect() as db:
                 db.execute('BEGIN')
                 link = db.execute('SELECT operation_id FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
                 if link:
+                    pin.dataops_link = link['operation_id']
                     import db_dbt
                     db_dbt._check_operation(db, link['operation_id'])
+                else:
+                    pin.dataops_link = False
         except QueryError:
             _best_cancel(query_id)
             raise
-    pin = _pins[query_id]
     if pin.plan is not None and method in ('POST', 'GET'):
         import db_ai_plan
         try:
