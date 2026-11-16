@@ -16,27 +16,28 @@
 ## 計測方法（診断と公式E2Eの区別）
 
 - 公式E2E: 3 size × 2 route × (initial 1 + warm 3) = 24/24。同じmanifest SQL、DuckDB full reference、23列、600秒、4GiB declared peak、concurrency 1、0.2秒sampler、forced scan。BEFOREは最新の未変更24 runを、コード・manifest・context・dataset/snapshot・reference・serviceを監査したうえで再利用した。
-- BEFORE再利用の確認: product差分 `1561927d..a760e2af` は空、manifest SHA一致、public role/context一致、reference SHA一致、BEFORE 24/24 SUCCESS、engine ID 24 unique。現在のdirect 1M controlはbaseline direct中央値より **−1.68%** で、事前に定めた3%以内。directはWorkbenchページ経路を通らないcontrolである。
-- SQLite内訳: 同じ1M public all-resultsを、製品外の`sitecustomize`でSQLite `connect`/traceのみ数えた。製品ファイル・benchmark・guardは変更せず、SQL本文はliteralを伏せたshapeだけを保持した。通常ページはinitial submitとterminalを除く134ページ。traceの接続寿命はcallback overheadを含むため診断値であり、公式E2E時間ではない。
+- BEFORE再利用の確認: product差分 `1561927d..a760e2af` は空、manifest SHA一致、public role/context一致、reference SHA一致、BEFORE 24/24 SUCCESS、engine ID 24 unique。別に実施したone-off direct 1M equivalence run（`eq-1m-direct`、official 24-runのwarm directではない）はbaseline direct中央値より **−1.68%** で、事前に定めた3%以内。directはWorkbenchページ経路を通らないcontrolである。official 24-runのwarm direct wall差は別途 **−0.13%**（後述）。
+- SQLite内訳: 同じ1M public all-resultsを、製品外の`sitecustomize`でSQLite `connect`/traceのみ数えた。製品ファイル・benchmark・guardは変更せず、SQL本文はliteralを伏せたshapeだけを保持した。通常ページはinitial submitとterminalを除き、**BEFORE 133ページ / AFTER 134ページ**。page境界は各pageの`UPDATE query_records`を出すstate書込みconnectionで区切り、terminalは`UPDATE warehouse_admissions SET state`で判定した推論であり、request IDやHTTP開始時刻の直接観測ではない。page数が1異なるため、総量のper-page値は各phaseのページ数で割ったmean、種類別の値はper-page中央値として区別する。
 - 位相確認: 別の1M public diagnosticにmacOS `sample(1)`（10ms、100秒）を適用した。BEFOREの診断は変更前code、AFTERは最終code。公式E2Eとは別phaseであり、診断の秒数を公式値へ混ぜない。
 
-## SQLite内訳（通常データページ、134ページ）
+## SQLite内訳（通常データページ、BEFORE 133 / AFTER 134）
 
 | 項目 | BEFORE | AFTER | 差 |
 |---|---:|---:|---:|
-| SQLite接続/page | 11.36 | 6.37 | −44.0% |
-| 接続setup/page（PRAGMA×2 + sqlite_master×2を含む） | 44 | 24 | −45.5% |
-| BEGIN+COMMIT/page | 12 | 6 | −50% |
-| SELECT/page | 158 | 101 | −36.1% |
-| INSERT/UPDATE/DELETE/page | 2 | 1 | −50% |
-| SQL callback/page | 218.9 | 135.0 | −38.3% |
-| 接続寿命合計/page（診断、ms） | 14.16 | 9.82 | −30.6% |
+| SQLite接続/page（mean） | 11.36 | 6.37 | −44.0% |
+| setup/page（中央値。meanは45.4 / 25.5） | 44 | 24 | −45.5% |
+| BEGIN+COMMIT/page（中央値。meanは12.5 / 6.5） | 12 | 6 | −50% |
+| SELECT/page（中央値。meanは158.8 / 101.8） | 158 | 101 | −36.1% |
+| INSERT/UPDATE/DELETE/page（中央値。meanは2.2 / 1.2） | 2 | 1 | −50% |
+| SQL callback/page（mean） | 218.9 | 135.0 | −38.3% |
+| 接続寿命合計/page（mean、診断ms） | 14.16 | 9.82 | −30.6% |
 
+- 接続数・SQL callback・寿命合計は各phaseの通常ページ数（133/134）で割ったmean。setup/BEGIN+COMMIT/SELECT/writeはper-page中央値で、12または14接続のページがあるためmeanは中央値より大きい。`diag/sqlite-components.md`の表と同じ定義である。
 - 接続1回の独立測定は、382MBのstate DBで `connect`+setup+`SELECT 1` 中央値 **0.61ms**（200回）。1ページの接続setup削減は約5接続×0.6msに相当するが、これは診断であり公式wallへ加算しない。
 - ownership/authz/grants: 7接続・183 SQL/page → 3接続・111 SQL/page。row読取り、context解決、logical認可、identity照合をまとめ、同じ要求内で二重だったauthorize/identity読取りを除いた。
 - query state/stop: 4接続・33 SQL/page → 3接続・21 SQL/page。closure SELECTの重複、2ページ目以降のbackend ID再書込み、未リンクDataOps照会を削減した。admission停止確認・transport再確認・terminal admission確定は残した。
-- terminalページ: 11接続・219 SQL → 6接続・135 SQL。replayはこのE2Eに含まれず、下記の敵対的試験で別に確認した。
-- `sample(1)`のsqlite shareは **22.4%（134/599）→18.1%（100/553）**、header待ちへの比例配分は **1.526→1.138秒（−0.388秒 / −25.4%、推論）**。unknown/idleをsqliteへ再配分していない。
+- terminalページ（各1ページ）: 11接続・219 SQL → 6接続・135 SQL。replayはこのE2Eに含まれず、下記の敵対的試験で別に確認した。
+- `sample(1)`のsqlite shareは **22.4%（134/599 samples）→18.1%（100/553 samples）**。これらはsample数でありページ数ではない。header待ちへの比例配分は **1.526→1.138秒（−0.388秒 / −25.4%、推論）**。unknown/idleをsqliteへ再配分していない。
 
 ## 公式E2E（warm 3回のmedian [min–max]、秒）
 
@@ -52,10 +53,15 @@
 - 1M public: wall **−2.116秒（−0.72%）**、dispatch→result **−1.364秒（−2.15%）**、validation **−1.479秒（−0.81%）**、HTTP total **−0.595秒（−7.8%）**、header **−0.616秒（−9.1%）**。public wallのafter範囲はbefore範囲と重ならない。
 - 288k public: wall **+0.652秒（+0.78%）**、HTTP total **−0.301秒（−12.6%）**、header **−0.302秒（−14.2%）**、dispatch **−0.323秒**、validation **+0.355秒**。direct wallは+0.11%。HTTPは改善、wallはvalidation増で微増の混合。
 - 100k public: wall **+0.444秒（+1.49%）**、HTTP total **−0.091秒（−5.9%）**、header **−0.094秒（−6.5%）**。direct wallも+2.19%で、変更経路外のphase差を含む。
-- public−direct paired: 1M HTTP extra **2.738→2.110秒（−22.9%）**、header extra **6.094→5.489秒（−9.9%）**。288kはHTTP extra **−22.1%**、header extra **−14.3%**。100kはHTTP extra +0.9%（ほぼ不変）、header extra **−10.9%**。
+- public−direct paired: 1M HTTP extra **2.7377→2.1100秒（−22.9%）**、header extra **6.094→5.489秒（−9.9%）**。288kはHTTP extra **0.8596→0.6699秒（−22.1%）**、header extra **−14.3%**。100kはHTTP extra **0.3220→0.3246秒（+0.0026秒、ほぼneutral）**、header extra **−10.9%**。
 - follow-up header/call: 100k **57.59→52.89ms**、288k **48.97→42.36ms**、1M **50.16→44.73ms**。
 - Workbench CPU delta（補助、ps観測）: 1M public **4.63→3.96秒（−14.5%）**、288k **1.39→1.19秒**、100k **0.68→0.56秒**。directはほぼ不変で、ページ経路のlocal work削減と方向が一致する。これは公式CPU時間ではない。
-- 1M publicのwall改善はdirect control（−0.13%）より大きく、HTTP/headerの低下はpairedでも確認できる。ただし100k/288k wallは混合であり、wall一般の改善とはしない。
+- 1M publicのwall改善はofficial warm direct wall（−0.13%）より大きく、HTTP/headerの低下はpairedでも確認できる。ただし100k/288k wallは混合であり、wall一般の改善とはしない。1Mのone-off direct equivalence run（−1.68%）はBEFORE再利用の位相確認用であり、official warm matrixのdirect値ではない。
+
+## 次の優先
+
+- 通常ページに残るownership/authz SQLは **2接続・106 callbacks/page**（別にpage row 1接続・5 callbacks）。上流I/O前後の再認可は抑制せず、同一transaction内でさらに重複するidentity/binding読取りを減らせるかを、workload別の費用対効果で判断する。今回の計測だけでは、ここを次に優先すべきとまでは断定しない。
+- 今回の診断はWorkbench内部のSQLite成分とpublic HTTPであり、client・engineを含む外部runtime wallは別のE2E studyで確認する。
 
 ## 保証・敵対的検証
 
@@ -71,12 +77,12 @@
 - 公式AFTER phaseの新規Workbench query recordは14件（matrix public 12 + 診断2）で全てFINISHED。既存UNKNOWN 5件は不変、新規UNKNOWN/CANCELED/FAILEDは0。direct 12件はTrino側で終端確認済み。
 - 会計は前campaignの53 rootを継承し、新TASKと新campaign rootを加えた55 root。owned 57件は全てSUCCESS。check時点でused **約39.60GB**、remaining **約1.9599TB**、2TB ceiling・512MiB drain・4GiB declared peak内（最終値は`evidence/accounting-final.json`）。既存accountingはresetしていない。
 - doctorはpre/postともhealthy（45 healthy + 1 informational）。Trino pod UID不変。通常Workbenchは最終codeで再起動し、`/api/session` 200（admin）、`/api/status` 200（healthy）、`/api/v1/databases` 200（148件）を確認。状態DB・履歴は保持した。最終確認中に通常serverが停止したため、同じcode・同じ状態DBのままdetached processへ再起動し、同じ3面を再確認した（追加のcode変更なし）。
-- GitOpsの既存dirty 2ファイルとindexは変更していない。commitは製品4ファイル、試験1ファイル、本reportのみを対象とする。
+- GitOpsの既存dirty 2ファイルとindexは変更していない。commitは製品source 3ファイル（`query_service.py`、`query_context.py`、`data_management.py`）、試験1ファイル、本reportのみを対象とする。
 - 開発中の証拠として、最初の24 run（`cmp-*`）と途中診断（`diag-1m-public-before/after`、`cnt-*`）を保持するが、公式値には最終24 runと最終診断だけを使う。最初のclean diagnosticはsample fileが期限前に確定せず不採用として保持し、再実行していない。開発中に`test_database_ai`でdatabase lockedが出た原因は、`_resolve_context`の開発途中版がread transactionを保持したまま別接続を開いたことであり、最終版では接続を閉じてからlegacy最終認可を行う形に修正し、全回帰を通した。
 
 ## 制約
 
-- 単一host、concurrency 1、warm 3、統計検定なし。BEFOREは別phaseの24 runで、direct controlは−1.68%のphase差を含む。initialはcold cacheの証明ではない。
+- 単一host、concurrency 1、warm 3、統計検定なし。BEFOREは別phaseの24 runで、one-off direct equivalence runは−1.68%、official warm direct wallは−0.13%のphase差を含む。initialはcold cacheの証明ではない。
 - SQLite寿命はtrace callback overheadを含む診断値。接続数・SQL分類はexact callback count、秒の比例配分は推論。sampleは1 phase 1 profileで、thread内時系列相関により不確実性を過小評価する。
 - replayはE2E 1M publicに含まれず、adversarial unit testsで確認した。100k/288k wallは混合で、wall一般・SLO・100M性能の根拠にしない。benchmark/meter/guardは変更していない。
 
