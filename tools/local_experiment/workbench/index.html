@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Shirokuma · Workbench</title>
+<title>SQL Worksheets · Shirokuma Workbench</title>
 <script data-workbench-language>
 // Localize the neutral boot surface before its first paint, even while the app script loads.
 try {
@@ -44,27 +44,27 @@ try {
 <div id="lang-switcher" role="group" aria-label="Language"><button id="lang-en" data-lang="en" aria-pressed="true">EN</button><button id="lang-ja" data-lang="ja" aria-pressed="false">日本語</button></div>
 </header>
 <div class="layout">
-<nav id="workbench-nav" data-workbench-shell inert aria-label="Workbench sections" role="tablist" aria-orientation="vertical">
+<nav id="workbench-nav" data-workbench-shell inert aria-label="Workbench sections">
 <h2 class="nav-category">Work with Data</h2>
-<button id="tab-catalog" role="tab" aria-controls="catalog" aria-selected="false" tabindex="-1" data-tab="catalog"><svg class="icon" aria-hidden="true"><use href="#i-catalog"/></svg>Data Explorer</button>
-<button id="tab-warehouse" role="tab" aria-controls="warehouse" aria-selected="true" data-tab="warehouse"><svg class="icon" aria-hidden="true"><use href="#i-sql"/></svg>SQL Worksheets</button>
-<button id="tab-ingestion" role="tab" aria-controls="ingestion" aria-selected="false" tabindex="-1" data-tab="ingestion"><svg class="icon" aria-hidden="true"><use href="#i-ingest"/></svg>Ingestion &amp; Stages</button>
-<button id="tab-transformation" role="tab" aria-controls="transformation" aria-selected="false" tabindex="-1" data-tab="transformation"><svg class="icon" aria-hidden="true"><use href="#i-transform"/></svg>Transformation</button>
-<button id="tab-jobs" role="tab" aria-controls="jobs" aria-selected="false" tabindex="-1" data-tab="jobs" data-role-write="engineer"><svg class="icon" aria-hidden="true"><use href="#i-jobs"/></svg>Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></button>
-<button id="tab-bears" role="tab" aria-controls="bears" aria-selected="false" tabindex="-1" data-tab="bears"><svg class="icon" aria-hidden="true"><use href="#i-bears"/></svg>AI Bears</button>
+<a id="tab-catalog" href="#catalog" aria-controls="catalog" data-tab="catalog"><svg class="icon" aria-hidden="true"><use href="#i-catalog"/></svg>Data Explorer</a>
+<a id="tab-warehouse" href="#warehouse" aria-controls="warehouse" aria-current="page" data-tab="warehouse"><svg class="icon" aria-hidden="true"><use href="#i-sql"/></svg>SQL Worksheets</a>
+<a id="tab-ingestion" href="#ingestion" aria-controls="ingestion" data-tab="ingestion"><svg class="icon" aria-hidden="true"><use href="#i-ingest"/></svg>Ingestion &amp; Stages</a>
+<a id="tab-transformation" href="#transformation" aria-controls="transformation" data-tab="transformation"><svg class="icon" aria-hidden="true"><use href="#i-transform"/></svg>Transformation</a>
+<a id="tab-jobs" href="#jobs" aria-controls="jobs" data-tab="jobs" data-role-write="engineer"><svg class="icon" aria-hidden="true"><use href="#i-jobs"/></svg>Jobs<span id="jobs-alert-count" class="badge" role="status" hidden></span></a>
+<a id="tab-bears" href="#bears" aria-controls="bears" data-tab="bears"><svg class="icon" aria-hidden="true"><use href="#i-bears"/></svg>AI Bears</a>
 <h2 class="nav-category">Manage &amp; Monitor</h2>
-<button id="tab-db-admin" role="tab" aria-controls="db-admin" aria-selected="false" tabindex="-1" data-tab="db-admin" hidden><svg class="icon" aria-hidden="true"><use href="#i-db-admin"/></svg><span id="tab-db-admin-label">DB management</span></button>
-<button id="tab-pawprints" role="tab" aria-controls="pawprints" aria-selected="false" tabindex="-1" data-tab="pawprints"><svg class="icon" aria-hidden="true"><use href="#i-audit"/></svg>Audit Log</button>
-<button id="tab-compute" role="tab" aria-controls="compute" aria-selected="false" tabindex="-1" data-tab="compute"><svg class="icon" aria-hidden="true"><use href="#i-compute"/></svg>Compute &amp; Governance</button>
+<a id="tab-db-admin" href="#db-admin" aria-controls="db-admin" data-tab="db-admin" hidden><svg class="icon" aria-hidden="true"><use href="#i-db-admin"/></svg><span id="tab-db-admin-label">DB management</span></a>
+<a id="tab-pawprints" href="#pawprints" aria-controls="pawprints" data-tab="pawprints"><svg class="icon" aria-hidden="true"><use href="#i-audit"/></svg>Audit Log</a>
+<a id="tab-compute" href="#compute" aria-controls="compute" data-tab="compute"><svg class="icon" aria-hidden="true"><use href="#i-compute"/></svg>Compute &amp; Governance</a>
 <p class="nav-note">Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.</p>
 </nav>
 <main id="workbench-main" data-workbench-shell inert>
-<section id="db-admin" role="tabpanel" aria-labelledby="tab-db-admin" hidden>
+<section id="db-admin" hidden>
 <div class="page-head"><div class="page-title"><h1 id="db-admin-title">DB management</h1></div><button id="db-admin-refresh" type="button">Refresh current revisions</button></div>
 <div id="db-admin-error" class="error" role="alert" hidden></div>
 <div id="db-admin-content"></div>
 </section>
-<section id="warehouse" role="tabpanel" aria-labelledby="tab-warehouse">
+<section id="warehouse">
 <div class="page-head"><div class="page-title"><h1 id="database-page-title">SQL Worksheets</h1><p id="database-page-description">Query Iceberg tables with the resident Trino warehouse.</p></div>
 <div class="warehouse-strip" aria-label="Warehouse status"><strong>Trino / LOCAL</strong><span id="warehouse-state" class="badge">Loading…</span><span id="replicas" class="muted">Replicas —</span><details><summary>Components</summary><div id="components" class="components"></div></details><button id="chill" class="small">Chill</button><button id="wake" class="small">Wake</button><button id="refresh-status" class="small">Refresh</button></div></div>
 <div id="status-error" class="error" role="status" hidden></div>
@@ -73,7 +73,7 @@ try {
 <div class="samples"><h3>Sample queries</h3><button data-sample="orders">Recent orders</button><button data-sample="revenue">TPC-H Revenue by Nation</button><button data-sample="customers">Customers</button></div></details>
 <div class="sql-main">
 <div class="panel editor-panel">
-<div class="editor-tabs"><div id="worksheet-tabs" role="tablist" aria-label="SQL worksheets"></div><button id="add-worksheet-tab" aria-label="Add SQL worksheet">+ Worksheet</button><div class="history-field"><label for="query-history">Recent Query History</label><select id="query-history"><option value="">Restore a past query…</option></select></div></div>
+<div class="editor-tabs"><div id="worksheet-tabs" role="tablist" aria-label="SQL worksheets"></div><div id="worksheet-closers" class="worksheet-closers" hidden><label for="worksheet-close-select">Worksheet to close</label><select id="worksheet-close-select" disabled><option value="">Choose worksheet to close</option></select><button id="worksheet-close-action" type="button" disabled>Close worksheet</button></div><button id="add-worksheet-tab" aria-label="Add SQL worksheet">+ Worksheet</button><div class="history-field"><label for="query-history">Recent Query History</label><select id="query-history"><option value="">Restore a past query…</option></select></div></div>
 <label for="sql" class="visually-hidden">SQL statement</label><textarea id="sql" class="editor" spellcheck="false">SELECT * FROM marts.fct_orders LIMIT 10</textarea>
 <div class="query-footer"><div class="toolbar"><span class="field"><label for="query-warehouse">Warehouse</label><select id="query-warehouse"><option>LOCAL</option><option>XS</option><option>S</option></select></span><span class="field"><label for="query-schema">Schema</label><select id="query-schema"><option>marts</option><option>raw</option><option>sandbox</option><option>staging</option><option>tpch_tiny</option><option>smoke</option></select></span><span class="field"><label for="query-mode">Mode</label><select id="query-mode"><option>read-only</option><option>sandbox-write</option><option>admin-write</option></select></span><span class="field"><label for="max-rows">Max rows</label><input id="max-rows" type="number" min="1" value="1000"></span></div><div class="run-group"><small class="wide-only">Runs selected text when present</small><kbd>⌘/Ctrl + Enter</kbd><button id="run-query" class="primary run">Run Query</button></div></div>
 <details class="copilot"><summary>AI Bear Copilot</summary><div class="copilot-body"><label for="copilot-request">Describe the SQL you need</label><textarea id="copilot-request" rows="2" placeholder="Revenue by nation"></textarea><div class="toolbar"><button id="copilot-generate">Generate SQL</button><button id="copilot-explain">Explain Plan</button><span class="divider"></span><label for="copilot-stage-table">WAP table</label><input id="copilot-stage-table" placeholder="nation_summary"><button id="copilot-stage">Stage &amp; Audit</button><button id="copilot-publish">Publish</button></div><section id="proposal-panel" hidden></section><pre id="copilot-result" role="status" hidden></pre></div></details>
@@ -81,10 +81,10 @@ try {
 <div class="panel results-panel"><div class="panel-head"><h2>Results</h2><span id="query-meta" class="status-line" role="status">Ready</span></div>
 <div class="results-tools"><div class="segmented" role="group" aria-label="Result view"><button id="result-view-table" aria-pressed="true">Table View</button><button id="result-view-chart" aria-pressed="false">Chart View</button></div><label for="result-filter">Filter rows</label><input id="result-filter" type="search" placeholder="Search returned rows"><span class="header-spacer"></span><button id="export-csv" class="small" disabled>Download CSV</button><button id="export-json" class="small" disabled>Download JSON</button><button id="export-tsv" class="small" disabled hidden>Download TSV</button><button id="copy-tsv" class="small" disabled>Copy TSV</button><small id="result-action-state" role="status"></small></div>
 <div id="chart-tools" class="results-tools chart-tools" hidden><label for="chart-type">Chart type</label><select id="chart-type"><option value="bar">Bar Chart</option><option value="line">Line Chart</option></select><label for="chart-x-col">X column</label><select id="chart-x-col"></select><label for="chart-y-col">Y column</label><select id="chart-y-col"></select></div>
-<div id="query-chart" hidden></div><div id="query-error" class="error" role="alert" hidden></div><div id="query-results" class="table-wrap"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
+<div id="query-chart" hidden></div><div id="query-error" class="error" role="alert" hidden></div><div id="query-results" class="table-wrap" role="region" tabindex="0" aria-label="Query results"><div class="empty">Run a query to inspect rows and column types. Chilled warehouses wake automatically.</div></div></div>
 </div></div>
 </section>
-<section id="ingestion" role="tabpanel" aria-labelledby="tab-ingestion" hidden>
+<section id="ingestion" hidden>
 <div class="page-head"><div class="page-title"><h1>Ingestion &amp; Stages</h1><p>Preview file columns and sample rows before loading an Iceberg table.</p></div></div>
 <div class="subnav" role="tablist" aria-label="Ingestion views"><button id="ingestion-view-file" role="tab" aria-selected="true" aria-controls="ingestion-file" data-view="ingestion">File upload</button><button id="ingestion-view-stages" role="tab" aria-selected="false" tabindex="-1" aria-controls="ingestion-stages" data-view="ingestion" data-admin-view>Stages</button></div>
 <div id="ingestion-file" role="tabpanel" aria-labelledby="ingestion-view-file">
@@ -107,7 +107,7 @@ try {
 <div>
 <div class="section"><div class="section-head"><h3>Stage definition</h3></div>
 <form id="stage-form"><div class="job-fields">
-<div><label for="stage-name">Stage name</label><input id="stage-name" required maxlength="48" pattern="[a-z][a-z0-9_-]{0,47}" placeholder="sales-files"></div>
+<div><label for="stage-name">Stage name</label><input id="stage-name" required maxlength="48" pattern="[a-z][a-z0-9_\-]{0,47}" placeholder="sales-files"></div>
 <div><label for="stage-directory">Host folder (absolute path)</label><input id="stage-directory" required placeholder="/absolute/path/to/files"></div>
 <div><label for="stage-table">Target table</label><input id="stage-table" required placeholder="raw.sales_events"></div>
 <div><label for="stage-mode">Mode</label><select id="stage-mode"><option value="append">append</option><option value="replace">replace</option><option value="upsert">upsert</option></select></div>
@@ -153,7 +153,7 @@ try {
 </div>
 </div>
 </section>
-<section id="transformation" role="tabpanel" aria-labelledby="tab-transformation" hidden>
+<section id="transformation" hidden>
 <div class="page-head"><div class="page-title"><h1>Transformation</h1><p id="transformation-lead">Inspect model definitions and dependencies, then build or refresh.</p></div></div>
 <div class="subnav" role="tablist" aria-label="Transformation views"><button id="transformation-view-models" role="tab" aria-selected="true" aria-controls="transformation-models" data-view="transformation">Models</button><button id="transformation-view-wap" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-wap" data-view="transformation" hidden>Manual WAP</button><button id="transformation-view-marts" role="tab" aria-selected="false" tabindex="-1" aria-controls="transformation-marts" data-view="transformation" data-admin-view>Refresh targets</button></div>
 <div id="transformation-models" role="tabpanel" aria-labelledby="transformation-view-models">
@@ -197,7 +197,7 @@ try {
 </section>
 </div>
 </section>
-<section id="jobs" role="tabpanel" aria-labelledby="tab-jobs" hidden>
+<section id="jobs" hidden>
 <div class="page-head"><div class="page-title"><h1>Jobs</h1><p>Save ordered steps, run them now, or schedule them.</p></div></div>
 <div class="subnav" role="tablist" aria-label="Jobs views"><button id="jobs-view-definitions" role="tab" aria-selected="true" aria-controls="jobs-definitions" data-view="jobs">Saved jobs</button><button id="jobs-view-runs" role="tab" aria-selected="false" tabindex="-1" aria-controls="jobs-runs" data-view="jobs">Run history</button><button id="jobs-view-alerts" role="tab" aria-selected="false" tabindex="-1" aria-controls="jobs-alerts" data-view="jobs">Notifications <span id="jobs-alert-tab-count" class="badge tone-bad" hidden></span></button></div>
 <div id="jobs-error" class="error" role="alert" hidden></div>
@@ -205,7 +205,7 @@ try {
 <div class="panel"><div class="panel-head"><div><h2>Saved jobs</h2><small>Select a job to edit, run or schedule it.</small></div><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap list"><div class="empty">No jobs loaded.</div></div>
 <div class="detail-grid">
 <form id="job-form" class="section"><div class="section-head"><h3>Job definition</h3><small id="job-editor-state" class="badge" role="status">New definition</small></div>
-<div class="job-fields"><div><label for="job-name">Job name</label><input id="job-name" required maxlength="64" pattern="[a-z][a-z0-9_-]*" placeholder="daily_sales"></div><div><label for="job-description">Description</label><input id="job-description" maxlength="500"></div></div>
+<div class="job-fields"><div><label for="job-name">Job name</label><input id="job-name" required maxlength="64" pattern="[a-z][a-z0-9_\-]*" placeholder="daily_sales"></div><div><label for="job-description">Description</label><input id="job-description" maxlength="500"></div></div>
 <label for="job-parameters">Argument definitions (JSON)</label><textarea id="job-parameters" rows="3" spellcheck="false" aria-describedby="job-parameter-help">{}</textarea><small id="job-parameter-help">Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes. <code>{{name}}</code></small>
 <details class="help"><summary>Argument definition example</summary><pre id="job-parameter-example"></pre></details>
 <h3 class="job-step-heading" style="margin-top:14px">Steps</h3><div id="job-steps"></div><div class="form-actions"><button id="job-add-step" type="button">Add step</button><button id="job-save" class="primary" type="submit">Save job</button><span id="job-save-state" class="state" role="status"></span></div>
@@ -240,7 +240,7 @@ try {
 <div class="panel"><div class="panel-head"><div><h2>Notifications</h2><small id="job-alerts-timezone"></small></div><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="notes"><span>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</span><span>Up to 100 notifications, unacknowledged first.</span></div><div id="job-alerts-error" class="error" role="alert" hidden></div><div id="job-alerts" class="table-wrap list"><div class="empty">No notifications loaded.</div></div></div>
 </div>
 </section>
-<section id="catalog" role="tabpanel" aria-labelledby="tab-catalog" hidden>
+<section id="catalog" hidden>
 <div class="page-head"><div class="page-title"><h1>Data Explorer</h1><p>Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p></div><div class="page-actions"><button id="refresh-catalog">Refresh catalog</button></div></div>
 <div id="catalog-error" class="error" role="alert" hidden></div><div class="catalog-grid"><div class="panel"><div class="panel-head"><h2>Iceberg tables</h2></div><div class="panel-body" style="padding-bottom:0"><label for="catalog-filter" style="margin-top:0">Find schema or table</label><input id="catalog-filter" type="search" placeholder="Search catalog"><p class="help">Select a table to inspect its columns, data and history.</p></div><div id="catalog-tree" class="empty">Load the catalog to browse tables.</div></div><div class="panel"><div class="panel-head"><h2 id="table-title">Table Inspector</h2><div class="toolbar"><button id="refresh-table-details" class="small" disabled>Refresh details</button><button id="open-table-sql" class="small" disabled>Open in Worksheet</button><button id="clone-table-btn" class="small" disabled>Clone to Sandbox</button><select id="export-table-format" aria-label="Export format"><option value="csv">CSV</option><option value="jsonl">JSONL</option><option value="parquet">Parquet</option></select><button id="export-table-btn" class="small" disabled>Export Table</button><button id="drop-table-btn" class="small danger" hidden>Drop Table</button></div></div>
 <div id="inspector-tabs" role="tablist" aria-label="Table Inspector">
@@ -258,11 +258,11 @@ try {
 <div id="inspect-lineage" role="tabpanel" aria-labelledby="inspect-tab-lineage" hidden><div id="table-lineage" class="panel-body lineage"></div></div></div></div>
 <div class="panel" style="margin-top:14px"><div class="panel-head"><h2>dbt model lineage</h2><small>Local model definitions</small></div><div id="lineage" class="panel-body lineage">Loading dependencies…</div></div>
 </section>
-<section id="bears" role="tabpanel" aria-labelledby="tab-bears" hidden><div class="page-head"><div class="page-title"><h1>AI Bears</h1><p id="bears-lead">Run the five resident specialists. Inspect their findings, recommendations, and telemetry.</p></div></div><div id="bear-cards" class="bear-layout"></div></section>
-<section id="pawprints" role="tabpanel" aria-labelledby="tab-pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1><p>Recent warehouse and Bear activity, recorded in ClickHouse.</p></div></div>
+<section id="bears" hidden><div class="page-head"><div class="page-title"><h1>AI Bears</h1><p id="bears-lead">Run the five resident specialists. Inspect their findings, recommendations, and telemetry.</p></div></div><div id="bear-cards" class="bear-layout"></div></section>
+<section id="pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1><p>Recent warehouse and Bear activity, recorded in ClickHouse.</p></div></div>
 <div class="panel"><div class="panel-head"><div><h2>AgentHouse Pawprints</h2><small id="pawprint-meta" role="status">Latest 100 events</small></div><button id="refresh-pawprints">Refresh</button></div><div class="filters"><label for="pawprint-filter">Search Pawprints</label><input id="pawprint-filter" type="search" placeholder="Action, Bear, trace, or model"><label for="pawprint-status-filter">Status</label><select id="pawprint-status-filter"><option value="">All statuses</option><option>success</option><option>failed</option><option>degraded</option><option>denied</option></select></div><div id="pawprint-error" class="error" role="alert" hidden></div><div id="pawprint-results" class="table-wrap"><div class="empty">Refresh to load recent Pawprints.</div></div></div>
 <div class="panel"><div class="panel-head"><h2>Query &amp; Load History</h2><button id="refresh-history">Refresh History</button></div><div id="history-error" class="error" role="alert" hidden></div><h3 class="subhead">Trino Query History</h3><div id="runtime-queries-results" class="table-wrap"></div><h3 class="subhead">Copy &amp; Data Load History</h3><div id="load-history-results" class="table-wrap"></div></div></section>
-<section id="compute" role="tabpanel" aria-labelledby="tab-compute" hidden><div id="compute-legacy-overview" class="page-head"><div class="page-title"><h1>Compute &amp; Governance</h1><p>Virtual warehouse readiness and resident cluster checks.</p></div><div class="page-actions"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check" class="run">SRE Cluster Health Check</button><button id="compute-policy-check" class="run">Policy Gatekeeper Audit</button></div></div>
+<section id="compute" hidden><div id="compute-legacy-overview" class="page-head"><div class="page-title"><h1>Compute &amp; Governance</h1><p>Virtual warehouse readiness and resident cluster checks.</p></div><div class="page-actions"><button id="compute-refresh">Refresh status</button><button id="compute-sre-check" class="run">SRE Cluster Health Check</button><button id="compute-policy-check" class="run">Policy Gatekeeper Audit</button></div></div>
 <pre id="compute-check-result" role="status" hidden></pre>
 <div id="compute-legacy-status" class="panel"><div class="panel-head"><h2>Virtual warehouse status</h2></div><dl id="compute-summary" class="facts"></dl><details class="raw"><summary>Raw status</summary><pre id="compute-warehouse" role="status">Loading…</pre></details><h3 class="subhead">Component readiness</h3><div id="compute-components" class="table-wrap"></div></div>
 <div id="compute-legacy-auto-chill" class="panel"><div class="panel-head"><div><h2>Auto-Chill</h2><small>Chill the warehouse after it has been idle for the selected time.</small></div></div><div class="panel-body toolbar"><label for="auto-chill-minutes">Auto-Chill (idle minutes)</label><select id="auto-chill-minutes"><option value="0">Off</option><option value="5">5m</option><option value="15">15m</option><option value="30">30m</option><option value="60">60m</option></select><button id="save-auto-chill" class="primary">Apply Auto-Chill</button><span id="auto-chill-state" class="badge" role="status">Auto-Chill: Off</span></div></div></section>
@@ -321,6 +321,7 @@ function setLanguage(lang) {
  if (typeof worksheets !== 'undefined') updateWorksheetCloseLabels();
  if (typeof queryResult !== 'undefined') renderChart();
  if (typeof databaseMode !== 'undefined' && databaseMode && $('query-database')) {dbControls();dbRenderRun();dbRenderHistory();dbExplorerControls();}
+ applyPageTitle();
 }
 // Register only source UI nodes before dynamic data is loaded. Keep text nodes
 // separate so labels, <br> elements, focus and edited form values survive a switch.
@@ -743,8 +744,21 @@ function loadPawprints(){
 }
 $('refresh-pawprints').onclick=()=>busy($('refresh-pawprints'),loadPawprints);
 let activeTab='warehouse';
-function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();document.querySelectorAll('[data-tab]').forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=!selected;});activeTab=button.dataset.tab;workbenchRememberPage(activeTab);if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
-const tabs=[...document.querySelectorAll('[data-tab]')];tabs.forEach(button=>{button.onclick=()=>activate(button);button.onkeydown=e=>{const available=tabs.filter(tab=>!tab.hidden&&!tab.disabled),i=available.indexOf(button);let n;if(['ArrowDown','ArrowRight'].includes(e.key))n=(i+1)%available.length;else if(['ArrowUp','ArrowLeft'].includes(e.key))n=(i+available.length-1)%available.length;else if(e.key==='Home')n=0;else if(e.key==='End')n=available.length-1;if(n!==undefined){e.preventDefault();available[n].focus();activate(available[n]);}};});
+function activate(button){if(button.hidden||button.disabled)return;stopJobsPolling();stopMartsPolling();for(const b of tabs){const selected=b===button;if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');$(b.dataset.tab).hidden=!selected;}activeTab=button.dataset.tab;workbenchRememberPage(activeTab);applyPageTitle();if(activeTab==='jobs')loadJobs();if(activeTab==='ingestion'&&currentRole==='admin')loadStages();if(activeTab==='catalog')$('refresh-catalog').click();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}if(activeTab==='transformation'){$('refresh-models').click();loadMarts();}if(activeTab==='compute')$('compute-refresh').click();}
+const tabs=[...document.querySelectorAll('[data-tab]')];
+tabs.forEach(link=>{link.onclick=event=>{
+ // Modified clicks keep the browser's open-in-new-tab/window behavior.
+ if(event?.defaultPrevented||event?.button!==undefined&&event.button!==0||event?.metaKey||event?.ctrlKey||event?.shiftKey||event?.altKey)return;
+ event?.preventDefault();
+ workbenchNavigationPush=true;
+ try{return activate(link);}finally{workbenchNavigationPush=false;}
+};});
+function workbenchPageName(){
+ if(activeTab==='warehouse'&&databaseMode)return dbWorkspacePane==='details'?'Data Explorer':'SQL Worksheets';
+ if(activeTab==='jobs'&&databaseMode)return 'Database Jobs';
+ return {warehouse:'SQL Worksheets',catalog:'Data Explorer',ingestion:'Ingestion & Stages',transformation:'Transformation',jobs:'Jobs',bears:'AI Bears','db-admin':'DB management',pawprints:'Audit Log',compute:'Compute & Governance'}[activeTab]||'Workbench';
+}
+function applyPageTitle(){document.title=t(workbenchPageName())+' · Shirokuma Workbench';}
 setInterval(async()=>{if(document.hidden)return;if(typeof databaseMode!=='undefined'&&databaseMode){await dbRefreshAccess();await refreshStatus();await dbExplanationPoll();return;}if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
 function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
@@ -818,22 +832,39 @@ let worksheetId=worksheets.some(w=>w.id===saved?.active)?saved.active:worksheets
 function saveWorksheet(){if(typeof databaseMode!=='undefined'&&databaseMode)return dbSave();const current=worksheets.find(w=>w.id===worksheetId);if(current)current.sql=$('sql').value;writeStorage(worksheetKey,{active:worksheetId,tabs:worksheets});}
 function setSQL(sql){$('sql').value=sql;saveWorksheet();}
 function worksheetName(w){const numbered=/^Worksheet (\d+)$/.exec(w.name);return numbered?t('Worksheet {number}',{number:numbered[1]}):w.name;}
-function updateWorksheetCloseLabels(){for(const button of $('worksheet-tabs').querySelectorAll('.worksheet-close')){const w=worksheets.find(w=>w.id===button.dataset.worksheet);const label=t('Close {name}',{name:worksheetName(w)})+(button.disabled?' '+t('Keep at least one worksheet.'):'');button.setAttribute('aria-label',label);button.title=label;}}
+function updateWorksheetCloseAction(){
+ const select=$('worksheet-close-select'),button=$('worksheet-close-action');if(!select||!button)return;
+ const unavailable=worksheets.length===1,group=$('worksheet-closers');
+ if(group)group.hidden=worksheets.length<2;
+ select.disabled=unavailable;button.disabled=unavailable||!select.value;
+ const title=unavailable?t('Keep at least one worksheet.'):t('Close worksheet');
+ select.title=title;button.title=title;
+}
+function updateWorksheetCloseLabels(){
+ const select=$('worksheet-close-select');if(!select)return;
+ select.replaceChildren();
+ const placeholder=document.createElement('option');placeholder.value='';ui(placeholder,'Choose worksheet to close');select.append(placeholder);
+ for(const w of worksheets){const option=document.createElement('option');option.value=w.id;ui(option,'Close {name}',{name:worksheetName(w)});select.append(option);}
+ select.value='';updateWorksheetCloseAction();
+}
 function closeWorksheet(id){
- if(worksheets.length===1)return;
- const index=worksheets.findIndex(w=>w.id===id);if(index<0)return;
+ if(worksheets.length===1)return false;
+ const index=worksheets.findIndex(w=>w.id===id);if(index<0)return false;
  const w=worksheets[index],sql=id===worksheetId?$('sql').value:w.sql;
  // No dirty-history tracking: empty SQL and the pristine default sample close directly.
- if(sql.trim()&&sql!==samples.orders&&!confirm(t('Closing removes this worksheet’s SQL. Close {name}?',{name:worksheetName(w)})))return;
+ if(sql.trim()&&sql!==samples.orders&&!confirm(t('Closing removes this worksheet’s SQL. Close {name}?',{name:worksheetName(w)})))return false;
  const editor=$('sql'),selection=[editor.selectionStart,editor.selectionEnd,editor.selectionDirection];
  saveWorksheet();worksheets.splice(index,1);
  if(id===worksheetId){worksheetId=worksheets[Math.min(index,worksheets.length-1)].id;editor.value=worksheets.find(w=>w.id===worksheetId).sql;}
  else editor.setSelectionRange(...selection);
  saveWorksheet();renderWorksheets();$('worksheet-'+worksheetId)?.focus();
+ return true;
 }
-function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const group=document.createElement('div'),b=document.createElement('button'),close=document.createElement('button');group.className='worksheet-tab';const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;close.type='button';close.className='worksheet-close';close.textContent='×';close.dataset.worksheet=w.id;close.disabled=worksheets.length===1;close.onclick=()=>closeWorksheet(w.id);group.append(b,close);container.append(group);}updateWorksheetCloseLabels();wireTabs([...container.querySelectorAll('[role=tab]')],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
+function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const b=document.createElement('button');const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;container.append(b);}updateWorksheetCloseLabels();wireTabs([...container.querySelectorAll('[role=tab]')],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
 function addWorksheet(sql=samples.orders){saveWorksheet();const number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;saveWorksheet();renderWorksheets();}
 function openWorksheet(sql){addWorksheet(sql);activate($('tab-warehouse'));$('sql').focus();}
+$('worksheet-close-select').onchange=updateWorksheetCloseAction;
+$('worksheet-close-action').onclick=()=>{const select=$('worksheet-close-select'),id=select.value;if(!id){select.focus();return;}if(!closeWorksheet(id))$('worksheet-close-action').focus();};
 $('sql').addEventListener('input',saveWorksheet);$('add-worksheet-tab').onclick=()=>addWorksheet();
 $('sql').value=worksheets.find(w=>w.id===worksheetId).sql;renderWorksheets();
 if(matchMedia('(max-width: 1024px)').matches)$('worksheet-explorer').open=false;
@@ -845,8 +876,43 @@ $('query-history').onchange=()=>{const value=$('query-history').value;if(value!=
 
 let queryResult=null,sortColumn=-1,sortDirection=1;
 const cellText=v=>v==null?'NULL':typeof v==='object'?JSON.stringify(v):String(v);
-function visibleRows(){const term=$('result-filter').value.toLowerCase(),rows=(queryResult?.rows||[]).filter(row=>row.some(v=>cellText(v).toLowerCase().includes(term)));if(sortColumn>=0)rows.sort((a,b)=>{const x=a[sortColumn],y=b[sortColumn];return sortDirection*(x==null?(y==null?0:-1):y==null?1:typeof x==='number'&&typeof y==='number'?x-y:cellText(x).localeCompare(cellText(y),undefined,{numeric:true}));});return rows;}
-function renderResults(){for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;if(!queryResult){$('query-chart').replaceChildren();return;}renderChart();table($('query-results'),queryResult.columns,visibleRows(),false);$('query-results').querySelectorAll('th').forEach((th,i)=>{th.setAttribute('aria-sort',sortColumn===i?(sortDirection===1?'ascending':'descending'):'none');const b=document.createElement('button');b.textContent=th.textContent+(sortColumn===i?(sortDirection===1?' ↑':' ↓'):'');b.onclick=()=>{sortDirection=sortColumn===i?-sortDirection:1;sortColumn=i;renderResults();};th.replaceChildren(b);});}
+function filteredRows(){const term=$('result-filter').value.toLowerCase();return (queryResult?.rows||[]).filter(row=>row.some(v=>cellText(v).toLowerCase().includes(term)));}
+function compareResultRows(a,b,index,direction){const x=a?.[index],y=b?.[index];return direction*(x==null?(y==null?0:-1):y==null?1:typeof x==='number'&&typeof y==='number'?x-y:cellText(x).localeCompare(cellText(y),undefined,{numeric:true}));}
+function visibleRows(){const rows=filteredRows();if(sortColumn>=0)rows.sort((a,b)=>compareResultRows(a,b,sortColumn,sortDirection));return rows;}
+function resultColumnName(column){return typeof column==='string'?column:column.name;}
+function installResultSort(tableElement,columns,rows){
+ const head=tableElement.tHead||tableElement.querySelector('thead'),tbody=tableElement.tBodies[0];
+ if(!head?.rows[0]||!tbody)return;
+ const headers=[...head.rows[0].cells],indicators=[],byRow=new Map(),trs=[];
+ if(sortColumn>=columns.length)sortColumn=-1;
+ for(const tr of tbody.rows)trs.push(tr);
+ trs.forEach((tr,index)=>{const row=rows[index];if(!row)return;const mounted=byRow.get(row);if(mounted)mounted.push(tr);else byRow.set(row,[tr]);});
+ const updateHeaders=()=>headers.forEach((th,index)=>{
+  if(index===sortColumn)th.setAttribute('aria-sort',sortDirection===1?'ascending':'descending');
+  else th.removeAttribute('aria-sort');
+  if(indicators[index])indicators[index].textContent=index===sortColumn?(sortDirection===1?' ↑':' ↓'):'';
+ });
+ headers.forEach((th,index)=>{
+  const name=resultColumnName(columns[index]),button=document.createElement('button');
+  button.type='button';button.setAttribute('aria-label',name);
+  const label=document.createElement('span');label.textContent=name;
+  const indicator=document.createElement('span');indicator.className='result-sort-indicator';indicator.setAttribute('aria-hidden','true');
+  indicators.push(indicator);button.append(label,indicator);
+  button.onclick=()=>{
+   sortDirection=sortColumn===index?-sortDirection:1;sortColumn=index;
+   const canonical=visibleRows(),positions=new Map();
+   for(const row of canonical){
+    const mounted=byRow.get(row),position=positions.get(row)||0,tr=mounted?.[position];
+    if(tr)tbody.append(tr);
+    positions.set(row,position+1);
+   }
+   updateHeaders();renderChart();
+  };
+  th.replaceChildren(button);
+ });
+ updateHeaders();
+}
+function renderResults(){for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;if(!queryResult){$('query-chart').replaceChildren();return;}renderChart();if(sortColumn>=queryResult.columns.length)sortColumn=-1;const rows=visibleRows();table($('query-results'),queryResult.columns,rows,false);const tableElement=$('query-results').querySelector?.('table');if(!tableElement)return;const caption=document.createElement('caption');caption.className='visually-hidden';ui(caption,'Query results');tableElement.prepend(caption);installResultSort(tableElement,queryResult.columns,rows);}
 $('result-filter').oninput=renderResults;
 function delimited(separator){const quote=v=>'"'+cellText(v).replaceAll('"','""')+'"';return [queryResult.columns.map(c=>typeof c==='string'?c:c.name),...visibleRows()].map(row=>row.map(quote).join(separator)).join('\r\n');}
 function download(format){if(!queryResult)return;const content=format==='csv'?delimited(','):JSON.stringify(visibleRows().map(row=>Object.fromEntries(queryResult.columns.map((c,i)=>[typeof c==='string'?c:c.name,row[i]]))),null,2);const url=URL.createObjectURL(new Blob([content],{type:format==='csv'?'text/csv;charset=utf-8':'application/json'})),link=document.createElement('a');link.href=url;link.download='query-results.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);ui($('result-action-state'),'Downloaded visible rows.');}
@@ -1668,6 +1734,7 @@ async function startWorkbench(){
   await initializeSession();
   for(const id of ['workbench-header','workbench-nav','workbench-main'])$(id).removeAttribute('inert');
   $('workbench-boot').hidden=true;
+  workbenchShellReady=true;workbenchHistoryHref=globalThis.location?.href||'';
  }catch{
   $('workbench-boot').setAttribute('aria-busy','false');
   $('workbench-boot-loading').hidden=true;
@@ -1678,6 +1745,7 @@ async function startWorkbench(){
 // Shared by normal and legacy navigation; keep URL state separate from worksheet storage.
 let dbNavigationReady=false;
 let dbPageHydration=Promise.resolve(),dbRuntimeHydration=Promise.resolve();
+let workbenchNavigationPush=false,workbenchHistoryHref='',workbenchShellReady=false,workbenchSession=null;
 const dbWorkspaceHydrations=new Map();
 // These promises track reads only. Stored inputs never establish authorization.
 function dbEnsureWorkspace(pane){
@@ -1706,10 +1774,14 @@ function workbenchRememberPage(page){
   if(key.startsWith('creation')?page!=='db-admin':page!=='transformation'){params.delete(key);url.searchParams.delete(key);}
  }
  const state=params.toString();url.hash=page+(state?'?'+state:'');
- if(url.href!==globalThis.location.href)globalThis.history.replaceState(null,'',url);
+ if(url.href!==globalThis.location.href){
+  if(workbenchNavigationPush&&globalThis.history.pushState)globalThis.history.pushState(null,'',url);
+  else globalThis.history.replaceState(null,'',url);
+ }
+ workbenchHistoryHref=globalThis.location.href;
 }
-async function workbenchRestorePage(session){
- if(session.authenticated!==true)return;
+async function workbenchRestorePage(session,{history=false}={}){
+ if(session.authenticated!==true&&!(history&&!databaseMode))return;
  const {page}=workbenchRoute(),dbt=databaseMode?dbDbtURL():{},creation=databaseMode?dbCreationURL():{};
  // Older creation links used SQL/worksheet fragment names before top-page routes.
  const legacy=!page||/^(?:workbench|sql|worksheet-[A-Za-z0-9_-]+)$/.test(page);
@@ -1719,6 +1791,18 @@ async function workbenchRestorePage(session){
  if(databaseMode&&available&&target==='transformation'){showView('transformation-view-models');await dbHydratePage('db-dbt-panel',dbDbtRestore);}
  await hydration;
 }
+async function workbenchHistoryRestore(){
+ if(!workbenchShellReady||!globalThis.location)return;
+ const href=globalThis.location.href;if(href===workbenchHistoryHref)return;
+ workbenchHistoryHref=href;
+ try{await workbenchRestorePage(workbenchSession||{authenticated:false},{history:true});}
+ catch(error){
+  const id={warehouse:databaseMode?'database-context-state':'status-error',catalog:'catalog-error','db-admin':'db-admin-error',transformation:databaseMode?'db-dbt-status':'models-state',pawprints:databaseMode?'db-audit-status':'pawprint-error',jobs:'jobs-error'}[activeTab]||'status-error';
+  if($(id))message(id,error.message);
+ }
+ workbenchHistoryHref=globalThis.location.href;
+}
+if(typeof globalThis.addEventListener==='function')for(const event of ['popstate','hashchange'])globalThis.addEventListener(event,()=>{void workbenchHistoryRestore();});
 
 Object.assign(i18n.ja,{
  "Manual file ingestion and registered Stages are supported. Choose an authorized role and a current Database/schema in each panel; writes require an allowed RAW or SANDBOX target.": "ファイル取り込みと登録済み Stage を利用できます。各パネルで許可されたロールと最新の Database／スキーマを選択してください。書き込みには許可された RAW または SANDBOX の対象が必要です。",
@@ -6235,11 +6319,12 @@ function dbQualifiedObject(database,schema,object){
 function dbSyncWorkspaceNavigation(){
  if(activeTab!=='warehouse')return;
  const details=dbWorkspacePane==='details',selectedId=details?'tab-catalog':'tab-warehouse';
- for(const button of tabs){const selected=button.id===selectedId;button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;}
+ for(const button of tabs){const selected=button.id===selectedId;if(selected)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}
  $('warehouse').setAttribute('aria-labelledby',selectedId);
  for(const [id,key] of [['database-page-title',details?'Data Explorer':'SQL Worksheets'],['database-page-description',details?'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Query Iceberg tables with the resident Trino warehouse.']]){
   if($(id).textContent!==t(key))ui($(id),key);
  }
+ applyPageTitle();
 }
 function dbShowWorkspace(pane){
  if(pane!==dbWorkspacePane){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}
@@ -6559,7 +6644,7 @@ async function initializeDatabaseUI(session){
   if(next==='db-admin'&&!dbAdminAllowed())return;
   workbenchRememberPage(next);
   if(activeTab==='db-admin'&&next!=='db-admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
-  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)dbResultExport.invalidateBoundary();stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)return dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbHydratePage('db-admin',dbAdminOpen);else if(target==='jobs')return dbHydratePage('jobs',dbJobsOpen);else if(target==='pawprints')return dbHydratePage('pawprints',dbAuditOpen);else dataopsOpen(target);};
+  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)dbResultExport.invalidateBoundary();stopJobsPolling();stopMartsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;applyPageTitle();dbProposalSync();dbCuratorSync();dbObservationsSync();if(workspace)return dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='db-admin')return dbHydratePage('db-admin',dbAdminOpen);else if(target==='jobs')return dbHydratePage('jobs',dbJobsOpen);else if(target==='pawprints')return dbHydratePage('pawprints',dbAuditOpen);else dataopsOpen(target);};
  $('role-selector').onchange=async()=>{
   const auditUsed=!!dbAudit.proof||!!dbAudit.choiceItems;
   dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();
@@ -9422,7 +9507,7 @@ function dbJobsInstall(){
  if(typeof document.addEventListener==='function')document.addEventListener('visibilitychange',()=>{dbJobsSuspend();if(!document.hidden)dbJobsSyncPolling();});
  p.principal=dbPrincipal;p.role=dbCurrent()?.selected_role||currentRole;p.database=dbCurrent()?.database_id||'';p.schema=dbCurrent()?.schema_id||'';p.schemas=[];p.databases=dbRoleItems(p.role);p.files=[];
  for(const child of $('jobs').children)child.hidden=true;
- const root=dataopsNode('section','db-jobs-panel',$('jobs'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h2','',body,'Database Jobs');dataopsNode('p','',body,'Jobs context is independent of worksheets and Explorer.').className='help';
+ const root=dataopsNode('section','db-jobs-panel',$('jobs'));root.className='panel';const body=dataopsNode('div','',root);body.className='panel-body';dataopsNode('h1','db-jobs-title',body,'Database Jobs');dataopsNode('p','',body,'Jobs context is independent of worksheets and Explorer.').className='help';
  const selectors=dataopsNode('div','',body);selectors.className='toolbar jobs-context-toolbar';
  for(const [key,label] of [['role','Execution role'],['database','Database'],['schema','Schema']]){
   const node=dataopsField(selectors,'db-jobs-'+key,label,'select');node.onchange=()=>{dbJobsCapture();p[key]=node.value;p.job=null;p.selection='';p.save=null;p.history=[];p.jobs=[];p.context=null;p.invalid=true;for(const k of dbJobsFields)$('db-jobs-'+k).value='';if(key==='database')p.schema='';return dbJobsRefresh();};
@@ -9448,7 +9533,7 @@ function dbJobsInstall(){
  dataopsNode('p','',inputHelp,'Provide parameter definitions and typed arguments as JSON. Files use the input name referenced by an ingest step.').className='help';
  dataopsNode('div','db-jobs-files',p.form);dataopsButton(p.form,'db-jobs-add-input','Add named input',()=>{if(p.pending||p.invalid)return;const row=dataopsNode('div','',$('db-jobs-files'));row.className='toolbar jobs-input-row';const id=crypto.randomUUID(),name=dataopsField(row,'db-job-input-name-'+id,'Input name'),file=dataopsField(row,'db-job-input-file-'+id,'Input file');file.type='file';const record={name,file,row};p.files.push(record);dataopsButton(row,'','Remove',()=>{if(p.pending)return;file.value='';name.value='';p.files=p.files.filter(r=>r!==record);$('db-jobs-files').replaceChildren(...p.files.map(r=>r.row));});});
  const actions=dataopsNode('div','',p.form);actions.className='toolbar jobs-actions';dataopsButton(actions,'db-jobs-save','Save Job',dbJobsSave).className='primary';dataopsButton(actions,'db-jobs-run','Run Job',dbJobsRun).className='run';
- dataopsNode('h3','',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
+ dataopsNode('h2','db-jobs-history-title',body,'Job history');dataopsButton(body,'db-jobs-history-refresh','Refresh history',dbJobsListHistory);dataopsNode('div','db-jobs-history',body);dbJobsRender();
  if(activeTab==='jobs')void dbJobsOpen();
 }
 function dbJobsOpen(){if(!dbJobs.installed)return;if(!dbJobs.started){dbJobs.started=true;return dbJobsRefresh();}dbJobsSyncPolling();}
@@ -11984,6 +12069,7 @@ function dbAuditInstall(){
  if(dbAudit.installed)return;dbAudit.installed=true;
  const w=dbCurrent();dbAudit.role=w?.selected_role||currentRole;dbAudit.database=w?.database_id||'';
  const host=$('pawprints');host.replaceChildren();const panel=dbAdminNode('div','db-audit-panel',host);panel.className='panel';
+ dbAdminNode('h1','db-audit-title',panel,'Audit Log');
  dbAdminNode('h2','',panel,'Saved metadata audit');
  const target=dbAdminNode('p','db-audit-target',panel);target.className='wb-task-context';target.setAttribute('role','status');
  const form=dbAdminNode('form','db-audit-form',panel);form.className='toolbar';
@@ -12474,6 +12560,7 @@ async function initializeSession() {
  const session=await response.json();
  if(!response.ok)throw new Error(session.error||`HTTP ${response.status}`);
  if(session.data_mode==='database'&&session.authenticated!==true)throw new Error('Authentication required');
+ workbenchSession=session;
  catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
  const ranks={bi_viewer:0,data_engineer:1,admin:2};
  currentRole=session.maximum_role;

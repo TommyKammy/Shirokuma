@@ -1189,46 +1189,54 @@ function boot(saved=null,unavailable=false){
   setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k];}
   addEventListener(k,fn){this['on'+k]=fn;}focus(){focused=this;}click(){if(!this.disabled)this.onclick?.();}
   setSelectionRange(a,b,d){this.selectionStart=a;this.selectionEnd=b;this.selectionDirection=d;}
-  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'||selector==='.worksheet-close'&&c.className==='worksheet-close'?[c]:[]),...c.querySelectorAll(selector)]);}
+  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'?[c]:[]),...c.querySelectorAll(selector)]);}
  }
  const $=id=>nodes[id]||$('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.id===id);
- for(const id of ['sql','worksheet-tabs','add-worksheet-tab','query-meta'])nodes[id]=new Element();
+ for(const id of ['sql','worksheet-tabs','worksheet-closers','worksheet-close-select','worksheet-close-action','add-worksheet-tab','query-meta'])nodes[id]=new Element();
  const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};nodes.sql.value=samples.orders;
  const context=vm.createContext({$,samples,document:{createElement:tag=>new Element(tag)},crypto:{randomUUID:()=>String(++sequence)},
   localStorage:{getItem:k=>{if(unavailable)throw Error('blocked');return store[k]??null;},setItem:(k,v)=>{if(unavailable)throw Error('blocked');store[k]=v;}},
   confirm:text=>{confirmations.push(text);return answer;},activate:()=>{},ui:(node,key,values)=>{node.textContent=context.t(key,values);}});
  vm.runInContext(DICTIONARY+WIRE+SOURCE,context);
  return {context,nodes,store,confirmations,answer:value=>answer=value,run:code=>vm.runInContext(code,context),
-  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),closes:()=>nodes['worksheet-tabs'].querySelectorAll('.worksheet-close'),focus:()=>focused};
+  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),select:()=>nodes['worksheet-close-select'],action:()=>nodes['worksheet-close-action'],focus:()=>focused};
 }
-const a=boot();assert.equal(a.closes()[0].disabled,true);assert.match(a.closes()[0].title,/at least one/);
+const a=boot();assert.equal(a.select().disabled,true);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,true);assert.match(a.action().title,/at least one/);
 a.run("closeWorksheet(worksheetId)");assert.equal(a.tabs().length,1);
 a.nodes['add-worksheet-tab'].click();a.nodes['add-worksheet-tab'].click();
-assert.equal(a.tabs().length,3);assert.equal(a.closes()[0].tag,'button');assert.equal(a.tabs()[0].children.length,0);
-// Closing a nonactive sample preserves the current draft and selection, even before an input event.
-a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.closes()[0].click();
+const ids=a.run('worksheets.map(w=>w.id)');
+assert.equal(a.tabs().length,3);assert.equal(a.select().disabled,false);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,false);assert.equal(a.select().children.length,4);
+assert.deepEqual(a.select().children.slice(1).map(option=>option.textContent),['Close Worksheet 1','Close Worksheet 2','Close Worksheet 3']);
+assert.equal(a.tabs().every(n=>n.attrs.role==='tab'),true);assert.equal(a.nodes['worksheet-tabs'].children.length,a.tabs().length);
+// Choosing a target never closes it; only the explicit action button does.
+a.select().value=ids[0];a.select().onchange();
+assert.equal(a.tabs().length,3);assert.equal(a.confirmations.length,0);assert.equal(a.action().disabled,false);
+// Closing a nonactive sample through the explicit action preserves the current draft and selection.
+a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.action().click();
 assert.equal(a.confirmations.length,0);assert.equal(a.nodes.sql.value,'SELECT latest');assert.equal(a.nodes.sql.selectionStart,2);assert.equal(a.nodes.sql.selectionEnd,7);assert.equal(a.nodes.sql.selectionDirection,'backward');
-assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');
-// Cancellation leaves state, persisted data and focus unchanged.
-const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'],focus=a.focus();
-a.answer(false);a.closes()[1].click();assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),focus);
+assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');assert.equal(a.tabs().length,2);assert.equal(a.focus(),a.tabs()[1]);
+// Cancellation leaves state and persisted data unchanged, restoring focus to the close action.
+a.run("worksheets.find(w=>w.id==='"+ids[1]+"').sql='SELECT keep'");
+const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'];
+a.answer(false);a.select().value=ids[1];a.select().onchange();a.action().click();
+assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),a.action());
 assert.match(a.confirmations.at(-1),/removes this worksheet’s SQL/);
-// Active last tab chooses left; the replacement active ID and removal survive reload.
-a.answer(true);a.closes()[1].click();assert.equal(a.tabs().length,1);assert.equal(a.nodes.sql.value,a.context.samples.orders);assert.equal(a.focus(),a.tabs()[0]);
+// Closing the active last tab chooses the remaining tab, confirms, and restores focus there.
+a.answer(true);a.select().value=ids[2];a.select().onchange();a.action().click();assert.equal(a.tabs().length,1);assert.equal(a.run('worksheetId'),ids[1]);assert.equal(a.nodes.sql.value,'SELECT keep');assert.equal(a.focus(),a.tabs()[0]);
 const reloaded=boot(JSON.parse(a.store['shirokuma.worksheets.v1']));assert.equal(reloaded.tabs().length,1);assert.equal(reloaded.run('worksheetId'),a.run('worksheetId'));
 // Numbering follows the largest remaining number, never the tab count.
 const b=boot({active:'b',tabs:[{id:'a',name:'Worksheet 1',sql:''},{id:'b',name:'Worksheet 3',sql:'persisted SQL'},{id:'c',name:'Worksheet 4',sql:''}]});
-b.answer(false);b.closes()[1].click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');
-b.answer(true);b.closes()[1].click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
+b.answer(false);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');assert.equal(b.focus(),b.action());
+b.answer(true);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
 b.nodes['add-worksheet-tab'].click();assert.equal(b.run('worksheets.at(-1).name'),'Worksheet 5');
-// Keyboard tab movement receives only role=tab buttons; close uses native button activation.
+// Keyboard tab movement receives only role=tab buttons; close remains a labeled select plus explicit action.
 let prevented=0;b.tabs()[2].onkeydown({key:'Home',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'a');
 b.tabs()[0].onkeydown({key:'End',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'1');
 b.tabs()[2].onkeydown({key:'ArrowLeft',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'c');assert.equal(prevented,3);
-b.closes()[0].click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
-b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.closes()[0].title,/閉じる/);
-b.nodes.sql.value='編集 SQL';b.answer(false);b.closes()[0].click();assert.match(b.confirmations.at(-1),/SQL が削除/);
-const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.closes()[0].click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
+b.select().value='a';b.select().onchange();assert.equal(b.confirmations.length,2);b.action().click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
+b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.select().children[1].textContent,/閉じる/);assert.match(b.action().title,/閉じる/);
+b.nodes.sql.value='編集 SQL';b.answer(false);b.select().value='c';b.select().onchange();b.action().click();assert.match(b.confirmations.at(-1),/SQL が削除/);assert.equal(b.focus(),b.action());
+const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.select().value=c.run('worksheets[0].id');c.select().onchange();c.action().click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
 '''
         result = subprocess.run(['node', '-e', 'const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1521,6 +1529,140 @@ const run=eval(HANDLER);
         result = subprocess.run(['node'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_result_sorting_keeps_header_focus_and_updates_only_current_aria_sort(self):
+        script = self.workbench_document().main_script()
+        table_source = script[script.index('function table('):script.index('let statusEpoch=')]
+        results_source = script[script.index('let queryResult=null'):script.index('function download(')]
+        harness = r'''
+const assert=require('node:assert/strict');
+let activeElement=null;
+class Element{
+ constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.attrs={};this.className='';this.textContent='';this.value='';this.cells=[];this.rows=[];}
+ append(...nodes){for(const node of nodes){if(node.parentElement){node.parentElement.children=node.parentElement.children.filter(child=>child!==node);}node.parentElement=this;this.children.push(node);if(this.tagName==='TR'&&['TH','TD'].includes(node.tagName)&&!this.cells.includes(node))this.cells.push(node);}}
+ prepend(...nodes){for(const node of [...nodes].reverse()){node.parentElement=this;this.children.unshift(node);}}
+ replaceChildren(...nodes){this.children=[];this.textContent='';this.append(...nodes);}
+ setAttribute(key,value){this.attrs[key]=String(value);}
+ getAttribute(key){return this.attrs[key];}
+ removeAttribute(key){delete this.attrs[key];}
+ createTHead(){const head=new Element('thead');this.append(head);return head;}
+ createTBody(){const body=new Element('tbody');this.append(body);return body;}
+ get tHead(){return this.children.find(child=>child.tagName==='THEAD');}
+ get tBodies(){return this.children.filter(child=>child.tagName==='TBODY');}
+ insertRow(){const row=new Element('tr');this.append(row);this.rows.push(row);return row;}
+ insertCell(){const cell=new Element('td');this.append(cell);return cell;}
+ focus(){activeElement=this;}
+ click(){this.onclick?.();}
+ querySelector(selector){
+  if(selector.startsWith('.'))return this.descendants().find(node=>node.className.split(' ').includes(selector.slice(1)));
+  return this.descendants().find(node=>node.tagName===selector.toUpperCase());
+ }
+ querySelectorAll(selector){return this.descendants().filter(node=>node.tagName===selector.toUpperCase());}
+ descendants(){return this.children.flatMap(child=>[child,...child.descendants()]);}
+}
+const nodes={};
+for(const id of ['query-results','query-chart','result-filter','export-csv','export-json','copy-tsv'])nodes[id]??=Object.assign(new Element('div'),{id});
+const $=id=>nodes[id]??=Object.assign(new Element('div'),{id});
+const document={createElement:tag=>new Element(tag),get activeElement(){return activeElement;}};
+const t=key=>key,ui=(node,key)=>{node.textContent=key;},charts=[],renderChart=()=>charts.push(visibleRows().map(row=>row.slice()));
+''' + table_source + '\n' + results_source + r'''
+queryResult={columns:[{name:'name',type:'text'},'n','payload'],rows:[['b',2,{x:1}],['a',null,{x:2}],['a',1,null],['c',3,{x:1}]]};sortColumn=-1;renderResults();
+const container=$('query-results'),grid=container.querySelector('table'),caption=grid.querySelector('caption');
+assert.equal(caption.textContent,'Query results');
+const headers=[...grid.tHead.rows[0].cells],buttons=headers.map(th=>th.children[0]);
+assert.deepEqual(buttons.map(button=>button.getAttribute('aria-label')),['name','n','payload']);
+assert.equal(headers.some(th=>Object.hasOwn(th.attrs,'aria-sort')),false);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['b','a','a','c']);
+const trs=[...grid.tBodies[0].children],cells=trs.map(row=>[...row.children]);
+const first=buttons[0],firstHeader=headers[0];first.focus();
+first.click();
+assert.equal(document.activeElement,first);assert.equal(buttons[0],first);assert.equal(headers[0],firstHeader);
+assert.equal(firstHeader.getAttribute('aria-sort'),'ascending');assert.equal(headers[1].getAttribute('aria-sort'),undefined);
+assert.equal(first.children[0].textContent,'name');assert.equal(first.children[1].textContent,' ↑');
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['a','a','b','c']);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[1].textContent),['NULL','1','2','3']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[1],trs[2],trs[0],trs[3]]);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['a','a','b','c']);
+assert.deepEqual(trs.map(row=>[...row.children]),cells);
+assert.equal(grid.tBodies[0].children[0],trs[1]);assert.equal(grid.tBodies[0].children[1],trs[2]);
+first.click();
+assert.equal(document.activeElement,first);assert.equal(firstHeader.getAttribute('aria-sort'),'descending');
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['c','b','a','a']);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['c','b','a','a']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[3],trs[0],trs[1],trs[2]]);
+const second=buttons[1],secondHeader=headers[1];second.focus();second.click();
+assert.equal(document.activeElement,second);assert.equal(firstHeader.getAttribute('aria-sort'),undefined);assert.equal(secondHeader.getAttribute('aria-sort'),'ascending');
+assert.equal(headers.filter(th=>Object.hasOwn(th.attrs,'aria-sort')).length,1);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[1].textContent),['NULL','1','2','3']);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['a','a','b','c']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[1],trs[2],trs[0],trs[3]]);
+$('result-filter').value='nothing';renderResults();
+assert.deepEqual(charts.at(-1),[]);
+assert.equal(container.querySelector('table'),undefined);
+assert.equal(container.children[0].className,'empty');assert.equal(container.children[0].textContent,'No rows returned.');
+$('result-filter').value='a';renderResults();
+const filtered=container.querySelector('table'),filteredHeader=filtered.tHead.rows[0].cells[1];
+assert.notEqual(filtered,grid);assert.equal(filtered.querySelector('caption').textContent,'Query results');
+assert.equal(filteredHeader.getAttribute('aria-sort'),'ascending');assert.equal(filtered.tHead.rows[0].cells[0].getAttribute('aria-sort'),undefined);
+assert.deepEqual(filtered.tBodies[0].children.map(row=>row.children[0].textContent),['a','a']);
+queryResult={columns:['x'],rows:[['z'],['y']]};sortColumn=-1;$('result-filter').value='';renderResults();
+const replacement=container.querySelector('table'),newHeader=replacement.tHead.rows[0].cells[0];
+assert.notEqual(replacement,filtered);assert.equal(replacement.querySelector('caption').textContent,'Query results');
+assert.equal(Object.hasOwn(newHeader.attrs,'aria-sort'),false);
+assert.deepEqual(replacement.tBodies[0].children.map(row=>row.children[0].textContent),['z','y']);
+assert.equal(['export-csv','export-json','copy-tsv'].every(id=>$(id).disabled===false),true);
+queryResult={columns:['n','text'],rows:[[1,'zz_match'],[1,'aa_match'],[1,'mm_match']]};sortColumn=-1;$('result-filter').value='';renderResults();
+let canonical=container.querySelector('table');
+canonical.tHead.rows[0].cells[1].children[0].click();
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['aa_match','mm_match','zz_match']);
+$('result-filter').value='match';renderResults();
+canonical=container.querySelector('table');
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['aa_match','mm_match','zz_match']);
+const numeric=canonical.tHead.rows[0].cells[0].children[0];numeric.focus();numeric.click();
+assert.equal(document.activeElement,numeric);
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['zz_match','aa_match','mm_match']);
+assert.deepEqual(visibleRows().map(row=>row[1]),['zz_match','aa_match','mm_match']);
+assert.deepEqual(charts.at(-1).map(row=>row[1]),['zz_match','aa_match','mm_match']);
+assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"1","mm_match"');
+'''
+        result = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_narrow_form_controls_use_readable_text_and_contain_page_overflow(self):
+        doc = self.workbench_document()
+        css = WorkbenchSource(doc.html).css
+        narrow = '\n'.join(re.findall(r'@media\(max-width:760px\)\{(.*?)\n\}', css, re.S))
+        self.assertNotIn('html,body{max-width:100%;overflow-x:hidden}', narrow)
+        self.assertIn(':is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:1rem}', narrow)
+        for selector in ('.editor', '#database-workspace .explorer-search input',
+                         '#database-workspace .explorer-foot select',
+                         '#database-context-bar select', '#database-context-bar input'):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, narrow)
+        # Desktop typography remains compact outside the narrow media query.
+        self.assertIn('.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px', css)
+        self.assertIn('body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans)', css)
+        for identifier in ('stage-name', 'job-name'):
+            with self.subTest(pattern=identifier):
+                pattern = doc.by_id(identifier)['pattern']
+                self.assertIn('[a-z0-9_\\-]', pattern)
+                self.assertNotIn('[a-z0-9_-]', pattern)
+        results = doc.by_id('query-results')
+        self.assertEqual(results['role'], 'region')
+        self.assertEqual(results['tabindex'], '0')
+        self.assertEqual(results['aria-label'], 'Query results')
+
+    def test_top_level_pages_have_one_descriptive_h1(self):
+        doc = self.workbench_document()
+        for name in ('warehouse', 'catalog', 'ingestion', 'transformation', 'jobs',
+                     'bears', 'db-admin', 'pawprints', 'compute'):
+            with self.subTest(page=name):
+                section = doc.by_id(name)
+                headings = [node for node in doc.nodes
+                            if node['tag'] == 'h1' and section in node['ancestors']]
+                self.assertEqual(len(headings), 1)
+                self.assertTrue(headings[0]['text'].strip())
+
     def test_phase8_api_and_rendering_contracts(self):
         script = self.workbench_document().main_script()
         for contract in (
@@ -1650,6 +1792,8 @@ const run=eval(HANDLER);
     def test_snowsight_navigation_contract(self):
         doc = self.workbench_document()
         navigation = next(n for n in doc.nodes if n['tag'] == 'nav')
+        self.assertEqual(navigation['aria-label'], 'Workbench sections')
+        self.assertNotIn('role', navigation)
         headings = [n['text'] for n in doc.nodes
                     if n['tag'] == 'h2' and navigation in n['ancestors']]
         self.assertEqual(headings, ['Work with Data', 'Manage & Monitor'])
@@ -1664,16 +1808,22 @@ const run=eval(HANDLER);
             ('pawprints', 'Audit Log'),
             ('compute', 'Compute & Governance'),
         ]
-        tabs = [n for n in doc.nodes if 'data-tab' in n]
-        self.assertEqual([(n['data-tab'], n['text']) for n in tabs], expected)
+        links = [n for n in doc.nodes if 'data-tab' in n]
+        self.assertEqual([(n['data-tab'], n['text']) for n in links], expected)
+        self.assertTrue(all(n['tag'] == 'a' for n in links))
         for name, _ in expected:
             with self.subTest(tab=name):
-                tab, panel = doc.by_id('tab-' + name), doc.by_id(name)
-                self.assertEqual(tab['role'], 'tab')
-                self.assertEqual(tab['aria-controls'], name)
-                self.assertEqual(panel['role'], 'tabpanel')
-                self.assertEqual(panel['aria-labelledby'], tab['id'])
-                self.assertEqual('hidden' in panel, name != 'warehouse')
+                link = doc.by_id('tab-' + name)
+                section = doc.by_id(name)
+                self.assertEqual(link['href'], '#' + name)
+                self.assertEqual(link['aria-controls'], name)
+                self.assertNotIn('role', link)
+                self.assertNotIn('aria-selected', link)
+                self.assertEqual(section['tag'], 'section')
+                self.assertNotIn('role', section)
+                self.assertEqual('hidden' in section, name != 'warehouse')
+        current = [n for n in links if n.get('aria-current') == 'page']
+        self.assertEqual([n['id'] for n in current], ['tab-warehouse'])
         self.assertIn('hidden', doc.by_id('tab-db-admin'))
         legacy = doc.by_id('legacy-header-warehouse')
         self.assertNotIn('hidden', legacy)

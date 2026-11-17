@@ -668,7 +668,7 @@ globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 for(let reload=0;reload<2;reload++){
  dbCreationClear();activeTab='warehouse';const before=calls.length;
  await initializeDatabaseUI(session);await tick();
- assert.equal(activeTab,'db-admin');assert.equal($('db-admin').hidden,false);assert.equal($('tab-db-admin').getAttribute('aria-selected'),'true');
+ assert.equal(activeTab,'db-admin');assert.equal($('db-admin').hidden,false);assert.equal($('tab-db-admin').getAttribute('aria-current'),'page');
  assert.equal(dbCreation.process.creation_id,'creation');assert.equal(dbCreation.environment_id,'envA');assert.match(contents($('db-creation-process')),/sales/);
  assert.equal(calls.slice(before).filter(c=>c.path==='/api/v1/admin/databases').length,1);
  assert.equal(calls.slice(before).some(c=>c.path===C+'/creation'),true);

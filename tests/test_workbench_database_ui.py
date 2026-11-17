@@ -25,7 +25,7 @@ NAVIGATION_HANDLERS = NAVIGATION[NAVIGATION.index('tabs.forEach'):]
 LEGACY_ACTIVATE = SCRIPT[SCRIPT.index('function activate('):SCRIPT.index('const tabs=')].replace('function activate(', 'function legacyActivate(')
 PERIODIC_REFRESH = SCRIPT[SCRIPT.index('setInterval(async()=>'):SCRIPT.index('// Small DOM helpers')].replace('setInterval(', 'const periodicRefresh=registerInterval(', 1)
 TRANSLATIONS = SCRIPT[SCRIPT.index('const i18n = '):SCRIPT.index("let language = 'en';")]
-MENU = re.findall(r'<button id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</button>', HTML)
+MENU = re.findall(r'<a id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</a>', HTML)
 
 
 class DatabaseUI(unittest.TestCase):
@@ -50,7 +50,7 @@ class Node {
  dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);}
  setRangeText(value,start,end){this.value=this.value.slice(0,start)+value+this.value.slice(end);}
  setSelectionRange(start,end){this.selectionStart=start;this.selectionEnd=end;}
- querySelectorAll(selector){const all=this.descendants();return all.filter(c=>selector==='[role=tab]'?c.role==='tab':selector==='[data-tree-key]'?!!c.dataset.treeKey:selector==='.worksheet-close'?c.className==='worksheet-close':selector==='th'?false:['BUTTON','INPUT','SELECT','TEXTAREA'].includes(c.tagName));}
+ querySelectorAll(selector){const all=this.descendants();return all.filter(c=>selector==='[role=tab]'?c.role==='tab':selector==='[data-tree-key]'?!!c.dataset.treeKey:selector==='th'?false:['BUTTON','INPUT','SELECT','TEXTAREA'].includes(c.tagName));}
  querySelector(selector){const all=this.children.flatMap(c=>[c,...c.descendants()]);return all.find(c=>selector.startsWith('.')?c.className?.split(' ').includes(selector.slice(1)):c.tagName===selector.toUpperCase());}
  descendants(){return this.children.flatMap(c=>[c,...c.descendants()]);}
 }
@@ -68,7 +68,7 @@ const table=(node,columns,rows)=>{node.rows=rows;node.columns=columns;};
 let catalogSession='',currentRole='admin',databaseMode=true,worksheets=[],worksheetId='',queryResult=null,activeTab='warehouse',activeInspector='columns';
 const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshots:'table-snapshots',ddl:'table-ddl',profile:'inspect-profile',lineage:'table-lineage'};
 const inspectorTabs=['columns','preview','profile','ddl','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
-const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('button'),{id:'tab-'+tab,dataset:{tab},textContent:label});ui(node,label);return node;});
+const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('a'),{id:'tab-'+tab,dataset:{tab},textContent:label,href:'#'+tab});ui(node,label);return node;});
 const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};
 const confirm=()=>true,populateChartColumns=()=>{},stopJobsPolling=()=>{},stopMartsPolling=()=>{};
 const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>{storage.set(key,value);writes.push(key);}};
@@ -100,12 +100,12 @@ $('query-schema').parentElement=new Node();
 const layout=Object.assign(new Node(),{className:'sql-layout'}),main=Object.assign(new Node(),{className:'sql-main'}),editor=new Node(),results=new Node(),strip=new Node(),inspector=new Node(),head=new Node(),actions=new Node(),filter=new Node();
 $('warehouse').append(layout);layout.append($('worksheet-explorer'),main);$('worksheet-explorer').append(new Node('summary'),$('worksheet-tree-filter'),$('worksheet-tree'));
 main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('copilot-result'));editor.append(strip,$('sql'),copilot);
-const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('add-worksheet-tab'));results.append($('query-results'));
+const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('worksheet-closers'),$('add-worksheet-tab'));results.append($('query-results'));
 head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),...Object.values(inspectorTargets).map($),$('snapshot-preview'));actions.append($('open-table-sql'));
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
@@ -262,29 +262,28 @@ for(const change of [()=>{dbPrincipal+='-next';},()=>{currentRole=currentRole===
 
     def test_navigation_dom_order_keyboard_and_legacy_page(self):
         self.javascript(r'''
+assert.equal(tabs[0].tagName,'A');assert.equal(tabs[1].tagName,'A');
 assert.deepEqual(tabs.slice(0,2).map(b=>b.id),['tab-catalog','tab-warehouse']);
 assert.deepEqual(tabs.slice(0,2).map(b=>b.textContent),['Data Explorer','SQL Worksheets']);
+assert.deepEqual(tabs.slice(0,2).map(b=>b.href),['#catalog','#warehouse']);
 let refreshes=0;$('refresh-catalog').onclick=()=>refreshes++;
 activate=legacyActivate;tabs[0].onclick();assert.equal(activeTab,'catalog');assert.equal($('catalog').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal(refreshes,1);
-const key=key=>({key,preventDefault(){}});
-tabs[0].onkeydown(key('ArrowDown'));assert.equal(document.activeElement,tabs[1]);assert.equal(activeTab,'warehouse');
-tabs[1].onkeydown(key('ArrowLeft'));assert.equal(document.activeElement,tabs[0]);assert.equal(activeTab,'catalog');
-tabs[0].onkeydown(key('End'));assert.equal(document.activeElement,tabs.at(-1));
-tabs.at(-1).onkeydown(key('Home'));assert.equal(document.activeElement,tabs[0]);
-assert.equal(tabs.filter(b=>b.tabIndex===0).length,1);assert.equal(tabs.filter(b=>b.getAttribute('aria-selected')==='true').length,1);
+assert.equal(tabs[0].getAttribute('aria-current'),'page');assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);
+assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);
+assert.equal(tabs[0].onkeydown,undefined);
+// Modified activation is left to the browser for its normal new-tab behavior.
+let prevented=0,active=activeTab;tabs[1].onclick({button:0,metaKey:true,preventDefault(){prevented++;}});assert.equal(prevented,0);assert.equal(activeTab,active);
 databaseMode=false;setLanguage('ja');assert.equal(tabs[0].textContent,'データ探索');assert.equal(tabs[1].textContent,'SQL ワークシート');
 ''')
 
     def test_workspace_navigation_real_pane_switches_and_languages(self):
         self.javascript(r'''
 await dualBoot();
-const check=(pane)=>{const details=pane==='details',selected=details?'tab-catalog':'tab-warehouse';assert.equal(dbWorkspacePane,pane);assert.equal($('warehouse').getAttribute('aria-labelledby'),selected);assert.equal(tabs.filter(b=>b.getAttribute('aria-selected')==='true').length,1);assert.equal(tabs.filter(b=>b.tabIndex===0).length,1);assert.equal($(selected).getAttribute('aria-selected'),'true');assert.equal($(selected).tabIndex,0);assert.equal($('database-page-title').textContent,t(details?'Data Explorer':'SQL Worksheets'));assert.equal($('database-page-description').textContent,t(details?'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Query Iceberg tables with the resident Trino warehouse.'));};
+const check=(pane)=>{const details=pane==='details',selected=details?'tab-catalog':'tab-warehouse';assert.equal(dbWorkspacePane,pane);assert.equal($('warehouse').getAttribute('aria-labelledby'),selected);assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);assert.equal($(selected).getAttribute('aria-current'),'page');assert.equal($('database-page-title').textContent,t(details?'Data Explorer':'SQL Worksheets'));assert.equal(document.title,t(details?'Data Explorer':'SQL Worksheets')+' · Shirokuma Workbench');assert.equal($('database-page-description').textContent,t(details?'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Query Iceberg tables with the resident Trino warehouse.'));};
 check('worksheet');
-const key=key=>({key,preventDefault(){}});
-$('tab-warehouse').onkeydown(key('ArrowUp'));check('details');assert.equal(document.activeElement,$('tab-catalog'));
-$('tab-catalog').onkeydown(key('ArrowRight'));check('worksheet');assert.equal(document.activeElement,$('tab-warehouse'));
-$('tab-warehouse').onkeydown(key('End'));assert.equal(document.activeElement,tabs.at(-1));
-tabs.at(-1).onkeydown(key('Home'));check('details');assert.equal(document.activeElement,$('tab-catalog'));$('tab-warehouse').onclick();
+assert.equal($('tab-warehouse').onkeydown,undefined);
+$('tab-catalog').onclick();check('details');
+$('tab-warehouse').onclick();check('worksheet');
 for(const lang of ['ja','en']){
  dbTreeExpanded.delete('database:finance');dbTreeExpanded.delete('schema:finance:finance-marts');dbRenderTree();
  setLanguage(lang);check('worksheet');
@@ -317,10 +316,10 @@ assert.equal(JSON.stringify(dbExplorer),explorer);assert.equal(dbTreeSelection,s
         self.javascript(r'''
 await boot();$('tab-catalog').onclick();$('workspace-details').focus();
 const detailsTab=$('workspace-details'),title=$('database-page-title'),binding=uiBindings.get(title);
-await periodicRefresh();setLanguage('ja');assert.equal(document.activeElement,detailsTab);assert.equal($('workspace-details'),detailsTab);assert.equal(uiBindings.get(title),binding);assert.equal($('tab-catalog').getAttribute('aria-selected'),'true');assert.equal(title.textContent,'データ探索');
+await periodicRefresh();setLanguage('ja');assert.equal(document.activeElement,detailsTab);assert.equal($('workspace-details'),detailsTab);assert.equal(uiBindings.get(title),binding);assert.equal($('tab-catalog').getAttribute('aria-current'),'page');assert.equal(title.textContent,'データ探索');
 $('tab-jobs').onclick();$('tab-jobs').focus();
 await periodicRefresh();dbControls();dbShowWorkspace('worksheet');renderWorksheets();await tick();setLanguage('en');
-assert.equal(activeTab,'jobs');assert.equal(document.activeElement,$('tab-jobs'));assert.equal($('jobs').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal($('tab-jobs').getAttribute('aria-selected'),'true');assert.equal($('tab-jobs').tabIndex,0);assert.equal(tabs.filter(b=>b.tabIndex===0).length,1);assert.equal(tabs.filter(b=>b.getAttribute('aria-selected')==='true').length,1);
+assert.equal(activeTab,'jobs');assert.equal(document.activeElement,$('tab-jobs'));assert.equal($('jobs').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal($('tab-jobs').getAttribute('aria-current'),'page');assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);
 $('tab-catalog').onclick();assert.equal($('database-page-title').textContent,'Data Explorer');assert.equal($('warehouse').hidden,false);
 ''')
 
@@ -491,8 +490,16 @@ assert.equal(dbRuns.has(worksheetId),false);assert.equal(calls.filter(c=>c.optio
 
     def test_details_and_worksheet_tab_keyboard_contract_and_narrow_collapse(self):
         self.javascript(r'''
-narrow=true;await boot([input(),input('b'),input('c'),input('d')]);assert.equal($('worksheet-explorer').open,false);
+narrow=true;await boot([input(),{...input('b'),name:'Worksheet 2'},{...input('c'),name:'Worksheet 3'},{...input('d'),name:'Worksheet 4'}]);assert.equal($('worksheet-explorer').open,false);
 const tabs=$('worksheet-tabs').querySelectorAll('[role=tab]');assert.equal(tabs.length,5);assert.equal(tabs[0].id,'workspace-details');
+assert.equal($('worksheet-tabs').children.every(n=>n.getAttribute('role')==='tab'),true);
+const closeSelect=$('worksheet-close-select');
+assert.equal(closeSelect.disabled,false);assert.equal(closeSelect.children.length,5);
+assert.deepEqual(closeSelect.children.slice(1).map(n=>n.textContent),['Close Worksheet 1','Close Worksheet 2','Close Worksheet 3','Close Worksheet 4']);
+assert.ok(closeSelect.children.slice(1).every(n=>n.value));
+const closeAction=$('worksheet-close-action');assert.equal(closeAction.disabled,true);
+closeSelect.value=closeSelect.children[1].value;updateWorksheetCloseAction();assert.equal(closeAction.disabled,false);assert.equal($('worksheet-tabs').children.length,5);
+closeSelect.value='';updateWorksheetCloseAction();assert.equal(closeAction.disabled,true);
 const key=value=>({key:value,preventDefault(){}});$('worksheet-a').onkeydown(key('Home'));
 assert.equal(dbWorkspacePane,'details');assert.equal(document.activeElement,$('workspace-details'));assert.equal($('workspace-details').getAttribute('aria-selected'),'true');
 assert.equal($('database-details').getAttribute('role'),'tabpanel');assert.equal($('database-details').getAttribute('aria-labelledby'),'workspace-details');assert.equal($('database-details').hidden,false);

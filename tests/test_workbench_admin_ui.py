@@ -112,7 +112,7 @@ const worksheetsBefore=JSON.stringify(worksheets),expected=$('db-admin-database-
 // A different administrator changed metadata. The ordinary 15-second inventory sees its revision first.
 inventory[0].revision+=1;inventory[0].display_name='他画面で保存した表示名';adminItems[0].revision+=1;
 await periodicRefresh();
-assert.equal(activeTab,'db-admin');assert.equal($('tab-db-admin').getAttribute('aria-selected'),'true');
+assert.equal(activeTab,'db-admin');assert.equal($('tab-db-admin').getAttribute('aria-current'),'page');
 assert.equal($('db-admin').hidden,false);assert.equal(dbAdminAllowed(),true);assert.equal(dbAdmin.database,'db');
 assert.equal($('db-admin-content'),content);assert.equal($('db-admin-detail'),detail);assert.equal($('db-admin-database-db-name'),field);
 assert.equal(field.value,'競合側の未保存 draft');assert.equal(document.activeElement,field);assert.equal(field.selectionStart,2);assert.equal(field.selectionEnd,5);

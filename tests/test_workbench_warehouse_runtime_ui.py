@@ -35,7 +35,7 @@ assert.equal($('database-compute-state').textContent,'LOCAL · Chilled');
 assert.match($('runtime-physical').textContent,/Physical Chilled.*2026-10-29/);
 assert.match($('warehouse-state').textContent,/Physical Chilled.*2026-10-29/);
 $('database-compute-status').onclick();
-assert.equal(activeTab,'compute');assert.equal($('tab-compute').getAttribute('aria-selected'),'true');
+assert.equal(activeTab,'compute');assert.equal($('tab-compute').getAttribute('aria-current'),'page');
 assert.match($('runtime-proof').textContent,/unverified/);
 runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();
 assert.match($('runtime-proof').textContent,/unverified/);assert.doesNotMatch($('quick-warehouse-state').textContent,/Ready/);

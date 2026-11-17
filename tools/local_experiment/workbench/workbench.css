@@ -143,10 +143,10 @@ td.tone-ok,td.tone-bad,td.tone-warn,td.tone-run{background:none;font-family:var(
 .layout{display:grid;grid-template-columns:228px minmax(0,1fr);min-height:calc(100vh - 48px)}
 nav{position:sticky;top:48px;align-self:start;display:flex;flex-direction:column;height:calc(100vh - 48px);overflow:auto;padding:8px 8px 12px;background:var(--surface);border-right:1px solid var(--line)}
 .nav-category{margin:14px 8px 4px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-nav button{position:relative;width:100%;justify-content:flex-start;gap:10px;min-height:32px;margin:1px 0;padding:5px 8px;border:0;background:transparent;color:var(--ink-2);font-weight:500;text-align:left;white-space:normal}
-nav button:hover:not(:disabled){background:var(--surface-2);color:var(--ink)}
-nav button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
-nav button[aria-selected=true]::after{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
+nav a{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:32px;margin:1px 0;padding:5px 8px;border:0;border-radius:var(--radius);background:transparent;color:var(--ink-2);font-weight:500;text-align:left;text-decoration:none;white-space:normal}
+nav a:hover{background:var(--surface-2);color:var(--ink)}
+nav a[aria-current=page]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+nav a[aria-current=page]::after{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
 .icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 #jobs-alert-count{margin-left:auto;background:var(--bad);color:var(--on-accent);min-height:18px;padding:0 6px;font-size:11px}
 .nav-note{margin:auto 8px 0;padding-top:16px;color:var(--muted);font-size:11.5px;line-height:1.45}
@@ -237,8 +237,10 @@ details>summary::marker{color:var(--muted)}
 #worksheet-tabs{display:flex;gap:2px;flex:1 1 220px;min-width:0;padding-bottom:14px;overflow-x:auto;overflow-y:hidden}
 #worksheet-tabs button{min-height:28px;padding:3px 10px;border-color:transparent;background:transparent;color:var(--ink-2);font-weight:500}
 #worksheet-tabs button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600}
-#worksheet-tabs .worksheet-tab{display:flex;align-items:center;flex:none}
-#worksheet-tabs .worksheet-close{min-width:24px;min-height:28px;padding:2px 5px;font-size:16px}
+.worksheet-closers{display:flex;align-items:center;gap:6px;flex:none;flex-wrap:wrap;min-width:0;padding-bottom:14px}
+.worksheet-closers label{margin:0;font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+#worksheet-close-select{width:auto;max-width:100%;min-height:28px;padding:2px 6px;font-size:12px}
+#worksheet-close-action{min-height:28px;padding:2px 8px}
 #add-worksheet-tab{min-height:28px;padding:2px 8px}
 .history-field{display:flex;align-items:center;gap:6px;max-width:340px;min-width:0}
 .history-field label{margin:0;white-space:nowrap;font-weight:500}
@@ -276,6 +278,8 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .segmented button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
 #query-results{max-height:max(300px,calc(100vh - 300px))}
 #query-results th button{min-height:0;padding:0;border:0;background:transparent;font:inherit;color:inherit;width:100%;justify-content:flex-start}
+.result-sort-indicator{display:inline-block;min-width:1ch;margin-left:4px;color:var(--accent-ink)}
+#query-results:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
 #query-error{margin:10px 14px}
 #query-chart{overflow:auto;padding:14px}
 #query-chart svg{display:block;width:100%;min-width:480px;height:auto;color:var(--ink)}
@@ -490,7 +494,7 @@ html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#ru
 .header-group,#role-controls,#lang-switcher,#ai-settings-button{order:2}
 .layout{display:block}
 nav{position:static;height:auto;flex-direction:row;align-items:center;gap:2px;padding:6px 8px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
-nav button{width:auto;flex:none;white-space:nowrap}nav button[aria-selected=true]::after{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:2px}
+nav a{width:auto;flex:none;white-space:nowrap}nav a[aria-current=page]::after{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:2px}
 .nav-category,.nav-note{display:none}
 main{padding:14px 12px 32px}
 .editor{min-height:112px;height:clamp(112px,20vh,220px)}
@@ -555,13 +559,9 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 /* One tab strip: Details, worksheets with their close buttons, and + at the end. */
 #database-workspace-main>.editor-tabs{flex-wrap:nowrap;align-items:center;gap:6px;min-width:0;padding:6px 8px;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
 #database-workspace #worksheet-tabs{gap:4px;padding:0;scrollbar-width:thin}
-#database-workspace #worksheet-tabs>button,#database-workspace #worksheet-tabs .worksheet-tab{border:1px solid transparent;border-radius:5px}
-#database-workspace #worksheet-tabs .worksheet-tab button{border:0;border-radius:5px}
-#database-workspace #worksheet-tabs>button[aria-selected=true],#database-workspace #worksheet-tabs .worksheet-tab:has([aria-selected=true]){background:var(--surface);border-color:var(--line)}
-#database-workspace #worksheet-tabs [role=tab][aria-selected=true]{color:var(--accent-ink);background:transparent}
-#database-workspace #worksheet-tabs>button[aria-selected=true]{background:var(--surface)}
-#database-workspace #worksheet-tabs .worksheet-close{min-width:24px;padding:2px 6px;color:var(--muted);font-size:14px}
-#database-workspace #worksheet-tabs .worksheet-close:hover:not(:disabled){color:var(--ink);background:var(--surface-2)}
+#database-workspace #worksheet-tabs>button{border:1px solid transparent;border-radius:5px}
+#database-workspace .worksheet-closers{padding:0}
+#database-workspace #worksheet-tabs>button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--accent-ink)}
 #database-workspace #add-worksheet-tab{flex:none}
 /* Details: breadcrumb and title first, actions next to them. */
 #database-details .panel-head{flex-wrap:wrap;align-items:center}
@@ -896,3 +896,18 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #compute-diagnostics .panel{margin-bottom:12px}
 #database-details .panel-head>.toolbar>.unavailable-actions:empty{display:none}
 .panel-head>.compute-kind{flex-basis:100%;margin-bottom:-6px}
+/* Narrow screens: keep controls at a readable 16px without widening the page. */
+@media(max-width:760px){
+ :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:1rem}
+ .editor,#database-workspace .explorer-search input,#database-workspace .explorer-foot select,#database-context-bar select,#database-context-bar input,.db-manage-group .toolbar select{font-size:1rem}
+ .app-header,#role-controls,#role-selector,.header-group,.toolbar,.editor-tabs,#database-workspace-main{min-width:0;max-width:100%}
+ main>section,.results-tools,.panel-body{min-width:0;max-width:100%}
+ pre{max-width:100%;overflow:auto}
+ .header-group,.toolbar{flex-wrap:wrap}
+ .toolbar select,.toolbar input{max-width:100%}
+ #copilot-stage-table{width:auto;max-width:100%}
+ #worksheet-closers{max-width:100%}
+ #worksheet-close-select{font-size:1rem}
+ #database-workspace-main>.editor-tabs{flex-wrap:wrap}
+ #database-workspace-main>.editor-tabs>.history-field{max-width:100%}
+}
