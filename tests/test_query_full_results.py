@@ -401,6 +401,21 @@ class FullResultTests(unittest.TestCase):
                 self.assert_code('DB_ACCESS_REVOKED', fetch, 403)
             self.assertEqual(transport.call_count, 2)
 
+    def test_page_token_never_crosses_query_context_even_for_same_owner(self):
+        pages = [self.backend_page(0), self.backend_page(1), self.backend_page(0), self.backend_page(1)]
+        with patch.object(qs, '_transport', side_effect=pages) as transport:
+            first = self.submit()
+            second = self.submit()
+            first_token, second_token = self.token(first), self.token(second)
+            self.assertEqual(transport.call_count, 2)
+            self.assert_code('QUERY_NOT_FOUND', lambda: qs.fetch(
+                self.f.principal, second['id'], first_token,
+                selected_role=self.context.selected_role), 404)
+            self.assert_code('QUERY_NOT_FOUND', lambda: qs.fetch(
+                self.f.principal, first['id'], second_token,
+                selected_role=self.context.selected_role), 404)
+            self.assertEqual(transport.call_count, 2)
+
     def test_cached_results_recheck_current_grant_revision_before_replay(self):
         with patch.object(qs, '_transport', side_effect=[self.backend_page(0), self.backend_page(1)]) as transport:
             first = self.submit()
@@ -491,6 +506,73 @@ class FullResultTests(unittest.TestCase):
                 logical_registry.revoke_identity(db, identity)
             self.assert_code('DB_ACCESS_REVOKED', fetch, 403)
             transport.assert_not_called()
+
+    def logical_live_pin(self):
+        import test_logical_access as logical_fixtures
+        fixture = setup_fixture(self, logical_fixtures.LogicalAccessTests())
+        context = fixture.context()
+        query_id, token = 'full-logical-live', 'next'
+        with control_store.connect() as db:
+            db.execute("INSERT INTO query_records VALUES (?, 'alice', 'db', 'marts', 'LOCAL', 'foundation', 'RUNNING', 'now')", (query_id,))
+            db.execute("INSERT INTO query_execution_contexts VALUES (?, 'bi_viewer', 'read-only', 'db', 'marts', 1, 1, 'alice-id-user', 'pin', 'backend', 'request', 'worksheet', 'SELECT 1')", (query_id,))
+            handle = qs.admission.admit(db, actor='alice', kind='query', subject_id=query_id,
+                                        generation_id='foundation', database_id='db')
+        pin = qs._Pin(context, 'http://127.0.0.1:1234', {}, None, admission=handle,
+                      max_rows=None, full_results=True, full_next_token=token)
+        pin.tokens[token] = ('http://127.0.0.1:1234/v1/statement/backend/1', frozenset(('GET',)))
+        return fixture, query_id, token, pin
+
+    def test_logical_identity_revocation_during_inflight_page_never_delivers_its_data(self):
+        import logical_registry
+        fixture, query_id, token, pin = self.logical_live_pin()
+        def backend(url, method, target, body=None):
+            self.assertEqual(method, 'GET')
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                logical_registry.revoke_identity(db, 'alice-id')
+            return dict(id='backend', data=[[987654321]], stats={'state': 'RUNNING'})
+        with patch.dict(qs._pins, {query_id: pin}), patch.object(qs, '_transport', side_effect=backend) as transport, \
+                patch.object(qs, '_best_cancel'):
+            with self.assertRaises(qs.QueryError) as caught:
+                qs.fetch(fixture.alice, query_id, token, selected_role='bi_viewer')
+            self.assertEqual(caught.exception.code, 'DB_ACCESS_REVOKED')
+            self.assertNotIn('987654321', str(caught.exception))
+            with patch.object(qs, '_transport') as retry, patch.object(qs, '_best_cancel'):
+                with self.assertRaises(qs.QueryError) as cached:
+                    qs.fetch(fixture.alice, query_id, token, selected_role='bi_viewer')
+        self.assertEqual(cached.exception.code, 'DB_ACCESS_REVOKED')
+        retry.assert_not_called()
+        transport.assert_called_once()
+
+    def test_logical_binding_change_during_inflight_page_never_delivers_its_data(self):
+        fixture, query_id, token, pin = self.logical_live_pin()
+        def backend(url, method, target, body=None):
+            self.assertEqual(method, 'GET')
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                db.execute("UPDATE catalog_bindings SET desired_revision=2 WHERE database_id='db'")
+            return dict(id='backend', data=[[987654321]], stats={'state': 'RUNNING'})
+        with patch.dict(qs._pins, {query_id: pin}), patch.object(qs, '_transport', side_effect=backend) as transport, \
+                patch.object(qs, '_best_cancel'):
+            with self.assertRaises(qs.QueryError) as caught:
+                qs.fetch(fixture.alice, query_id, token, selected_role='bi_viewer')
+        self.assertEqual(caught.exception.code, 'DB_ACCESS_REVOKED')
+        self.assertNotIn('987654321', str(caught.exception))
+        transport.assert_called_once()
+
+    def test_account_disable_during_inflight_page_never_delivers_its_data(self):
+        fixture, query_id, token, pin = self.logical_live_pin()
+        def backend(url, method, target, body=None):
+            self.assertEqual(method, 'GET')
+            fixture.accounts['alice']['disabled'] = True
+            fixture.save_accounts()
+            return dict(id='backend', data=[[987654321]], stats={'state': 'RUNNING'})
+        with patch.dict(qs._pins, {query_id: pin}), patch.object(qs, '_transport', side_effect=backend), \
+                patch.object(qs, '_best_cancel'):
+            with self.assertRaises(qs.QueryError) as caught:
+                qs.fetch(fixture.alice, query_id, token, selected_role='bi_viewer')
+        self.assertEqual(caught.exception.code, 'DB_ACCESS_REVOKED')
+        self.assertNotIn('987654321', str(caught.exception))
 
     def test_failure_replays_without_backend_and_latest_cancellation_is_retained(self):
         def backend(url, method, pin, body=None):

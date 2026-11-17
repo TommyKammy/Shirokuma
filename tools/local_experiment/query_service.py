@@ -413,7 +413,8 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
                 if logical_mode:
                     context = _resolve_context(principal, row['database_id'], row['schema_id'], selected_role,
                         warehouse_id=row['warehouse_id'], expected_binding_revision=row['binding_revision'],
-                        db=db, backend_username=row['backend_username'])
+                        db=db, backend_username=row['backend_username'], account=account,
+                        mode='logical_v1')
                     if (context.generation_id != row['generation_id'] or context.sql_catalog != row['sql_catalog']
                             or context.sql_schema != row['sql_schema']
                             or context.grant_revision != row['grant_revision']):

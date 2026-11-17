@@ -62,7 +62,7 @@ def resolve_context(principal, database_id, schema_id, selected_role, *,
 
 def _resolve_context(principal, database_id, schema_id, selected_role, *,
                      warehouse_id, expected_binding_revision, decision=None, db=None,
-                     backend_username=None):
+                     backend_username=None, account=None, mode=None):
     if (any(not isinstance(v, str) or not v.strip() for v in
             (database_id, schema_id, warehouse_id, selected_role)) or
             type(expected_binding_revision) is not int or expected_binding_revision < 1):
@@ -72,14 +72,16 @@ def _resolve_context(principal, database_id, schema_id, selected_role, *,
             db.execute('BEGIN')
         parts = _resolve_context_in(principal, database_id, schema_id, selected_role,
             warehouse_id=warehouse_id, expected_binding_revision=expected_binding_revision,
-            decision=decision, db=db, backend_username=backend_username)
+            decision=decision, db=db, backend_username=backend_username,
+            account=account, mode=mode)
         return _resolve_context_finish(principal, database_id, schema_id, selected_role,
             warehouse_id=warehouse_id, parts=parts, db=db)
     with control_store.connect() as owned:
         owned.execute('BEGIN')
         parts = _resolve_context_in(principal, database_id, schema_id, selected_role,
             warehouse_id=warehouse_id, expected_binding_revision=expected_binding_revision,
-            decision=decision, db=owned, backend_username=backend_username)
+            decision=decision, db=owned, backend_username=backend_username,
+            account=account, mode=mode)
     # The final legacy decision uses its own short connection, as before; no
     # read transaction is held while another opener bootstraps/writes.
     return _resolve_context_finish(principal, database_id, schema_id, selected_role,
@@ -88,7 +90,7 @@ def _resolve_context(principal, database_id, schema_id, selected_role, *,
 
 def _resolve_context_in(principal, database_id, schema_id, selected_role, *,
                         warehouse_id, expected_binding_revision, decision, db,
-                        backend_username=None):
+                        backend_username=None, account=None, mode=None):
     database = registry.get_database(db, database_id)
     schema = registry.get_schema(db, schema_id)
     binding = registry.get_binding(db, database_id)
@@ -97,26 +99,31 @@ def _resolve_context_in(principal, database_id, schema_id, selected_role, *,
     if binding is None or binding.desired_revision != expected_binding_revision:
         raise QueryError('STALE_BINDING', 409)
     import logical_registry
-    if logical_registry.creation_mode(db, database_id) == 'logical_v1':
+    if mode is None:
+        mode = logical_registry.creation_mode(db, database_id)
+    generation = None
+    if mode == 'logical_v1':
         try:
             logical = logical_registry.resolve_binding(db, database_id, binding.applied_generation_id)
             if logical['warehouse_id'] != warehouse_id:
                 raise ValueError()
+            generation = registry.get_generation(db, binding.applied_generation_id)
             # Re-read current authority even when a backend snapshot was
             # supplied. Admission will compare its epoch before sending SQL.
-            current_decision = request_auth.authorize_database(principal, database_id, selected_role,
-                expected_generation_id=logical['generation_id'], db=db)
+            current_decision, identity = request_auth._authorize_database_prepared(
+                principal, database_id, selected_role,
+                expected_generation_id=logical['generation_id'], db=db,
+                database=database, binding=binding, generation=generation,
+                logical=logical, account=account)
             if decision is not None and decision != current_decision:
                 raise PermissionError()
-            if backend_username is not None:
-                identity = logical_registry.resolve_identity(db, principal.principal_id, database_id,
-                    selected_role, current_decision.grant_revision, current_decision.platform_admin)
-                if identity['backend_username'] != backend_username:
-                    raise PermissionError()
+            if backend_username is not None and identity['backend_username'] != backend_username:
+                raise PermissionError()
             decision = current_decision
         except (ValueError, PermissionError):
             raise QueryError('DB_ACCESS_REVOKED', 403) from None
-    generation = registry.get_generation(db, binding.applied_generation_id)
+    else:
+        generation = registry.get_generation(db, binding.applied_generation_id)
     import warehouse_admission
     ready = database.state == 'READY' or (
         type(principal) is request_auth.AuthenticatedPrincipal and warehouse_admission.continuing_database(
