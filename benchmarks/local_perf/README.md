@@ -310,7 +310,9 @@ mismatch, or a missing field fails closed. The gate re-reads and re-derives all
 of these conditions on every dispatch evaluation. It also requires every
 attempt path/request ID recorded in `run.json` to have a matching discovered
 `attempt.json`; a missing file or directory, mismatched ID, malformed path, or
-missing `attempts` list blocks dispatch. Unlisted crash-cutpoint receipts are
+missing `attempts` list blocks dispatch. When `planned_attempts` is present, the
+`attempts + pending + not_run` accounting must also agree, so removing both a
+record and its file cannot hide the gap. Unlisted crash-cutpoint receipts are
 still validated, and intentional `not_run_attempts` tails do not require files.
 `gate-status` uses the same `inspect_campaign` path as `run` and performs no
 dispatch. Absence of state rows alone never unlocks the gate.

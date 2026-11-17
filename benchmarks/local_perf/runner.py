@@ -916,6 +916,17 @@ def inspect_campaign(campaign):
             blockers.append({"run": name,
                              "reason": "incomplete prior run report blocks dispatch; inspect campaign"})
             continue
+        planned = report.get("planned_attempts")
+        if planned is not None:
+            pending, not_run = report.get("pending_attempts"), report.get("not_run_attempts")
+            if (type(planned) is not int or planned < 0
+                    or type(pending) is not int or pending < 0
+                    or type(not_run) is not int or not_run < 0):
+                blockers.append({"run": name,
+                                 "reason": "incomplete attempt accounting blocks dispatch; inspect campaign"})
+            elif len(recorded) + pending + not_run != planned:
+                blockers.append({"run": name,
+                                 "reason": "attempt accounting mismatch blocks dispatch; inspect campaign"})
         discovered = {}
         for path in sorted(run_root.glob("*/attempt.json")):
             discovered[path.parent.name] = (path, json.loads(path.read_text()))

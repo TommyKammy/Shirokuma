@@ -459,6 +459,17 @@ class NotSentTests(TestCase):
                 self.assert_gate_blocked(campaign)
                 self.assertFalse((path.parent / "not-sent.json").exists())
 
+    def test_removed_attempt_and_report_entry_blocks_accounting(self):
+        campaign, path = self.fixture()
+        report_path = path.parent.parent / "run.json"
+        report = json.loads(report_path.read_text())
+        report["attempts"] = []
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+        shutil.rmtree(path.parent)
+        gate = self.assert_gate_blocked(campaign)
+        self.assertTrue(any("attempt accounting mismatch" in blocker["reason"]
+                            for blocker in gate["blockers"]), gate)
+
     def test_orphaned_unknown_attempt_is_still_validated(self):
         campaign, path = self.fixture()
         report_path = path.parent.parent / "run.json"

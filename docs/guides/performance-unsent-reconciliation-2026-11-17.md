@@ -41,6 +41,8 @@ c02の24 runは観測データのままで、遡及受入しない。
 - `inspect_campaign`は`run.json.attempts[]`の各`path`と`request_id`を、実際に
   発見した`*/attempt.json`へ照合する。記録されたfile/directoryが無い、IDが
   一致しない、pathが不正・重複、`attempts`が無い場合はblockerにし、dispatchしない。
+  `planned_attempts`がある場合は`attempts + pending + not_run`の会計も照合し、
+  記録とfileを同時に消した場合の欠落を検出する。
 - 記録に無いattempt fileは従来どおり検証する。UNKNOWN等ならblockし、terminal
   receiptやNOT_SENT sidecarの検証も省略しない。`not_run_attempts`の未実行tailは
   fileを要求しない（intentional NOT_RUNと通常のrunner lifecycleを維持）。
@@ -129,14 +131,15 @@ campaign ID/root/run所有、process log、server log、state scan、prior evide
 
 ## 検証
 
-- `make test-local-perf`: 21 suite / 460 tests、失敗0（既存skipのみ）。
-- `make verify-local-experiment`: 162 suite / 5,990 tests、失敗0。
+- `make test-local-perf`: 21 suite / 461 tests、失敗0（既存skipのみ）。
+- `make verify-local-experiment`: 162 suite / 5,991 tests、失敗0。
   `make verify-design-context`: exit 0（documents=94、issues=10、references=42）。
 - 追加したfail-closed試験: 送信/retry/follow-up/response/timeout/reset、terminal handle、
   403 receipt、result file、process時刻/PID不一致、state一致行、server後続entry、
   scope/hash/field改竄、別attemptへのsidecar流用、無関係UNKNOWNの残存block、
   run.json記録attemptのfile/directory欠落・ID不一致・不正/重複path・attempts欠落、
-  orphan UNKNOWN attempt、handle key欠落、bool/float call数、初回capture失敗後の再試行。
+  planned/pending/not_run会計不一致、orphan UNKNOWN attempt、handle key欠落、
+  bool/float call数、初回capture失敗後の再試行。
 - `gate-status` c01: `ok=true`、blockers 0。`gate-status` c02: 24/24 SUCCESS、
   `not_sent` 0、blockers 0（観測データのまま）。
 - 元attempt/reconciliation/campaign/run/queriesのSHA256は
