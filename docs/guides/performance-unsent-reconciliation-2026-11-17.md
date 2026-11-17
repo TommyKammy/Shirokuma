@@ -18,10 +18,10 @@ c02の24 runは観測データのままで、遡及受入しない。
   `conn.request`へ到達していない。`ConnectionRefusedError`はTCP connect自体の
   拒否なので、HTTP request bytesは送信されていない。
 - 対象attemptは次を満たす必要がある。
-  - `status=UNKNOWN`、`handle=null`、`submission_rejection`無し、
+  - `status=UNKNOWN`、`handle` keyが存在してnull、`submission_rejection`無し、
     `result.jsonl`無し、`recovered_handle`無し。
   - `error_type=ConnectionRefusedError`、`error_code=PUBLIC_QUERY_UNMET`、
-    `initial.calls=1`、`follow_up.calls=0`。
+    `initial.calls=1`、`follow_up.calls=0`。call数はboolでない整数であること。
   - `connect`は正、`send`/`header_wait`/`body_read`/`decode`はnull、
     `initial.total >= connect`、`follow_up`の全phaseはnull。
   - `dispatch_started`、`recovery_started`、`recovery_complete`、
@@ -35,6 +35,30 @@ c02の24 runは観測データのままで、遡及受入しない。
   scope/hash不一致、必須field欠落。
 - DB行の不在だけでは解錠しない。transport proofを必須とし、process終了または
   read-only state scanの独立corroborationを最低1つ要求する。c01は両方を用いた。
+
+## ゲートの記録照合（レビュー修正）
+
+- `inspect_campaign`は`run.json.attempts[]`の各`path`と`request_id`を、実際に
+  発見した`*/attempt.json`へ照合する。記録されたfile/directoryが無い、IDが
+  一致しない、pathが不正・重複、`attempts`が無い場合はblockerにし、dispatchしない。
+- 記録に無いattempt fileは従来どおり検証する。UNKNOWN等ならblockし、terminal
+  receiptやNOT_SENT sidecarの検証も省略しない。`not_run_attempts`の未実行tailは
+  fileを要求しない（intentional NOT_RUNと通常のrunner lifecycleを維持）。
+- 元attemptが無い、またはsidecarが無い状態でUNKNOWNが残る場合は解錠しない。
+- 空の`attempts`はpre-dispatch失敗として許容するが、記録されたattemptの欠落は
+  たとえrunがFAILED/SUCCESS表記でも許容しない。
+
+## 部分失敗の再試行
+
+- corroborationはattempt directory内のhidden stagingへ書き、全検証後に
+  `not-sent-evidence/capture-<id>/`へatomic renameし、最後にreceiptを書く。
+  receipt本体もtemp fileへfsync後にhard linkで公開し、途中終了でpartialな
+  `not-sent.json`を残さない。
+- 誤ったPID、state一致行、server log後続entry等で最初の確認が失敗しても、
+  fixed-name evidenceを公開しない。同じcaseで引数を直して再実行でき、元の
+  attempt/reconciliation/既存receiptを削除・書換えする必要はない。
+- 公開済みcapture directoryとreceiptは不変。既存c01 receiptは
+  `not-sent-evidence/process.log`等の元pathのままbyte-identicalで再検証される。
 
 ## オフライン手順
 
@@ -105,12 +129,14 @@ campaign ID/root/run所有、process log、server log、state scan、prior evide
 
 ## 検証
 
-- `make test-local-perf`: 21 suite / 453 tests、失敗0（既存skipのみ）。
-- `make verify-local-experiment`: 162 suite / 5,983 tests、失敗0。
+- `make test-local-perf`: 21 suite / 460 tests、失敗0（既存skipのみ）。
+- `make verify-local-experiment`: 162 suite / 5,990 tests、失敗0。
   `make verify-design-context`: exit 0（documents=94、issues=10、references=42）。
 - 追加したfail-closed試験: 送信/retry/follow-up/response/timeout/reset、terminal handle、
   403 receipt、result file、process時刻/PID不一致、state一致行、server後続entry、
-  scope/hash/field改竄、別attemptへのsidecar流用、無関係UNKNOWNの残存block。
+  scope/hash/field改竄、別attemptへのsidecar流用、無関係UNKNOWNの残存block、
+  run.json記録attemptのfile/directory欠落・ID不一致・不正/重複path・attempts欠落、
+  orphan UNKNOWN attempt、handle key欠落、bool/float call数、初回capture失敗後の再試行。
 - `gate-status` c01: `ok=true`、blockers 0。`gate-status` c02: 24/24 SUCCESS、
   `not_sent` 0、blockers 0（観測データのまま）。
 - 元attempt/reconciliation/campaign/run/queriesのSHA256は

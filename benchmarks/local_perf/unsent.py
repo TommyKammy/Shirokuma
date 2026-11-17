@@ -20,9 +20,12 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
+import tempfile
 import time
 import urllib.parse
+import uuid
 
 
 NOT_SENT_NAME = "not-sent.json"
@@ -132,7 +135,8 @@ def transport_proof(intent):
                  "invalid preview identity")
 
     _require(intent.get("status") == "UNKNOWN", "attempt must remain UNKNOWN")
-    _require(intent.get("handle") is None, "attempt handle must be null")
+    _require("handle" in intent and intent.get("handle") is None,
+             "attempt handle field must be present and null")
     _require("submission_rejection" not in intent or intent.get("submission_rejection") is None,
              "submission rejection contradicts pre-send refusal")
     _require("recovered_handle" not in intent or intent.get("recovered_handle") is None,
@@ -168,13 +172,15 @@ def transport_proof(intent):
     _require(isinstance(initial, dict) and isinstance(follow, dict), "HTTP phase groups required")
     _require(set(initial) == {"calls", *HTTP_PHASES}, "initial phase fields missing")
     _require(set(follow) == {"calls", *HTTP_PHASES}, "follow-up phase fields missing")
-    _require(initial.get("calls") == 1, "exactly one initial call required")
+    _require(type(initial.get("calls")) is int and initial.get("calls") == 1,
+             "exactly one integer initial call required")
     connect, total = initial.get("connect"), initial.get("total")
     _require(_positive(connect), "initial connect phase required")
     _require(_positive(total) and total + 1e-9 >= connect, "initial total must include connect")
     for phase in ("send", "header_wait", "body_read", "decode"):
         _require(initial.get(phase) is None, "initial request/response phase contradicts NOT_SENT")
-    _require(follow.get("calls") == 0, "no follow-up call permitted")
+    _require(type(follow.get("calls")) is int and follow.get("calls") == 0,
+             "zero integer follow-up calls required")
     for phase in HTTP_PHASES:
         _require(follow.get(phase) is None, "follow-up phase contradicts NOT_SENT")
 
@@ -252,8 +258,43 @@ def _exclusive_json(path, value):
 
 
 def write_json_new(path, value):
-    """Append-only JSON writer used for receipts and captured scans."""
-    _exclusive_json(path, value)
+    """Atomically publish an append-only JSON receipt.
+
+    The final name is created with a hard link only after the full body has been
+    written and fsynced.  A killed writer leaves either no final name or a
+    complete one, plus at most an unreferenced temporary file.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = (json.dumps(value, indent=2, ensure_ascii=False, allow_nan=False) + "\n").encode("utf8")
+    temporary = path.with_name(path.name + ".new-" + uuid.uuid4().hex)
+    descriptor = os.open(str(temporary), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    try:
+        with os.fdopen(descriptor, "wb") as target:
+            target.write(data)
+            target.flush()
+            os.fsync(target.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            if path.read_bytes() != data:
+                raise UnsentError("append-only receipt already exists with different bytes") from None
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def publish_evidence(staging, final_dir):
+    """Atomically move a validated staging directory to its capture name."""
+    staging, final_dir = Path(staging), Path(final_dir)
+    _require(staging.is_dir(), "staged evidence missing")
+    final_dir.parent.mkdir(parents=True, exist_ok=True)
+    _require(not final_dir.exists(), "capture directory collision")
+    try:
+        os.replace(staging, final_dir)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return final_dir
 
 
 def _copy_evidence(source, target):
@@ -427,125 +468,137 @@ def build_corroboration(attempt_dir, wall_started, request_id, worksheet_id, *,
                         process_log=None, process_pid=None, utc_offset_seconds=None,
                         server_log=None, state_db=None, state_window_s=60,
                         historical_evidence=(), process_source_command=None):
-    """Copy/derive corroborating evidence into the attempt directory (append-only)."""
-    attempt_dir = Path(attempt_dir)
-    evidence = attempt_dir / EVIDENCE_DIR
-    evidence.mkdir(parents=True, exist_ok=True)
+    """Stage corroborating evidence; publication happens only after validation.
+
+    Files are written under a hidden staging directory first.  The caller
+    atomically publishes the whole directory under a fresh
+    ``not-sent-evidence/capture-<id>/`` name and only then writes the receipt.
+    A failed or interrupted first confirmation therefore leaves no fixed-name
+    evidence and cannot strand a later valid confirmation.
+    """
+    attempt_dir = Path(attempt_dir).resolve()
     offset = time.localtime().tm_gmtoff if utc_offset_seconds is None else utc_offset_seconds
     _require(isinstance(offset, int) and -86400 <= offset <= 86400, "UTC offset out of range")
+    staging = Path(tempfile.mkdtemp(prefix=".not-sent-staging-", dir=attempt_dir))
+    final_rel = Path(EVIDENCE_DIR) / ("capture-" + uuid.uuid4().hex)
+    final_dir = attempt_dir / final_rel
+    try:
+        _require(not final_dir.exists(), "capture directory collision")
+        process = None
+        if process_log is not None:
+            _require(process_pid is not None, "process pid required with process log")
+            source = Path(process_log).resolve()
+            target = staging / "process.log"
+            source_sha = file_sha256(source)
+            copy_sha = _copy_evidence(source, target)
+            _require(source_sha == copy_sha, "process evidence copy changed")
+            terminal = parse_process_log(target.read_text(encoding="utf8", errors="replace"),
+                                         process_pid, offset)
+            started = dt.datetime.fromtimestamp(wall_started, dt.timezone.utc)
+            age = (started - terminal).total_seconds()
+            _require(0 < age <= 3600, "termination must immediately precede the attempt")
+            process = {
+                "kind": "macos-unified-log-process-exit",
+                "path": str(final_rel / "process.log"),
+                "sha256": copy_sha,
+                "source_path": str(source),
+                "source_sha256": source_sha,
+                "source_command": process_source_command,
+                "pid": process_pid,
+                "utc_offset_seconds": offset,
+                "termination_utc": terminal.isoformat(timespec="microseconds"),
+                "age_before_wall_started_s": age,
+                "captured_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds"),
+                "limits": "the unified log identifies a process exit; pid-to-Workbench command linkage must come from contemporaneous ps evidence",
+            }
 
-    process = None
-    if process_log is not None:
-        _require(process_pid is not None, "process pid required with process log")
-        source = Path(process_log).resolve()
-        target = evidence / "process.log"
-        source_sha = file_sha256(source)
-        copy_sha = _copy_evidence(source, target)
-        _require(source_sha == copy_sha, "process evidence copy changed")
-        terminal = parse_process_log(target.read_text(encoding="utf8", errors="replace"),
-                                     process_pid, offset)
-        started = dt.datetime.fromtimestamp(wall_started, dt.timezone.utc)
-        age = (started - terminal).total_seconds()
-        _require(0 < age <= 3600, "termination must immediately precede the attempt")
-        process = {
-            "kind": "macos-unified-log-process-exit",
-            "path": str(target.relative_to(attempt_dir)),
-            "sha256": copy_sha,
-            "source_path": str(source),
-            "source_sha256": source_sha,
-            "source_command": process_source_command,
-            "pid": process_pid,
-            "utc_offset_seconds": offset,
-            "termination_utc": terminal.isoformat(timespec="microseconds"),
-            "age_before_wall_started_s": age,
-            "captured_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds"),
-            "limits": "the unified log identifies a process exit; pid-to-Workbench command linkage must come from contemporaneous ps evidence",
-        }
+        server = None
+        if server_log is not None:
+            source = Path(server_log).resolve()
+            target = staging / "server.log"
+            source_sha = file_sha256(source)
+            copy_sha = _copy_evidence(source, target)
+            _require(source_sha == copy_sha, "server evidence copy changed")
+            facts = parse_server_log(target.read_text(encoding="utf8", errors="replace"),
+                                     wall_started, offset)
+            _require(facts["post_requests_at_or_after_wall_started"] == 0,
+                     "server access log contains a POST at/after the attempt")
+            _require(facts["entries_after_wall_started"] == 0,
+                     "server access log continues after the attempt")
+            server = {
+                "kind": "workbench-access-log",
+                "path": str(final_rel / "server.log"),
+                "sha256": copy_sha,
+                "source_path": str(source),
+                "source_sha256": source_sha,
+                "utc_offset_seconds": offset,
+                "entries": facts["entries"],
+                "last_entry_utc": facts["last_entry_utc"],
+                "entries_after_wall_started": facts["entries_after_wall_started"],
+                "post_requests_at_or_after_wall_started": facts["post_requests_at_or_after_wall_started"],
+                "captured_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds"),
+                "limits": "scoped to the captured server process access log; not a cluster-wide request log",
+            }
 
-    server = None
-    if server_log is not None:
-        source = Path(server_log).resolve()
-        target = evidence / "server.log"
-        source_sha = file_sha256(source)
-        copy_sha = _copy_evidence(source, target)
-        _require(source_sha == copy_sha, "server evidence copy changed")
-        facts = parse_server_log(target.read_text(encoding="utf8", errors="replace"),
-                                 wall_started, offset)
-        _require(facts["post_requests_at_or_after_wall_started"] == 0,
-                 "server access log contains a POST at/after the attempt")
-        _require(facts["entries_after_wall_started"] == 0,
-                 "server access log continues after the attempt")
-        server = {
-            "kind": "workbench-access-log",
-            "path": str(target.relative_to(attempt_dir)),
-            "sha256": copy_sha,
-            "source_path": str(source),
-            "source_sha256": source_sha,
-            "utc_offset_seconds": offset,
-            "entries": facts["entries"],
-            "last_entry_utc": facts["last_entry_utc"],
-            "entries_after_wall_started": facts["entries_after_wall_started"],
-            "post_requests_at_or_after_wall_started": facts["post_requests_at_or_after_wall_started"],
-            "captured_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="microseconds"),
-            "limits": "scoped to the captured server process access log; not a cluster-wide request log",
-        }
+        state = None
+        if state_db is not None:
+            target = staging / "state-scan.json"
+            scan = scan_state(state_db, request_id, worksheet_id, wall_started, window_s=state_window_s)
+            _exclusive_json(target, scan)
+            raw = json.loads(target.read_text())
+            _require(raw == scan, "state scan copy mismatch")
+            _require(not raw["matching_rows"], "state database contains matching request ids")
+            _require(raw["query_records_window"] == 0, "query record exists in failure window")
+            _require(raw["admissions_window"] == 0, "warehouse admission exists in failure window")
+            _require(raw["execution_contexts"] == 0, "execution context exists for request ids")
+            state = {
+                "kind": "readonly-workbench-state-scan",
+                "path": str(final_rel / "state-scan.json"),
+                "sha256": file_sha256(target),
+                "source_path": raw["db_path"],
+                "source_sha256": raw["db_sha256"],
+                "db_path": raw["db_path"],
+                "db_sha256": raw["db_sha256"],
+                "db_size": raw["db_size"],
+                "db_mtime_ns": raw["db_mtime_ns"],
+                "window_seconds": raw["window_seconds"],
+                "tables_scanned": raw["tables_scanned"],
+                "matching_rows": raw["matching_rows"],
+                "query_records_window": raw["query_records_window"],
+                "admissions_window": raw["admissions_window"],
+                "execution_contexts": raw["execution_contexts"],
+                "captured_at": raw["captured_at"],
+                "limits": "absence of rows is corroboration only; the transport phase proof is the primary basis",
+            }
 
-    state = None
-    if state_db is not None:
-        target = evidence / "state-scan.json"
-        scan = scan_state(state_db, request_id, worksheet_id, wall_started, window_s=state_window_s)
-        _exclusive_json(target, scan)
-        raw = json.loads(target.read_text())
-        _require(raw == scan, "state scan copy mismatch")
-        _require(not raw["matching_rows"], "state database contains matching request ids")
-        _require(raw["query_records_window"] == 0, "query record exists in failure window")
-        _require(raw["admissions_window"] == 0, "warehouse admission exists in failure window")
-        _require(raw["execution_contexts"] == 0, "execution context exists for request ids")
-        state = {
-            "kind": "readonly-workbench-state-scan",
-            "path": str(target.relative_to(attempt_dir)),
-            "sha256": file_sha256(target),
-            "source_path": raw["db_path"],
-            "source_sha256": raw["db_sha256"],
-            "db_path": raw["db_path"],
-            "db_sha256": raw["db_sha256"],
-            "db_size": raw["db_size"],
-            "db_mtime_ns": raw["db_mtime_ns"],
-            "window_seconds": raw["window_seconds"],
-            "tables_scanned": raw["tables_scanned"],
-            "matching_rows": raw["matching_rows"],
-            "query_records_window": raw["query_records_window"],
-            "admissions_window": raw["admissions_window"],
-            "execution_contexts": raw["execution_contexts"],
-            "captured_at": raw["captured_at"],
-            "limits": "absence of rows is corroboration only; the transport phase proof is the primary basis",
-        }
+        _require(process is not None or state is not None,
+                 "at least one independent corroboration is required")
 
-    _require(process is not None or state is not None,
-             "at least one independent corroboration is required")
+        prior = []
+        seen = set()
+        for item in historical_evidence:
+            source = Path(item).resolve()
+            source_sha = file_sha256(source)
+            name = "prior-" + source_sha[:12] + "-" + re.sub(r"[^A-Za-z0-9._-]", "_", source.name)
+            target = staging / name
+            copy_sha = _copy_evidence(source, target)
+            _require(copy_sha == source_sha, "historical evidence copy changed")
+            key = str(target.resolve())
+            _require(key not in seen, "duplicate historical evidence")
+            seen.add(key)
+            prior.append({
+                "path": str(final_rel / name),
+                "sha256": copy_sha,
+                "source_path": str(source),
+                "source_sha256": source_sha,
+                "role": "historical-corroboration",
+            })
+        prior.sort(key=lambda item: item["source_path"])
 
-    prior = []
-    seen = set()
-    for item in historical_evidence:
-        source = Path(item).resolve()
-        source_sha = file_sha256(source)
-        name = "prior-" + source_sha[:12] + "-" + re.sub(r"[^A-Za-z0-9._-]", "_", source.name)
-        target = evidence / name
-        copy_sha = _copy_evidence(source, target)
-        _require(copy_sha == source_sha, "historical evidence copy changed")
-        key = str(target.resolve())
-        _require(key not in seen, "duplicate historical evidence")
-        seen.add(key)
-        prior.append({
-            "path": str(target.relative_to(attempt_dir)),
-            "sha256": copy_sha,
-            "source_path": str(source),
-            "source_sha256": source_sha,
-            "role": "historical-corroboration",
-        })
-    prior.sort(key=lambda item: item["source_path"])
-
-    return {"process": process, "server": server, "state": state, "prior": prior}
+        return {"process": process, "server": server, "state": state, "prior": prior}, staging, final_dir
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def _validate_linked(attempt_dir, item, kind, exact_keys):

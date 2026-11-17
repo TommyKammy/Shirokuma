@@ -882,15 +882,17 @@ def _not_sent_reconciliation(path, intent, prepared=None):
 def resolve_attempt(path, intent, prepared=None):
     """Return a terminal effective record, or None when the attempt stays uncertain."""
     path = Path(path)
-    terminal = _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared)
-    if (path.parent / unsent.NOT_SENT_NAME).exists():
-        if terminal is not None:
-            raise unsent.UnsentError("terminal reconciliation contradicts not-sent receipt")
-        resolved = _not_sent_reconciliation(path, intent, prepared)
-        if resolved is None:
-            raise unsent.UnsentError("not-sent receipt disappeared during gate read")
-        return resolved
-    return terminal
+    receipt = path.parent / unsent.NOT_SENT_NAME
+    if not receipt.exists():
+        if intent.get("reconciliation") == "NOT_SENT":
+            raise unsent.UnsentError("not-sent claim without sidecar")
+        return _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared)
+    if _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared) is not None:
+        raise unsent.UnsentError("terminal reconciliation contradicts not-sent receipt")
+    resolved = _not_sent_reconciliation(path, intent, prepared)
+    if resolved is None:
+        raise unsent.UnsentError("not-sent receipt disappeared during gate read")
+    return resolved
 
 
 def inspect_campaign(campaign):
@@ -908,8 +910,43 @@ def inspect_campaign(campaign):
         prepared = _prepare_frozen(json.loads(raw_manifest),
                                    json.loads((run_root / "run.json").read_text()),
                                    hashlib.sha256(raw_manifest).hexdigest())
+        report = prepared[1]
+        recorded = report.get("attempts")
+        if not isinstance(recorded, list):
+            blockers.append({"run": name,
+                             "reason": "incomplete prior run report blocks dispatch; inspect campaign"})
+            continue
+        discovered = {}
         for path in sorted(run_root.glob("*/attempt.json")):
-            audit = json.loads(path.read_text())
+            discovered[path.parent.name] = (path, json.loads(path.read_text()))
+        recorded_paths = set()
+        for item in recorded:
+            if not isinstance(item, dict):
+                blockers.append({"run": name, "reason": "recorded attempt entry is invalid"})
+                continue
+            attempt_name = item.get("path")
+            if (not isinstance(attempt_name, str) or not attempt_name
+                    or Path(attempt_name).name != attempt_name
+                    or attempt_name in (".", "..") or "\x00" in attempt_name):
+                blockers.append({"run": name, "reason": "recorded attempt path is invalid"})
+                continue
+            if attempt_name in recorded_paths:
+                blockers.append({"run": name, "attempt": attempt_name,
+                                 "reason": "recorded attempt path is duplicated"})
+                continue
+            recorded_paths.add(attempt_name)
+            request_id = item.get("request_id")
+            if not isinstance(request_id, str) or not request_id:
+                blockers.append({"run": name, "attempt": attempt_name,
+                                 "reason": "recorded attempt request id is missing"})
+            if attempt_name not in discovered:
+                blockers.append({"run": name, "attempt": attempt_name,
+                                 "reason": "recorded attempt file is missing"})
+                continue
+            if request_id and discovered[attempt_name][1].get("request_id") != request_id:
+                blockers.append({"run": name, "attempt": attempt_name,
+                                 "reason": "recorded attempt request id mismatch"})
+        for path, audit in sorted(discovered.values(), key=lambda item: item[0].parent.name):
             _validate_frozen_intent(prepared, audit)
             if "submission_rejection" in audit:
                 from .public import valid_submission_rejection
@@ -994,49 +1031,54 @@ def confirm_not_sent(path, adapter, *, process_log=None, process_pid=None,
         reconciliation_sha256 = hashlib.sha256(retained.read_bytes()).hexdigest()
     else:
         reconciliation_state, reconciliation_sha256 = "absent", None
-    corroboration = unsent.build_corroboration(
+    corroboration, staging, final_dir = unsent.build_corroboration(
         path.parent, intent["wall_started"], intent["request_id"], intent["dispatch"]["worksheet_id"],
         process_log=process_log, process_pid=process_pid,
         utc_offset_seconds=utc_offset_seconds, server_log=server_log,
         state_db=state_db, state_window_s=state_window_s,
         historical_evidence=historical_evidence,
         process_source_command=process_source_command)
-    receipt = {
-        "format": 1,
-        "kind": unsent.KIND,
-        "status": "FAILED",
-        "reconciliation": "NOT_SENT",
-        "decision": "NOT_SENT",
-        "request_id": intent["request_id"],
-        "query_id": intent.get("query_id"),
-        "worksheet_id": intent["dispatch"]["worksheet_id"],
-        "attempt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-        "reconciliation_state": reconciliation_state,
-        "reconciliation_sha256": reconciliation_sha256,
-        "run_sha256": hashlib.sha256((run_root / "run.json").read_bytes()).hexdigest(),
-        "queries_sha256": hashlib.sha256((run_root / "queries.json").read_bytes()).hexdigest(),
-        "campaign_sha256": hashlib.sha256(campaign.path.read_bytes()).hexdigest(),
-        "campaign_id": campaign.state.get("id"),
-        "campaign_root": str(campaign.root),
-        "run_name": run_root.name,
-        "query_manifest_sha256": report.get("query_manifest_sha256"),
-        "sql_sha256": intent.get("sql_sha256"),
-        "dataset_id": intent.get("dataset_id"),
-        "adapter_identity_sha256": unsent.canonical_sha256(intent["adapter_identity"]),
-        "dispatch_sha256": unsent.canonical_sha256(intent["dispatch"]),
-        "transport": proof,
-        "corroboration": corroboration,
-        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "procedure": unsent.PROCEDURE,
-        "limits": [
-            "TCP connect refusal proves this process sent no HTTP request bytes; it does not audit other clients.",
-            "The state and server evidence are scoped to the captured Workbench process/state database.",
-            "The original attempt and UNKNOWN reconciliation remain unchanged; this is not a successful query.",
-            "No result data, backend handle, retry, follow-up, or response exists for this attempt.",
-            "The append-only receipt is local evidence, not a cryptographic signature or global cluster audit.",
-        ],
-    }
-    unsent.write_json_new(receipt_path, receipt)
+    try:
+        receipt = {
+            "format": 1,
+            "kind": unsent.KIND,
+            "status": "FAILED",
+            "reconciliation": "NOT_SENT",
+            "decision": "NOT_SENT",
+            "request_id": intent["request_id"],
+            "query_id": intent.get("query_id"),
+            "worksheet_id": intent["dispatch"]["worksheet_id"],
+            "attempt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "reconciliation_state": reconciliation_state,
+            "reconciliation_sha256": reconciliation_sha256,
+            "run_sha256": hashlib.sha256((run_root / "run.json").read_bytes()).hexdigest(),
+            "queries_sha256": hashlib.sha256((run_root / "queries.json").read_bytes()).hexdigest(),
+            "campaign_sha256": hashlib.sha256(campaign.path.read_bytes()).hexdigest(),
+            "campaign_id": campaign.state.get("id"),
+            "campaign_root": str(campaign.root),
+            "run_name": run_root.name,
+            "query_manifest_sha256": report.get("query_manifest_sha256"),
+            "sql_sha256": intent.get("sql_sha256"),
+            "dataset_id": intent.get("dataset_id"),
+            "adapter_identity_sha256": unsent.canonical_sha256(intent["adapter_identity"]),
+            "dispatch_sha256": unsent.canonical_sha256(intent["dispatch"]),
+            "transport": proof,
+            "corroboration": corroboration,
+            "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "procedure": unsent.PROCEDURE,
+            "limits": [
+                "TCP connect refusal proves this process sent no HTTP request bytes; it does not audit other clients.",
+                "The state and server evidence are scoped to the captured Workbench process/state database.",
+                "The original attempt and UNKNOWN reconciliation remain unchanged; this is not a successful query.",
+                "No result data, backend handle, retry, follow-up, or response exists for this attempt.",
+                "The append-only receipt is local evidence, not a cryptographic signature or global cluster audit.",
+            ],
+        }
+        unsent.publish_evidence(staging, final_dir)
+        unsent.write_json_new(receipt_path, receipt)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
     resolved = _not_sent_reconciliation(path, intent, prepared)
     if resolved is None:
         raise ValueError("written not-sent receipt did not validate")

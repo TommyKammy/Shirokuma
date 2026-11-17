@@ -296,8 +296,9 @@ rtk proxy python3 -m benchmarks.local_perf gate-status /absolute/campaign
 
 The receipt is minted only when the immutable attempt proves one initial call,
 a non-null measured `connect`, null `send`/`header_wait`/`body_read`/`decode`,
-zero follow-up calls, no terminal/response/backend event, no handle, no
-submission rejection, and no result file. It also revalidates the frozen
+zero follow-up calls, no terminal/response/backend event, an explicit
+`handle: null`, no submission rejection, and no result file. Both call counts
+must be integer non-boolean values. It also revalidates the frozen
 manifest/SQL/snapshot, run/campaign ownership, exact public account/role/context/
 origin, and the historical UNKNOWN reconciliation. At least one independent
 corroboration is required: a process termination captured immediately before
@@ -306,9 +307,23 @@ request/worksheet IDs and zero query/admission rows in a tight window. A process
 log after the attempt, a matching state row, a terminal handle, a 403 receipt,
 a response phase, a retry/follow-up, an ambiguous network error, a scope/hash
 mismatch, or a missing field fails closed. The gate re-reads and re-derives all
-of these conditions on every dispatch evaluation. `gate-status` uses the same
-`inspect_campaign` path as `run` and performs no dispatch. Absence of state rows
-alone never unlocks the gate.
+of these conditions on every dispatch evaluation. It also requires every
+attempt path/request ID recorded in `run.json` to have a matching discovered
+`attempt.json`; a missing file or directory, mismatched ID, malformed path, or
+missing `attempts` list blocks dispatch. Unlisted crash-cutpoint receipts are
+still validated, and intentional `not_run_attempts` tails do not require files.
+`gate-status` uses the same `inspect_campaign` path as `run` and performs no
+dispatch. Absence of state rows alone never unlocks the gate.
+
+Evidence is first written to a hidden staging directory. Only after every
+corroboration check passes is the directory atomically published under a fresh
+`not-sent-evidence/capture-<id>/` name, followed by the receipt. The receipt is
+fsynced to a temporary file and published with an exclusive hard link, so an
+interrupted writer leaves either no final receipt or a complete one. A failed
+first confirmation (wrong argument, matching state row, interrupted capture)
+leaves no fixed-name evidence and can be retried without deleting originals.
+Once the receipt exists, its evidence is immutable and revalidated on every gate
+read.
 
 
 ## Public API and portable connection qualification

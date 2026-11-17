@@ -3,6 +3,7 @@ import datetime as dt
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import tempfile
 from unittest import TestCase, main
@@ -297,11 +298,16 @@ class NotSentTests(TestCase):
             "sent": lambda value: value["timings"]["http"]["initial"].update(send=0.0001),
             "retry": lambda value: value["timings"]["http"]["initial"].update(calls=2),
             "follow-up": lambda value: value["timings"]["http"]["follow_up"].update(calls=1),
+            "bool-initial": lambda value: value["timings"]["http"]["initial"].update(calls=True),
+            "bool-follow-up": lambda value: value["timings"]["http"]["follow_up"].update(calls=False),
+            "float-initial": lambda value: value["timings"]["http"]["initial"].update(calls=1.0),
+            "float-follow-up": lambda value: value["timings"]["http"]["follow_up"].update(calls=0.0),
             "response": lambda value: value["timings"]["events"].update(initial_response_complete=0.1),
             "terminal": lambda value: value["timings"]["events"].update(terminal_observed=0.1),
             "timeout": lambda value: value.update(error_type="TimeoutError"),
             "reset": lambda value: value.update(error_type="ConnectionResetError"),
             "handle": lambda value: value.update(handle={"id": "query"}),
+            "missing-handle": lambda value: value.pop("handle"),
             "rejection": lambda value: value.update(submission_rejection={"http_status": 403}),
             "running": lambda value: value.update(status="RUNNING"),
             "backend": lambda value: value["timings"]["backend_report"].update(client_observed=True),
@@ -417,6 +423,95 @@ class NotSentTests(TestCase):
         with self.assertRaises(ValueError):
             runner.confirm_not_sent(path, self.adapter(), **options)
         self.assertFalse((path.parent / "not-sent.json").exists())
+
+    def test_recorded_attempt_missing_file_or_directory_blocks(self):
+        for missing in ("file", "directory"):
+            with self.subTest(missing=missing):
+                campaign, path = self.fixture()
+                if missing == "file":
+                    path.unlink()
+                else:
+                    shutil.rmtree(path.parent)
+                gate = self.assert_gate_blocked(campaign)
+                self.assertTrue(any("recorded attempt file is missing" in blocker["reason"]
+                                    for blocker in gate["blockers"]), gate)
+                adapter = ScriptedTrino("ok")
+                with self.assertRaisesRegex(RuntimeError, "recorded attempt file is missing"):
+                    runner.run(campaign, "blocked", PUBLIC_MANIFEST, adapter, reference_label="test only")
+                self.assertEqual(adapter.posts, 0)
+
+    def test_recorded_attempt_identity_and_path_must_match_discovery(self):
+        cases = {
+            "request-id": lambda report: report["attempts"][0].update(
+                request_id="00000000-0000-4000-8000-000000000000"),
+            "missing-request-id": lambda report: report["attempts"][0].pop("request_id"),
+            "invalid-path": lambda report: report["attempts"][0].update(path="../escape"),
+            "duplicate-path": lambda report: report["attempts"].append(dict(report["attempts"][0])),
+            "missing-attempts": lambda report: report.pop("attempts"),
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                campaign, path = self.fixture()
+                report_path = path.parent.parent / "run.json"
+                report = json.loads(report_path.read_text())
+                mutate(report)
+                report_path.write_text(json.dumps(report, indent=2) + "\n")
+                self.assert_gate_blocked(campaign)
+                self.assertFalse((path.parent / "not-sent.json").exists())
+
+    def test_orphaned_unknown_attempt_is_still_validated(self):
+        campaign, path = self.fixture()
+        report_path = path.parent.parent / "run.json"
+        report = json.loads(report_path.read_text())
+        report["attempts"] = []
+        report_path.write_text(json.dumps(report, indent=2) + "\n")
+        gate = self.assert_gate_blocked(campaign)
+        self.assertTrue(any(blocker.get("attempt") == path.parent.name for blocker in gate["blockers"]), gate)
+
+    def test_failed_first_capture_can_retry_without_deleting_evidence(self):
+        campaign, path = self.fixture()
+        with self.assertRaises(ValueError):
+            self.mint(path, evidence_options=dict(state_rows=True))
+        self.assertFalse((path.parent / "not-sent.json").exists())
+        self.assertFalse((path.parent / "not-sent-evidence").exists())
+        result = self.mint(path)
+        self.assertEqual(result["reconciliation"], "NOT_SENT")
+        receipt = json.loads((path.parent / "not-sent.json").read_text())
+        self.assertTrue(receipt["corroboration"]["state"]["path"].startswith(
+            "not-sent-evidence/capture-"))
+        self.assert_gate_open(campaign)
+
+        campaign, path = self.fixture()
+        with self.assertRaises(ValueError):
+            self.mint(path, evidence_options=dict(pid_override=9999))
+        self.assertFalse((path.parent / "not-sent.json").exists())
+        self.assertEqual(self.mint(path)["reconciliation"], "NOT_SENT")
+        self.assert_gate_open(campaign)
+
+    def test_missing_sidecar_reblocks_without_rewriting_original(self):
+        campaign, path = self.fixture()
+        original_attempt = path.read_bytes()
+        self.mint(path)
+        (path.parent / "not-sent.json").unlink()
+        gate = self.assert_gate_blocked(campaign)
+        self.assertTrue(any(blocker["effective_status"] == "UNKNOWN" for blocker in gate["blockers"]), gate)
+        self.assertEqual(path.read_bytes(), original_attempt)
+
+    def test_attempt_claiming_not_sent_without_sidecar_blocks(self):
+        campaign, path = self.fixture()
+        intent = json.loads(path.read_text())
+        intent.update(status="FAILED", reconciliation="NOT_SENT")
+        path.write_text(json.dumps(intent, indent=2) + "\n")
+        gate = self.assert_gate_blocked(campaign)
+        self.assertTrue(any("not-sent claim without sidecar" in blocker["reason"]
+                            for blocker in gate["blockers"]), gate)
+        self.assertFalse((path.parent / "not-sent.json").exists())
+
+    def test_orphan_receipt_temp_does_not_block_retry(self):
+        campaign, path = self.fixture()
+        (path.parent / "not-sent.json.new-deadbeef").write_text("partial\n")
+        self.assertEqual(self.mint(path)["reconciliation"], "NOT_SENT")
+        self.assert_gate_open(campaign)
 
     def test_sidecar_cannot_be_reused_for_another_attempt(self):
         campaign, first = self.fixture()
