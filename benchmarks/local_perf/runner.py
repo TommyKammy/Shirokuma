@@ -18,6 +18,7 @@ import time
 import urllib.parse
 import uuid
 
+from . import unsent
 from .capacity import Campaign, CapacitySampler, allocated, write_json
 from .engine import bounded, connect, ident, quote
 from .protocol import settings
@@ -521,30 +522,9 @@ def run(campaign, name, manifest, adapter, *, references=None, mode="qualificati
             select_only(q[sql_variant])
     if references is None and reference_label is None:
         raise ValueError("reference directory required; use prepare-reference separately")
-    campaign.refresh()
-    for n, entry in campaign.state["owned"].items():
-        if entry["kind"] == "run":
-            if not (campaign.root / n / "run.json").exists():
-                raise RuntimeError("incomplete prior run blocks dispatch; inspect campaign")
-            saved_root = campaign.root / n
-            raw_manifest = (saved_root / "queries.json").read_bytes()
-            prepared = _prepare_frozen(json.loads(raw_manifest),
-                                       json.loads((saved_root / "run.json").read_text()),
-                                       hashlib.sha256(raw_manifest).hexdigest())
-            for p in saved_root.glob("*/attempt.json"):
-                audit = json.loads(p.read_text())
-                _validate_frozen_intent(prepared, audit)
-                if "submission_rejection" in audit:
-                    from .public import valid_submission_rejection
-                    if not valid_submission_rejection(audit["submission_rejection"], audit):
-                        raise ValueError("invalid submission rejection")
-                reconciliation = p.parent / "reconciliation.json"
-                if reconciliation.exists():
-                    resolved = _terminal_reconciliation(reconciliation, audit, prepared)
-                    if resolved is not None:
-                        audit = resolved
-                if audit["status"] in ("INTENT", "RUNNING", "UNKNOWN"):
-                    raise RuntimeError("unreconciled attempt blocks new dispatch")
+    gate = inspect_campaign(campaign)
+    if gate["blockers"]:
+        raise RuntimeError(gate["blockers"][0]["reason"])
     campaign.check(cfg["peak_bytes"])
     root = campaign.own(name, "run")
     report = dict(format=1, status="INCOMPLETE", adapter=adapter.name, adapter_identity=identity, dataset_id=manifest["dataset_id"], settings=cfg,
@@ -786,6 +766,284 @@ def terminal_reconciliation(path, intent):
     return _terminal_reconciliation(path, intent)
 
 
+def _validate_unknown_reconciliation(path, intent):
+    result = json.loads(path.read_text())
+    if set(result) != set(intent) | {"reconciliation"}:
+        raise ValueError("retained reconciliation shape mismatch")
+    if result.get("status") != "UNKNOWN" or result.get("reconciliation") != "UNKNOWN":
+        raise ValueError("retained reconciliation is not UNKNOWN")
+    if result.get("recovered_handle") is not None:
+        raise ValueError("recovered handle contradicts unsent attempt")
+    for key, value in intent.items():
+        if key not in ("status", "reconciliation") and result.get(key) != value:
+            raise ValueError("retained reconciliation scope mismatch")
+    return result
+
+
+def _not_sent_reconciliation(path, intent, prepared=None):
+    """Validate the append-only NOT_SENT sidecar and return an effective record.
+
+    The sidecar never replaces attempt.json or the historical UNKNOWN
+    reconciliation.  It is re-derived from the immutable files and linked
+    evidence on every gate read.
+    """
+    path = Path(path).resolve()
+    receipt_path = path.parent / unsent.NOT_SENT_NAME
+    if not receipt_path.exists():
+        return None
+    if intent.get("adapter_identity", {}).get("kind") != unsent.PUBLIC:
+        raise unsent.UnsentError("not-sent receipt requires public adapter identity")
+    run_root, campaign_root = path.parent.parent, path.parent.parent.parent
+    if prepared is None:
+        raw_manifest = (run_root / "queries.json").read_bytes()
+        prepared = _prepare_frozen(json.loads(raw_manifest),
+                                   json.loads((run_root / "run.json").read_text()),
+                                   hashlib.sha256(raw_manifest).hexdigest())
+    _validate_frozen_intent(prepared, intent)
+    _, report, _, _ = prepared
+    if _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared) is not None:
+        raise unsent.UnsentError("terminal reconciliation contradicts not-sent receipt")
+    receipt = json.loads(receipt_path.read_text())
+    required = {
+        "format", "kind", "status", "reconciliation", "decision", "request_id",
+        "query_id", "worksheet_id", "attempt_sha256", "reconciliation_state",
+        "reconciliation_sha256", "run_sha256", "queries_sha256", "campaign_sha256",
+        "campaign_id", "campaign_root", "run_name", "query_manifest_sha256",
+        "sql_sha256", "dataset_id", "adapter_identity_sha256", "dispatch_sha256",
+        "transport", "corroboration", "captured_at", "procedure", "limits",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != required:
+        raise unsent.UnsentError("not-sent receipt shape mismatch")
+    if (receipt["format"] != 1 or receipt["kind"] != unsent.KIND
+            or receipt["status"] != "FAILED" or receipt["reconciliation"] != "NOT_SENT"
+            or receipt["decision"] != "NOT_SENT" or receipt["procedure"] != unsent.PROCEDURE):
+        raise unsent.UnsentError("not-sent receipt header mismatch")
+    if not isinstance(receipt["limits"], list) or not receipt["limits"] or not all(
+            isinstance(item, str) and item.strip() for item in receipt["limits"]):
+        raise unsent.UnsentError("not-sent receipt limits required")
+    if not isinstance(receipt["captured_at"], str) or not receipt["captured_at"]:
+        raise unsent.UnsentError("not-sent receipt capture time required")
+
+    identity, dispatch, request_id = intent["adapter_identity"], intent["dispatch"], intent["request_id"]
+    if (receipt["request_id"] != request_id or receipt["query_id"] != intent.get("query_id")
+            or receipt["worksheet_id"] != dispatch.get("worksheet_id")
+            or receipt["sql_sha256"] != intent.get("sql_sha256")
+            or receipt["dataset_id"] != intent.get("dataset_id")
+            or receipt["query_manifest_sha256"] != report.get("query_manifest_sha256")
+            or receipt["adapter_identity_sha256"] != unsent.canonical_sha256(identity)
+            or receipt["dispatch_sha256"] != unsent.canonical_sha256(dispatch)):
+        raise unsent.UnsentError("not-sent receipt scope mismatch")
+    if receipt["transport"] != unsent.transport_proof(intent):
+        raise unsent.UnsentError("not-sent transport proof mismatch")
+    if (receipt["attempt_sha256"] != hashlib.sha256(path.read_bytes()).hexdigest()
+            or receipt["run_sha256"] != hashlib.sha256((run_root / "run.json").read_bytes()).hexdigest()
+            or receipt["queries_sha256"] != hashlib.sha256((run_root / "queries.json").read_bytes()).hexdigest()):
+        raise unsent.UnsentError("not-sent immutable input changed")
+    if not isinstance(receipt["campaign_sha256"], str) or not re.fullmatch(
+            r"[a-f0-9]{64}", receipt["campaign_sha256"]):
+        raise unsent.UnsentError("not-sent campaign provenance missing")
+    campaign = Campaign(campaign_root)
+    if (receipt["campaign_id"] != campaign.state.get("id")
+            or receipt["campaign_root"] != str(campaign.root)
+            or receipt["run_name"] != run_root.name
+            or campaign.state.get("root") != str(campaign.root)):
+        raise unsent.UnsentError("not-sent campaign scope mismatch")
+    owned = campaign.state.get("owned", {}).get(run_root.name, {})
+    if owned.get("kind") != "run" or owned.get("status") != "FAILED":
+        raise unsent.UnsentError("not-sent run ownership/status mismatch")
+    if report.get("status") != "FAILED" or report.get("adapter") != unsent.PUBLIC:
+        raise unsent.UnsentError("not-sent run report mismatch")
+    if (report.get("dataset_id") != intent.get("dataset_id")
+            or report.get("adapter_identity") != identity
+            or report.get("sql_variant", "sql") != intent.get("sql_variant", "sql")
+            or report.get("settings", {}).get("timeout_s") != intent.get("timeout_s")):
+        raise unsent.UnsentError("not-sent run binding mismatch")
+    matches = [item for item in report.get("attempts", []) if item.get("path") == path.parent.name]
+    if len(matches) != 1 or matches[0].get("request_id") != request_id:
+        raise unsent.UnsentError("not-sent run attempt ownership mismatch")
+    if "submission_rejection" in intent or (path.parent / "result.jsonl").exists():
+        raise unsent.UnsentError("result/response evidence contradicts NOT_SENT")
+
+    retained = path.parent / "reconciliation.json"
+    if retained.exists():
+        _validate_unknown_reconciliation(retained, intent)
+        if (receipt["reconciliation_state"] != "unknown-sidecar"
+                or receipt["reconciliation_sha256"] != hashlib.sha256(retained.read_bytes()).hexdigest()):
+            raise unsent.UnsentError("retained reconciliation binding mismatch")
+    elif receipt["reconciliation_state"] != "absent" or receipt["reconciliation_sha256"] is not None:
+        raise unsent.UnsentError("retained reconciliation presence mismatch")
+
+    unsent.validate_corroboration(path.parent, receipt["corroboration"], intent["wall_started"],
+                                  request_id, dispatch["worksheet_id"])
+    return dict(intent, status="FAILED", reconciliation="NOT_SENT",
+                not_sent_receipt=str(receipt_path))
+
+
+def resolve_attempt(path, intent, prepared=None):
+    """Return a terminal effective record, or None when the attempt stays uncertain."""
+    path = Path(path)
+    terminal = _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared)
+    if (path.parent / unsent.NOT_SENT_NAME).exists():
+        if terminal is not None:
+            raise unsent.UnsentError("terminal reconciliation contradicts not-sent receipt")
+        resolved = _not_sent_reconciliation(path, intent, prepared)
+        if resolved is None:
+            raise unsent.UnsentError("not-sent receipt disappeared during gate read")
+        return resolved
+    return terminal
+
+
+def inspect_campaign(campaign):
+    """Non-dispatching production gate evaluation shared by run and gate-status."""
+    campaign.refresh()
+    attempts, blockers = [], []
+    for name, entry in campaign.state.get("owned", {}).items():
+        if entry.get("kind") != "run":
+            continue
+        run_root = campaign.root / name
+        if not (run_root / "run.json").exists():
+            blockers.append({"run": name, "reason": "incomplete prior run blocks dispatch; inspect campaign"})
+            continue
+        raw_manifest = (run_root / "queries.json").read_bytes()
+        prepared = _prepare_frozen(json.loads(raw_manifest),
+                                   json.loads((run_root / "run.json").read_text()),
+                                   hashlib.sha256(raw_manifest).hexdigest())
+        for path in sorted(run_root.glob("*/attempt.json")):
+            audit = json.loads(path.read_text())
+            _validate_frozen_intent(prepared, audit)
+            if "submission_rejection" in audit:
+                from .public import valid_submission_rejection
+                if not valid_submission_rejection(audit["submission_rejection"], audit):
+                    raise ValueError("invalid submission rejection")
+            try:
+                resolved = resolve_attempt(path, audit, prepared)
+            except (unsent.UnsentError, KeyError, TypeError, ValueError, OSError) as exc:
+                blockers.append({"run": name, "attempt": path.parent.name,
+                                 "request_id": audit.get("request_id"),
+                                 "stored_status": audit.get("status"),
+                                 "reason": "invalid not-sent receipt blocks dispatch: " + str(exc)})
+                continue
+            effective = resolved or audit
+            record = {"run": name, "attempt": path.parent.name,
+                      "request_id": audit.get("request_id"),
+                      "stored_status": audit.get("status"),
+                      "effective_status": effective.get("status"),
+                      "reconciliation": effective.get("reconciliation"),
+                      "not_sent": bool(resolved is not None
+                                       and effective.get("reconciliation") == "NOT_SENT")}
+            attempts.append(record)
+            if effective.get("status") in ("INTENT", "RUNNING", "UNKNOWN"):
+                blockers.append(dict(record, reason="unreconciled attempt blocks new dispatch"))
+    return {"format": 1, "campaign": str(campaign.root), "ok": not blockers,
+            "attempts": attempts, "blockers": blockers}
+
+
+def confirm_not_sent(path, adapter, *, process_log=None, process_pid=None,
+                     utc_offset_seconds=None, server_log=None, state_db=None,
+                     state_window_s=60, historical_evidence=(),
+                     process_source_command=None):
+    """Offline, append-only NOT_SENT determination for a public connect refusal.
+
+    Never sends an HTTP request, never writes attempt.json/reconciliation.json,
+    and never changes campaign/run ownership or the historical UNKNOWN result.
+    """
+    from .public import PublicAdapter
+    path = Path(path).resolve()
+    if path.name != "attempt.json":
+        raise ValueError("owned attempt path required")
+    if not isinstance(adapter, PublicAdapter):
+        raise ValueError("not-sent confirmation requires the public adapter")
+    campaign = Campaign(path.parent.parent.parent)
+    run_root = path.parent.parent
+    owned = campaign.state.get("owned", {}).get(run_root.name, {})
+    if owned.get("kind") != "run" or run_root.parent != campaign.root:
+        raise ValueError("unowned attempt")
+    report = json.loads((run_root / "run.json").read_text())
+    intent = json.loads(path.read_text())
+    if not any(item.get("path") == path.parent.name and item.get("request_id") == intent.get("request_id")
+               for item in report.get("attempts", [])):
+        raise ValueError("unowned attempt")
+    raw_manifest = (run_root / "queries.json").read_bytes()
+    prepared = _prepare_frozen(json.loads(raw_manifest), report,
+                               hashlib.sha256(raw_manifest).hexdigest())
+    _validate_frozen_intent(prepared, intent)
+    identity = adapter_identity(adapter)
+    if (intent.get("adapter_identity") != identity or report.get("adapter_identity") != identity
+            or report.get("adapter") != unsent.PUBLIC):
+        raise ValueError("not-sent confirmation must use original public adapter/account/role/context/origin")
+    receipt_path = path.parent / unsent.NOT_SENT_NAME
+    if receipt_path.exists():
+        resolved = _not_sent_reconciliation(path, intent, prepared)
+        if resolved is None:
+            raise ValueError("existing not-sent receipt did not validate")
+        return resolved
+    if intent.get("status") != "UNKNOWN":
+        raise ValueError("only an UNKNOWN attempt can be confirmed unsent")
+    if report.get("status") != "FAILED" or owned.get("status") != "FAILED":
+        raise ValueError("not-sent confirmation requires the retained FAILED run")
+    if ("submission_rejection" in intent or intent.get("handle") is not None
+            or (path.parent / "result.jsonl").exists()):
+        raise ValueError("receipt/result/handle evidence contradicts NOT_SENT")
+    proof = unsent.transport_proof(intent)
+    retained = path.parent / "reconciliation.json"
+    if retained.exists():
+        if _terminal_reconciliation(retained, intent, prepared) is not None:
+            raise ValueError("attempt already has terminal reconciliation")
+        _validate_unknown_reconciliation(retained, intent)
+        reconciliation_state = "unknown-sidecar"
+        reconciliation_sha256 = hashlib.sha256(retained.read_bytes()).hexdigest()
+    else:
+        reconciliation_state, reconciliation_sha256 = "absent", None
+    corroboration = unsent.build_corroboration(
+        path.parent, intent["wall_started"], intent["request_id"], intent["dispatch"]["worksheet_id"],
+        process_log=process_log, process_pid=process_pid,
+        utc_offset_seconds=utc_offset_seconds, server_log=server_log,
+        state_db=state_db, state_window_s=state_window_s,
+        historical_evidence=historical_evidence,
+        process_source_command=process_source_command)
+    receipt = {
+        "format": 1,
+        "kind": unsent.KIND,
+        "status": "FAILED",
+        "reconciliation": "NOT_SENT",
+        "decision": "NOT_SENT",
+        "request_id": intent["request_id"],
+        "query_id": intent.get("query_id"),
+        "worksheet_id": intent["dispatch"]["worksheet_id"],
+        "attempt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "reconciliation_state": reconciliation_state,
+        "reconciliation_sha256": reconciliation_sha256,
+        "run_sha256": hashlib.sha256((run_root / "run.json").read_bytes()).hexdigest(),
+        "queries_sha256": hashlib.sha256((run_root / "queries.json").read_bytes()).hexdigest(),
+        "campaign_sha256": hashlib.sha256(campaign.path.read_bytes()).hexdigest(),
+        "campaign_id": campaign.state.get("id"),
+        "campaign_root": str(campaign.root),
+        "run_name": run_root.name,
+        "query_manifest_sha256": report.get("query_manifest_sha256"),
+        "sql_sha256": intent.get("sql_sha256"),
+        "dataset_id": intent.get("dataset_id"),
+        "adapter_identity_sha256": unsent.canonical_sha256(intent["adapter_identity"]),
+        "dispatch_sha256": unsent.canonical_sha256(intent["dispatch"]),
+        "transport": proof,
+        "corroboration": corroboration,
+        "captured_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "procedure": unsent.PROCEDURE,
+        "limits": [
+            "TCP connect refusal proves this process sent no HTTP request bytes; it does not audit other clients.",
+            "The state and server evidence are scoped to the captured Workbench process/state database.",
+            "The original attempt and UNKNOWN reconciliation remain unchanged; this is not a successful query.",
+            "No result data, backend handle, retry, follow-up, or response exists for this attempt.",
+            "The append-only receipt is local evidence, not a cryptographic signature or global cluster audit.",
+        ],
+    }
+    unsent.write_json_new(receipt_path, receipt)
+    resolved = _not_sent_reconciliation(path, intent, prepared)
+    if resolved is None:
+        raise ValueError("written not-sent receipt did not validate")
+    return resolved
+
+
+
 def _terminal_reconciliation(path, intent, prepared=None):
     if not path.exists() or intent.get("adapter_identity", {}).get("kind") not in (TrinoAdapter.name, "shirokuma-public"):
         return None
@@ -890,10 +1148,16 @@ def reconcile(path, adapter, *, rejection_evidence=None):
                for a in report["attempts"]):
         raise ValueError("unowned attempt")
     snapshot = json.loads((run_root / "queries.json").read_text())
-    validate_frozen(snapshot, report, intent)
+    raw_manifest = (run_root / "queries.json").read_bytes()
+    prepared = _prepare_frozen(snapshot, report, hashlib.sha256(raw_manifest).hexdigest())
+    _validate_frozen_intent(prepared, intent)
     identity = adapter_identity(adapter)
     if intent.get("adapter_identity") != identity or report.get("adapter_identity") != identity:
         raise ValueError("reconcile must use original adapter/user/catalog/schema/origin")
+    if (path.parent / unsent.NOT_SENT_NAME).exists():
+        resolved = _not_sent_reconciliation(path, intent, prepared)
+        if resolved is not None:
+            return resolved
     if rejection_evidence is not None:
         from .public import PublicAdapter
         if not isinstance(adapter, PublicAdapter):
@@ -913,7 +1177,7 @@ def reconcile(path, adapter, *, rejection_evidence=None):
         raise ValueError("external DuckDB reconciliation cannot prove original connection closed")
     if adapter.name == "shirokuma-public":
         adapter.bind(intent)
-    retained = terminal_reconciliation(path.parent / "reconciliation.json", intent)
+    retained = _terminal_reconciliation(path.parent / "reconciliation.json", intent, prepared)
     if retained is not None:
         return retained
     result = dict(intent, status="UNKNOWN", reconciliation="UNKNOWN")

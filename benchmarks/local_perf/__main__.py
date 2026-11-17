@@ -10,7 +10,8 @@ from .dataset import generate, prepare_reference, qualify_packaged_tpch, prepare
 from .protocol import GIB, plan, protocol
 from .public import PublicAdapter, client_auth_path, private_auth
 from .results import compare
-from .runner import DuckDBAdapter, TrinoAdapter, reconcile, run
+from .runner import (DuckDBAdapter, TrinoAdapter, confirm_not_sent, inspect_campaign,
+                     reconcile, run)
 
 
 def main():
@@ -121,6 +122,21 @@ def main():
     p.add_argument("attempt", help="existing owned attempt.json; never redispatch")
     p.add_argument("--rejection-evidence", help="explicit scoped local-operator audit JSON")
     add_adapter(p, trino_only=True)
+    p = commands.add_parser("confirm-not-sent")
+    p.add_argument("attempt", help="existing owned public attempt.json; never redispatch")
+    add_adapter(p, public_only=True)
+    p.add_argument("--process-log", help="captured macOS unified log text for the Workbench PID")
+    p.add_argument("--process-pid", type=positive_int)
+    p.add_argument("--utc-offset-seconds", type=int)
+    p.add_argument("--process-command", help="captured ps/lstart command line for provenance")
+    p.add_argument("--server-log", help="captured Workbench access log")
+    p.add_argument("--state-db", help="authoritative Workbench SQLite database; opened read-only")
+    p.add_argument("--state-window-seconds", type=positive_int, default=60,
+                   help="query/admission window around the attempt (default 60)")
+    p.add_argument("--historical-evidence", action="append", default=[],
+                   help="prior evidence file to copy and link (repeatable)")
+    p = commands.add_parser("gate-status")
+    p.add_argument("campaign")
     p = commands.add_parser("cleanup")
     p.add_argument("campaign")
     p.add_argument("name")
@@ -241,6 +257,16 @@ def main():
             result = json.loads(Path(args.path).read_text())
         elif cmd == "reconcile":
             result = reconcile(args.attempt, adapter(args), rejection_evidence=args.rejection_evidence)
+        elif cmd == "confirm-not-sent":
+            result = confirm_not_sent(
+                args.attempt, adapter(args), process_log=args.process_log,
+                process_pid=args.process_pid, utc_offset_seconds=args.utc_offset_seconds,
+                server_log=args.server_log, state_db=args.state_db,
+                state_window_s=args.state_window_seconds,
+                historical_evidence=args.historical_evidence,
+                process_source_command=args.process_command)
+        elif cmd == "gate-status":
+            result = inspect_campaign(Campaign(args.campaign))
         elif cmd == "cleanup":
             Campaign(args.campaign).cleanup(args.name)
             result = {"cleaned": args.name, "baseline_preserved": True}

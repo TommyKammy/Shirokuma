@@ -95,6 +95,15 @@
 2. stop手続きの受入が明示的に回復するまでc02をofficial/SLO結果として扱わない。c02はobservational dataとして保持する。
 3. 製品変更はidentity/binding-only **90→24/page**（bi_viewer fixture 46→13）とfull testsで別途qualifiedし、wall/SLO/engine性能は主張しない。次の性能作業はstop手続きclosure後にsetup/connection等を新しい承認protocolで扱う。
 
+## 追記（2026-11-17 JST）
+
+c01の`authz-cmp-288464-public-0`は、初期POSTのTCP connectが送信前に拒否されたことを
+transport phase、process終了、server log、read-only state scanで確認し、既存のUNKNOWN
+attempt/reconciliationを変更せずに別の追記専用`not-sent.json`（FAILED / NOT_SENT）で
+確定した。本文の当時のUNKNOWN判定・stop手続き記述は履歴としてそのまま保持する。
+c02の24 runは観測データのままで遡及受入しない。手順と証拠は
+[送信前connect拒否のオフライン確定](performance-unsent-reconciliation-2026-11-17.md)に記録した。
+
 ## 制約
 
 - 単一host、concurrency 1、warm 3、統計検定なし。BEFOREは別phaseの24 runで、別途direct 1M controlを確認して再利用した。initialはcold cacheの証明ではない。

@@ -276,6 +276,41 @@ SLO verdict. Do not execute SF100+ until Commander reviews capacity/pilot eviden
 The legacy `fetch_s`, `validation_s` and `elapsed_s` retain their original
 boundaries. Use the versioned `timings` record below for phase measurements.
 
+### Offline pre-send connect-refusal receipt
+
+A public initial POST that failed in TCP connect, before `conn.request(...)`, can
+be recorded as `FAILED / NOT_SENT` by a separate append-only
+`not-sent.json` sidecar. The historical `attempt.json` and any existing
+`reconciliation.json` stay byte-identical, and the attempt is never upgraded to
+a successful query. This path is offline only; it never opens a socket, submits
+SQL, retries, follows up, or restarts a service.
+
+```sh
+rtk proxy python3 -m benchmarks.local_perf confirm-not-sent \
+  /absolute/run/attempt.json --adapter public --connection-file /absolute/public.json \
+  --process-log /absolute/unified.log --process-pid 1234 --utc-offset-seconds 32400 \
+  --server-log /absolute/server.log --state-db /absolute/jobs.sqlite3 \
+  --historical-evidence /absolute/prior-evidence.json
+rtk proxy python3 -m benchmarks.local_perf gate-status /absolute/campaign
+```
+
+The receipt is minted only when the immutable attempt proves one initial call,
+a non-null measured `connect`, null `send`/`header_wait`/`body_read`/`decode`,
+zero follow-up calls, no terminal/response/backend event, no handle, no
+submission rejection, and no result file. It also revalidates the frozen
+manifest/SQL/snapshot, run/campaign ownership, exact public account/role/context/
+origin, and the historical UNKNOWN reconciliation. At least one independent
+corroboration is required: a process termination captured immediately before
+the attempt and/or a read-only authoritative state scan with zero matching
+request/worksheet IDs and zero query/admission rows in a tight window. A process
+log after the attempt, a matching state row, a terminal handle, a 403 receipt,
+a response phase, a retry/follow-up, an ambiguous network error, a scope/hash
+mismatch, or a missing field fails closed. The gate re-reads and re-derives all
+of these conditions on every dispatch evaluation. `gate-status` uses the same
+`inspect_campaign` path as `run` and performs no dispatch. Absence of state rows
+alone never unlocks the gate.
+
+
 ## Public API and portable connection qualification
 
 `public` uses the normal `/api/v1/queries` interface, with Basic authentication
@@ -511,6 +546,14 @@ time. `client_poll_wait_s` is deliberate client sleep. Artifact processing
 includes guards, receipts, capacity checks and typed output; it is not disk time
 alone. DuckDB also records SQL execution and local fetch durations. These
 overlapping observations are not additive components of end-to-end time.
+
+`connect` wraps `conn.connect()` and `send` wraps `conn.request(...)`. The phase
+timer is written in a `finally` block, so a phase is non-null even when its
+wrapped call raises. A `ConnectionRefusedError` from TCP connect therefore
+leaves `connect` set, `send` null, zero follow-up calls and no HTTP response
+phase. That is the transport basis for the offline `NOT_SENT` receipt; if
+`conn.request` had been entered, `send` would be set and the attempt is not
+eligible.
 
 `backend_report` preserves only the latest observed `response.stats` snapshot:
 queued, CPU, wall and elapsed milliseconds, with its page state. Missing or

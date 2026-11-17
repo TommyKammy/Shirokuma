@@ -129,6 +129,37 @@ class CliTests(unittest.TestCase):
             self.invoke('prepare-tpcds-approved', self.campaign.root, 'dataset', 'plan', '--source-dir', 'private', code=2)
             module.prepare_approved.assert_not_called()
 
+    def test_confirm_not_sent_and_gate_status_dispatch(self):
+        with patch.object(cli, "adapter") as make_adapter, patch.object(
+                cli, "confirm_not_sent", return_value={"reconciliation": "NOT_SENT"}) as confirm:
+            out, err = self.invoke(
+                "confirm-not-sent", self.root / "attempt.json", "--adapter", "public",
+                "--process-log", self.root / "process.log", "--process-pid", "4242",
+                "--utc-offset-seconds", "32400", "--server-log", self.root / "server.log",
+                "--state-db", self.root / "state.sqlite3",
+                "--historical-evidence", self.root / "prior.json",
+                "--process-command", "ps -p 4242")
+            self.assertEqual((json.loads(out), err), ({"reconciliation": "NOT_SENT"}, ""))
+            self.assertEqual(confirm.call_args.args, (str(self.root / "attempt.json"), make_adapter.return_value))
+            self.assertEqual(confirm.call_args.kwargs, dict(
+                process_log=str(self.root / "process.log"), process_pid=4242,
+                utc_offset_seconds=32400, server_log=str(self.root / "server.log"),
+                state_db=str(self.root / "state.sqlite3"), state_window_s=60,
+                historical_evidence=[str(self.root / "prior.json")],
+                process_source_command="ps -p 4242"))
+        with patch.object(cli, "inspect_campaign", return_value={"ok": True}) as inspect:
+            out, err = self.invoke("gate-status", self.campaign.root)
+            self.assertEqual((json.loads(out), err), ({"ok": True}, ""))
+            self.assertEqual(inspect.call_args.args[0].root, self.campaign.root)
+        for value in ("0", "-1", "1.5", "invalid"):
+            with self.subTest(value=value):
+                with patch.object(cli, "confirm_not_sent") as confirm:
+                    _, err = self.invoke(
+                        "confirm-not-sent", self.root / "attempt.json", "--adapter", "public",
+                        "--process-log", self.root / "process.log", "--process-pid", value, code=2)
+                    self.assertIn("--process-pid", err)
+                    confirm.assert_not_called()
+
     def test_prepare_dispatch_and_tpch_defaults_preserved(self):
         dataset = self.root / "dataset.json"
         for suite, flags, expected in (("tpch", [], {}), ("tpcds", [], {"timeout": 300}),
