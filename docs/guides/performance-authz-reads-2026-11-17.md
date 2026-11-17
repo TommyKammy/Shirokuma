@@ -1,6 +1,6 @@
 # Workbench full-resultsページ認可transaction内の重複identity/binding読取り削減（2026-11-17）
 
-通常Workbench公開APIのfull-results 1ページは、上流Trino GETの前後にそれぞれ独立した認可transactionを持つ。今回、各transaction内で同じ行を複数回読んでいた現在account/role、database/catalog binding/論理binding/foundation/generation、logical identityの読取りを、transaction内で一度読んだ事実を後続の認可判断へ渡す形に整理した。pre-upstreamとpost-upstreamの認可transaction、要求・ページ・threadをまたぐcacheは追加していない。1M publicの製品外traceでは、通常ページのownership/authz SQL callbackが **106→40/page**、identity/binding読取りが **94→28/page** となり、接続数・setup・page state/transport処理は変えていない。公式24 runは **24/24 SUCCESS**。public HTTP totalは100k/288k/1Mで **−1.20% / −3.30% / −2.70%**、header待ちは **−1.37% / −3.73% / −3.09%** だったが、同じphaseのdirect routeもvalidation/HTTPが遅く、wallの一般改善・SLO・engine性能としては主張しない。
+通常Workbench公開APIのfull-results 1ページは、上流Trino GETの前後にそれぞれ独立した認可transactionを持つ。今回、各transaction内で同じ行を複数回読んでいた現在account/role、database/catalog binding/論理binding/foundation/generation、logical identityの読取りを、transaction内で一度読んだ事実を後続の認可判断へ渡す形に整理した。pre-upstreamとpost-upstreamの認可transaction、要求・ページ・threadをまたぐcacheは追加していない。1M publicの製品外traceでは、通常ページのownership/authz SQL callbackが **106→40/page**、identity/binding-only読取りが **90→24/page** となった。setup 12/page、query row 2/page、schema 2/pageは変わっていない。c02観測24回は **24/24 SUCCESS** だが、c01のfailed attemptがUNKNOWNのままなのでstop手続きの受入は保留し、c02は**観測データのみ**である。public HTTP totalは100k/288k/1Mで **−1.20% / −3.30% / −2.70%**、header待ちは **−1.37% / −3.73% / −3.09%** だったが、同じphaseのdirect routeもvalidation/HTTPが遅く、wallの一般改善・SLO・engine性能としては主張しない。製品変更はfocused/full testsとexact count reductionで別途qualifiedする。
 
 ## 変更（製品経路のみ）
 
@@ -23,16 +23,14 @@
 
 ## SQLite内訳（製品外trace、1M public all-results）
 
-- ページあたりownership/authz接続は **2本（pre/post）で変更なし**。1認可あたりのSQL callbackは **53→20**、setup（PRAGMA/sqlite_master/BEGIN）を除く認可読取りは **48→15**。
+- ページあたりownership/authz接続は **2本（pre/post）で変更なし**。live adminの1認可あたりSQL callbackは **53→20**。内訳はsetup 6（PRAGMA 2、sqlite_master 2、BEGIN 1、COMMIT 1）、query row 1、schema 1、identity/binding-only **45→12**。
 - 通常ページ（initial submitとterminalを除く）はBEFORE 134 / AFTER 131。page数はTrinoのpage分割で変わり得るため、per-page値は各phaseのpage数で割ったmeanとして比較する。
-- ownership/authz callbackは **106→40/page**、うちidentity/binding読取りは **94→28/page**、setupは **12/pageで不変**。総callbackは **14,204→5,240（−63.1%）**、identity/binding総数は **12,596→3,668（−70.9%）**。削減分はすべてidentity/binding読取りで、page row/state/transport/admission処理は変更していない。
+- ownership/authz callbackは **106→40/page**。setupは **12/pageで不変**（PRAGMA 4、sqlite_master 4、BEGIN 2、COMMIT 2）、query rowも **2/pageで不変**、schemaも **2/pageで不変**、identity/binding-onlyは **90→24/page（−73.3%）**。総callbackは **14,204→5,240（−63.1%）**、identity/binding-only総数は **12,060→3,144（−73.9%）**。以前の「94→28」はquery row+schemaを含む集計だった。削減分はすべてidentity/binding-only読取りで、page row/state/transport/admission処理は変更していない。
 
-| shape | before/認可 | after/認可 |
+| identity/binding-only shape (live admin) | before/認可 | after/認可 |
 |---|---:|---:|
-| query row | 1 | 1 |
 | creation_mode | 4 | 1 |
 | databases | 3 | 1 |
-| schemas | 1 | 1 |
 | catalog_bindings | 7 | 2 |
 | db_creations root | 5 | 1 |
 | logical_bindings | 5 | 1 |
@@ -40,15 +38,17 @@
 | logical_foundations | 5 | 1 |
 | generation pins | 5 | 1 |
 | generation row | 2 | 1 |
-| effective_grants | 1 | 1 |
+| effective_grants | 0 | 0 |
 | logical_backend_identities | 2 | 1 |
 | identity gate | 2 | 1 |
-| grants join | 2 | 1 |
+| grants join | 0 | 0 |
 
-- 1M publicのadmin contextではeffective_grants/grants joinは0回（platform admin経路）。bi_viewerの製品外fixture traceでは、effective_grants 1回・grants join 2→1回を含めて53→20を確認した。
+- 上の表はlive adminのidentity/binding-onlyで合計45→12。setup 6/認可、query row 1/認可、schema 1/認可は別。adminではeffective_grants/grants joinは0回で、identity gate 2→1が含まれる。別のbi_viewer fixture trace（live pageではない）では、effective_grants 1回・grants join 2→1・identity gateなしを含むidentity/binding-only **46→13**、総statement **53→20**、setup 5→5、query row 1→1、schema 1→1を確認した。
 - BEFOREは前studyの最終trace（同じbaseline code、SHA一致）を再利用し、AFTERは最終codeで1回取得した。traceは`sitecustomize`でSQLite connect/traceだけを数え、SQL本文はliteralを伏せたshapeだけを保持する。製品ファイル・benchmark・guard・正式timing経路は変更していない。
 
-## 公式E2E（warm 3回のmedian [min–max]、秒）
+## c02観測E2E（warm 3回のmedian [min–max]、秒; stop手続き受入は保留）
+
+以下はc02の観測値であり、c01のUNKNOWN attemptが残るためstop手続き上の公式受入ではない。
 
 | rows | route | wall before | wall after | HTTP total before | HTTP total after | header before | header after | dispatch→result before | dispatch→result after |
 |---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -72,32 +72,41 @@
 - 上流I/O中にaccountをdisableした場合、dataを返さず `DB_ACCESS_REVOKED`。
 - 既存のgrant剥奪・closure・replay前identity revoke・owner/role/closure再確認・cancel/UNKNOWN・cold pending・transport deadline・接続再利用・DataOps link fenceを再実行する。
 - page tokenを同じownerの別queryへ流用するcross-context substitutionを追加し、`QUERY_NOT_FOUND` でbackend GETを出さないことを確認する。
-- 開発中にc01 campaignの288k public-0でWorkbench processが消え、`ConnectionRefusedError` のUNKNOWN attemptが残った。reconcileはUNKNOWNのままで、新しいdispatchをblockしたため、c01は証拠として保持し、c02 campaignをfresh baselineで作成して公式24 runを実行する。失敗runのdata/backend handleは無く、公式値には使わない。c01のunreconciled attemptが新規dispatchをblockしたため、最初のofficial名の試行はrun directoryを作らず保持し、c02を新設した（`evidence/blocked-official-attempt.json`）。
+- **c01 failed attempt（未解決のまま保持）**: `authz-cmp-288464-public-0`、request_id `b0320a0d-fcf7-4964-a50a-66ea13c449f9`、worksheet_id `de47bff5-1933-4943-9a47-dd66835347f7`、adapter `shirokuma-public`（p26-admin/admin、read-only、all-results）。`ConnectionRefusedError`、attempt UNKNOWN、handleなし、submission_rejectionなし、terminal receiptなし。attempt.jsonとreconciliation.jsonはbyte-identical（SHA256 `fe8a548a...`）で、supported reconcileの結果もUNKNOWN。
+- **dispatchなしの根拠と限界**: HTTP初期phaseはconnect 0.000936秒、send/header_wait/body_readはnull。`runner.py`は`conn.connect()`をconnect phase、`conn.request()`をsend phaseで測るため、TCP接続失敗がHTTP送信より前だったことを示す。Workbench logは07:21:59 JSTで終了、PID 39756は07:24:10 JSTにproc_exit、失敗は07:24:17 JST。Workbench state DB 79 tableをrequest_id/worksheet_idで走査して0行、22:22–22:29 UTCのquery_records/admissionsは0行。したがってWorkbenchへのdispatch・query record・admission・backend handleは無い。Trino側の既存全activityを新規観測なしに否定することはできないが、このattemptにlinkするhandle/recordは無い。
+- **supported reconciliationの可否**: handle/recovered_handle+terminal receipt、またはHTTP 403 `SQL_PERMISSION_DENIED`のno-dispatch operator auditだけがterminalにできる。ConnectionRefusedは403でもhandleでもないため、synthetic 403・guard clearing・receipt捏造は行わない。UNKNOWNを維持し、c01の新規dispatchはblockされたままにする。
+- **process deviation**: c01がUNKNOWNでblockされている間にc02を作成して24 runを実行したのは、明示されたstop手続きからの逸脱である。**stop手続きの受入はwithheld**、c02はobservational only、製品変更は別途qualifiedとする。最初のofficial名の試行はrun directoryを作らず保持し、c02を新設した（`evidence/blocked-official-attempt.json`）。
 
 ## 運用・会計・cleanup
 
 - 実装と測定: 測定時HEADは `a0260010`（product変更はworktree、通常Workbench PID 42996にload）。製品3ファイルのSHA256は測定前後で一致し、最終commitは同じbytesを記録する（`evidence/source-deployed.json`）。
-- 公式c02は **24/24 SUCCESS**。BEFOREは前studyの最終24 runを、manifest/SQL/dataset/snapshot/23列/full comparison/timeout/peak/concurrency/guard/reference/order/engine IDのaudit後に再利用した。
-- BEFORE再利用の位相確認として、c02でone-off direct 1M `eq-1m-direct` を実行し、baseline final directの`result_complete`中央値より **−1.68%**（事前の3%以内）。directはWorkbenchページ経路を通らないcontrolである。
-- 公式phaseの設定は全runで600秒、4GiB declared peak、concurrency 1、capacity guard 0.2秒（check calls 1,665–16,934）、global failed scans 0。direct 12 runはTrino側で終端確認済み。
-- Workbench query recordは全delta **17件**（1M public診断1、開発100k public 4、公式public 12）。全てFINISHEDで、既存UNKNOWN 5件は不変、新規UNKNOWN/CANCELED/FAILEDは0（`evidence/final-checks.json`）。
+- c02観測は **24/24 SUCCESS**。BEFOREは前studyの最終24 runを、manifest/SQL/dataset/snapshot/23列/full comparison/timeout/peak/concurrency/guard/reference/order/engine IDのaudit後に再利用した。これはc02の観測値であり、stop手続きの受入ではない。
+- BEFORE再利用の位相確認は**c01の`eq-1m-direct`**（`/private/tmp/shirokuma-authz-reads-20261117-c01/campaign/eq-1m-direct`、direct-only、wall_started 2026-11-16T22:06:36Z、result_complete 58.3949秒）で、baseline final directの中央値より **−1.68%**（3%以内）。**c02には24 trialしかなく、probeは無い**。direct-onlyでWorkbenchページ経路を通らないため、candidate Workbench phaseの支持には使わない。
+- c02観測phaseの設定は全runで600秒、4GiB declared peak、concurrency 1、capacity guard 0.2秒（check calls 1,665–16,934）、global failed scans 0。direct 12 runはTrino側で終端確認済み。
+- Workbench query recordは全delta **17件**（1M public診断1、開発100k public 4、c02観測public 12）。全てFINISHEDで、既存UNKNOWN 5件は不変、新規UNKNOWN/CANCELED/FAILEDは0（`evidence/final-checks.json`）。
 - doctorはpre/postともhealthy（45 healthy + 1 informational）。Trino pod UIDは不変。通常Workbenchは最終codeで再起動し、`/api/session` 200（admin）、`/api/status` 200（healthy）、`/api/v1/databases` 200（148件）を確認する（`evidence/server-session-final.json`）。
-- 会計はc01の57 rootを継承し、c02 campaign rootを加えた58 root。c01は開発run 12件（うち1件FAILED/UNKNOWN）として保持し、c02の公式24件は全てSUCCESS。final checkは **used 43,993,120,768 bytes（約43.99GB）**、**remaining 1,955,470,008,320 bytes（約1.9555TB）**、2TB ceiling・512MiB drain・4GiB additional内（`evidence/final-checks.json`）。
-- 検証: `make verify-local-experiment` データops Pythonで **162 suites / 5,972 tests / 失敗0**、`make verify-design-context` は exit 0（documents=94、issues=10、references=42）、doc checksと`git diff --check`は exit 0（`evidence/verify-summary.json`）。
+- 会計は前studyの**55 root baseline**を継承。c01はTASKとc01 rootを加えた**57 root**、c02はc02 rootを加えた**58 root**。c02はnew campaign rootであり**fresh baselineではない**: c02のbaselineではTASK/c01 rootが0のままで、c01 usageはc02 usedに含まれる。host baselineは両方 `3,089,681,522,688`、2TB ceiling・512MiB drainは同一。review-time read-only checkはc01 used **40,535,060,480** / remaining **1,958,928,068,608**、c02 used **43,995,230,208** / remaining **1,955,467,898,880**、c02-only added **3,460,169,728**。final-checkの43,993,120,768はそれより前のsnapshotで、baselineは変更していない（`evidence/accounting-review.json`）。
+- 検証: `make verify-local-experiment` データops Pythonで **162 suites / 5,972 tests / 失敗0**、`make verify-design-context` は exit 0（documents=94、issues=10、references=42）、doc checksと`git diff --check`は exit 0（`evidence/verify-summary.json`）。これらは製品変更のqualificationであり、c02のstop手続き受入ではない。
 - GitOpsの既存dirty 2ファイルとindexは変更していない。commitは製品source 3ファイル、試験1ファイル、本reportのみを対象とし、`evidence/git-commit.txt`にhashを残す。
+
+## 次の優先
+
+1. c01のUNKNOWNを解消できるのは、actual authoritative matching handle/terminal receipt、またはtruthfulな403 no-dispatch operator auditだけ。ConnectionRefusedでは後者を作れないため、synthetic 403・guard clearing・receipt捏造をせずUNKNOWNを維持し、c01で新規dispatchしない。
+2. stop手続きの受入が明示的に回復するまでc02をofficial/SLO結果として扱わない。c02はobservational dataとして保持する。
+3. 製品変更はidentity/binding-only **90→24/page**（bi_viewer fixture 46→13）とfull testsで別途qualifiedし、wall/SLO/engine性能は主張しない。次の性能作業はstop手続きclosure後にsetup/connection等を新しい承認protocolで扱う。
 
 ## 制約
 
 - 単一host、concurrency 1、warm 3、統計検定なし。BEFOREは別phaseの24 runで、別途direct 1M controlを確認して再利用した。initialはcold cacheの証明ではない。
-- SQLite traceはcallback数とshapeの診断で、寿命/秒はtrace overheadを含む。公式E2Eのwall/HTTPへ診断秒を混ぜない。page境界はstate書込みconnectionからの推論で、request ID/HTTP開始時刻の直接観測ではない。
+- SQLite traceはcallback数とshapeの診断で、寿命/秒はtrace overheadを含む。c02観測E2Eのwall/HTTPへ診断秒を混ぜない。page境界はstate書込みconnectionからの推論で、request ID/HTTP開始時刻の直接観測ではない。
 - admin 1M publicではgrant/identity gateの一部が0回であり、非admin roleの削減は製品外fixture traceで確認した。wall・SLO・100M性能の根拠にしない。
 - benchmark・meter・guard・正式timing経路は変更していない。診断は製品外の`sitecustomize`/解析scriptだけを使った。
 
 ## 証拠
 
-- 作業領域: `/tmp/shirokuma-authz-reads-j15lv6wk/`（`raw/authz-official-matrix.json`、`diag/sqlite-before.json`、`diag/sqlite-after.json`、`diag/authz-reads.json`、`report/official-tables.md`、`evidence/final-checks.json`、`evidence/source-deployed.json`、`evidence/integrity-audit-final.json`、`evidence/verify-summary.json`、`evidence/failure-reconciliation.json`、`evidence/blocked-official-attempt.json`）
-- 公式campaign: `/private/tmp/shirokuma-authz-reads-20261117-c02/campaign`
-- 開発campaign（保持、公式外）: `/private/tmp/shirokuma-authz-reads-20261117-c01/campaign`
+- 作業領域: `/tmp/shirokuma-authz-reads-j15lv6wk/`（`raw/authz-official-matrix.json`、`diag/sqlite-before.json`、`diag/sqlite-after.json`、`diag/authz-reads.json`、`diag/authz-reads-review.json`、`report/official-tables.md`、`evidence/final-checks.json`、`evidence/source-deployed.json`、`evidence/integrity-audit-final.json`、`evidence/verify-summary.json`、`evidence/failure-reconciliation.json`、`evidence/blocked-official-attempt.json`、`evidence/failed-request-state-scan.json`、`evidence/failed-request-process-log.txt`、`evidence/direct-probe-source.json`、`evidence/accounting-review.json`、`evidence/review-followup-note.md`、`evidence/review-followup-summary.json`）
+- c02観測campaign: `/private/tmp/shirokuma-authz-reads-20261117-c02/campaign`
+- 開発campaign（保持、c02観測外）: `/private/tmp/shirokuma-authz-reads-20261117-c01/campaign`
 - BEFORE matrix: `/private/tmp/shirokuma-sqlite-pages-20261116-c01/campaign/final-cmp-*`（copy `raw/baseline-matrix.json`）
 - BEFORE diagnostic: `/tmp/shirokuma-sqlite-pages-_r765kh7/diag/sqlite-final.json`（copy `diag/sqlite-before.json`）
 - reference: `/private/tmp/shirokuma-return-scale-20261116-c01/campaign/ref-*`
