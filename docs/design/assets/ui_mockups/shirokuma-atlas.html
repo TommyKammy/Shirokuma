@@ -138,9 +138,33 @@
       .compute-chip[hidden] {
         display: none;
       }
+      /* Keep the editor focus ring inside its card. */
+      .editor textarea:focus-visible {
+        outline-offset: -2px;
+      }
+      .pageheading > .badge {
+        flex: none;
+        white-space: nowrap;
+      }
+      @media (max-width: 600px) {
+        /* One-line breadcrumb on phones; the page title below carries the full name. */
+        #breadcrumb {
+          display: block;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          max-width: 34vw;
+        }
+        .pageheading {
+          flex-wrap: wrap;
+        }
+        .pageheading > .badge {
+          font-size: 11px;
+        }
+      }
       .app {
         display: grid;
-        grid-template-columns: 232px minmax(0, 1fr);
+        grid-template-columns: 244px minmax(0, 1fr);
         min-height: 100vh;
       }
       .sidebar {
@@ -193,6 +217,7 @@
       .navlink {
         display: flex;
         align-items: center;
+        white-space: nowrap;
         gap: 11px;
         padding: 9px 11px;
         border-radius: 6px;
@@ -1060,9 +1085,6 @@
           gap: 6px;
           font-size: 12px;
         }
-        .date {
-          display: none;
-        }
         .toptools {
           gap: 6px;
         }
@@ -1304,7 +1326,8 @@
       .sql-context select { width: 100%; min-width: 0; }
       .sql-fixed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; }
       .sql-fixed > span { white-space: nowrap; }
-      .sql-actions { flex-wrap: wrap; justify-content: flex-start; }
+      .sql-actions { flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; }
+      @media (min-width: 601px) { .sql-actions select, .sql-actions button { height: 36px; box-sizing: border-box; } }
       .sql-note { margin: 0; padding: 10px 16px; font-size: 12px; overflow-wrap: anywhere; }
       .sql-note p { margin: 6px 0; }
       .sql-note summary { cursor: pointer; padding: 8px 0; }
@@ -1506,8 +1529,7 @@
         </details>
         <header class="topbar">
           <div class="breadcrumb">
-            <span id="breadcrumb">ホーム</span><span class="muted date">/</span
-            ><span class="muted tiny date">11月18日 水曜日</span>
+            <span id="breadcrumb">ホーム</span>
           </div>
           <div class="toptools">
             <a class="sample compute-chip" id="compute-indicator" href="#compute" hidden></a
@@ -1551,7 +1573,7 @@
         ><input
           class="field"
           id="command-search"
-          placeholder="ページやテーブルを検索…"
+          placeholder="ページ・操作・テーブル・DBを検索…"
           autocomplete="off"
         /><button id="close-command" aria-label="検索を閉じる">Esc</button>
       </div>
@@ -1559,10 +1581,21 @@
       <p class="empty" id="command-empty" hidden>
         一致する移動先がありません。
       </p>
-      <div class="dialogfoot">Tab で移動 · Enter で開く · Esc で閉じる</div>
+      <div class="dialogfoot">↑↓ で選択 · Enter で開く · Esc で閉じる</div>
     </dialog>
     <div id="toast" class="toast" role="status" hidden></div>
     <script>
+      // All user-facing times are shown in JST; date inputs are read as JST too.
+      const JST_OFFSET = "+09:00";
+      function fmtJST(value, seconds = false) {
+        const d = new Date(value);
+        if (!Number.isFinite(d.getTime())) return String(value ?? "");
+        const parts = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", ...(seconds ? { second: "2-digit" } : {}), hour12: false }).formatToParts(d);
+        const g = t => parts.find(x => x.type === t)?.value;
+        return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}${seconds ? ":" + g("second") : ""} JST`;
+      }
+      const fmtInputJST = v => v ? `${v.replace("T", " ")} JST` : "";
       "use strict";
       const tables = {
         orders: {
@@ -1853,7 +1886,7 @@
           const rows=freezeRows(v.rows), columns=t.columns.map(c=>Object.freeze([...c]));
           const clone={...t,name,database:t.database,schema:"sandbox",label:`${t.name} の固定コピー`,description:`${objectKey(t)} · ${v.id} から作成したサンプル。`,roles:["data_engineer"],columns,rows,count:String(rows.length),demoClone:true};
           demoCatalog.push(clone);
-          sampleSnapshots.set(destination,Object.freeze([Object.freeze({id:`${destination}@1`,committed:new Date().toLocaleString("ja-JP"),parent:null,rows})]));
+          sampleSnapshots.set(destination,Object.freeze([Object.freeze({id:`${destination}@1`,committed:fmtJST(Date.now()),parent:null,rows})]));
           managementResult(saveTableOperation(t,"CLONE_TABLE_SNAPSHOT",{destination},{outcome:"SUCCEEDED",message:`全 ${rows.length} 行を固定コピーしました。リンクから開けます。`})); return;
         }
         if(operation==="export") {
@@ -1995,8 +2028,8 @@
       ];
       const dbStates = {
         ready: ["利用可能", "success"], creating: ["作成中", ""],
-        blocked: ["要確認", "warning"], retiring: ["廃止予定", "warning"],
-        retired: ["廃止済み", ""], retiring_active: ["利用終了処理中 / RETIRING", "warning"],
+        blocked: ["要確認", "warning"], retiring: ["利用終了予定", "warning"],
+        retired: ["利用終了済み", ""], retiring_active: ["利用終了処理中", "warning"],
       };
       const dbDay = (offset) => new Date(Date.UTC(2026, 10, 18 + offset)).toISOString().slice(0, 10);
       const databases = dbProjects.flatMap((project, pi) =>
@@ -2105,9 +2138,9 @@
           ready: ["稼働確認", `${db.tables}テーブルを参照可能。直近の整合性検証は正常です。`, "検証履歴を見る", ["カタログ登録とアクセス設定を検証", `${db.tables}テーブルの整合性検証が完了`]],
           creating: ["作成進捗", `全4工程のうち${db.progress}工程が完了。${["", "カタログ登録", "アクセス設定", "利用前検証"][db.progress]}を処理中です。`, "作成工程を見る", ["作成要求を受け付け", ...["ストレージ準備が完了", "カタログ登録が完了", "アクセス設定が完了"].slice(0, db.progress)]],
           blocked: ["確認待ち", "担当チームのアクセス設定に不一致があります。作成は利用前検証で停止しています。", "停止箇所を見る", ["ストレージ準備・カタログ登録が完了", `${db.team}のアクセス設定が利用前検証と不一致。担当者: ${db.owner}`]],
-          retiring: ["廃止予定", `${db.scheduled}に廃止予定。担当者が参照元の移行を確認中です。`, "廃止予定を見る", ["廃止要求を受け付け", `参照元の移行確認: ${db.owner}`, `${db.scheduled} 廃止予定。履歴を保持`]],
+          retiring: ["利用終了予定", `${db.scheduled}に利用終了予定。担当者が参照元の移行を確認中です。`, "利用終了予定を見る", ["利用終了要求を受け付け", `参照元の移行確認: ${db.owner}`, `${db.scheduled} 利用終了予定。履歴を保持`]],
           retiring_active: ["利用終了処理", "新規利用を停止し、関連スケジュールを一時停止しました。データは保持しています。", "操作記録を見る", ["利用終了要求を受け付け", "スケジュールの一時停止が完了", "次: 依存関係の終了確認とアクセス整理（サンプルでは未実行）"]],
-          retired: ["廃止記録", `${db.updated}に廃止が完了。参照は終了し、操作記録を保持しています。`, "廃止履歴を見る", ["参照元の移行確認が完了", "アクセス終了・カタログ整理が完了"]],
+          retired: ["利用終了の記録", `${db.updated}に利用終了が完了。参照は終了し、操作記録を保持しています。`, "利用終了の履歴を見る", ["参照元の移行確認が完了", "アクセス終了・カタログ整理が完了"]],
         };
         const [heading, information, action, history] = operations[db.state];
         return `<a class="backlink" href="#databases">← 一覧に戻る</a>
@@ -2306,7 +2339,7 @@
         const db = databaseById.get(id);
         if (!db) return `<a class="backlink" href="#databases">← 一覧に戻る</a><h1>対象DBが見つかりません</h1>`;
         if ((panel === "access" && db.state !== "ready") || (panel === "operation" && !dbP1Operations.has(id))) {
-          return `${dbP1Context(db, panel, "この操作は利用できません")}<p role="status">${panel === "access" ? "アクセス権は利用可能 / READY のDBで確認してください。" : "このDBには照合対象の要求がありません。"}</p></div>`;
+          return `${dbP1Context(db, panel, "この操作は利用できません")}<p role="status">${panel === "access" ? "アクセス権は利用可能なDBで確認してください。" : "このDBには照合対象の要求がありません。"}</p></div>`;
         }
         if (panel === "access") {
           const access = dbP1AccessState(db);
@@ -2593,7 +2626,7 @@
           <h2>データの保持</h2><p>利用終了開始ではデータを削除しません。データ・操作履歴を保持し、新規利用と関連スケジュールを停止します。</p>`;
         return `<div class="db-flow"><a class="backlink" id="db-retire-cancel" href="#databases/${db.id}">← DB詳細に戻る</a><h1 id="db-retire-heading" tabindex="-1">利用終了${confirm ? "の確認" : "の影響"}</h1>
           ${dbTracker(["影響を確認", "対象を確認・開始"], confirm ? 1 : 0)}
-          <dl class="kv"><dt>対象DB</dt><dd>${safe(db.name)}${db.displayName ? ` · ${safe(db.displayName)}` : ""}</dd><dt>DB ID</dt><dd>${safe(db.id)}</dd><dt>現在の状態</dt><dd>利用可能 / READY</dd></dl>
+          <dl class="kv"><dt>対象DB</dt><dd>${safe(db.name)}${db.displayName ? ` · ${safe(db.displayName)}` : ""}</dd><dt>DB ID</dt><dd>${safe(db.id)}</dd><dt>現在の状態</dt><dd>利用可能</dd></dl>
           ${confirm ? `<p class="impact"><strong>スケジュール ${impact.schedules.length} 件を停止し、アクセス ${access.length} 件を終了します。データと操作履歴は保持します。</strong></p><details><summary>影響の詳細</summary>${detailHTML}</details>` : detailHTML}
           ${confirm && !impact.blockers.length ? `<form id="db-retire-form" data-target="${db.id}"><label for="db-retire-name">対象のSQLカタログ識別子「${safe(db.name)}」を入力<input id="db-retire-name" class="field" required autocomplete="off" spellcheck="false" aria-describedby="db-retire-error"></label><p id="db-retire-error" role="status"></p><div class="db-actions"><a href="#databases/retire~${db.id}">影響確認に戻る</a><button class="primary danger" id="db-retire-submit" type="submit" disabled>利用終了を開始</button></div></form>` : `<div class="db-actions"><a href="#databases/${db.id}">キャンセル</a>${impact.blockers.length ? '<button id="db-retire-confirm" disabled>ブロック解消が必要</button>' : `<a class="primary" id="db-retire-confirm" href="#databases/confirm~${db.id}">対象を確認して進む</a>`}</div>`}</div>`;
       }
@@ -2604,17 +2637,17 @@
           const r = db.retirement, active = r.work.filter(w => w.state === "RUNNING"), unknown = r.work.filter(w => w.state === "UNKNOWN");
           const done = r.state === "RETIRED", pending = active.length + unknown.length;
           return `<section class="db-flow section" aria-labelledby="db-retirement-title"><h2 id="db-retirement-title" tabindex="-1">利用終了の操作記録（サンプル）</h2>
-            <p id="db-retirement-status" role="status" tabindex="-1"><strong>${done ? "利用終了 完了" : `利用終了処理中 / RETIRING · 実行中 ${active.length}件 / 結果未確定 ${unknown.length}件`}</strong></p>
+            <p id="db-retirement-status" role="status" tabindex="-1"><strong>${done ? "利用終了 完了" : `利用終了処理中 · 実行中 ${active.length}件 / 結果未確定 ${unknown.length}件`}</strong></p>
             <p>${done ? "完了: 新規利用・アクセスを終了。保存データと操作記録を保持。" : pending ? `次: ${active.length ? "実行中の終了結果を観測" : "結果未確定の処理を照合"}してください。` : "次: 利用終了を完了してください。"}</p>
             ${done ? "" : `<div class="db-actions">${active.length ? `<button data-db-retirement="observe" data-target="${db.id}">実行中の終了結果を観測（サンプル）</button>` : ""}${unknown.length ? `<button data-db-retirement="reconcile" data-target="${db.id}">未確定の結果を照合（サンプル）</button>` : ""}<button id="db-retire-complete" data-db-retirement="complete" data-target="${db.id}" ${pending ? "disabled" : ""}>利用終了を完了（サンプル）</button></div>`}
             <h3>停止済みスケジュール · ${r.schedules.length}件</h3>${r.schedules.length ? `<ul>${r.schedules.map(x => `<li>${safe(x)}: 一時停止済み</li>`).join("")}</ul>` : "<p>なし</p>"}
-            <h3>実行中の観測</h3>${r.work.some(w => w.kind === "active") ? `<ul>${r.work.filter(w => w.kind === "active").map(w => `<li>${safe(w.id)}: ${w.state === "RUNNING" ? "実行中 / 終了結果待ち" : "終了を観測 / SUCCEEDED"}</li>`).join("")}</ul>` : "<p>0件</p>"}
-            <h3>結果未確定の照合</h3>${r.work.some(w => w.kind === "unknown") ? `<ul>${r.work.filter(w => w.kind === "unknown").map(w => `<li>${safe(w.id)}: ${w.state === "UNKNOWN" ? "結果未確定 / 照合待ち" : "照合済み / SUCCEEDED"}</li>`).join("")}</ul>` : "<p>0件</p>"}
-            <details><summary>保存データ・操作受領票</summary><p>対象: ${safe(db.name)} · ${safe(db.id)}</p><p>操作ID: ${safe(r.id)} · ${r.state}</p><p>保存: ${r.retainedTables}テーブル · データ削除なし</p><ol>${r.history.map(x => `<li>${safe(x)}</li>`).join("")}</ol></details></section>`;
+            <h3>実行中の観測</h3>${r.work.some(w => w.kind === "active") ? `<ul>${r.work.filter(w => w.kind === "active").map(w => `<li>${safe(w.id)}: ${w.state === "RUNNING" ? "実行中 · 終了結果待ち" : "終了を確認 · 成功"}</li>`).join("")}</ul>` : "<p>0件</p>"}
+            <h3>結果未確定の照合</h3>${r.work.some(w => w.kind === "unknown") ? `<ul>${r.work.filter(w => w.kind === "unknown").map(w => `<li>${safe(w.id)}: ${w.state === "UNKNOWN" ? "結果未確定 · 照合待ち" : "照合済み · 成功"}</li>`).join("")}</ul>` : "<p>0件</p>"}
+            <details><summary>保存データ・操作受領票</summary><p>対象: ${safe(db.name)} · ${safe(db.id)}</p><p>操作ID: ${safe(r.id)} · ${r.state === "RETIRED" ? "完了" : "処理中"}</p><p>保存: ${r.retainedTables}テーブル · データ削除なし</p><ol>${r.history.map(x => `<li>${safe(x)}</li>`).join("")}</ol></details></section>`;
         }
         if (!db.sampleRequest) return impactAction;
         return `<section class="db-flow section" aria-labelledby="db-creation-title"><h2 id="db-creation-title">作成・検証（サンプル）</h2><p>対象: ${safe(db.name)} · ${safe(db.id)}</p>${dbTracker(dbStages, db.state === "ready" ? 3 : db.progress)}<label for="db-create-progress">${db.progress} / 4 工程完了</label><progress id="db-create-progress" max="4" value="${db.progress}">${db.progress}/4</progress>
-          <p id="db-create-status" role="status" tabindex="-1">${db.state === "ready" ? "利用可能 / READY · サンプル検証完了" : `作成中 / CREATING · ${dbStages[db.progress]}待ち`}</p>
+          <p id="db-create-status" role="status" tabindex="-1">${db.state === "ready" ? "利用可能 · 検証完了" : `作成中 · ${dbStages[db.progress]}待ち`}</p>
           ${db.state === "creating" ? `<p>次: 「${dbStages[db.progress]}」のサンプル結果を確認して進めます。</p><button class="primary" id="db-create-advance" data-target="${db.id}">${dbStages[db.progress]}を確認（サンプル）</button>` : ""}
           <h3>この要求の操作記録</h3><ol><li>サンプル作成要求 ${db.requestId} を受付</li>${dbStageResults.slice(0, db.progress).map(x => `<li>${x}（サンプル）</li>`).join("")}</ol><h3>初期アクセス</h3>${dbGrantSummary(db.grants)}</section>${db.state === "ready" ? impactAction : ""}`;
       }
@@ -2677,7 +2710,7 @@
           db.retirement = {id:`sample-retire-${++dbSampleSequence}`, state:"RETIRING", schedules:[...impact.schedules], retainedTables:db.tables,
             // Named fixture: post-start-reconcile; preflight remains clear, work is observed after start.
             work:db.id === "db-hokusei-transactions-staging" ? [{id:"query-after-start-001",kind:"active",state:"RUNNING"},{id:"export-after-start-001",kind:"unknown",state:"UNKNOWN"}] : [],
-            history:["利用終了要求を受付 / RETIRING", `${impact.schedules.length}件のスケジュールを一時停止。保存データを保持`]};
+            history:["利用終了要求を受付", `${impact.schedules.length}件のスケジュールを一時停止。保存データを保持`]};
           db.retirement.audit=atlasSharedAudit("database","DB 利用終了要求",db.id,"admin","受付",[],"database",db.name);
           location.hash = `databases/${db.id}`;
         }
@@ -2691,13 +2724,13 @@
             if (r.work.some(w => ["RUNNING", "UNKNOWN"].includes(w.state))) return;
             r.state = "RETIRED"; db.state = "retired"; db.updated = dbDay(0);
             atlasSharedAudit("database","DB 利用終了完了",db.id,"admin","成功",r.audit?[r.audit]:[],"database",db.name);
-            r.history.push("終了結果と照合結果を確認。アクセス終了 / RETIRED。保存データ・受領票を保持");
+            r.history.push("終了結果と照合結果を確認。アクセス終了。保存データ・受領票を保持");
           } else if (["observe", "reconcile"].includes(action)) {
             const expected = action === "observe" ? "RUNNING" : "UNKNOWN";
             const work = r.work.filter(w => w.state === expected);
             if (!work.length) return;
             work.forEach(w => { w.state = "SUCCEEDED"; });
-            r.history.push(`${action === "observe" ? "終了観測" : "結果照合"}: ${work.map(w => w.id).join(", ")} → SUCCEEDED`);
+            r.history.push(`${action === "observe" ? "終了観測" : "結果照合"}: ${work.map(w => w.id).join(", ")} → 成功`);
           } else return;
           dbRefreshFocus("db-retirement-status"); return;
         }
@@ -3438,12 +3471,12 @@ ${id === "daily-sales"
         if(!t) { t={database,schema,name,kind:"テーブル",label:name,description:"ローカル取込・変換サンプル",roles:["bi_viewer","data_engineer"]}; demoCatalog.push(t); }
         Object.assign(t,{columns:atlasCopy(data.columns),rows:atlasCopy(data.rows),count:String(data.rows.length),unregistered:false,atlasRevision:++atlas.revision});
         const previous=sampleSnapshots.get(key)||[];
-        sampleSnapshots.set(key,Object.freeze([Object.freeze({id:`${key}@${atlas.revision}`,committed:new Date().toISOString(),parent:previous[0]?.id||null,rows:freezeRows(t.rows)}),...previous]));
+        sampleSnapshots.set(key,Object.freeze([Object.freeze({id:`${key}@${atlas.revision}`,committed:fmtJST(Date.now()),parent:previous[0]?.id||null,rows:freezeRows(t.rows)}),...previous]));
         return t;
       }
       const atlasOrders = bad => ({columns:atlasCopy(tables.orders.columns),rows:bad ? [[1101,301,"2026-11-18",1200],[1101,302,"2026-11-18",-500],[1103,null,"2026-11-19",800]] : [[1101,301,"2026-11-18",1200],[1102,302,"2026-11-18",500],[1103,303,"2026-11-19",800]]});
       atlasTablePut("iceberg.RAW.orders_seed",atlasOrders(true));
-      const atlasSeed=atlasEvent("ingestion","取込 create","iceberg.RAW.orders_seed");
+      const atlasSeed=atlasEvent("ingestion","取込 新規作成","iceberg.RAW.orders_seed");
       atlasEvent("transformation","品質検査: order_id 重複 / amount 負数 / NULL","iceberg.SANDBOX.orders_seed_v1","失敗",[atlasSeed]);
       atlasEvent("database","DB 権限変更","demo","成功",[],"database","demo");
       atlas.events[0].actor="db_admin";
@@ -3463,7 +3496,7 @@ ${id === "daily-sales"
         const i=atlas.ingest, targets=demoCatalog.filter(t=>!t.unregistered&&atlasReadDB(t.database)&&t.database===i.db&&t.schema==="RAW"), target=targets.find(t=>objectKey(t)===i.target);
         const valid=i.preview&&i.preview.fingerprint===atlasIngestFingerprint();
         return `<nav class="atlas-actions" aria-label="取込方法"><a href="#ingestion" aria-current="page">ファイル取込</a><a href="#ingestion/stages">保存済みステージ</a></nav>${i.data?'<details><summary>取込元ファイルを変更</summary>':''}<div class="atlas-actions"><button id="ingest-example">注文 CSV の例</button><details><summary>失敗例を試す</summary><button id="ingest-bad-example">品質失敗データを読み込む</button></details></div><div class="atlas-fields">${atlasField("ingest-file","CSV / JSON / JSONL ファイル（最大 2 MB）",'<input class="field" type="file" id="ingest-file" accept=".csv,.json,.jsonl,.ndjson">')}</div>${i.data?'</details>':''}${i.data?`<p>${safe(i.file)} · ${i.data.rows.length} 行 / ${i.data.columns.length} 列</p><details><summary>取込元の行データを確認</summary>${atlasGrid(i.data,"取込元プレビュー")}</details>`:'<p class="empty">ファイルまたは注文 CSV の例を選択してください。</p>'}
-        <section><h2>取込先と更新方法</h2><div class="atlas-fields">${atlasSelect("ingest-db","Iceberg データベース",["iceberg",...(atlasReadDB("demo")?["demo"]:[])],i.db)}${atlasSelect("ingest-mode","更新方法",[["create","新規作成"],["append","追加"],["replace","全件置換"],["upsert","キーで更新・追加"]],i.mode)}${i.mode==="create"?atlasInput("ingest-name","RAW テーブル名（英数字・_、先頭は英字）",i.name,"text",'pattern="[A-Za-z][A-Za-z0-9_]*" required'):atlasSelect("ingest-target","既存 RAW テーブル",[["","選択してください"],...targets.map(t=>[objectKey(t),objectKey(t)])],i.target)}${i.mode==="upsert"?atlasSelect("ingest-key","更新キー（NULL・重複不可）",(i.data?.columns||[]).map(c=>c[0]),i.key):''}</div><p>対象: <code>${safe(i.mode==="create"?`${i.db}.RAW.${i.name}`:i.target||"未選択")}</code>${target?` · 現在 ${target.rows.length} 行`:''}</p>${!atlasWrite(i.db)?'<p>このロールでは対象 DB に書き込めません。</p>':''}<div class="atlas-actions"><button id="ingest-preview" ${!i.data||!atlasWrite(i.db)?'disabled':''}>取込結果をプレビュー</button></div>${valid?`<h3>確認: ${safe(i.preview.target)}</h3>${atlasGrid(i.preview.data,"取込後プレビュー")}${atlasIngestImpact(i.preview)}<button class="primary${i.mode==="replace"?' danger':''}" id="ingest-confirm" ${!atlasWrite(i.db)?'disabled':''}>${atlasIngestConfirmLabel(i.preview.impact)}</button>`:''}${i.completed?`<p>取込済み: <a href="#explore/${safe(i.completed.target)}">${safe(i.completed.target)}</a> · <a href="#audit/${i.completed.event}">${i.completed.event}</a></p><button id="ingest-transform" class="primary">このデータから変換モデルを作成</button>`:''}</section>`;
+        <section><h2>取込先と更新方法</h2><div class="atlas-fields">${atlasSelect("ingest-db","Iceberg データベース",["iceberg",...(atlasReadDB("demo")?["demo"]:[])],i.db)}${atlasSelect("ingest-mode","更新方法",[["create","新規作成"],["append","追加"],["replace","全件置換"],["upsert","キーで更新・追加"]],i.mode)}${i.mode==="create"?atlasInput("ingest-name","RAW テーブル名（英数字・_、先頭は英字）",i.name,"text",'pattern="[A-Za-z][A-Za-z0-9_]*" required'):atlasSelect("ingest-target","既存 RAW テーブル",[["","選択してください"],...targets.map(t=>[objectKey(t),objectKey(t)])],i.target)}${i.mode==="upsert"?atlasSelect("ingest-key","更新キー（NULL・重複不可）",(i.data?.columns||[]).map(c=>c[0]),i.key):''}</div><p>対象: <code>${safe(i.mode==="create"?`${i.db}.RAW.${i.name}`:i.target||"未選択")}</code>${target?` · 現在 ${target.rows.length} 行`:''}</p>${!atlasWrite(i.db)?'<p>このロールでは対象 DB に書き込めません。</p>':''}<div class="atlas-actions"><button id="ingest-preview" aria-describedby="ingest-preview-hint" ${!i.data||!atlasWrite(i.db)||(i.mode!=="create"&&!target)?'disabled':''}>取込結果をプレビュー</button><span class="small muted" id="ingest-preview-hint">${i.data&&i.mode!=="create"&&!target?'既存 RAW テーブルを選択してください。':''}</span></div>${valid?`<h3>確認: ${safe(i.preview.target)}</h3>${atlasGrid(i.preview.data,"取込後プレビュー")}${atlasIngestImpact(i.preview)}<button class="primary${i.mode==="replace"?' danger':''}" id="ingest-confirm" ${!atlasWrite(i.db)?'disabled':''}>${atlasIngestConfirmLabel(i.preview.impact)}</button>`:''}${i.completed?`<p>取込済み: <a href="#explore/${safe(i.completed.target)}">${safe(i.completed.target)}</a> · <a href="#audit/${i.completed.event}">${i.completed.event}</a></p><button id="ingest-transform" class="primary">このデータから変換モデルを作成</button>`:''}</section>`;
       }
       // Downstream = saved models that read this RAW table, flagged when their MARTS is published.
       function atlasDownstream(key) {
@@ -3504,16 +3537,23 @@ ${id === "daily-sales"
         const m=atlas.transform,source=catalogObject(m.source),t=source&&atlasReadDB(source.database)?source:null,c=m.candidate&&atlasReadDB(m.candidate.target.split(".")[0])?m.candidate:null,current=atlasCandidateCurrent(),sources=demoCatalog.filter(t=>!t.unregistered&&t.schema==="RAW"&&atlasReadDB(t.database));
         const writable=t&&atlasWrite(t.database),latest=atlasSelectedModel(),saved=latest&&latest.fingerprint===atlasTransformFingerprint();
         return atlasTransformSurface(`<div class="atlas-fields">${atlasSelect("transform-source","取込元 RAW テーブル",[["","選択してください"],...sources.map(t=>[objectKey(t),objectKey(t)])],m.source)}${atlasInput("transform-name","モデル名（英数字・_、先頭は英字）",m.name)}${atlasSelect("transform-operation","変換処理",[["copy","全列をそのまま転送"],["nonnegative","amount の負数行を除外"],["daily","order_date ごとに売上集計"]],m.operation)}${atlasSelect("transform-key","品質検査の一意キー",(m.operation==="daily"?["sales_date"]:t?.columns.map(c=>c[0])||[]),m.key)}</div><p>RAW → ${safe(t?.database||"未選択")}.SANDBOX → ${safe(t?.database||"未選択")}.MARTS · 同じ DB 内</p>${t?`<details><summary>取込元の列と行</summary>${atlasGrid(t,"モデル取込元")}</details>`:''}<div class="atlas-actions"><button id="transform-save" class="primary" ${!writable?'disabled':''}>モデルを保存・バージョン作成</button><button id="transform-build" ${!writable||!saved?'disabled':''}>SANDBOX 候補をビルド</button></div><p id="transform-selected-version" tabindex="-1">選択中の保存バージョン: ${latest?`v${latest.version}${saved?' · 現在の入力と一致':' · 入力が保存時と不一致。再保存が必要'}`:'未保存'}</p>${!writable?'<p>書込可能な取込元とロールを選択してください。</p>':''}
-        <section><h2>候補と品質検査</h2>${c?`<p><code>${safe(c.target)}</code> · モデル v${c.version} / ビルド ${c.build} · ${!current?'入力変更により無効。保存して再ビルドしてください。':c.published?'公開済み':c.quality===true?'品質検査に合格':c.quality===false?'品質検査に失敗 · 公開できません':'品質検査待ち'}</p><details><summary>候補の行を確認</summary>${atlasGrid(c.data,"SANDBOX 候補")}</details><div class="atlas-actions"><button id="transform-check" ${!current||!writable?'disabled':''}>品質検査を実行</button><button id="transform-review" ${!current||!writable||c.quality!==true||c.published?'disabled':''}>MARTS 公開をプレビュー</button></div>${c.checks?`<ul>${c.checks.map(x=>`<li>${x.ok?'合格':'失敗'}: ${safe(x.label)}</li>`).join("")}</ul>`:''}${c.quality===false?'<p>復旧: 取込画面で正常な注文 CSV を読み込み、失敗元 RAW を全件置換してください。その後、モデルを保存 → 再ビルド → 再検査します。負数行のみなら変換処理で除外できます。</p><a href="#ingestion">取込へ戻る</a>':''}${m.review&&current&&c.quality===true?`<h3>公開確認</h3><p>${safe(c.target)} → <strong>${safe(c.destination)}</strong></p><p class="impact${catalogObject(c.destination)?'':' neutral'}"><strong>${catalogObject(c.destination)?`公開中の ${catalogObject(c.destination).rows.length} 行を ${c.data.rows.length} 行に置き換えます。`:`新しい MARTS テーブルを ${c.data.rows.length} 行で作成します。`}</strong>${catalogObject(c.destination)?`<br>参照中のロール: ${safe((catalogObject(c.destination).roles||['bi_viewer','data_engineer']).join('、'))} · 以前の版は公開履歴から戻せます`:''}</p><button class="primary${catalogObject(c.destination)?' danger':''}" id="transform-publish" ${!writable?'disabled':''}>${catalogObject(c.destination)?'置き換えて公開':'MARTS に公開'}</button>`:''}${c.published?`<p><a class="primary" href="#explore/${safe(c.destination)}">公開テーブルを開く</a> <a href="#audit/${c.published}">監査記録 ${c.published}</a></p>`:''}`:'<p class="empty">保存したモデルから候補をビルドしてください。</p>'}</section><details id="transform-model-history"><summary>モデル履歴（${m.versions.length} バージョン）</summary><ul>${m.versions.filter(v=>atlasReadDB(v.source.split(".")[0])).map(v=>`<li>v${v.version} · ${safe(v.name)} · ${safe(v.source)} · ${safe(v.operation)} · <a href="#audit/${v.event}">${v.event}</a> <button id="transform-open-${v.version}" data-model-version="${v.version}" ${!atlasWrite(v.source.split(".")[0])?'disabled':''}>v${v.version} を開く</button></li>`).join("")||'<li>保存履歴はありません。</li>'}</ul></details>`,{saved,current,c,writable})+atlasPublications()+atlasDbt();
+        <section><h2>候補と品質検査</h2>${c?`<p><code>${safe(c.target)}</code> · モデル v${c.version} / ビルド ${c.build} · ${!current?'入力変更により無効。保存して再ビルドしてください。':c.published?'公開済み':c.quality===true?'品質検査に合格':c.quality===false?'品質検査に失敗 · 公開できません':'品質検査待ち'}</p><details><summary>候補の行を確認</summary>${atlasGrid(c.data,"SANDBOX 候補")}</details><div class="atlas-actions"><button id="transform-check" ${!current||!writable?'disabled':''}>品質検査を実行</button><button id="transform-review" ${!current||!writable||c.quality!==true||c.published?'disabled':''}>MARTS 公開をプレビュー</button></div>${c.checks?`<ul>${c.checks.map(x=>`<li>${x.ok?'合格':'失敗'}: ${safe(x.label)}</li>`).join("")}</ul>`:''}${c.quality===false?'<p>復旧: 取込画面で正常な注文 CSV を読み込み、失敗元 RAW を全件置換してください。その後、モデルを保存 → 再ビルド → 再検査します。負数行のみなら変換処理で除外できます。</p><a href="#ingestion">取込へ戻る</a>':''}${m.review&&current&&c.quality===true?`<h3>公開確認</h3><p>${safe(c.target)} → <strong>${safe(c.destination)}</strong></p><p class="impact${catalogObject(c.destination)?'':' neutral'}"><strong>${catalogObject(c.destination)?`公開中の ${catalogObject(c.destination).rows.length} 行を ${c.data.rows.length} 行に置き換えます。`:`新しい MARTS テーブルを ${c.data.rows.length} 行で作成します。`}</strong>${catalogObject(c.destination)?`<br>参照中のロール: ${safe((catalogObject(c.destination).roles||['bi_viewer','data_engineer']).join('、'))} · 以前の版は公開履歴から戻せます`:''}</p><button class="primary${catalogObject(c.destination)?' danger':''}" id="transform-publish" ${!writable?'disabled':''}>${catalogObject(c.destination)?'置き換えて公開':'MARTS に公開'}</button>`:''}${c.published?`<p><a class="primary" href="#explore/${safe(c.destination)}">公開テーブルを開く</a> <a href="#audit/${c.published}">監査記録 ${c.published}</a></p>`:''}`:'<p class="empty">保存したモデルから候補をビルドしてください。</p>'}</section><details id="transform-model-history"><summary>モデル履歴（${m.versions.length} バージョン）</summary><ul>${m.versions.filter(v=>atlasReadDB(v.source.split(".")[0])).map(v=>`<li>v${v.version} · ${safe(v.name)} · ${safe(v.source)} · ${safe(atlasOperationLabel(v.operation))} · <a href="#audit/${v.event}">${v.event}</a> <button id="transform-open-${v.version}" data-model-version="${v.version}" ${!atlasWrite(v.source.split(".")[0])?'disabled':''}>v${v.version} を開く</button></li>`).join("")||'<li>保存履歴はありません。</li>'}</ul></details>`,{saved,current,c,writable})+atlasPublications()+atlasDbt();
       }
       function atlasVisibleEvents() {
         const a=atlas.audit;
         return atlas.events.filter(e=>atlasReadDB(e.db||"iceberg")&&(a.scope==="self"?e.scope==="self"&&e.actor===atlas.role&&e.db===a.db:a.scope==="database"?["db_admin","platform_admin"].includes(atlas.role)&&e.scope!=="platform"&&e.db===a.db:atlas.role==="platform_admin") );
       }
+      const atlasScopeLabel = v => ({self:"自分のデータ操作",database:"DB 管理",platform:"プラットフォーム全体"})[v] || v;
+      const atlasSourceLabel = v => ({ingestion:"取り込み",transformation:"データ変換",database:"DB 管理",platform:"基盤"})[v] || v;
+      const atlasModeLabel = v => ({create:"新規作成",append:"追加",replace:"全件置換",upsert:"キーで更新・追加"})[v] || v;
+      const atlasOperationLabel = v => ({copy:"全列をそのまま転送",nonnegative:"amount の負数行を除外",daily:"order_date ごとに売上集計"})[v] || v;
+      document.addEventListener("toggle", e => { if (e.target.id === "audit-filters") atlas.auditFiltersOpen = e.target.open; }, true);
+      const atlasKindLabel = v => ({publication:"公開",rollback:"ロールバック"})[v] || v;
       function atlasAudit(detail) {
         const a=atlas.auditDraft,applied=atlas.audit,allowed=atlasAuditRows(),event=detail?allowed.find(e=>e.id===detail):null;
         const rows=allowed;
-        return `<div class="atlas-fields">${atlasSelect("audit-scope","監査範囲",[["self","自分のデータ操作"],...(["db_admin","platform_admin"].includes(atlas.role)?[["database","DB 管理"]]:[]),...(atlas.role==="platform_admin"?[["platform","プラットフォーム全体"]]:[])],a.scope)}${atlasSelect("audit-db","DB",[...(a.scope==="platform"?[["","すべて"]]:[]),"iceberg",...(["db_admin","platform_admin"].includes(atlas.role)?["demo"]:[])],a.db)}${atlasInput("audit-from","開始日時（UTC）",a.from,"datetime-local")}${atlasInput("audit-to","終了日時（UTC）",a.to,"datetime-local")}${atlasSelect("audit-source","発生元",[["","すべて"],"ingestion","transformation","database",...(atlas.role==="platform_admin"?["platform"]:[])],a.source)}${atlasInput("audit-query","ID・操作・対象・実行者・状態を検索",a.query,"search")}</div><div class="atlas-actions"><button id="audit-filter">絞り込む</button><button id="audit-reset">条件をリセット</button><button id="audit-download">表示履歴の JSON を保存</button></div><p id="audit-applied">適用中: ${safe(applied.scope)} / DB ${safe(applied.db||"すべて")} / ${safe(applied.from||"開始指定なし")} ～ ${safe(applied.to||"終了指定なし")} UTC / 発生元 ${safe(applied.source||"すべて")} · ${rows.length} 件</p>${detail?event?`<section><h2>${event.id} の詳細</h2><button id="audit-record-download" data-record="${event.id}">この記録のメタデータを保存</button><dl class="kv"><dt>時刻（UTC）</dt><dd>${safe(event.time)}</dd><dt>操作 / 状態</dt><dd>${safe(event.action)} / ${safe(event.status)}</dd><dt>対象 / 実行者</dt><dd>${safe(event.target)} / ${safe(event.actor)}</dd></dl><p>関連記録: ${event.related.map(id=>allowed.some(e=>e.id===id)?`<a href="#audit/${id}">${id}</a>`:'範囲外').join(' · ')||'なし'}</p><p>${catalogObject(event.target)&&atlasReadDB(catalogObject(event.target).database)?`<a href="#explore/${safe(event.target)}">対象テーブル</a> · `:''}<a href="#${event.source==='ingestion'?'ingestion':event.source==='transformation'?'transformation':'audit'}">操作画面へ</a> · <a href="#audit">一覧へ戻る</a></p></section>`:'<p class="empty">指定の記録は現在の DB・ロール範囲で表示できません。</p>':''}${rows.length?`<div class="tablewrap" role="region" aria-label="監査履歴（横スクロール可能）" tabindex="0"><table><thead><tr>${['時刻（UTC）','操作','対象','実行者','状態','記録'].map(x=>`<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${rows.map(e=>`<tr><td><time datetime="${e.time}">${e.time.replace('T',' ').replace('Z','')}</time></td><td>${safe(e.action)}</td><td>${safe(e.target)}</td><td>${safe(e.actor)}</td><td>${e.status}</td><td><a href="#audit/${e.id}">${e.id}</a></td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">条件に一致する履歴はありません。条件をリセットするか、取込・変換を実行してください。</p>'}${atlasPawprints()}<details><summary>保存する情報</summary><p>JSON は表示中の操作メタデータのみ。テーブルの行データは含みません。</p></details>`;
+        const filtersOpen = !matchMedia("(max-width: 600px)").matches || atlas.auditFiltersOpen;
+        return `<details id="audit-filters" ${filtersOpen?'open':''}><summary>絞り込み条件</summary><div class="atlas-fields">${atlasSelect("audit-scope","監査範囲",[["self","自分のデータ操作"],...(["db_admin","platform_admin"].includes(atlas.role)?[["database","DB 管理"]]:[]),...(atlas.role==="platform_admin"?[["platform","プラットフォーム全体"]]:[])],a.scope)}${atlasSelect("audit-db","DB",[...(a.scope==="platform"?[["","すべて"]]:[]),"iceberg",...(["db_admin","platform_admin"].includes(atlas.role)?["demo"]:[])],a.db)}${atlasInput("audit-from","開始日時（JST）",a.from,"datetime-local")}${atlasInput("audit-to","終了日時（JST）",a.to,"datetime-local")}${atlasSelect("audit-source","発生元",[["","すべて"],...["ingestion","transformation","database",...(atlas.role==="platform_admin"?["platform"]:[])].map(v=>[v,atlasSourceLabel(v)])],a.source)}${atlasInput("audit-query","ID・操作・対象・実行者・状態を検索",a.query,"search")}</div><div class="atlas-actions"><button id="audit-filter">絞り込む</button><button id="audit-reset">条件をリセット</button><button id="audit-download">表示履歴の JSON を保存</button></div></details><p id="audit-applied">適用中: ${safe(atlasScopeLabel(applied.scope))} / DB ${safe(applied.db||"すべて")} / ${safe(fmtInputJST(applied.from)||"開始指定なし")} ～ ${safe(fmtInputJST(applied.to)||"終了指定なし")} / 発生元 ${safe(atlasSourceLabel(applied.source)||"すべて")} · ${rows.length} 件</p>${detail?event?`<section><h2>${event.id} の詳細</h2><button id="audit-record-download" data-record="${event.id}">この記録のメタデータを保存</button><dl class="kv"><dt>時刻</dt><dd>${safe(fmtJST(event.time,true))}<br><small class="muted">${safe(event.time)}（UTC）</small></dd><dt>操作 / 状態</dt><dd>${safe(event.action)} / ${safe(event.status)}</dd><dt>対象 / 実行者</dt><dd>${safe(event.target)} / ${safe(event.actor)}</dd></dl><p>関連記録: ${event.related.map(id=>allowed.some(e=>e.id===id)?`<a href="#audit/${id}">${id}</a>`:'範囲外').join(' · ')||'なし'}</p><p>${catalogObject(event.target)&&atlasReadDB(catalogObject(event.target).database)?`<a href="#explore/${safe(event.target)}">対象テーブル</a> · `:''}<a href="#${event.source==='ingestion'?'ingestion':event.source==='transformation'?'transformation':'audit'}">操作画面へ</a> · <a href="#audit">一覧へ戻る</a></p></section>`:'<p class="empty">指定の記録は現在の DB・ロール範囲で表示できません。</p>':''}${rows.length?`<div class="tablewrap" role="region" aria-label="監査履歴（横スクロール可能）" tabindex="0"><table><thead><tr>${['時刻','操作','対象','実行者','状態','記録'].map(x=>`<th scope="col">${x}</th>`).join('')}</tr></thead><tbody>${rows.map(e=>`<tr><td><time datetime="${e.time}">${safe(fmtJST(e.time,true))}</time></td><td>${safe(e.action)}</td><td>${safe(e.target)}</td><td>${safe(e.actor)}</td><td>${e.status}</td><td><a href="#audit/${e.id}">${e.id}</a></td></tr>`).join('')}</tbody></table></div>`:'<p class="empty">条件に一致する履歴はありません。条件をリセットするか、取込・変換を実行してください。</p>'}${atlasPawprints()}<details><summary>保存する情報</summary><p>JSON は表示中の操作メタデータのみ。テーブルの行データは含みません。</p></details>`;
       }
       function atlasCSV(text) {
         const records=[];let row=[],cell="",quoted=false,closed=false;
@@ -3654,7 +3694,7 @@ ${id === "daily-sales"
           if(id==="audit-filter") {
             const draft={...atlas.auditDraft};
             for(const k of ["from","to","query"])draft[k]=document.getElementById(`audit-${k}`).value;
-            for(const k of ["from","to"])if(draft[k]&&!Number.isFinite(Date.parse(draft[k]+"Z")))throw Error("有効な UTC 日時を指定してください。");
+            for(const k of ["from","to"])if(draft[k]&&!Number.isFinite(Date.parse(draft[k]+JST_OFFSET)))throw Error("有効な日時を指定してください。");
             if(draft.from&&draft.to&&draft.from>draft.to)throw Error("終了日時は開始日時以降にしてください。");
             if(!["self",...(["db_admin","platform_admin"].includes(atlas.role)?["database"]:[]),...(atlas.role==="platform_admin"?["platform"]:[])].includes(draft.scope)||(!draft.db&&draft.scope!=="platform")||(draft.db&&!atlasReadDB(draft.db)))throw Error("現在のロールの監査範囲を選択してください。");
             atlas.audit={...draft};atlas.auditDraft={...draft};atlas.message="監査履歴を絞り込みました。";
@@ -3679,7 +3719,7 @@ ${id === "daily-sales"
       atlas.stageId="daily-orders";
       function atlasAuditRows() {
         const a=atlas.audit;
-        return atlasVisibleEvents().filter(e=>(!a.db||e.db===a.db)&&(!a.from||e.time>=new Date(a.from+"Z").toISOString())&&(!a.to||e.time<=new Date(a.to+"Z").toISOString())&&(!a.source||e.source===a.source)&&`${e.id} ${e.action} ${e.target} ${e.actor} ${e.status}`.toLowerCase().includes(a.query.toLowerCase()));
+        return atlasVisibleEvents().filter(e=>(!a.db||e.db===a.db)&&(!a.from||e.time>=new Date(a.from+JST_OFFSET).toISOString())&&(!a.to||e.time<=new Date(a.to+JST_OFFSET).toISOString())&&(!a.source||e.source===a.source)&&`${e.id} ${e.action} ${e.target} ${e.actor} ${e.status}`.toLowerCase().includes(a.query.toLowerCase()));
       }
       function atlasGuardRole() {
         const i=atlas.ingest,m=atlas.transform;
@@ -3698,7 +3738,7 @@ ${id === "daily-sales"
       }
       function atlasCommitIngest(i) {
         if(!i.preview||i.preview.fingerprint!==atlasIngestFingerprint(i)||!atlasWrite(i.db))throw Error("入力が変わりました。プレビューをやり直してください。");
-        const p=i.preview;atlasTablePut(p.target,p.data);const event=atlasEvent("ingestion",`取込 ${i.mode}`,p.target);
+        const p=i.preview;atlasTablePut(p.target,p.data);const event=atlasEvent("ingestion",`取込 ${atlasModeLabel(i.mode)}`,p.target);
         i.completed={target:p.target,event};i.preview=null;atlas.message=`${p.data.rows.length} 行を取り込みました。変換モデルへ進めます。`;
         return {target:p.target,event,data:atlasCopy(p.data),time:new Date().toISOString(),actor:atlas.role};
       }
@@ -3708,8 +3748,8 @@ ${id === "daily-sales"
         const stages=atlas.stages.filter(st=>atlasReadDB(st.db)),st=atlasStage();
         if(!st){atlas.stageId=stages[0]?.id;return stages.length?atlasStages():"<p>参照可能なステージがありません。</p>";}
         const writable=atlasWrite(st.db),latest=st.runs.at(-1),output=st.outputs.at(-1),seen=st.outputs.find(o=>o.token===atlasStageToken(st)),d=st.scheduleDraft||st.schedule;
-        return `<nav class="atlas-actions" aria-label="取込方法"><a href="#ingestion">ファイル取込</a><a href="#ingestion/stages" aria-current="page">保存済みステージ</a></nav><h2>保存済みステージ</h2><p class="tiny muted">サンプルのファイル置場 · 実行と出力は再読み込みまで保存</p>${atlasSelect("stage-select","ステージ",stages.map(x=>[x.id,`${x.name} · ${x.db}`]),st.id)}<section><h2>${safe(st.name)}</h2><dl class="kv"><dt>状態</dt><dd>${!writable?'参照のみ':st.unknown?'結果不明 · 再実行前に照合':st.schedule.enabled?'予定あり':'手動'}</dd><dt>出力先</dt><dd>${safe(st.target)}</dd><dt>最新実行</dt><dd>${latest?`${safe(latest.time)} UTC · ${safe(latest.status)} · <a href="#audit/${latest.event}">${latest.event}</a>`:'未実行'}</dd><dt>次回予定（UTC）</dt><dd>${st.schedule.enabled?`${safe(st.schedule.date)} · ${st.schedule.days} 日間隔`:'無効（予定を保持）'}</dd></dl>${!writable?'<p>このロールでは走査・取込・予定変更を行えません。</p>':''}
-          <details id="stage-schedule-panel"><summary>スケジュールを編集</summary><fieldset ${st.unknown?'disabled':''}><legend>実行予定（UTC）</legend>${atlasInput("stage-date","予定日時（UTC）",d.date,"datetime-local")}${atlasInput("stage-days","間隔（日、1〜365）",d.days,"number",'min="1" max="365"')}<label><input type="checkbox" id="stage-enabled" ${d.enabled?'checked':''}>有効にする</label><button id="stage-schedule" ${!writable?'disabled':''}>予定を保存</button><p class="tiny muted">予定の保存サンプルです。バックグラウンドで自動実行しません。</p></fieldset></details>
+        return `<nav class="atlas-actions" aria-label="取込方法"><a href="#ingestion">ファイル取込</a><a href="#ingestion/stages" aria-current="page">保存済みステージ</a></nav><h2>保存済みステージ</h2><p class="tiny muted">サンプルのファイル置場 · 実行と出力は再読み込みまで保存</p>${atlasSelect("stage-select","ステージ",stages.map(x=>[x.id,`${x.name} · ${x.db}`]),st.id)}<section><h2>${safe(st.name)}</h2><dl class="kv"><dt>状態</dt><dd>${!writable?'参照のみ':st.unknown?'結果不明 · 再実行前に照合':st.schedule.enabled?'予定あり':'手動'}</dd><dt>出力先</dt><dd>${safe(st.target)}</dd><dt>最新実行</dt><dd>${latest?`${safe(fmtJST(latest.time))} · ${safe(latest.status)} · <a href="#audit/${latest.event}">${latest.event}</a>`:'未実行'}</dd><dt>次回予定</dt><dd>${st.schedule.enabled?`${safe(fmtInputJST(st.schedule.date))} · ${st.schedule.days} 日間隔`:'無効（予定を保持）'}</dd></dl>${!writable?'<p>このロールでは走査・取込・予定変更を行えません。</p>':''}
+          <details id="stage-schedule-panel"><summary>スケジュールを編集</summary><fieldset ${st.unknown?'disabled':''}><legend>実行予定（JST）</legend>${atlasInput("stage-date","予定日時（JST）",d.date,"datetime-local")}${atlasInput("stage-days","間隔（日、1〜365）",d.days,"number",'min="1" max="365"')}<label><input type="checkbox" id="stage-enabled" ${d.enabled?'checked':''}>有効にする</label><button id="stage-schedule" ${!writable?'disabled':''}>予定を保存</button><p class="tiny muted">予定の保存サンプルです。バックグラウンドで自動実行しません。</p></fieldset></details>
           <div class="atlas-actions">${atlasSelect("stage-scenario","走査結果のサンプル",[["found","ファイルあり"],["unknown","結果不明"]],st.scenario||"found").replace("<select ",st.unknown?"<select disabled ":"<select ")}<button id="stage-scan" ${!writable||st.unknown?'disabled':''}>手動で走査</button>${st.unknown?'<button id="stage-lookup">実行結果を照合</button>':''}</div>
           <p>選択ファイル: ${safe(st.file||"未選択")}${seen?' · この内容は取込済み':''}</p><div class="atlas-actions"><button id="stage-sample" ${!writable||st.unknown?'disabled':''}>注文 CSV の例を選択</button>${atlasField("stage-file","別の CSV / JSON / JSONL",`<input type="file" id="stage-file" accept=".csv,.json,.jsonl,.ndjson" ${!writable||st.unknown?'disabled':''}>`)}</div>
           ${st.data?`<details><summary>選択ファイルの行</summary>${atlasGrid(st.data,"ステージファイル")}</details>`:''}
@@ -3719,7 +3759,7 @@ ${id === "daily-sales"
           ${st.preview?`<h3>取込確認 · ${safe(st.preview.target)}</h3>${atlasGrid(st.preview.data,"ステージ取込結果")}<button class="primary" id="stage-confirm" ${!writable?'disabled':''}>${st.replay?'確認して明示的に再実行':'確認して取り込む'}</button>`:''}
           ${st.exportReceipt?`<details open><summary>出力の受領情報</summary><p><a href="${safe(st.exportReceipt.url)}" download="${safe(st.id)}-receipt.json">受領情報 JSON を保存</a> · <a href="#audit/${st.exportReceipt.data.exportEvent}">${st.exportReceipt.data.exportEvent}</a></p><pre class="codeblock">${safe(JSON.stringify(st.exportReceipt.data,null,2))}</pre></details>`:""}
           ${output?`<p>最新出力: <a href="#explore/${safe(output.target)}">${safe(output.target)}</a> · <a href="#audit/${output.event}">取込記録</a></p><button id="stage-transform" ${!writable?'disabled':''}>この出力から変換モデルを作成</button>${atlasSelect("stage-format","出力形式",["csv","jsonl"],st.format||"csv")}<button id="stage-export">出力と受領情報を保存</button>`:''}
-          <details><summary>実行・出力記録（${st.runs.length} 件 / ${st.outputs.length} 出力）</summary><ul>${st.runs.map(r=>`<li>${safe(r.time)} UTC · ${safe(r.status)} · <a href="#audit/${r.event}">${r.event}</a></li>`).join("")||'<li>実行記録なし</li>'}</ul></details></section>`;
+          <details><summary>実行・出力記録（${st.runs.length} 件 / ${st.outputs.length} 出力）</summary><ul>${st.runs.map(r=>`<li>${safe(fmtJST(r.time))} · ${safe(r.status)} · <a href="#audit/${r.event}">${r.event}</a></li>`).join("")||'<li>実行記録なし</li>'}</ul></details></section>`;
       }
       function atlasRememberPublication(c,m) {
         const pub={id:c.published,event:c.published,target:c.destination,source:m.source,name:m.name,version:c.version,operation:m.operation,key:m.key,data:atlasCopy(c.data),time:new Date().toISOString(),actor:atlas.role,kind:"publication"};
@@ -3727,7 +3767,7 @@ ${id === "daily-sales"
       }
       // Historical published examples have publication audit evidence, never arbitrary snapshots.
       atlasTablePut("iceberg.RAW.orders_demo_source",atlasOrders(false));
-      const atlasDemoSeed=atlasEvent("ingestion","取込 create","iceberg.RAW.orders_demo_source");
+      const atlasDemoSeed=atlasEvent("ingestion","取込 新規作成","iceberg.RAW.orders_demo_source");
       for(const [n,data] of [[1,atlasOrders(false)],[2,{columns:atlasOrders(false).columns,rows:atlasOrders(false).rows.slice(0,2)}]]) {
         const target="iceberg.MARTS.orders_demo",event=atlasEvent("transformation",`サンプル MARTS 公開 v${n}`,target,"成功",[atlasDemoSeed]);
         atlas.publications.push({id:event,event,target,source:"iceberg.RAW.orders_demo_source",name:"orders_demo",version:n,operation:"copy",key:"order_id",data:atlasCopy(data),time:new Date().toISOString(),actor:atlas.role,kind:"publication"});atlasTablePut(target,data);
@@ -3739,7 +3779,7 @@ ${id === "daily-sales"
       function atlasPublications() {
         const pubs=atlas.publications.filter(p=>atlasReadDB(p.target.split(".")[0])),targets=[...new Set(pubs.map(p=>p.target))],target=targets.includes(atlas.selectedMart)?atlas.selectedMart:targets[0],versions=pubs.filter(p=>p.target===target),current=versions.at(-1),writable=current&&atlasWrite(current.target.split(".")[0]);
         atlas.selectedMart=target||"";
-        return `<section><h2>公開済み MARTS</h2>${targets.length?`${atlasSelect("model-mart","公開モデル",targets,target)}<p>現在の公開: モデル v${current.version} · ${safe(current.kind)} · <a href="#audit/${current.event}">${current.event}</a><br>最終実行: ${safe(current.time)} UTC${current.planned?`<br>更新予定: ${safe(current.planned.date)} UTC · <a href="#audit/${current.planned.event}">${current.planned.event}</a>`:''}</p><a href="#explore/${safe(target)}">公開テーブルを確認</a><details id="model-rollback-panel"><summary>公開履歴とロールバック</summary><ul>${versions.map(v=>`<li>v${v.version} · ${safe(v.kind)} · <a href="#audit/${v.event}">${v.event}</a></li>`).join('')}</ul>${atlasSelect("model-prior","戻す公開版",versions.filter(p=>p.kind==="publication"&&p.id!==current.id).map(p=>[p.id,`v${p.version} · ${p.event}`]),atlas.prior||"")}<button id="model-rollback-review" ${!writable||!versions.some(p=>p.kind==="publication"&&p.id!==current.id)?'disabled':''}>以前の公開内容を確認</button>${atlas.rollback?`<p id="model-rollback-detail">${safe(atlas.rollback.prior.target)} を公開 v${atlas.rollback.prior.version}（${atlas.rollback.prior.data.rows.length} 行）へ戻します。<a href="#audit/${atlas.rollback.prior.event}">元の公開記録</a></p><button id="model-rollback-confirm" ${!writable?'disabled':''}>確認してロールバック</button>`:''}</details><details id="model-refresh-panel"><summary>更新のレビューと保存</summary>${atlasSelect("model-refresh-mode","更新方法",[["manual","手動更新"],["planned","予定更新"]],atlas.refreshMode||"manual")}${atlasInput("model-refresh-date","予定日時（UTC）",atlas.refreshDate||"2026-12-01T09:00","datetime-local")}<button id="model-refresh-review" ${!writable?'disabled':''}>更新内容を確認</button>${atlas.refreshReview?`<p>${safe(atlas.refreshReview.source)} → ${safe(target)} · ${safe(atlas.refreshReview.mode)} · ${safe(atlas.refreshReview.date||"即時")} UTC<br>保存済みの変換処理 ${safe(current.operation)} を再ビルドし、品質検査後に保存します。</p><button id="model-refresh-save" ${!writable?'disabled':''}>確認して更新結果を保存</button>`:''}</details>`:'<p>公開済みモデルはありません。</p>'}</section>`;
+        return `<section><h2>公開済み MARTS</h2>${targets.length?`${atlasSelect("model-mart","公開モデル",targets,target)}<p>現在の公開: モデル v${current.version} · ${safe(atlasKindLabel(current.kind))} · <a href="#audit/${current.event}">${current.event}</a><br>最終実行: ${safe(fmtJST(current.time))}${current.planned?`<br>更新予定: ${safe(fmtInputJST(current.planned.date))} · <a href="#audit/${current.planned.event}">${current.planned.event}</a>`:''}</p><a href="#explore/${safe(target)}">公開テーブルを確認</a><details id="model-rollback-panel"><summary>公開履歴とロールバック</summary><ul>${versions.map(v=>`<li>v${v.version} · ${safe(atlasKindLabel(v.kind))} · <a href="#audit/${v.event}">${v.event}</a></li>`).join('')}</ul>${atlasSelect("model-prior","戻す公開版",versions.filter(p=>p.kind==="publication"&&p.id!==current.id).map(p=>[p.id,`v${p.version} · ${p.event}`]),atlas.prior||"")}<button id="model-rollback-review" ${!writable||!versions.some(p=>p.kind==="publication"&&p.id!==current.id)?'disabled':''}>以前の公開内容を確認</button>${atlas.rollback?`<p id="model-rollback-detail">${safe(atlas.rollback.prior.target)} を公開 v${atlas.rollback.prior.version}（${atlas.rollback.prior.data.rows.length} 行）へ戻します。<a href="#audit/${atlas.rollback.prior.event}">元の公開記録</a></p><button id="model-rollback-confirm" ${!writable?'disabled':''}>確認してロールバック</button>`:''}</details><details id="model-refresh-panel"><summary>更新のレビューと保存</summary>${atlasSelect("model-refresh-mode","更新方法",[["manual","手動更新"],["planned","予定更新"]],atlas.refreshMode||"manual")}${atlasInput("model-refresh-date","予定日時（JST）",atlas.refreshDate||"2026-12-01T09:00","datetime-local")}<button id="model-refresh-review" ${!writable?'disabled':''}>更新内容を確認</button>${atlas.refreshReview?`<p>${safe(atlas.refreshReview.source)} → ${safe(target)} · ${safe(({manual:"手動",planned:"予定"})[atlas.refreshReview.mode]||atlas.refreshReview.mode)} · ${safe(fmtInputJST(atlas.refreshReview.date)||"即時")}<br>保存済みの変換処理「${safe(atlasOperationLabel(current.operation))}」 を再ビルドし、品質検査後に保存します。</p><button id="model-refresh-save" ${!writable?'disabled':''}>確認して更新結果を保存</button>`:''}</details>`:'<p>公開済みモデルはありません。</p>'}</section>`;
       }
       function atlasDbt() {
         const m=atlas.transform,t=catalogObject(m.source),c=m.candidate;
@@ -3747,7 +3787,7 @@ ${id === "daily-sales"
       }
       function atlasPawprints() {
         if(atlas.role!=="platform_admin")return "";
-        return `<details id="ops-pawprints"><summary>Pawprints プレビュー（運用者用サンプル）</summary><p>保存履歴とは別の観測サンプルです。</p><button id="ops-observe">サンプルを観測</button>${atlas.pawprints?`<p>観測日時: ${safe(atlas.pawprints.time)} UTC · 状態: sample / 接続なし · ローカル操作 ${atlas.pawprints.count} 件</p>`:''}</details>`;
+        return `<details id="ops-pawprints"><summary>Pawprints プレビュー（運用者用サンプル）</summary><p>保存履歴とは別の観測サンプルです。</p><button id="ops-observe">サンプルを観測</button>${atlas.pawprints?`<p>観測日時: ${safe(fmtJST(atlas.pawprints.time))} · 状態: sample / 接続なし · ローカル操作 ${atlas.pawprints.count} 件</p>`:''}</details>`;
       }
       document.addEventListener("input",e=>{
         const id=e.target.id;
@@ -3785,8 +3825,8 @@ ${id === "daily-sales"
             if(st.unknown&&!["stage-export","stage-lookup"].includes(id))throw Error("先に元の実行結果を照合してください。");
             if(id==="stage-schedule") {
               const d=st.scheduleDraft||st.schedule,date=d.date,days=Number(d.days);
-              if(!date||!Number.isFinite(Date.parse(date+"Z"))||!Number.isInteger(days)||days<1||days>365)throw Error("有効な UTC 日時と 1〜365 日の整数を指定してください。");
-              if(d.enabled&&Date.parse(date+"Z")<=Date.now())throw Error("有効な予定には未来の日時を指定してください。");
+              if(!date||!Number.isFinite(Date.parse(date+JST_OFFSET))||!Number.isInteger(days)||days<1||days>365)throw Error("有効な日時と 1〜365 日の整数を指定してください。");
+              if(d.enabled&&Date.parse(date+JST_OFFSET)<=Date.now())throw Error("有効な予定には未来の日時を指定してください。");
               st.schedule={date,days,enabled:d.enabled};st.scheduleDraft=null;atlas.message="予定を保存しました（サンプル、自動実行なし）。";
             }
             if(id==="stage-sample"){st.loadVersion=(st.loadVersion||0)+1;st.data=atlasOrders(false);st.file="orders.csv";st.preview=null;st.completed=null;atlas.message="注文 CSV の例を選択しました。";}
@@ -3831,13 +3871,13 @@ ${id === "daily-sales"
             }
             if(id==="model-refresh-review") {
               const mode=document.getElementById("model-refresh-mode").value,date=document.getElementById("model-refresh-date").value;
-              if(mode==="planned"&&(!date||!Number.isFinite(Date.parse(date+"Z"))||Date.parse(date+"Z")<=Date.now()))throw Error("未来の UTC 予定日時を指定してください。");
+              if(mode==="planned"&&(!date||!Number.isFinite(Date.parse(date+JST_OFFSET))||Date.parse(date+JST_OFFSET)<=Date.now()))throw Error("未来の予定日時を指定してください。");
               const t=catalogObject(current.source);if(!t||!atlasReadDB(t.database))throw Error("参照可能な取込元がありません。");
               atlas.refreshReview={mode,date:mode==="planned"?date:"",source:current.source,sourceToken:JSON.stringify([t.atlasRevision,t.rows]),current:current.id,revision:catalogObject(current.target)?.atlasRevision};atlas.message="更新方法と取込元を確認してください。";
             }
             if(id==="model-refresh-save") {
               const r=atlas.refreshReview,t=catalogObject(current.source);if(!r||r.current!==current.id||r.revision!==catalogObject(current.target)?.atlasRevision||r.sourceToken!==JSON.stringify([t?.atlasRevision,t?.rows]))throw Error("更新条件が変わりました。再確認してください。");
-              if(r.mode==="planned") {const event=atlasEvent("transformation",`更新予定保存 ${r.date} UTC`,current.target,"成功",[current.event]);current.planned={date:r.date,event};atlas.message="更新予定を保存しました（サンプル、自動実行なし）。";}
+              if(r.mode==="planned") {const event=atlasEvent("transformation",`更新予定保存 ${fmtInputJST(r.date)}`,current.target,"成功",[current.event]);current.planned={date:r.date,event};atlas.message="更新予定を保存しました（サンプル、自動実行なし）。";}
               else {
                 const m=atlas.transform;Object.assign(m,{source:current.source,name:current.name,operation:current.operation,key:current.key});m.revision++;m.review=null;
                 for(const action of ["transform-save","transform-build","transform-check"])if(!atlasInvoke(action))throw Error(atlas.message);
@@ -3861,7 +3901,7 @@ const computeDemo = { role:'bi_viewer', state:'ready', observed:Date.now(), scen
   autoChill:15, confirmation:null, receipt:null, receipts:[], lookup:'', found:null,
   message:'', sequence:0, configuredAt:Date.now()-300000, usageAt:Date.now()-12000,
   headroomAt:Date.now()-24000, sampleAt:'2026-11-18 09:00 JST' };
-const bearDemoTime = value => value ? new Date(value).toLocaleString('ja-JP') : '未観測';
+const bearDemoTime = value => value ? fmtJST(value, true) : '未観測';
 const bearDemoOptions = (values, selected, empty='選択してください') =>
   `<option value="">${safe(empty)}</option>` + [...new Set(values)].map(v=>`<option value="${safe(v)}"${v===selected?' selected':''}>${safe(v)}</option>`).join('');
 const bearDemoRoleOptions = role => ['bi_viewer','data_engineer','admin'].map(v=>`<option${v===role?' selected':''}>${v}</option>`).join('');
@@ -4052,10 +4092,10 @@ function bearDemoPage() {
       <dl class="kv"><dt>対象</dt><dd>${safe(p.table)}</dd><dt>ロール</dt><dd>${safe(p.role)}</dd><dt>作成時刻</dt><dd>${safe(bearDemoTime(p.createdAt))}</dd></dl>
       <p>${safe(p.note)}</p><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${safe(p.sql || p.description)}</pre>
       <form id="bearDemo-approval"><label for="bearDemo-approved"><input id="bearDemo-approved" type="checkbox" required> 対象・文脈・内容を確認し、この案の下書きへの引渡しを承認する</label>
-      <div class="toolbar">${p.kind==='description'?'<button type="submit" name="bearDemo-destination" value="catalog">説明文の下書きを渡す</button>':'<button class="primary" type="submit" name="bearDemo-destination" value="worksheet">承認してワークシートを開く</button><button type="submit" name="bearDemo-destination" value="transformation">承認してWAPへ渡す</button>'}</div></form>
-      <p class="small">SQLの自動実行・公開はありません。WAPは受け手側で再確認・検証します。</p></section>`:''}
+      <div class="toolbar">${p.kind==='description'?'<button type="submit" name="bearDemo-destination" value="catalog">説明文の下書きを渡す</button>':'<button class="primary" type="submit" name="bearDemo-destination" value="worksheet">承認してワークシートを開く</button><button type="submit" name="bearDemo-destination" value="transformation">承認してデータ変換へ渡す</button>'}</div></form>
+      <p class="small">SQLの自動実行・公開はありません。データ変換側で再確認・品質検査します。</p></section>`:''}
     <section class="section"><h2>Catalog Curator</h2><dl class="kv"><dt>対象</dt><dd>${safe(t?objectKey(t):'テーブルを選択してください')}</dd><dt>説明</dt><dd>${safe(t?t.description || '説明未登録':'参照可能な対象のみ表示します。')}</dd></dl><button type="button" data-bear-demo="curator">説明文を提案</button></section>
-    <section class="section"><h2>観測とポリシー</h2><dl class="kv"><dt>SRE</dt><dd>LOCAL · ${safe(computeDemoLabel(computeDemoState()))} · 観測 ${safe(bearDemoTime(computeDemo.observed))}</dd><dt>Policy</dt><dd>${safe(b.role)} · ${t?'対象メタデータを参照可能':'対象未選択 / 権限未確認'} · 固定ルール</dd><dt>標本時刻</dt><dd>${computeDemo.sampleAt} · 実クラスタ・外部LLMには未接続</dd></dl><a href="#compute">Compute &amp; Governance を確認 →</a>
+    <section class="section"><h2>観測とポリシー</h2><dl class="kv"><dt>SRE</dt><dd>LOCAL · ${safe(computeDemoLabel(computeDemoState()))} · 観測 ${safe(bearDemoTime(computeDemo.observed))}</dd><dt>Policy</dt><dd>${safe(b.role)} · ${t?'対象メタデータを参照可能':'対象未選択 / 権限未確認'} · 固定ルール</dd><dt>標本時刻</dt><dd>${computeDemo.sampleAt} · 実クラスタ・外部LLMには未接続</dd></dl><a href="#compute">コンピュート &amp; ガバナンスを確認 →</a>
       <details><summary>根拠・履歴・リクエスト</summary><p>カタログの固定メタデータと元SQLを使用します。行データは生成しません。受付・監査・公開結果の実測履歴はありません。</p>${p?`<dl class="kv"><dt>提案ID</dt><dd>${safe(p.id)}</dd><dt>元SQL</dt><dd><code>${safe(p.sourceSQL)}</code></dd></dl>`:''}</details></section>
   </div>`;
 }
@@ -4154,7 +4194,7 @@ function computeDemoPage() {
     <div class="atlas-fields"><label for="computeDemo-role">ロール（デモ）<select class="field" id="computeDemo-role">${bearDemoRoleOptions(c.role)}</select></label></div>
     <section class="section"><h2>共有 LOCAL</h2><dl class="kv"><dt>状態</dt><dd>${safe(computeDemoLabel(state))}${state==='stale'?` · 最後の状態 ${safe(computeDemoLabel(c.state))}`:''}</dd><dt>観測時刻</dt><dd>${safe(bearDemoTime(c.observed))} · 有効期限60秒</dd><dt>影響範囲</dt><dd>このタブの共有 LOCAL 全体。休止は全利用者の新規処理を停止し、起動は利用可能に戻します。永続ストレージは保持します。</dd><dt>停止の妨げ</dt><dd>${admin && blockers.length?blockers.map(safe).join('<br>'):admin?'把握している実行中・不明の処理なし（デモ）':'詳細は管理者が確認します'}</dd></dl>
     <div class="toolbar"><button id="computeDemo-refresh" type="button" data-compute-demo="refresh">状態を更新</button>${['wake','chill'].map(action=>`<button id="computeDemo-${action}" type="button" data-compute-demo="${action}"${computeDemoReason(action)?' disabled':''}>${action==='wake'?'起動':'休止'}</button>`).join('')}</div>
-    <p class="small">${safe(computeDemoReason('chill') || '停止前に共有範囲を確認してください。')}</p>
+    <p class="small">${safe(c.state==='chilled' ? (computeDemoReason('wake') || '起動すると全利用者が実行できる状態に戻ります。') : (computeDemoReason('chill') || '休止すると全利用者の新規処理が止まります。'))}</p>
     ${pending?`<form id="computeDemo-confirm"><h3 id="computeDemo-confirm-title" tabindex="-1">${pending.action==='wake'?'起動':'休止'} の確認</h3><p class="impact${pending.action==='wake'?' neutral':''}"><strong>${pending.action==='wake'?'共有 LOCAL を起動し、全利用者が実行できる状態に戻します。':`全利用者の新規処理を止めます。ジョブ ${Object.values(jobInfo).map(j=>j.name).join('・')} と、開いている SQL ワークシート ${worksheets.length} 件は起動まで実行できません。`}</strong>${pending.action==='wake'?'':'<br>永続ストレージは保持します。自動では再開しません。'}</p><label for="computeDemo-consent"><input id="computeDemo-consent" type="checkbox" required> 共有 LOCAL 全体への影響を確認しました</label><div class="toolbar"><button class="primary${pending.action==='wake'?'':' danger'}" type="submit">確認して${pending.action==='wake'?'起動':'休止'}</button><button type="button" data-compute-demo="cancel">戻る</button></div></form>`:''}
     <p id="computeDemo-message" role="status" tabindex="-1">${safe(admin?(c.message || '固定サンプル · 実基盤は操作しません。'):(c.message==='共有状態を更新しました。'?c.message:'共有状態の閲覧のみ。計測・設定・受付情報は管理者が確認します。'))}</p>
     ${admin && receipt?`<dl class="kv"><dt>元受付</dt><dd>${safe(receipt.id)}</dd><dt>操作と結果</dt><dd>${safe(computeDemoLabel(receipt.action))} · ${safe(computeDemoLabel(receipt.outcome))} · ${safe(bearDemoTime(receipt.at))}</dd></dl><button type="button" data-compute-demo="reconcile">この元受付を照合</button>`:''}</section>
@@ -4454,7 +4494,7 @@ main.addEventListener('submit', event=>{
         rememberSQLSelection();
         if (sqlBlockReason()) { updateSQLControls(); return; }
         const [start, end] = worksheet.selection, selected = start !== end;
-        const request = Object.freeze({ ...worksheet.context, id: `sample-${String(++sqlSequence).padStart(3, "0")}`, sql: selected ? worksheet.text.slice(start, end) : worksheet.text, editor: worksheet.text, start, end, selected, scenario: worksheet.scenario, submittedAt: new Date().toLocaleString("ja-JP") });
+        const request = Object.freeze({ ...worksheet.context, id: `sample-${String(++sqlSequence).padStart(3, "0")}`, sql: selected ? worksheet.text.slice(start, end) : worksheet.text, editor: worksheet.text, start, end, selected, scenario: worksheet.scenario, submittedAt: fmtJST(Date.now(), true) });
         const query = parseSampleSQL(request.sql);
         let error = !query ? "対応する単一のSELECT文を選び直してください。LIMITは1〜100です。" : "";
         if (query?.database && (query.database !== request.database.toLowerCase() || query.schema !== request.schema.toLowerCase())) error = "SQLのDB・スキーマ指定が選択先と異なります。SQLか実行先を合わせてください。";
@@ -4655,30 +4695,36 @@ main.addEventListener('submit', event=>{
       });
       const dialog = document.getElementById("command");
       const search = document.getElementById("command-search");
+      // Same order as the side navigation, then actions; tables and DBs appear once the user types.
       const destinations = [
-        ["取り込み・ステージ", "ingestion", "ページ"],
-        ["AI Bears", "bears", "ページ"],
-        ["コンピュート & ガバナンス", "compute", "ページ"],
-        ["データ変換", "transformation", "ページ"],
-        ["監査ログ", "audit", "ページ"],
         ["ホーム", "home", "ページ"],
         ["データ探索", "explore", "ページ"],
-        ["データベース管理", "databases", "ページ"],
         ["SQL ワークシート", "sql", "ページ"],
+        ["取り込み・ステージ", "ingestion", "ページ"],
+        ["データ変換", "transformation", "ページ"],
         ["ジョブ", "jobs", "ページ"],
-
+        ["AI Bears", "bears", "ページ"],
+        ["データベース管理", "databases", "ページ"],
+        ["監査ログ", "audit", "ページ"],
+        ["コンピュート & ガバナンス", "compute", "ページ"],
+        ["DBを作成", "databases/create", "操作"],
+        ["ファイルを取り込む", "ingestion", "操作"],
+        ["保存済みステージを開く", "ingestion/stages", "操作"],
+        ["コンピュートの状態を確認", "compute", "操作"],
       ];
       function commandResults() {
         const q = search.value.trim().toLowerCase();
-        const list = [...destinations,...demoCatalog.filter(t=>!t.unregistered).map(t=>[objectKey(t),"explore/"+objectKey(t),t.kind])].filter((d) =>
-          (d[0] + " " + d[2]).toLowerCase().includes(q),
-        );
+        const match = d => (d[0] + " " + d[2]).toLowerCase().includes(q);
+        const objects = q ? demoCatalog.filter(t => !t.unregistered && t.roles?.length && sqlUsableDatabase(t.database, ""))
+          .map(t => [objectKey(t), "explore/" + objectKey(t), t.kind]).filter(match) : [];
+        const dbs = q ? databases.filter(db => db.state !== "retired").map(db => [db.name, "databases/" + db.id, "データベース"]).filter(match) : [];
+        const list = [...destinations.filter(match), ...objects, ...dbs.slice(0, 20)];
         document.getElementById("command-list").innerHTML = list
           .map(
             (d) =>
               `<a href="#${safe(d[1])}"><span>${safe(d[0])}</span><span class="tiny muted">${safe(d[2])} →</span></a>`,
           )
-          .join("");
+          .join("") + (dbs.length > 20 ? `<p class="tiny muted">ほか ${dbs.length - 20} 件のデータベース。検索語を足して絞り込んでください。</p>` : "");
         document.getElementById("command-empty").hidden = list.length !== 0;
       }
       function openCommand() {
@@ -4696,6 +4742,16 @@ main.addEventListener('submit', event=>{
         .getElementById("close-command")
         .addEventListener("click", () => dialog.close());
       search.addEventListener("input", commandResults);
+      // Arrow keys move through results; Enter opens the focused (or first) result.
+      dialog.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        const links = [...document.querySelectorAll("#command-list a")];
+        if (!links.length) return;
+        e.preventDefault();
+        const i = links.indexOf(document.activeElement);
+        const next = e.key === "ArrowDown" ? (i < 0 ? 0 : Math.min(i + 1, links.length - 1)) : i <= 0 ? -1 : i - 1;
+        (next < 0 ? search : links[next]).focus();
+      });
       search.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
           const first = document.querySelector("#command-list a");
