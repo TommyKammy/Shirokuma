@@ -194,7 +194,7 @@ class OperatorTests(unittest.TestCase):
                 del operator.root_api  # Actual root OAuth and GET requests go through HTTP.
                 with store.connect() as db:
                     for name, value in self.bundle['manifest']['spec']['databases'].items():
-                        db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+                        db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                             (name, value['sql_catalog'], name, '', 'user', 'READY', 1))
                         dm.create_binding(db, name, **{k:v for k,v in value['binding'].items() if k != 'desired_revision'})
                         for schema in value['schemas']:
@@ -1876,7 +1876,7 @@ else:
                         SHIROKUMA_AUTH_MODE='shared', SHIROKUMA_AUTH_FILE=str(accounts)):
             with control_store.connect() as db:
                 for key, value in spec_value['databases'].items():
-                    db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+                    db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                                (key, value['sql_catalog'], key, '', 'user', 'READY', 1))
                     dm.create_binding(db, key, **{k: v for k, v in value['binding'].items() if k != 'desired_revision'})
                     for schema in value['schemas']:

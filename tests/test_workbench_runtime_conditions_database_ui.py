@@ -40,7 +40,7 @@ await start();const original=structuredClone(dbRuntime.status);
 for(const allowed of [true,false])for(const pending of [true,false])for(const local of [null,'ACCEPTED','RUNNING','UNKNOWN'])for(const shared of [null,'ACCEPTED','RUNNING','UNKNOWN'])for(const count of [0,1]){
  dbRuntime.status={...structuredClone(original),available_actions:allowed?original.available_actions:[],operation_phase:shared};dbRuntime.status.blockers.admissions=count;dbRuntime.pending=pending;dbRuntime.intent=null;dbRuntime.operation=local?{phase:local}:null;dbRuntime.dirty=true;dbRuntime.base=3;dbRuntime.conflict=false;$('runtime-minutes').value='20';dbRuntimeRender();
  const locked=pending||['ACCEPTED','RUNNING'].includes(local);
- for(const action of ['wake','chill','reconcile']){const disabled=!allowed||locked||action==='chill'&&count>0||['ACCEPTED','RUNNING'].includes(shared);for(const id of ['runtime-'+action,...(action==='reconcile'?[]:[action,'quick-'+action])])assert.equal($(id).disabled,disabled,id);}
+ for(const action of ['wake','chill','reconcile']){const disabled=!allowed||locked||action==='chill'&&count>0||['ACCEPTED','RUNNING'].includes(shared);for(const id of ['runtime-'+action,...(action==='reconcile'?[]:[action])])assert.equal($(id).disabled,disabled,id);}
  for(const id of ['runtime-save','runtime-minutes','runtime-reload'])assert.equal($(id).disabled,!allowed||locked,id);
  assert.equal($('runtime-receipt').disabled,true);assert.equal($('runtime-receipt').hidden,true);
 }
@@ -97,7 +97,7 @@ assert.equal(dbRuntimePhysicalLabel('starting'),'Transitioning');assert.equal(t(
 await start();const input=$('runtime-minutes');input.value='47';input.oninput();input.focus();dbRuntime.intent={action:'auto-chill',body:{minutes:47,expected_revision:3},key:'original-key'};
 const before=JSON.stringify(dbRuntime),draft=JSON.stringify(dbInput(dbCurrent())),beforeCalls=calls.length;
 for(const lang of ['ja','en','ja','en']){setLanguage(lang);const beforeWrites=writes.length;dbRuntimeRender();dbRuntimeRender();assert.equal(writes.length,beforeWrites);assert.equal(document.activeElement,input);assert.equal(input.value,'47');assert.equal(JSON.stringify(dbRuntime),before);}
-activate($('tab-compute'));activate($('tab-warehouse'));assert.equal(JSON.stringify(dbRuntime),before);assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal(calls.length,beforeCalls);assert.equal(posts().length,0);
+dbAISettings.autoOpened=true;activate($('tab-compute'));activate($('tab-warehouse'));assert.equal(JSON.stringify(dbRuntime),before);assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal(calls.length,beforeCalls);assert.equal(posts().length,0);
 """)
 
     def test_original_unknown_explanation_does_not_retarget_or_replay(self):
@@ -110,7 +110,7 @@ assert.match($('runtime-condition-receipt').textContent,/may POST/);actionRoute=
     def test_bilingual_existing_sections_descriptions_and_impact_preserved(self):
         self.javascript(r"""
 await start();const input=$('runtime-minutes');
-for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('runtime-panel').parentElement,$('compute'));for(const [action,section] of [['wake','controls'],['reconcile','controls'],['receipt','controls'],['chill','safety'],['save','policy'],['reload','policy']]){const condition=$('runtime-condition-'+action);assert.equal(condition.parentElement,$('runtime-'+section+'-section'));const ids=$('runtime-'+action).getAttribute('aria-describedby').split(' ');assert.equal(new Set(ids).size,ids.length);assert.ok(ids.includes(condition.id));}assert.match($('runtime-condition-wake').textContent,lang==='ja'?/この観測では選択できます。操作時に再確認します。/:/Selectable/);assert.ok($('runtime-conditions-scope').textContent.includes(t('Refresh status')));assert.match($('quick-wake').title,lang==='ja'?/全 DB/:/all databases/);}
+for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('runtime-panel').parentElement,$('compute'));for(const [action,section] of [['wake','controls'],['reconcile','controls'],['receipt','controls'],['chill','safety'],['save','policy'],['reload','policy']]){const condition=$('runtime-condition-'+action);assert.equal(condition.parentElement,$('runtime-conditions'));const ids=$('runtime-'+action).getAttribute('aria-describedby').split(' ');assert.equal(new Set(ids).size,ids.length);assert.ok(ids.includes(condition.id));}assert.match($('runtime-condition-wake').textContent,lang==='ja'?/この観測では選択できます。操作時に再確認します。/:/Selectable/);assert.ok($('runtime-conditions-scope').textContent.includes(t('Refresh status')));assert.match($('runtime-wake').title,lang==='ja'?/全 DB/:/all databases/);}
 for(const id of ['runtime-minutes-help','runtime-policy','runtime-draft'])assert.ok(input.getAttribute('aria-describedby').split(' ').includes(id));assert.equal(posts().length,0);
 """)
 

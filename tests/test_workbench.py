@@ -1081,7 +1081,7 @@ eval(HANDLERS+`
 const assert=require('node:assert/strict');
 const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,options:[]};
 const document={documentElement:{dataset:{}}};let selectedTable=null;
-$('ai-settings').open=true;$('ai-settings').close=()=>{$('ai-settings').open=false;};
+$('ai-settings').hidden=true;
 $('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>({value}));
 $('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
 $('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
@@ -1092,6 +1092,8 @@ let catalogGeneration=0;function catalogMutation(){return false;}function catalo
 function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
 function invalidateStatus(){}
 function loadCatalog(){}
+function workbenchRenderAlerts(){}
+function workbenchSyncMobileNav(){}
 eval(HANDLERS+`
 (async()=>{
  await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
@@ -1099,7 +1101,7 @@ eval(HANDLERS+`
  assert.equal(document.documentElement.dataset.role,'bi_viewer');assert.equal(synced.at(-1),'generate','form follows the corrected action');
  assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
  assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
- assert.equal($('ai-settings').open,false);
+ assert.equal($('ai-settings').hidden,true);
  for(const id of ['run-dbt-build','drop-table-btn','run-ingest','ai-settings-button'])assert.equal($(id).disabled,true);
  await api('/api/warehouse/query',{sql:'SELECT 1'});
  assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'bi_viewer');
@@ -1306,7 +1308,7 @@ for(const [action,fields] of Object.entries(expected))assert.deepEqual(dataBearP
 assert.equal(typeof dataBearPayload('rollback',values).snapshot_id,'string');
 assert.deepEqual(dataBearPayload('refresh',{...values,sql:'  '}),{bear:'data',action:'refresh',refresh:'ref_t'},'empty SQL uses the saved SQL');
 for(const [action,bad,message] of [['generate',{},/description|SQL/],['stage',{request:'x'},/table name/],['publish',{stage_table:'x'},/table name/],
- ['rollback',{rollback:'marts.t',snapshot_id:'12a'},/digits only/],['rollback',{rollback:'marts.t',snapshot_id:'1e3'},/digits only/],['other',values,/WAP action/]])
+ ['rollback',{rollback:'marts.t',snapshot_id:'12a'},/digits only/],['rollback',{rollback:'marts.t',snapshot_id:'1e3'},/digits only/],['other',values,/Transformation action/]])
  assert.throws(()=>dataBearPayload(action,bad),message,action);
 // Visible inputs follow the action; hidden ones are disabled and keep their drafts.
 for(const key of Object.keys(values))$('bear-data-'+key).value=values[key];
@@ -1315,7 +1317,7 @@ for(const [action,spec] of Object.entries(dataBearActions)){
  $('bear-data-action').value=action;updateDataBearForm();
  assert.deepEqual(visible(),Object.keys(values).filter(key=>spec.fields.includes(key)),action);
  for(const key of Object.keys(values))assert.equal($('bear-data-'+key).disabled,!spec.fields.includes(key),key);
- assert.equal($('bear-data-run').text,spec.button);assert.equal($('bear-data-help').text,spec.help);
+ assert.equal($('bear-data-run').text,spec.button);assert.equal($('bear-data-help').text,t(spec.help));
  if(spec.target)assert.equal($('bear-data-'+spec.target).required,true);assert.equal($('bear-data-request').required,false);
 }
 assert.equal($('bear-data-publish').value,'pub_t','drafts survive action changes');
@@ -1377,8 +1379,10 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
     def test_ai_settings_form_and_translations(self):
         doc = self.workbench_document()
         dialog = doc.by_id('ai-settings')
-        self.assertEqual(dialog['tag'], 'dialog')
+        self.assertEqual(dialog['tag'], 'section')
         self.assertEqual(dialog['aria-labelledby'], 'ai-settings-title')
+        self.assertIn('hidden', dialog)
+        self.assertTrue(any(n.get('id') == 'compute' for n in dialog['ancestors']))
         for identifier in ('ai-provider', 'ai-model', 'ai-url', 'ai-key', 'ai-timeout'):
             self.assertIn(dialog, doc.by_id(identifier)['ancestors'])
             self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
@@ -1403,8 +1407,8 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
         harness = r"""
 const assert=require('node:assert/strict');
 new Function(SCRIPT);
-const nodes={};const $=id=>nodes[id]??=( {value:'',disabled:false,
- addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},reportValidity(){return true;}} );
+const nodes={};const $=id=>nodes[id]??=( {value:'',disabled:false,hidden:false,
+ addEventListener(){},focus(){},scrollIntoView(){},reportValidity(){return true;}} );
 const ui=(node,key,values)=>{node.label=key;node.values=values;};
 const busy=async(button,task)=>{await task();};
 const calls=[];
@@ -1416,7 +1420,7 @@ const api=async(path,body)=>{calls.push([path,body]);
 eval('function aiStatus('+HANDLERS);
 (async()=>{
  await $('ai-settings-button').onclick();
- assert.equal($('ai-settings').open,true);assert.equal($('ai-model').value,'test-model');
+ assert.equal($('ai-settings').hidden,false);assert.equal($('ai-model').value,'test-model');
  assert.equal($('ai-key').value,'');
  await $('ai-test').onclick();
  assert.equal($('ai-config-status').label,'Connected {latency}ms');
@@ -1433,7 +1437,7 @@ eval('function aiStatus('+HANDLERS);
  await $('ai-settings-form').onsubmit({preventDefault(){}});
  assert.equal(calls.at(-1)[0],'/api/ai/config');assert.equal(calls.at(-1)[1].api_key,'new-key');
  assert.equal($('ai-key').value,'');assert.equal($('ai-config-status').label,'Settings saved');
- $('ai-close').onclick();assert.equal($('ai-settings').open,false);
+ $('ai-close').onclick();assert.equal($('ai-settings').hidden,true);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
         harness = 'const SCRIPT=' + json.dumps(script) + ';const HANDLERS=' + json.dumps(handlers) + ';' + harness
@@ -1446,7 +1450,6 @@ eval('function aiStatus('+HANDLERS);
             'warehouse': 'query-schema result-view-table result-view-chart chart-type chart-x-col chart-y-col query-chart',
             'catalog': 'clone-table-btn export-table-format export-table-btn',
             'compute': 'auto-chill-minutes save-auto-chill auto-chill-state',
-            'pawprints': 'refresh-history runtime-queries-results load-history-results',
         }
         for section, identifiers in controls.items():
             for identifier in identifiers.split():
@@ -1466,7 +1469,7 @@ eval('function aiStatus('+HANDLERS);
         for identifier, text in {
             'result-view-table': 'Table View', 'result-view-chart': 'Chart View',
             'clone-table-btn': 'Clone to Sandbox', 'export-table-btn': 'Export Table',
-            'save-auto-chill': 'Apply Auto-Chill', 'refresh-history': 'Refresh History',
+            'save-auto-chill': 'Apply Auto-Chill',
             'auto-chill-state': 'Auto-Chill: Off',
         }.items():
             self.assertEqual(doc.by_id(identifier)['text'], text)
@@ -1488,11 +1491,10 @@ eval('function aiStatus('+HANDLERS);
         labels = '''Schema|Table View|Chart View|Chart type|Bar Chart|Line Chart|X column|Y column|
             Clone to Sandbox|Clone Snapshot|Export format|Export Table|Auto-Chill (idle minutes)|
             Off|5m|15m|30m|60m|Apply Auto-Chill|Auto-Chill: Off|Auto-Chill: {minutes}m|
-            Query & Load History|Refresh History|Trino Query History|Copy & Data Load History|
-            Query ID|User|Source|SQL|Target|Result chart|
+            Result chart|
             Choose a numeric Y column to chart visible rows.|Clone audit needs review|
             Cloned {source} to {table}.|Clone failed: {error}|Exported {table} ({row_count} / {total_rows} rows) to {filename}.|
-            Export failed: {error}|Auto-Chill failed: {error}|History failed: {error}'''
+            Export failed: {error}|Auto-Chill failed: {error}'''
         for label in labels.split('|'):
             with self.subTest(label=label.strip()):
                 self.assertRegex(translations[label.strip()], r'[ぁ-んァ-ヶ一-龯]')
@@ -1677,14 +1679,11 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             "if(data.auto_chill)updateAutoChill(data.auto_chill)",
             "document.activeElement!==select",
             "api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})",
-            "api('/api/history?mode=runtime')", "$('refresh-history').onclick",
-            "if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}",
-            "actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex]))",
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, script)
         for action in ('lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop', 'bear.data_engineer'):
-            self.assertIn("'" + action + "'", script)
+            self.assertNotIn("'" + action + "'", script)
 
     def test_query_session_schema_and_legacy_default(self):
         with patch.object(wb.warehouse_resident, 'query', return_value={'rows': []}) as query:
@@ -1796,18 +1795,20 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         self.assertNotIn('role', navigation)
         headings = [n['text'] for n in doc.nodes
                     if n['tag'] == 'h2' and navigation in n['ancestors']]
-        self.assertEqual(headings, ['Work with Data', 'Manage & Monitor'])
+        self.assertEqual(headings, ['Work with data', 'Administration', 'Workspace'])
         expected = [
+            ('home', 'Home'),
             ('catalog', 'Data Explorer'),
             ('warehouse', 'SQL Worksheets'),
             ('ingestion', 'Ingestion & Stages'),
             ('transformation', 'Transformation'),
             ('jobs', 'Jobs'),
             ('bears', 'AI Bears'),
-            ('db-admin', 'DB management'),
-            ('pawprints', 'Audit Log'),
+            ('db-admin', 'Database Management'),
+            ('pawprints', 'Audit log'),
             ('compute', 'Compute & Governance'),
         ]
+        routes = {'catalog': 'explore', 'warehouse': 'sql', 'db-admin': 'databases', 'pawprints': 'audit'}
         links = [n for n in doc.nodes if 'data-tab' in n]
         self.assertEqual([(n['data-tab'], n['text']) for n in links], expected)
         self.assertTrue(all(n['tag'] == 'a' for n in links))
@@ -1815,25 +1816,33 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             with self.subTest(tab=name):
                 link = doc.by_id('tab-' + name)
                 section = doc.by_id(name)
-                self.assertEqual(link['href'], '#' + name)
+                self.assertEqual(link['href'], '#' + routes.get(name, name))
                 self.assertEqual(link['aria-controls'], name)
                 self.assertNotIn('role', link)
                 self.assertNotIn('aria-selected', link)
                 self.assertEqual(section['tag'], 'section')
                 self.assertNotIn('role', section)
-                self.assertEqual('hidden' in section, name != 'warehouse')
+                self.assertEqual('hidden' in section, name != 'home')
         current = [n for n in links if n.get('aria-current') == 'page']
-        self.assertEqual([n['id'] for n in current], ['tab-warehouse'])
+        self.assertEqual([n['id'] for n in current], ['tab-home'])
         self.assertIn('hidden', doc.by_id('tab-db-admin'))
-        legacy = doc.by_id('legacy-header-warehouse')
-        self.assertNotIn('hidden', legacy)
-        self.assertTrue(any(n['tag'] == 'header' for n in legacy['ancestors']))
-        for identifier in ('quick-warehouse-state', 'quick-wake', 'quick-chill'):
-            self.assertIn(legacy, doc.by_id(identifier)['ancestors'])
+        identifiers = {n.get('id') for n in doc.nodes}
+        for identifier in ('legacy-header-warehouse', 'quick-warehouse-state', 'quick-wake', 'quick-chill', 'quick-status-error'):
+            self.assertNotIn(identifier, identifiers)
         entry = doc.by_id('database-compute-status')
         self.assertEqual(entry['tag'], 'button')
         self.assertEqual(entry['aria-controls'], 'compute')
-        self.assertIn('hidden', entry)
+        self.assertNotIn('hidden', entry)
+        self.assertTrue(any(n['tag'] == 'header' for n in entry['ancestors']))
+        self.assertIn('database-compute-state', identifiers)
+        for identifier in ('workbench-alerts-button', 'workbench-command-button', 'workbench-open-sql', 'user-menu'):
+            self.assertTrue(any(n.get('id') == 'workbench-header' for n in doc.by_id(identifier)['ancestors']), identifier)
+        open_sql = doc.by_id('workbench-open-sql')
+        self.assertEqual(open_sql['tag'], 'a')
+        self.assertEqual(open_sql['text'], 'Open SQL')
+        self.assertIn('primary', open_sql['class'].split())
+        self.assertEqual(open_sql['href'], '#sql')
+        self.assertFalse(any('nav-note' in (n.get('class') or '').split() for n in doc.nodes))
 
     def test_workbench_controls_belong_to_their_workspaces(self):
         doc = self.workbench_document()
@@ -1841,19 +1850,18 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             'warehouse': '''warehouse-state replicas chill wake refresh-status components status-error
                 sql query-warehouse query-mode max-rows run-query query-meta query-error query-results
                 worksheet-explorer worksheet-tree-filter worksheet-tabs add-worksheet-tab query-history
-                copilot-request copilot-generate copilot-explain copilot-stage-table copilot-stage
-                copilot-publish result-filter export-csv export-json copy-tsv''',
+                copilot-request copilot-generate copilot-explain open-transformation
+                result-filter export-csv export-json copy-tsv''',
             'ingestion': '''ingest-form ingest-file ingest-table ingest-mode ingest-key run-ingest
                 ingest-state ingest-error ingest-result ingest-upload-input ingest-dropzone
                 preview-ingest ingest-preview''',
             'transformation': '''refresh-models run-dbt-build run-dbt-test dbt-models wap-models
-                model-lineage model-sql-preview open-model-sql refresh-wap-model''',
+                model-lineage model-sql-preview open-model-sql refresh-wap-model copilot-stage-table
+                copilot-stage copilot-publish''',
             'catalog': '''refresh-catalog catalog-error catalog-tree catalog-filter table-title
-                table-columns lineage open-table-sql drop-table-btn table-preview table-ddl
+                table-columns open-table-sql drop-table-btn table-preview table-ddl
                 table-snapshots snapshot-preview table-lineage''',
             'bears': 'bear-cards',
-            'pawprints': '''refresh-pawprints pawprint-meta pawprint-error pawprint-results
-                pawprint-filter pawprint-status-filter''',
             'compute': 'compute-warehouse compute-components compute-sre-check compute-policy-check',
         }
         for section, identifiers in controls.items():
@@ -1913,16 +1921,16 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         self.assertEqual(result.returncode, 0, result.stderr)
         translations = json.loads(result.stdout)
         expected = {
-            'Work with Data': 'データを扱う', 'Catalog': 'カタログ',
-            'Manage & Monitor': '監視・管理',
+            'Catalog': 'カタログ',
             'SQL Worksheets': 'SQL ワークシート',
             'Ingestion & Stages': '取り込み・ステージ',
             'Transformation': 'データ変換',
-            'AI Bears': 'AI Bears（専門AI）',
+            'AI Bears': 'AI Bears',
             'Data Explorer': 'データ探索',
-            'DB management': 'DB 管理',
+            'Database Management': 'データベース管理',
+            'Work with data': 'データを扱う', 'Administration': '運用管理', 'Workspace': 'ワークスペース',
+            'Open SQL': 'SQL を開く',
             'Audit Log': '監査ログ',
-            'AgentHouse Pawprints': 'AgentHouse 監査ログ (Pawprints)',
             'Compute & Governance': 'コンピュート & ガバナンス',
             'Columns': 'カラム定義', 'Data Preview': 'データプレビュー',
             'Profile & NULL Stats': 'プロファイル & NULL統計', 'DDL': 'DDL 定義',
@@ -1933,10 +1941,12 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             with self.subTest(translation=english):
                 self.assertEqual(translations[english], japanese)
         # Every section's title and description, plus all specialist copy, is covered.
+        # Product and specialist names stay in Latin script; every other title and description is Japanese.
         for node in doc.nodes:
             if node.get('class') == 'page-title':
                 for child in doc.nodes:
-                    if node in child['ancestors'] and child['tag'] in {'h1', 'p'}:
+                    if (node in child['ancestors'] and child['tag'] in {'h1', 'p'}
+                            and child['text'].strip() and child['text'] != 'AI Bears'):
                         self.assertRegex(translations[child['text']], r'[ぁ-んァ-ヶ一-龯]')
         for title, description in re.findall(r"name:'([^']+)',description:'([^']+)'", script):
             self.assertIn(title, translations)
@@ -2098,7 +2108,7 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                 self.assertEqual(status, 200)
                 self.assertIn("text/html", headers["Content-Type"])
                 self.assertIn(b"SQL Worksheets", body)
-                self.assertIn(b"AgentHouse Pawprints", body)
+                self.assertIn(b"Audit log is available in Database mode.", body)
 
     def test_chart_static_asset(self):
         for name, mime in (('result_chart.js', 'application/javascript; charset=utf-8'),

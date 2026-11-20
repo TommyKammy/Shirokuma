@@ -30,10 +30,8 @@ class BearsDatabaseUI(unittest.TestCase):
 
     def markup_javascript(self, body):
         # Seed the existing paragraphs from production source, with the Doctor field layout.
-        lead = re.search(r'<h1>AI Bears</h1><p id="bears-lead">(.*?)</p>', harness.HTML)[1]
         intro = re.search(r"key:'query',name:'Query Doctor Bear',description:'([^']+)'", harness.SCRIPT)[1]
-        fixture = 'const legacyLead=' + json.dumps(lead) + ', legacyIntro=' + json.dumps(intro) + r'''
-const lead=document.createElement('p');lead.id='bears-lead';ui(lead,legacyLead);$('bears').append(lead);
+        fixture = 'const legacyIntro=' + json.dumps(intro) + r'''
 const intro=document.createElement('p');ui(intro,legacyIntro);
 const content=document.createElement('div'),field=document.createElement('div'),label=document.createElement('label');
 field.className='bear-field';field.append(label,$('bear-query-sql'));content.append(intro,field);$('bear-panel-query').append(content);
@@ -270,20 +268,16 @@ route=async()=>wrap(completed);await $('explanation-copilot-recover').onclick();
 wait.resolve(reply);await pending;assert.equal($('bear-query-sql').value,draft);assert.equal(dbSource.origin,null);assert.equal(dbExplanation.record.id,completed.id);assert.equal(posts().length,1);
 ''')
 
-    def test_database_lead_instruction_and_single_metadata_helper_preserve_legacy_copy(self):
+    def test_database_instruction_and_single_metadata_helper_preserve_legacy_copy(self):
         self.markup_javascript(r'''
-assert.equal(lead.textContent,'Run the five resident specialists. Inspect their findings, recommendations, and telemetry.');
+assert.equal(nodes['bears-lead'],undefined);
 assert.equal(intro.textContent,'Explain SQL or inspect a recent query for performance advice.');
 assert.equal(dbExplanation.installed,false);
-setLanguage('ja');assert.match(lead.textContent,/5 体の常駐スペシャリスト/);
+setLanguage('ja');assert.match(intro.textContent,/性能改善/);
 setLanguage('en');await boot();const notice=$('database-bears-notice');
 for(const locale of ['en','ja']){
  setLanguage(locale);
- assert.equal(lead.textContent,t(dbExplanationLead));
- assert.equal($('bears').querySelector('p'),lead);
- assert.equal(notice.parentElement.tagName,'DETAILS');
  assert.equal(intro.textContent,t(dbExplanationInstruction));
- assert.match(lead.textContent,/Query Doctor/);
  for(const kind of ['sre','policy']){assert.equal($('bear-tab-'+kind).disabled,false);assert.equal($('bear-'+kind+'-run').disabled,true);assert.equal($('bear-'+kind+'-run').hidden,true);}
  const helpers=$('bear-panel-query').descendants().filter(n=>n.textContent===t(dbExplanationHelp));assert.equal(helpers.length,1);
  assert.ok(helpers[0].textContent.includes(locale==='en'?'SQL is not executed.':'SQL は実行しません。'));
@@ -353,7 +347,7 @@ for(const [state,en,ja] of [['SUCCEEDED','Completed','完了'],['RUNNING','Runni
 ''')
 
     def test_database_defaults_to_doctor_and_hides_legacy_target(self):
-        tab_handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
+        tab_handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
         self.javascript(r'''
 const bearList=new Node();bearList.setAttribute('aria-orientation','vertical');
 for(const bear of ['sre','query','data','catalog','policy']){
@@ -727,7 +721,7 @@ for(const id of ['copilot-result','explanation-doctor-output']){
 }
 assert.equal($('copilot-explain').textContent,'新しい説明を要求');setLanguage('en');assert.equal($('copilot-explain').textContent,'Request new explanation');
 assert.match(visibleText($('copilot-result')),/<script>attack/);
-for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button'])assert.equal($(id).disabled,true,id);
+for(const id of ['copilot-generate','copilot-stage','copilot-publish'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 ''')
 
     def test_malformed_wrong_context_or_input_reply_is_not_displayed(self):
@@ -845,7 +839,7 @@ for(const change of [()=>{dbPrincipal='other-owner';},()=>{dbPrincipal=JSON.stri
 await boot();const before=calls.length;
 for(const body of [{bear:'query',target:'latest'},{bear:'query',target:'query-id'},{bear:'sre'},{bear:'data',action:'generate'},{bear:'data',action:'publish'},{bear:'catalog'},{bear:'policy'}])await assert.rejects(api('/api/bears/run',body));
 assert.equal(calls.length,before);
-for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','wake','chill'])assert.equal($(id).disabled,true,id);
+for(const id of ['copilot-generate','copilot-stage','copilot-publish','wake','chill'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 assert.match($('database-bears-notice').textContent,/Legacy direct Bear and Copilot execution is unavailable/);
 setLanguage('ja');assert.match($('database-bears-notice').textContent,/旧 Bear と Copilot の直接実行は利用できません/);
 ''')

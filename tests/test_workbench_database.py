@@ -251,6 +251,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
     def test_inventory_routes_and_query_pages(self):
         routes = [('/api/v1/databases', 'list_databases'), ('/api/v1/databases/d/schemas', 'list_schemas'),
                   ('/api/v1/schemas/s/objects?kind=TABLE&q=a&limit=2', 'list_objects'),
+                  ('/api/v1/objects/search?q=a&limit=2', 'search_objects'),
                   ('/api/v1/objects/resolve?database_id=d&schema_id=s&name=a', 'resolve_object'),
                   ('/api/v1/objects/o?detail=columns', 'object_detail')]
         for path, function in routes:

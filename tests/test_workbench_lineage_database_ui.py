@@ -39,7 +39,7 @@ SETUP = DATAOPS_SETUP + 'const catalogMarkup=' + json.dumps(catalog_markup.root)
 // Mount the original markup before initializeDatabaseUI moves its Inspector.
 function mountCatalog(spec){
  const attrs=spec.attrs;
- const node=attrs['data-inspect']?inspectorTabs.find(b=>b.dataset.inspect===attrs['data-inspect']):attrs.id?$(attrs.id):document.createElement(spec.tag);
+ const node=attrs['data-inspect']?(inspectorTabs.find(b=>b.dataset.inspect===attrs['data-inspect'])||document.createElement('button')):attrs.id?$(attrs.id):document.createElement(spec.tag);
  node.tagName=spec.tag.toUpperCase();
  for(const [key,value] of Object.entries(attrs)){
   if(key==='class')node.className=value;

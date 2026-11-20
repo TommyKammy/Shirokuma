@@ -170,7 +170,7 @@ class LogicalFixture(CreationFixture):
         logical.register_foundation()
 
     def logical_create(self, name='research', key='create', grants=None):
-        payload = dict(sql_catalog=name)
+        payload = dict(sql_catalog=name, team='Data Team')
         if grants is not None:
             payload['initial_grants'] = grants
         return logical.create(self.alice, 'admin', payload, key)

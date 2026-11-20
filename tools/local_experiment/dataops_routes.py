@@ -277,7 +277,7 @@ def _dispatch(handler, method, path, params, principal, role):
         if 'key_columns' in options and not isinstance(options['key_columns'], list):
             raise ValueError('key_columns array required')
         if path.endswith('/preview'):
-            envelope['preview'] = manual_ingest.input_preview(context, **options)
+            envelope['preview'] = manual_ingest.input_preview(context, principal=principal, **options)
         else:
             key = _key(handler)
             if 'expected_preview_fingerprint' in body:

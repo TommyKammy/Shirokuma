@@ -107,7 +107,7 @@ const body=deferred(),entered=deferred();route=async()=>({telemetryResponse:{ok:
 
     def test_refresh_authority_is_manual_independent_and_late_denial_ignored(self):
         self.navigation_javascript(r"""
-await telemetryBoot();$('tab-compute').click();await telemetryFetch('sre');const held=dbTelemetryReadiness.sre.record;
+await telemetryBoot();dbAISettings.autoOpened=true;$('tab-compute').click();await telemetryFetch('sre');const held=dbTelemetryReadiness.sre.record;
 const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbTelemetryReadinessRefreshAuth('sre');await tick();const busy=dbTelemetryReadiness.sre.busy;await telemetryFetch('compute');assert.equal(dbTelemetryReadiness.sre.busy,busy);assert.equal(dbTelemetryReadiness.sre.record,held);
 $('tab-warehouse').click();$('tab-compute').click();const saved=dbTelemetryReadiness.compute.record;wait.resolve({telemetryResponse:{ok:false,status:403,json:async()=>{throw Error('late');}}});await pending;assert.equal(dbTelemetryReadiness.compute.record,saved);assert.equal(dbAdmin.platform,true);
 for(const status of [401,403]){dbAdminSession(session);let parsed=0;sessionRoute=async()=>({telemetryResponse:{ok:false,status,json:async()=>{parsed++;throw Error('must not parse');}}});await dbTelemetryReadinessRefreshAuth('compute');assert.equal(parsed,0);telemetryEmpty();}

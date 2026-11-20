@@ -45,7 +45,7 @@ URL_SETUP = r"""
 for(const [id,attrs] of Object.entries(BOOT_MARKUP)){
  for(const [key,value] of Object.entries(attrs))$(id).setAttribute(key,value===null?true:value);
 }
-$('tab-warehouse').setAttribute('aria-current','page');
+$('tab-home').setAttribute('aria-current','page');
 const shell=()=>SHELL_IDS.map($);
 const loading=()=>{
  assert.ok(shell().every(node=>node.hasAttribute('inert')));
@@ -95,21 +95,26 @@ class NavigationUI(unittest.TestCase):
         self.assertEqual(nav['tag'], 'nav')
         self.assertEqual(nav['attrs']['aria-label'], 'Workbench sections')
         self.assertNotIn('role', nav['attrs'])
-        for key in ['tab-warehouse', 'quick-wake', 'quick-chill', 'role-selector', 'ai-settings-button', 'warehouse', 'jobs', 'catalog']:
+        for key in ['tab-warehouse', 'database-compute-status', 'role-selector', 'ai-settings-button', 'workbench-command-button', 'warehouse', 'jobs', 'catalog']:
             self.assertTrue(any(parent['attrs'].get('id') in SHELL_IDS for parent in MARKUP.ids[key]['parents']), key)
+        for key in ['quick-wake', 'quick-chill', 'quick-warehouse-state', 'quick-status-error', 'legacy-header-warehouse']:
+            self.assertNotIn(key, MARKUP.ids)
         links = [node for node in MARKUP.elements if 'data-tab' in node['attrs']]
-        self.assertEqual(len(links), 9)
+        self.assertEqual(len(links), 10)
         self.assertTrue(all(node['tag'] == 'a' for node in links))
-        self.assertTrue(all(node['attrs'].get('href') == '#' + node['attrs']['data-tab'] for node in links))
+        routes = {'catalog': 'explore', 'warehouse': 'sql', 'db-admin': 'databases', 'pawprints': 'audit'}
+        self.assertTrue(all(node['attrs'].get('href') == '#' + routes.get(node['attrs']['data-tab'], node['attrs']['data-tab']) for node in links))
+        self.assertFalse(any('nav-note' in (node['attrs'].get('class') or '').split() for node in MARKUP.elements))
         current = [node for node in links if node['attrs'].get('aria-current') == 'page']
-        self.assertEqual([node['attrs']['id'] for node in current], ['tab-warehouse'])
+        self.assertEqual([node['attrs']['id'] for node in current], ['tab-home'])
         for node in links:
             self.assertNotIn('aria-selected', node['attrs'])
             self.assertNotIn('tabindex', node['attrs'])
             section = MARKUP.ids[node['attrs']['data-tab']]
             self.assertEqual(section['tag'], 'section')
             self.assertNotIn('role', section['attrs'])
-            self.assertNotIn('aria-labelledby', section['attrs'])
+            if node['attrs']['data-tab'] != 'home':
+                self.assertNotIn('aria-labelledby', section['attrs'])
         boot = MARKUP.ids['workbench-boot']
         self.assertNotIn('hidden', boot['attrs'])
         self.assertFalse(any('inert' in parent['attrs'] for parent in boot['parents']))
@@ -120,7 +125,7 @@ class NavigationUI(unittest.TestCase):
         self.assertIn('hidden', retry['attrs'])
 
     def test_held_production_reads_release_only_requested_shell(self):
-        for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('warehouse', 'warehouse'), ('db-admin', 'warehouse')]:
+        for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('warehouse', 'warehouse'), ('db-admin', 'home')]:
             with self.subTest(page=page):
                 self.run_url('http://local/#' + page, r"""
 loading();storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
@@ -128,7 +133,7 @@ const sessionGate=deferred(),inventoryGate=deferred(),runtimeGate=deferred();
 sessionRoute=()=>sessionGate.promise;inventoryRoute=()=>inventoryGate.promise;
 route=path=>path.includes('/runtime')?runtimeGate.promise:{};
 const pending=startWorkbench();await tick();loading();
-assert.equal(selected(),'warehouse');assert.deepEqual(calls.map(c=>c.path),['/api/session']);
+assert.equal(selected(),'home');assert.deepEqual(calls.map(c=>c.path),['/api/session']);
 assert.equal(dbAdmin.installed,false);assert.deepEqual(released,[]);
 sessionGate.resolve(session);await pending;await tick();
 assert.equal(selected(),FINAL);assert.deepEqual(released,[FINAL,FINAL,FINAL]);
@@ -166,6 +171,7 @@ const worksheet=activate($('tab-warehouse'));await tick();
 assert.equal(selected(),'warehouse');assert.equal($('run-query').disabled,true);
 assert.equal($('database-worksheet-pane').getAttribute('aria-busy'),'true');
 assert.equal(dbWorkspaceHydrations.has('details'),false);
+workbenchSetComputeStatus('available','tone-ok');
 schemaGate.resolve({items:schemas});await worksheet;
 assert.equal($('run-query').disabled,false);assert.equal(dbReason(dbCurrent()),'');
 assert.equal(calls.some(c=>c.path.includes('/objects?')),false);
@@ -289,19 +295,20 @@ assert.equal($('workbench-boot').hidden,true);assert.deepEqual(released,['jobs',
 """.replace('EARLY', json.dumps(early)).replace('LANG', json.dumps(lang)))
 
     def test_all_pages_roundtrip_in_a_fresh_boot(self):
-        labels = {'warehouse': 'SQL Worksheets', 'catalog': 'Data Explorer', 'jobs': 'Database Jobs',
+        labels = {'warehouse': 'SQL Worksheets', 'catalog': 'Data Explorer', 'jobs': 'Jobs',
                   'ingestion': 'Ingestion & Stages', 'transformation': 'Transformation',
-                  'bears': 'AI Bears', 'db-admin': 'DB management', 'pawprints': 'Audit Log',
+                  'bears': 'AI Bears', 'db-admin': 'Database Management', 'pawprints': 'Audit log',
                   'compute': 'Compute & Governance'}
+        routes = {'warehouse': 'sql', 'catalog': 'explore', 'db-admin': 'databases', 'pawprints': 'audit'}
         for page in ['warehouse', 'catalog', 'jobs', 'ingestion', 'transformation',
                      'bears', 'db-admin', 'pawprints', 'compute']:
             with self.subTest(page=page):
-                url = self.run_url('http://local/workbench?keep=query#warehouse?keep=fragment',
+                url = self.run_url('http://local/workbench?keep=query#sql?keep=fragment',
                     "session.platform_admin=true;await boot();await activate($('tab-" + page + "'));"
                     "assert.equal(document.title," + json.dumps(labels[page] + ' · Shirokuma Workbench') + ");"
                     "setLanguage('ja');assert.equal(document.title,t(" + json.dumps(labels[page]) + ")+' · Shirokuma Workbench');"
                     "noPosts();console.log(location.href);").strip()
-                self.assertIn('#' + page + '?keep=fragment', url)
+                self.assertIn('#' + routes.get(page, page) + '?keep=fragment', url)
                 self.run_url(url, "session.platform_admin=true;await boot();"
                     "assert.equal(selected()," + json.dumps(page) + ");"
                     "assert.equal(new URL(location.href).searchParams.get('keep'),'query');noPosts();")
@@ -310,35 +317,37 @@ assert.equal($('workbench-boot').hidden,true);assert.deepEqual(released,['jobs',
         self.run_url('http://local/#jobs', r"""
 await boot();
 const h1s=id=>$(id).descendants().filter(node=>node.tagName==='H1');
-assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),['Database Jobs']);
+assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),['Jobs']);
 const headingLevels=$('db-jobs-panel').descendants().filter(node=>/^H[1-6]$/.test(node.tagName)).map(node=>Number(node.tagName.slice(1)));
 assert.deepEqual(headingLevels.slice(0,2),[1,2]);for(let i=1;i<headingLevels.length;i++)assert.ok(headingLevels[i]<=headingLevels[i-1]+1);
-assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),['Audit Log']);
-assert.equal(document.title,'Database Jobs · Shirokuma Workbench');
+assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),['Audit log']);
+assert.equal(document.title,'Jobs · Shirokuma Workbench');
 await activate($('tab-pawprints'));
-assert.equal(document.title,'Audit Log · Shirokuma Workbench');
+assert.equal(document.title,'Audit log · Shirokuma Workbench');
 setLanguage('ja');
-assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),[t('Database Jobs')]);
-assert.notEqual(t('Database Jobs'),'Database Jobs');
-assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),[t('Audit Log')]);
-assert.equal(document.title,t('Audit Log')+' · Shirokuma Workbench');
+assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),[t('Jobs')]);
+assert.notEqual(t('Jobs'),'Jobs');
+assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),[t('Audit log')]);
+assert.equal(document.title,t('Audit log')+' · Shirokuma Workbench');
 await activate($('tab-jobs'));
-assert.equal(document.title,t('Database Jobs')+' · Shirokuma Workbench');
+assert.equal(document.title,t('Jobs')+' · Shirokuma Workbench');
 noPosts();
 """)
 
     def test_normal_links_push_history_and_back_forward_restores_page(self):
-        self.run_url('http://local/#warehouse', r"""
+        self.run_url('http://local/#sql', r"""
 const entries=[];
 globalThis.history.pushState=(_state,_title,url)=>{location.href=String(url);entries.push(location.href);};
 await boot();workbenchShellReady=true;workbenchSession=session;workbenchHistoryHref=location.href;
 $('tab-catalog').click();
-assert.equal(selected(),'catalog');assert.equal(location.href,'http://local/#catalog');
-assert.deepEqual(entries,['http://local/#catalog']);
-location.href='http://local/#warehouse';await workbenchHistoryRestore();
+assert.equal(selected(),'catalog');assert.equal(location.href,'http://local/#explore');
+assert.deepEqual(entries,['http://local/#explore']);
+location.href='http://local/#sql';await workbenchHistoryRestore();
 assert.equal(selected(),'warehouse');
-location.href='http://local/#catalog';await workbenchHistoryRestore();
+location.href='http://local/#explore';await workbenchHistoryRestore();
 assert.equal(selected(),'catalog');
+location.href='http://local/#pawprints';await workbenchHistoryRestore();
+assert.equal(selected(),'pawprints');assert.equal(new URL(location.href).hash,'#audit');
 noPosts();
 """)
 
@@ -347,24 +356,24 @@ noPosts();
 databaseMode=false;activate=legacyActivate;session={username:null,maximum_role:'admin',authenticated:false};
 sessionRoute=async()=>structuredClone(session);globalThis.loadJobAlerts=()=>{};globalThis.loadStages=()=>{};globalThis.loadJobs=()=>{};
 await startWorkbench();
-assert.equal($('workbench-boot').hidden,true);assert.equal(selected(),'warehouse');
+assert.equal($('workbench-boot').hidden,true);assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#sql');
 $('tab-ingestion').click();$('tab-jobs').click();
 assert.equal(selected(),'jobs');assert.equal(new URL(location.href).hash,'#jobs');
 location.href='http://local/#ingestion';await workbenchHistoryRestore();
 assert.equal(selected(),'ingestion');assert.equal(new URL(location.href).hash,'#ingestion');
 $('tab-jobs').hidden=true;location.href='http://local/#jobs';await workbenchHistoryRestore();
-assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#warehouse');
+assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');
 location.href='http://local/#db-admin';await workbenchHistoryRestore();
-assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#warehouse');
+assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');
 noPosts();
 """)
 
     def test_workspace_switches_and_background_renders(self):
         self.run_url('http://local/#catalog', r"""
 await boot();assert.equal(selected(),'catalog');assert.equal(dbWorkspacePane,'details');
-dbWireWorkspaceTabs();assert.equal(location.href,'http://local/#catalog');
-await $('worksheet-'+worksheetId).onclick();assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#warehouse');
-$('workspace-details').onclick();assert.equal(new URL(location.href).hash,'#catalog');
+dbWireWorkspaceTabs();assert.equal(location.href,'http://local/#explore');
+await $('worksheet-'+worksheetId).onclick();assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#sql');
+$('workspace-details').onclick();assert.equal(new URL(location.href).hash,'#explore');
 await activate($('tab-jobs'));renderWorksheets();dbShowWorkspace('worksheet');
 assert.equal(new URL(location.href).hash,'#jobs');assert.equal(selected(),'jobs');noPosts();
 """)
@@ -373,13 +382,13 @@ assert.equal(new URL(location.href).hash,'#jobs');assert.equal(selected(),'jobs'
         for route in ['db-admin', 'unknown', '%E0%A4%A', 'jobs/../../db-admin', 'jobs%3Fcreation=x']:
             with self.subTest(route=route):
                 self.run_url('http://local/#' + route + '?creation=old&dbt_db=db&dbt_plan=old', r"""
-await boot();assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#warehouse');
+await boot();assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');
 assert.equal(dbAdmin.installed,false);assert.equal(calls.some(c=>c.path.startsWith('/api/v1/admin/')),false);noPosts();
 """)
 
     def test_hidden_disabled_and_unauthenticated_restore(self):
         for constraint in ["$('tab-jobs').hidden=true", "$('tab-jobs').disabled=true"]:
-            self.run_url('http://local/#jobs', constraint + ";await boot();assert.equal(selected(),'warehouse');noPosts();")
+            self.run_url('http://local/#jobs', constraint + ";await boot();assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');noPosts();")
         self.run_url('http://local/#db-admin', r"""
 session.authenticated=false;session.platform_admin=true;await boot();
 assert.notEqual(selected(),'db-admin');assert.equal(dbAdmin.installed,false);
@@ -387,13 +396,14 @@ assert.equal(calls.some(c=>c.path.startsWith('/api/v1/admin/')),false);noPosts()
 """)
 
     def test_explicit_page_wins_over_unrelated_details_and_clears_them(self):
+        routes = {'catalog': 'explore', 'warehouse': 'sql'}
         for page in ['jobs', 'catalog', 'warehouse', 'ingestion']:
             url = self.run_url('http://local/?keep=q&creation=old&creation_environment=lab#' + page +
                 '?keep=f&dbt_db=db&dbt_plan=old&creation=old',
                 "session.platform_admin=true;await boot();assert.equal(selected()," + json.dumps(page) + ");"
                 "assert.equal(calls.some(c=>c.path.includes('/dbt/plans/old')||c.path.includes('/creations/old')),false);"
                 "noPosts();console.log(location.href);").strip()
-            self.assertEqual(url, 'http://local/?keep=q#' + page + '?keep=f')
+            self.assertEqual(url, 'http://local/?keep=q#' + routes.get(page, page) + '?keep=f')
             self.run_url(url, "session.platform_admin=true;await boot();assert.equal(selected()," + json.dumps(page) + ");noPosts();")
 
     def test_details_are_restored_only_on_their_explicit_page(self):
@@ -469,7 +479,7 @@ globalThis.loadJobs=()=>{};globalThis.loadStages=()=>{};globalThis.loadMarts=()=
 await workbenchRestorePage(session);assert.equal(activeTab,'jobs');assert.equal(new URL(location.href).hash,'#jobs?keep=f');
 assert.equal(document.title,'Jobs · Shirokuma Workbench');setLanguage('ja');assert.equal(document.title,t('Jobs')+' · Shirokuma Workbench');
 $('tab-db-admin').hidden=true;location.href='http://local/#db-admin';
-await workbenchRestorePage(session);assert.equal(activeTab,'warehouse');noPosts();
+await workbenchRestorePage(session);assert.equal(activeTab,'home');noPosts();
 """)
 
 

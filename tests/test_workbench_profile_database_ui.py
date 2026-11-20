@@ -222,25 +222,25 @@ const tab=section=>inspectorTabs.find(b=>b.dataset.inspect===section);
 const worksheet=JSON.stringify(worksheets),sql=$('sql').value,ingest=$('p35-ingest-name').value,wap=$('p35-wap-sql').value;
 const key=(section,value,expected)=>{
  tab(section).onkeydown({key:value,preventDefault(){}});
- assert.equal(activeInspector,expected);assert.equal(document.activeElement,tab(expected));
+ assert.equal(activeInspector,expected,section+' '+value);assert.equal(document.activeElement,tab(expected));
  assert.equal(document.activeElement.disabled,false);assert.equal(document.activeElement.hidden,false);
 };
 key('preview','ArrowRight','profile');await tick();
 dbObject={...stable('orders_view'),kind:'VIEW'};await dbDescribe(dbObject,'preview');
 assert.equal(tab('profile').disabled,true);
-key('preview','ArrowRight','ddl');await tick();
+key('preview','ArrowRight','snapshots');await tick();
 tab('snapshots').disabled=true;
-key('ddl','ArrowRight','lineage');key('columns','ArrowLeft','lineage');
-key('preview','End','lineage');key('ddl','Home','columns');await tick();
+key('preview','ArrowRight','lineage');key('columns','ArrowLeft','lineage');
+key('preview','End','lineage');key('lineage','Home','columns');await tick();
 for(const role of ['data_engineer','bi_viewer','admin']){
  currentRole=role;dbInventories.set(role,{items:structuredClone(inventory)});dbExplorer.schemaScope=dbSchemaKey(role,'db');dbDatabases=structuredClone(inventory);
  dbExplorerControls();assert.equal(tab('profile').disabled,true);
- key('preview','ArrowRight','ddl');await tick();
+ key('preview','ArrowRight',role==='bi_viewer'?'columns':'lineage');await tick();
  dbObject=stable('orders');dbExplorerControls();assert.equal(tab('profile').disabled,false);
  key('preview','ArrowRight','profile');await tick();
  dbObject={...stable('orders_view'),kind:'VIEW'};dbExplorerControls();
 }
-tab('ddl').hidden=true;key('preview','ArrowRight','lineage');
+tab('profile').hidden=true;key('preview','ArrowRight','lineage');
 const focused=document.activeElement;tab('profile').onkeydown({key:'Home',preventDefault(){throw Error('disabled key');}});
 assert.equal(document.activeElement,focused);
 assert.equal(submissions.filter(s=>s.path.includes('table-profiles')||s.path.includes('/queries')).length,0);

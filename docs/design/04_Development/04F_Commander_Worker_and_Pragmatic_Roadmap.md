@@ -12,6 +12,11 @@ tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
 
+2026-11-20 JST、[Workbench Atlas 見本の採用](../../guides/workbench-atlas-adoption-plan-2026-11-18.md)（UX-A0〜A7）を完了した。共通の画面枠、ホーム、データ探索・SQL、取り込み・データ変換、DB管理、ジョブ・監査・AI Bears・コンピュートを見本の並びと日英文言にそろえた。
+要APIは承認済みの3件（DB横断検索、プレビューの影響行数、`databases.team`）だけを追加した。旧 Pawprints・旧履歴・ジョブ3タブなどの旧UIを撤去し、Database モードの全画面が /api/v1 だけを使う。
+Workbenchテスト1502件、`make verify-local-experiment` 6131件、設計整合が成功し、オーナーが4シナリオ（1440/390/320px・日英・キーボード）を確認して受け入れた。
+休止を妨げる処理名は他利用者の処理・DB作成が件数のみ、Catalog Curator の受け渡しとお気に入りは未実装。詳細は[機能対応表](../../guides/workbench-atlas-feature-map-2026-11-18.md)に記録する。
+
 2026-11-15 JST、[SF0.1 scale・計測器characterization](../../guides/performance-scale-meter-2026-11-15.md)を完了した。新24表/1,175,873行、fresh Spark reference 14件/1,113行、24表全部と288,464行large resultを直接/公開all-resultsで照合した。
 stage400のcoordinator/worker peakは3.59GB/4.04GB、OOM/restart 0。復元後は設定bytes・UID・CM/Deployment template・worker identity・59表pins・fenced UNKNOWN 5件を保持し、doctor healthy 46。
 初回計測はunsampled guard・不完全baseline等で不採用。corrected production guardでも最大global scan約332ms（median302ms/p95 316ms）、1M行offline checked/no-op per-pair overhead median約155.7%（ratio-of-medians158.9%）でobserver-readinessは不合格。計測器再設計まで大規模性能の判断に使わない。後続のcapacity scan最適化で`os.scandir`化しmax393.7→170.6ms、offline overhead median150.7→78.4%としたが10% screenは未達。Make162群は再実行し5,876成功・74 skip・失敗0。[bulk属性取得prototype](performance-capacity-bulk-2026-11-15.md)は33 root同一scope（Python 3.12.12）でper-scan 39.3ms、offline overhead median19.99%まで改善したが10%未達のためnative helperをproductionへ入れず、`allocated`は`os.scandir`のまま。

@@ -303,7 +303,7 @@ class ApplyAndMigrationTests(unittest.TestCase):
         with patch.object(creations, '_enrollment', config), patch.object(creations, '_readiness'), \
                 patch.object(creations, '_gate'), patch.object(creation_auth, 'current_authority'), \
                 patch.object(auth, '_principal_accounts', return_value={'admin': dict(role='admin', platform_admin=True)}):
-            ack, created = creations.create(admin, 'admin', dict(sql_catalog='nextdatabase'), 'next-create')
+            ack, created = creations.create(admin, 'admin', dict(sql_catalog='nextdatabase',team='Data Team'), 'next-create')
         self.assertTrue(created)
         public = catalog_admin.export_spec('next-create-candidate', base['manifest']['spec'])
         self.assertFalse(any(g['principal_id']=='unrelated' for g in public['grant_revisions']))
@@ -430,7 +430,7 @@ class ApplyAndMigrationTests(unittest.TestCase):
         with patch.object(creations, '_enrollment', config), patch.object(creations, '_readiness'), \
                 patch.object(creations, '_gate'), patch.object(creation_auth, 'current_authority'), \
                 patch.object(auth, '_principal_accounts', return_value={'admin': dict(role='admin', platform_admin=True)}):
-            ack, created = creations.create(admin, 'admin', dict(sql_catalog='nextdatabase'), 'next-create')
+            ack, created = creations.create(admin, 'admin', dict(sql_catalog='nextdatabase',team='Data Team'), 'next-create')
         self.assertTrue(created)
         public = catalog_admin.export_spec('next-create-candidate', base['manifest']['spec'])
         self.assertEqual(public['grant_revisions'], base['manifest']['spec']['grant_revisions'])

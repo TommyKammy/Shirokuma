@@ -96,7 +96,7 @@ const body=deferred(),entered=deferred();route=async()=>({podResponse:{ok:true,s
 
     def test_refresh_authority_is_manual_independent_and_late_denial_ignored(self):
         self.navigation_javascript(r"""
-await podBoot();$('tab-compute').click();await podFetch('policy');const held=dbPodBaseline.policy.record;
+await podBoot();dbAISettings.autoOpened=true;$('tab-compute').click();await podFetch('policy');const held=dbPodBaseline.policy.record;
 const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbPodBaselineRefreshAuth('policy');await tick();const busy=dbPodBaseline.policy.busy;await podFetch('compute');assert.equal(dbPodBaseline.policy.busy,busy);assert.equal(dbPodBaseline.policy.record,held);
 $('tab-warehouse').click();$('tab-compute').click();const saved=dbPodBaseline.compute.record;wait.resolve({podResponse:{ok:false,status:403,json:async()=>{throw Error('late');}}});await pending;assert.equal(dbPodBaseline.compute.record,saved);assert.equal(dbAdmin.platform,true);
 for(const status of [401,403]){dbAdminSession(session);let parsed=0;sessionRoute=async()=>({podResponse:{ok:false,status,json:async()=>{parsed++;throw Error('must not parse');}}});await dbPodBaselineRefreshAuth('compute');assert.equal(parsed,0);podEmpty();}
@@ -117,7 +117,7 @@ const snapshot=dbPodBaseline.compute.record;dbEpoch++;dbAuthorizationVersion++;d
     def test_legacy_audit_preview_contract_stays_separate(self):
         # The existing Audit preview still owns its latest-100 endpoint/filter.
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn('/api/v1/audit/telemetry',html)
+        self.assertNotIn('/api/v1/audit/telemetry',html)
         self.javascript(r"""
 await podBoot();dbAuditInstall();
 const podAuditItems=dbInventories.get('admin').items;assert.ok(dbInventoryCurrent(podAuditItems));
@@ -129,15 +129,14 @@ dbAudit.applied={source:'query',state:'UNKNOWN',search:'saved audit search',from
 dbAudit.cursors=['previous-page'];dbAudit.cursor='current-page';dbAudit.next='next-page';
 dbAudit.detail=dbAuditEvent({id:'query:retained',source:'query',source_id:'retained-query',action:'execute',actor:session.username,database_id:'db',schema_id:'schema',warehouse_id:'LOCAL',saved_role:'admin',state:'UNKNOWN',created_at:'2026-11-01T01:00:00Z',updated_at:null,finished_at:null,revision:1,committed:false,has_cleanup_error:false,links:[]});
 dbAudit.items=[dbAudit.detail];dbAudit.selected=dbAudit.detail.id;
-dbAudit.preview={availability:'available',truncated:false,items:[{event_id:'retained-audit-preview',timestamp:'2001-02-03 04:05:06.007',agent_id:'saved-agent',action_type:'saved-action',target_system:'saved-target',status:'success',trace_id:'saved-trace',duration_ms:'9007199254740993'}]};
-dbAudit.previewStamp=dbAuditStamp();dbAuditChoices(podAuditItems);dbAuditValidate();assert.equal(dbAuditReason(),'');assert.equal(dbAuditTelemetryAllowed(),true);
-dbAuditRenderRows();dbAuditRenderDetail(dbAudit.detail);dbAuditRenderTelemetry();
-const podAuditFields=['preview','previewStamp','draft','applied','cursors','detail','role','scope','database','items','selected','cursor','next','proof','capabilities'];
+dbAuditChoices(podAuditItems);dbAuditValidate();assert.equal(dbAuditReason(),'');
+dbAuditRenderRows();dbAuditRenderDetail(dbAudit.detail);
+const podAuditFields=['draft','applied','cursors','detail','role','scope','database','items','selected','cursor','next','proof','capabilities'];
 const podAuditSnapshot=Object.fromEntries(podAuditFields.map(key=>[key,dbAudit[key]])),podAuditData=JSON.stringify(podAuditSnapshot),podAuditStart=calls.length;
-const podAuditDOM=['db-audit-preview','db-audit-rows','db-audit-detail'].map(id=>$(id).children[0]);assert.ok(podAuditDOM.every(Boolean));assert.ok(visibleText($('db-audit-preview')).includes('retained-audit-preview'));
+const podAuditDOM=['db-audit-rows','db-audit-detail'].map(id=>$(id).children[0]);assert.ok(podAuditDOM.every(Boolean));
 await podFetch('policy');dbControls();await podFetch('compute');dbControls();
 for(const key of podAuditFields)assert.equal(dbAudit[key],podAuditSnapshot[key]);assert.equal(JSON.stringify(Object.fromEntries(podAuditFields.map(key=>[key,dbAudit[key]]))),podAuditData);
-for(const [index,id] of ['db-audit-preview','db-audit-rows','db-audit-detail'].entries())assert.equal($(id).children[0],podAuditDOM[index]);
+for(const [index,id] of ['db-audit-rows','db-audit-detail'].entries())assert.equal($(id).children[0],podAuditDOM[index]);
 assert.equal(calls.slice(podAuditStart).filter(c=>c.path.startsWith('/api/v1/audit/')||/^\/api\/(pawprints|history|query|load)/.test(c.path)).length,0);
 """)
 

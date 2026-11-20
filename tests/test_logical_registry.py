@@ -30,7 +30,7 @@ class LogicalRegistryTests(unittest.TestCase):
 
     def base(self, database_id='db', mode='logical_v1', reservation=1):
         db = self.db
-        db.execute("INSERT INTO databases VALUES (?,?,'Database','','test','READY',1)", (database_id, database_id))
+        db.execute("INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,'Database','','test','READY',1,NULL)", (database_id, database_id))
         db.execute("INSERT INTO operations VALUES (?, 'actor','create','[]',1,'APPLIED','[]',NULL,'{}','{}')", ('op-' + database_id,))
         db.execute('''INSERT INTO db_creations
             (id,environment_id,warehouse_id,actor,enrollment_id,enrollment_revision,database_id,
@@ -267,7 +267,7 @@ class LogicalRegistryTests(unittest.TestCase):
         current = self.db; self.db = old
         try:
             # Populate the genuine v19 column shape before the additive upgrade.
-            old.execute("INSERT INTO databases VALUES ('kept','kept','Kept','','test','READY',1)")
+            old.execute("INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES ('kept','kept','Kept','','test','READY',1,NULL)")
             old.execute("INSERT INTO operations VALUES ('op','actor','create','[]',1,'UNKNOWN','[]',NULL,'{}','{}')")
             old.execute("INSERT INTO db_creations VALUES ('root','env','LOCAL','actor','enroll',1,'kept','op','{}','{}',1,1,NULL,'now','now')")
             old.commit()

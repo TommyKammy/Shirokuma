@@ -1554,7 +1554,7 @@ assert.equal(p.plan.state,'TERMINAL');assert.equal(dbDbtNode('build').disabled,'
 assert.equal(dbDbtCanBuild(),'TERMINAL'==='READY');
 const detail=text(dbDbtNode('compatibility')),reason=dbDbtNode('reason').textContent;
 if('TERMINAL'==='READY'){
- assert.match(detail,'LANGUAGE'==='ja'?/対応済み: SQL \/ WAP/:/Supported: SQL \/ WAP/);
+ assert.match(detail,'LANGUAGE'==='ja'?/対応済み: SQL \/ データ変換/:/Supported: SQL \/ Transformation/);
  assert.match(detail,'LANGUAGE'==='ja'?/保存プランと下記の適用テーブル形式/:/Build candidates and test using the saved plan/);
 }else{
  assert.match(detail,'LANGUAGE'==='ja'?/停止中: 未対応の設定/:/Blocked: unsupported settings/);
@@ -1588,7 +1588,7 @@ await compile();assert.equal(dbDbtCanBuild(),true);
 for(const lang of ['ja','en']){
  setLanguage(lang);
  const detail=text(dbDbtNode('compatibility'));
- assert.match(detail,/SQL \/ WAP/);assert.match(detail,/COUNT\(\*\)/);
+ assert.match(detail,/SQL \/ (?:データ変換|Transformation)/);assert.match(detail,/COUNT\(\*\)/);
  assert.match(detail,lang==='ja'?/UI／API／CLI は互換性のある保存済み1モデル/:/UI\/API\/CLI supports native TABLE execution for one compatible saved model/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/適用テーブル形式/:/Applied table format/);
  assert.match(text(dbDbtNode('models')),/PARQUET/);

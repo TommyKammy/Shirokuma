@@ -126,13 +126,32 @@ class DisplayManagementTests(unittest.TestCase):
 
     def test_transaction_rolls_back_metadata_when_audit_fails(self):
         with patch.object(display, '_json', side_effect=lambda value: (_ for _ in ()).throw(RuntimeError('audit'))
-                if isinstance(value, dict) and set(value) == {'display_name','description','revision'} else json.dumps(value, sort_keys=True)):
+                if isinstance(value, dict) and set(value) == {'display_name','description','revision','team'} else json.dumps(value, sort_keys=True)):
             with self.assertRaises(RuntimeError):
                 self.mutate()
         with store.connect() as db:
             self.assertEqual(dm.get_database(db, self.database.id), self.database)
             for table in ('operations','metadata_requests','metadata_audit'):
                 self.assertEqual(db.execute('SELECT count(*) FROM '+table).fetchone()[0], 0)
+
+    def test_team_can_be_set_later_and_is_audited_without_cas_change(self):
+        result = self.mutate(dict(self.payload, team='  Data Team  '))
+        self.assertEqual(result['revision'], 2)
+        with store.connect() as db:
+            changed = dm.get_database(db, self.database.id)
+            self.assertEqual(changed.team, 'Data Team')
+        operation = catalog_admin.inspect_operation(self.admin, 'admin', result['operation_id'])
+        self.assertEqual(operation['audit']['before']['team'], None)
+        self.assertEqual(operation['audit']['after']['team'], 'Data Team')
+        next_payload = dict(self.payload, display_name='Renamed', expected_revision=2)
+        self.mutate(next_payload, 'next')
+        with store.connect() as db:
+            self.assertEqual(dm.get_database(db, self.database.id).team, 'Data Team')
+        for key, team in (('empty', ''), ('blank', '   '), ('long', 'x' * 65),
+                          ('control', 'bad\x01team'), ('newline', 'bad\nteam'), ('wrong', 1)):
+            with self.subTest(team=team), self.assertRaises(OperationError) as error:
+                self.mutate(dict(self.payload, expected_revision=3, team=team), 'invalid-' + key)
+            self.assertEqual(error.exception.status, 400)
 
     def test_admin_list_exact_safe_shape_includes_every_state(self):
         for state in ('registered', 'READY', 'FAILED'):
@@ -141,7 +160,7 @@ class DisplayManagementTests(unittest.TestCase):
             result = display.list_databases(self.admin, 'admin')
             self.assertEqual(set(result), {'databases'})
             item = result['databases'][0]
-            self.assertEqual(set(item), {'id','sql_catalog','display_name','description','state','revision','schemas','binding'})
+            self.assertEqual(set(item), {'id','sql_catalog','display_name','description','team','state','revision','schemas','binding'})
             self.assertEqual(item['state'], state)
             self.assertEqual(len(item['schemas']), 4)
             self.assertEqual(set(item['binding']), {'database_id','polaris_service_ref','polaris_realm','polaris_catalog',

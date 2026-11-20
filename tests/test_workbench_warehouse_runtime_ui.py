@@ -6,6 +6,7 @@ import test_workbench_database_ui as database_ui
 
 SETUP = r'''
 const BASE='/api/v1/warehouses/LOCAL/runtime';
+runtimeStrict=true;
 let runtime={warehouse:'LOCAL',physical_state:'chilled',replicas:0,ready_replicas:0,observed_at:'2026-10-29T01:02:03Z',engine_verified:false,engine_verified_at:null,policy:{minutes:15,revision:3},blockers:{runtime_operations:0,admissions:0,unknown:0,creation:{requests:0,effects:0,roots:0}},operation_phase:null,available_actions:['wake','chill','auto-chill','reconcile']};
 let detail={id:'operation-one',actor:'owner',action:'WAREHOUSE_WAKE',phase:'RUNNING',timestamps:{accepted:'2026-10-29T01:02:03Z'},error_code:null};
 let runtimeRoute=null,actionRoute=null,detailRoute=null;
@@ -29,16 +30,15 @@ class WarehouseRuntimeUI(unittest.TestCase):
         self.javascript(r'''
 const observed=Date.parse(runtime.observed_at);Date.now=()=>observed;
 await start();
-assert.equal($('legacy-header-warehouse').hidden,true);
 assert.equal($('database-compute-status').hidden,false);
-assert.equal($('database-compute-state').textContent,'LOCAL · Chilled');
+assert.equal($('database-compute-state').textContent,'LOCAL · Paused');
 assert.match($('runtime-physical').textContent,/Physical Chilled.*2026-10-29/);
 assert.match($('warehouse-state').textContent,/Physical Chilled.*2026-10-29/);
 $('database-compute-status').onclick();
 assert.equal(activeTab,'compute');assert.equal($('tab-compute').getAttribute('aria-current'),'page');
 assert.match($('runtime-proof').textContent,/unverified/);
 runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();
-assert.match($('runtime-proof').textContent,/unverified/);assert.doesNotMatch($('quick-warehouse-state').textContent,/Ready/);
+assert.match($('runtime-proof').textContent,/unverified/);assert.equal($('database-compute-state').textContent,'LOCAL · Available');
 runtime.engine_verified=true;await refreshStatus();assert.match($('runtime-proof').textContent,/unverified/);
 runtime.engine_verified_at='2026-10-29T01:03:00Z';await refreshStatus();assert.match($('runtime-proof').textContent,/verified at/);
 assert.equal(posts().length,0);
@@ -49,17 +49,19 @@ for(const call of calls.filter(c=>c.path===BASE)){assert.equal(call.options.head
         self.javascript(r'''
 const observed=Date.parse(runtime.observed_at);Date.now=()=>observed;
 await start();runtime.physical_state='active';
-for(const [phase,qualifier] of [['ACCEPTED','Operation in progress'],['RUNNING','Operation in progress'],['FAILED','Last operation failed'],['UNKNOWN','Operation outcome unknown'],['FINISHED','']]){
+for(const [phase,qualifier,state] of [['ACCEPTED','Operation in progress','Switching'],['RUNNING','Operation in progress','Switching'],['FAILED','Last operation failed','Available'],['UNKNOWN','Operation outcome unknown','Available'],['FINISHED','','Available']]){
  runtime.operation_phase=phase;await refreshStatus();
- assert.equal($('database-compute-state').textContent,'LOCAL · Active'+(qualifier?' · '+qualifier:''));
+ assert.equal($('database-compute-state').textContent,'LOCAL · '+t(state));
+ assert.equal($('database-compute-status').title,qualifier?t(qualifier):t('Available'));
 }
 runtime.physical_state='unknown';await refreshStatus();
 assert.equal($('database-compute-state').textContent,'LOCAL · Unknown');
 runtimeRoute=()=>{throw Error('offline');};await refreshStatus();
-assert.equal($('database-compute-state').textContent,'LOCAL · State unavailable');
+assert.equal($('database-compute-state').textContent,'LOCAL · Unknown');
+assert.match($('runtime-message').textContent,/unavailable/i);
 setLanguage('ja');
-assert.equal($('database-compute-state').textContent,'LOCAL · '+t('State unavailable'));
-assert.notEqual(t('State unavailable'),'State unavailable');
+assert.equal($('database-compute-state').textContent,'LOCAL · '+t('Unknown'));
+assert.notEqual(t('Unknown'),'Unknown');
 assert.equal(posts().length,0);
 ''')
 
@@ -70,21 +72,22 @@ runtime.available_actions=[];runtime.physical_state='active';runtime.operation_p
 await start(false);
 const header=$('database-compute-state'),binding=()=>uiBindings.get(header);
 const fresh=binding();
-assert.equal(header.textContent,'LOCAL · Active · Operation in progress');
+assert.equal(header.textContent,'LOCAL · Switching');
+assert.equal($('database-compute-status').title,t('Operation in progress'));
 now=observed+10*60000-1;await refreshStatus();
 assert.equal(binding(),fresh);
 now+=1;await refreshStatus();
 const stale=binding();
 assert.notEqual(stale,fresh);
-assert.equal(header.textContent,'LOCAL · Stale observation: Active · Operation was in progress');
-assert.match($('runtime-summary').textContent,/may be outdated/);
+assert.equal(header.textContent,'LOCAL · Stale');
+assert.match($('runtime-summary-detail').textContent,/may be outdated/);
 now+=60000;await refreshStatus();
 assert.equal(binding(),stale);
 setLanguage('ja');
 assert.equal(binding(),stale);
-assert.equal(header.textContent,'LOCAL · 古い観測: 稼働中 · 観測時は操作中');
-runtime.observed_at=new Date(now).toISOString();await refreshStatus();
-assert.equal(header.textContent,'LOCAL · 稼働中 · 操作中');
+assert.equal(header.textContent,'LOCAL · 観測期限切れ');
+runtime.observed_at=new Date(now).toISOString();runtime.operation_phase='FINISHED';await refreshStatus();
+assert.equal(header.textContent,'LOCAL · 利用可能');
 assert.equal(posts().length,0);
 ''')
 
@@ -115,7 +118,7 @@ assert.equal($('runtime-wake').disabled,true);assert.equal($('runtime-physical')
 
     def test_ack_is_acceptance_then_terminal_detail(self):
         self.javascript(r'''
-await start();const draft=JSON.stringify(dbInput(dbCurrent()));await $('quick-wake').onclick();
+await start();const draft=JSON.stringify(dbInput(dbCurrent()));await $('runtime-wake').onclick();
 assert.equal(posts().length,1);assert.equal(posts()[0].path,BASE+'/wake');assert.equal(posts()[0].options.body,'{}');assert.ok(posts()[0].options.headers['Idempotency-Key']);
 assert.equal(dbRuntime.operation.phase,'ACCEPTED');assert.match($('runtime-guidance').textContent,/completion is not verified/);assert.equal($('runtime-chill').disabled,true);
 await dbRuntimeObserve();assert.equal(dbRuntime.operation.phase,'RUNNING');assert.match($('runtime-guidance').textContent,/Starting/);
@@ -176,8 +179,8 @@ assert.equal(dbRuntime.operation,null);assert.equal($('runtime-wake').disabled,t
 
     def test_cold_queued_poll_and_cancel_keep_original_context(self):
         self.javascript(r'''
-await start();const draft=JSON.stringify(dbInput(dbCurrent())),pending=deferred();let first;
-const prior=route;route=async(path,options)=>{
+runtime.physical_state='active';runtime.observed_at=new Date().toISOString();
+await start();const draft=JSON.stringify(dbInput(dbCurrent())),pending=deferred();let first;const prior=route;route=async(path,options)=>{
  if(path==='/api/v1/queries'){first=envelope(dbRuns.get('a'),{state:'QUEUED',backend_query_id:null,columns:[],data:[],next_uri:'/api/v1/queries/query-uuid/pages/pending-1'});return first;}
  if(path.endsWith('/pages/pending-1'))return pending.promise;
  if(path.endsWith('/cancel'))return {id:'query-uuid',state:'CANCELED'};
@@ -190,6 +193,7 @@ assert.equal(dbRuns.get('a').state,'CANCELED');assert.equal(JSON.stringify(dbInp
 
     def test_cold_pending_page_progression_finishes_without_sql_resubmission(self):
         self.javascript(r'''
+runtime.physical_state='active';runtime.observed_at=new Date().toISOString();
 await start();const prior=route;route=async(path,options)=>{
  const run=dbRuns.get('a');
  if(path==='/api/v1/queries')return envelope(run,{backend_query_id:null,state:'QUEUED',columns:[],data:[],next_uri:'/api/v1/queries/query-uuid/pages/one'});
@@ -205,7 +209,7 @@ await start();const draft=JSON.stringify(dbInput(dbCurrent()));await dbRuntimeAc
 activate($('tab-compute'));activate($('tab-warehouse'));assert.equal(dbRuntime.operation,op);assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
 for(const id of ['compute-sre-check','compute-policy-check','copilot-generate'])assert.equal($(id).disabled,true);
 for(const path of ['/api/warehouse/wake','/api/warehouse/chill','/api/warehouse/auto-chill','/api/lake/dbt/build'])await assert.rejects(api(path,{}));assert.equal(posts().length,1);
-setLanguage('ja');assert.match($('runtime-guidance').textContent,/受付済み/);assert.match($('runtime-wake').title||$('quick-wake').title,/全 DB/);
+setLanguage('ja');assert.match($('runtime-guidance').textContent,/受付済み/);assert.match($('runtime-wake').title,/全 DB/);
 ''')
 
     def test_unknown_missing_dto_and_unavailable_route_fail_safe(self):
@@ -239,13 +243,13 @@ assert.equal(dbRuntime.conflict,false);assert.equal(dbRuntime.dirty,false);asser
     def test_real_dto_202_running_succeeded_requires_separate_engine_proof(self):
         self.javascript(r"""
 await start();const draft=JSON.stringify(dbInput(dbCurrent())),sql=$('sql').value;
-assert.equal($('run-query').disabled,false);await $('quick-wake').onclick();
+assert.equal($('run-query').disabled,true);assert.equal($('database-context-state').textContent,t('The compute state is not confirmed. An administrator must reconcile it before SQL can run.'));await $('runtime-wake').onclick();
 assert.equal(dbRuntime.operation.phase,'ACCEPTED');assert.match($('runtime-guidance').textContent,/completion is not verified/);
 runtime.operation_id=detail.id;runtime.operation_action='WAREHOUSE_WAKE';runtime.operation_phase='RUNNING';runtime.physical_state='starting';await refreshStatus();
 assert.equal(dbRuntime.operation.phase,'RUNNING');assert.match($('runtime-guidance').textContent,/Starting shared LOCAL/);
 detail.phase='SUCCEEDED';detail.timestamps.finished='2026-10-29T01:03:00Z';runtime.operation_phase='SUCCEEDED';await refreshStatus();
 assert.equal(dbRuntime.operation.phase,'SUCCEEDED');assert.match($('runtime-guidance').textContent,/Operation finished/);assert.doesNotMatch($('runtime-guidance').textContent,/UNKNOWN/);assert.match($('runtime-physical').textContent,/Transitioning/);assert.match($('runtime-proof').textContent,/unverified/);
-runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();assert.match($('runtime-proof').textContent,/unverified/);
+runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;runtime.observed_at=new Date().toISOString();await refreshStatus();assert.match($('runtime-proof').textContent,/unverified/);
 runtime.engine_verified=true;runtime.engine_verified_at='2026-10-29T01:04:00Z';await refreshStatus();assert.match($('runtime-proof').textContent,/Engine verified at/);
 assert.equal($('run-query').disabled,false);assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal($('sql').value,sql);assert.equal(posts().length,1);
 """)
@@ -320,17 +324,17 @@ await refreshStatus();await dbRuntimeAct('wake');detail.phase='SUCCEEDED';await 
 
     def test_real_nested_blocker_zeroes_enable_chill_without_summing(self):
         self.javascript(r"""
-await start();assert.equal($('runtime-chill').disabled,false);assert.equal($('quick-chill').disabled,false);assert.equal($('chill').disabled,false);
+await start();assert.equal($('runtime-chill').disabled,false);assert.equal($('chill').disabled,false);
 assert.equal($('runtime-blockers').textContent,'Blockers: Runtime operations: 0 · Admitted work: 0 · Unresolved admissions (included in admitted work): 0 · Creation requests: 0 · Creation effects: 0 · Creation roots: 0');
 setLanguage('ja');assert.match($('runtime-blockers').textContent,/結果不明の受付（受付済み処理の内数）: 0/);assert.match($('runtime-blockers').textContent,/DB 作成要求: 0.*適用処理: 0.*基盤処理: 0/);assert.doesNotMatch($('runtime-blockers').textContent,/取得できません/);
-await $('quick-chill').onclick();assert.equal(posts().length,1);assert.equal(posts()[0].path,BASE+'/chill');
+await $('runtime-chill').onclick();assert.equal(posts().length,0);assert.equal($('runtime-chill-confirm').hidden,false);assert.match($('runtime-chill-impact').textContent,/実行中の処理はありません/);$('runtime-chill-confirm-check').checked=true;await $('runtime-chill-confirm-submit').onclick();assert.equal(posts().length,1);assert.equal(posts()[0].path,BASE+'/chill');
 """)
 
     def test_each_nonzero_creation_category_blocks_only_manual_chill(self):
         self.javascript(r"""
 await start();for(const key of ['requests','effects','roots']){
  runtime.blockers.creation={requests:0,effects:0,roots:0};runtime.blockers.creation[key]=2;await refreshStatus();
- assert.equal($('runtime-chill').disabled,true);assert.equal($('quick-chill').disabled,true);assert.equal($('chill').disabled,true);assert.equal($('runtime-wake').disabled,false);assert.equal($('runtime-reconcile').disabled,false);
+ assert.equal($('runtime-chill').disabled,true);assert.equal($('chill').disabled,true);assert.equal($('runtime-wake').disabled,false);assert.equal($('runtime-reconcile').disabled,false);
  assert.match($('runtime-blockers').textContent,/Creation .*: 2/);await dbRuntimeAct('chill');assert.equal(posts().length,0);
 }
 runtime.blockers.creation={requests:0,effects:0,roots:0};runtime.blockers.admissions=3;runtime.blockers.unknown=2;await refreshStatus();assert.match($('runtime-blockers').textContent,/Admitted work: 3.*included in admitted work\): 2/);assert.equal($('runtime-chill').disabled,true);
@@ -361,13 +365,13 @@ assert.equal(dbRuntime.dirty,false);assert.equal(dbRuntime.operation,null);asser
         self.javascript(r"""
 await start();runtime.physical_state='active';runtime.engine_verified=true;runtime.engine_verified_at='2026-10-29T01:03:00Z';runtime.operation_id='global-past-chill';runtime.operation_action='WAREHOUSE_CHILL';runtime.operation_phase='FAILED';await refreshStatus();
 const physical=$('runtime-physical'),operation=$('runtime-operation'),receipt=$('runtime-receipt-info');setLanguage('ja');
-assert.equal(physical.textContent,'物理状態 稼働中 · 観測 2026-10-29T01:02:03Z');assert.equal(operation.textContent,'共有操作: 休止 · 失敗');assert.match($('runtime-proof').textContent,/エンジン検証済み/);assert.equal(receipt.textContent,'操作 global-past-chill');assert.equal($('runtime-reconcile').textContent,'状態を再検証');assert.match($('runtime-reconcile').title,/SQL は再送しません/);
+assert.equal(physical.textContent,'物理状態 稼働中 · 観測 2026-10-29 10:02 JST');assert.equal(operation.textContent,'共有操作: 休止 · 失敗');assert.match($('runtime-proof').textContent,/エンジン検証済み/);assert.equal(receipt.textContent,'操作 global-past-chill');assert.equal($('runtime-reconcile').textContent,'状態を再検証');assert.match($('runtime-reconcile').title,/SQL は再送しません/);
 for(const [state,label] of [['chilled','休止中'],['starting','遷移中'],['unknown','不明']]){runtime.physical_state=state;await refreshStatus();assert.match(physical.textContent,new RegExp(label));assert.doesNotMatch($('runtime-proof').textContent,/エンジン検証済み/);}
 for(const [action,label] of [['WAREHOUSE_WAKE','起動'],['WAREHOUSE_CHILL','休止'],['WAREHOUSE_AUTO_CHILL','自動休止'],['WAREHOUSE_RECONCILE','状態を再検証']]){runtime.operation_action=action;runtime.operation_phase='RUNNING';await refreshStatus();assert.equal(operation.textContent,'共有操作: '+label+' · 実行中');}
 for(const [phase,label] of [['ACCEPTED','受付済み'],['SUCCEEDED','完了'],['FAILED','失敗'],['UNKNOWN','不明'],['RECONCILED','状態検証済み']]){runtime.operation_phase=phase;await refreshStatus();assert.match(operation.textContent,new RegExp(label));}
-runtime.operation_action='RAW_UNKNOWN_ACTION';runtime.operation_phase='SUCCESS_LIKE';await refreshStatus();assert.equal(operation.textContent,'共有操作: 不明な操作 · 不明');
-setLanguage('en');assert.equal($('runtime-physical'),physical);assert.equal($('runtime-operation'),operation);assert.equal($('runtime-receipt-info'),receipt);assert.equal(operation.textContent,'Shared operation: Unknown action · Unknown');assert.equal(receipt.textContent,'Operation global-past-chill');
-runtime.physical_state='arbitrary';await refreshStatus();assert.equal($('quick-warehouse-state').textContent,'Unknown');assert.match(physical.textContent,/Unknown/);assert.match($('runtime-proof').textContent,/unverified/);
+runtime.operation_action='RAW_UNKNOWN_ACTION';runtime.operation_phase='SUCCESS_LIKE';await refreshStatus();assert.equal(operation.textContent,'共有操作: 不明な操作 · 結果不明');
+setLanguage('en');assert.equal($('runtime-physical'),physical);assert.equal($('runtime-operation'),operation);assert.equal($('runtime-receipt-info'),receipt);assert.equal(operation.textContent,'Shared operation: Unknown action · Outcome unknown');assert.equal(receipt.textContent,'Operation global-past-chill');
+runtime.physical_state='arbitrary';await refreshStatus();assert.equal($('database-compute-state').textContent,'LOCAL · Unknown');assert.match(physical.textContent,/Unknown/);assert.match($('runtime-proof').textContent,/unverified/);
 """)
 
     def test_database_hides_whole_legacy_compute_panels_and_keeps_ids(self):
@@ -384,7 +388,7 @@ assert.equal($('compute-sre-check').disabled,true);assert.equal($('compute-polic
 api=async path=>(await fetch(path)).json();runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});const prior=route;route=async(path,options)=>path==='/api/status'?{status:'healthy',data_mode:'database'}:prior(path,options);
 await start();const draft=JSON.stringify(dbInput(dbCurrent())),sql=$('sql').value;
 assert.equal($('database-compute-state').textContent,'LOCAL · Not supported');
-for(const lang of ['en','ja']){setLanguage(lang);await refreshStatus();assert.equal(dbRuntimeSupport(),'unsupported');assert.equal($('runtime-guidance').textContent,t('Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.'));assert.equal($('quick-status-error').textContent,$('runtime-guidance').textContent);assert.doesNotMatch($('runtime-guidance').textContent,/automatically|自動起動します/);for(const id of ['runtime-wake','runtime-chill','runtime-reconcile','runtime-save'])assert.equal($(id).disabled,true);}
+for(const lang of ['en','ja']){setLanguage(lang);await refreshStatus();assert.equal(dbRuntimeSupport(),'unsupported');assert.equal($('runtime-guidance').textContent,t('Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.'));assert.equal($('database-compute-state').textContent,'LOCAL · '+t('Not supported'));assert.equal($('database-compute-status').title,t('Shared runtime controls and SQL auto-resume are unsupported for this profile. Use the existing operator workflow.'));assert.doesNotMatch($('runtime-guidance').textContent,/automatically|自動起動します/);for(const id of ['runtime-wake','runtime-chill','runtime-reconcile','runtime-save'])assert.equal($(id).disabled,true);}
 assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal($('sql').value,sql);assert.equal(posts().length,0);
 """)
 
@@ -392,15 +396,15 @@ assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);assert.equal($('sql').v
         self.javascript(r"""
 api=async path=>(await fetch(path)).json();runtimeRoute=async()=>{throw Error('temporary status failure');};const prior=route;route=async(path,options)=>{if(path==='/api/status')throw Error('temporary fallback failure');return prior(path,options);};await start();
 assert.equal(dbRuntimeSupport(),null);assert.match($('runtime-guidance').textContent,/support is not confirmed/);assert.doesNotMatch($('runtime-guidance').textContent,/unsupported|automatically/);
-runtimeRoute=null;await refreshStatus();assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/starts shared LOCAL automatically/);
-runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});await refreshStatus();assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-message').textContent,/unavailable/);assert.match($('runtime-guidance').textContent,/starts shared LOCAL automatically/);assert.equal($('runtime-wake').disabled,true);
-setLanguage('ja');assert.match($('runtime-guidance').textContent,/自動起動します/);assert.doesNotMatch($('runtime-guidance').textContent,/未対応/);assert.equal(posts().length,0);
+runtimeRoute=null;await refreshStatus();assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/Chilled at the last observation/);
+runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});await refreshStatus();assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-message').textContent,/unavailable/);assert.match($('runtime-guidance').textContent,/The state is not confirmed|Runtime support is not confirmed/);assert.equal($('runtime-wake').disabled,true);
+setLanguage('ja');assert.match($('runtime-guidance').textContent,/状態が確定していません/);assert.doesNotMatch($('runtime-guidance').textContent,/未対応/);assert.equal(posts().length,0);
 """)
 
     def test_logical_status_confirms_support_when_runtime_observation_fails(self):
         self.javascript(r"""
 api=async path=>(await fetch(path)).json();runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});const prior=route;let fail=false;route=async(path,options)=>{if(path==='/api/status'){if(fail)throw Error('offline');return {status:'degraded',data_mode:'database',creation_mode:'logical_v1',warehouse:{state:'unavailable'}};}return prior(path,options);};await start();
-assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/starts shared LOCAL automatically/);assert.equal($('runtime-wake').disabled,true);
+assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/The state is not confirmed|Runtime support is not confirmed/);assert.equal($('runtime-wake').disabled,true);
 fail=true;await refreshStatus();setLanguage('ja');assert.equal(dbRuntimeSupport(),'logical');assert.doesNotMatch($('runtime-guidance').textContent,/未対応/);
 """)
 
@@ -409,7 +413,7 @@ fail=true;await refreshStatus();setLanguage('ja');assert.equal(dbRuntimeSupport(
 runtimeRoute=async()=>({http:503,body:{error:'WAREHOUSE_UNAVAILABLE'}});await start();const prior=route;let cap={environment_id:'env-runtime',warehouse_id:'LOCAL',warehouse_revision:3,configured:true,available:true,blocker:null};let fail=false;
 route=async(path,options)=>{if(path==='/api/v1/admin/database-creations/capabilities'){if(fail)throw Error('offline');return structuredClone(cap);}return prior(path,options);};
 await dbCreationRequest('/api/v1/admin/database-creations/capabilities');assert.equal(dbRuntimeSupport(),'unsupported');assert.match($('runtime-guidance').textContent,/existing operator workflow/);
-cap={...cap,creation_mode:'logical_v1',warehouse_state:'STOPPED'};await dbCreationRequest('/api/v1/admin/database-creations/capabilities');assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/starts shared LOCAL automatically/);
+cap={...cap,creation_mode:'logical_v1',warehouse_state:'STOPPED'};await dbCreationRequest('/api/v1/admin/database-creations/capabilities');assert.equal(dbRuntimeSupport(),'logical');assert.match($('runtime-guidance').textContent,/The state is not confirmed|Runtime support is not confirmed/);
 fail=true;await assert.rejects(dbCreationRequest('/api/v1/admin/database-creations/capabilities'));assert.equal(dbRuntimeSupport(),'logical');assert.equal($('runtime-wake').disabled,true);assert.equal(posts().length,0);
 """)
 
@@ -421,7 +425,7 @@ assert.equal($('runtime-refresh').parentElement,$('runtime-heading'));assert.equ
 for(const [id,group] of [['runtime-physical','runtime-physical-group'],['runtime-proof','runtime-physical-group'],['runtime-operation','runtime-operation-group'],['runtime-blockers','runtime-safety-section'],['runtime-policy','runtime-policy-section'],['runtime-draft','runtime-policy-section']]){assert.equal($(id).parentElement,$(group));assert.equal($(id).getAttribute('role'),'status');assert.equal($(id).getAttribute('aria-atomic'),'true');}
 for(const name of ['controls','safety','policy'])assert.equal($('runtime-'+name+'-section').getAttribute('aria-labelledby'),'runtime-'+name+'-title');
 assert.equal($('runtime-minutes-label').htmlFor,'runtime-minutes');assert.equal(input.type,'number');assert.equal(input.min,'0');assert.equal(input.max,'1440');assert.equal(input.step,'1');assert.equal(input.parentElement,$('runtime-minutes-field'));
-for(const id of input.getAttribute('aria-describedby').split(' '))assert.ok(panel.descendants().includes($(id)),id);
+for(const id of input.getAttribute('aria-describedby').split(' '))assert.ok($('compute').descendants().includes($(id)),id);
 input.focus();input.value='37';input.oninput();const base=dbRuntime.base;
 for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();assert.equal($('runtime-minutes'),input);assert.equal(document.activeElement,input);assert.equal(input.value,'37');assert.equal(dbRuntime.base,base);assert.equal($('runtime-save').disabled,false);}
 runtime.policy={minutes:90,revision:4};await refreshStatus();assert.equal(input.value,'37');assert.equal(dbRuntime.base,base);assert.equal(dbRuntime.conflict,true);assert.equal(document.activeElement,input);assert.equal($('runtime-save').disabled,true);

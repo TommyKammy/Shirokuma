@@ -103,7 +103,7 @@ for(const lose of losses){
 
     def test_current_session_denials_purge_hidden_compute_without_parsing_and_stale_denials_do_not(self):
         self.navigation_javascript(r"""
-await platformBoot();
+await platformBoot();dbAISettings.autoOpened=true;
 for(const status of [401,403]){
  sessionRoute=null;dbAdminSession(session);$('tab-compute').click();await computeFetch();$('tab-warehouse').click();assert.ok(dbPlatform.record);
  let parsed=0;const denied={http:status,get body(){parsed++;throw SyntaxError('Unexpected end of JSON input');}};sessionRoute=async()=>denied;
@@ -116,7 +116,7 @@ for(const status of [401,403]){
 
     def test_late_success_session_json_cannot_restore_or_remove_newer_compute_authority(self):
         self.navigation_javascript(r"""
-await platformBoot();$('tab-compute').click();await computeFetch();
+await platformBoot();dbAISettings.autoOpened=true;$('tab-compute').click();await computeFetch();
 for(const denied of [false,true]){
  const body=deferred();let parsed=0;sessionRoute=async()=>({http:200,get body(){parsed++;return body.promise;}});const pending=$('observation-compute-auth').onclick();await tick();assert.equal(parsed,1);
  $('tab-warehouse').click();$('tab-compute').click();sessionRoute=null;await $('observation-compute-auth').onclick();await computeFetch();const saved=dbPlatform.record;
@@ -161,7 +161,7 @@ for(const id of ['compute-sre-check','compute-policy-check']){assert.equal($(id)
 const nativeAppend=Node.prototype.append;Node.prototype.append=function(...items){return nativeAppend.apply(this,items.map(n=>typeof n==='string'?Object.assign(new Node('text'),{textContent:n}):n));};
 session.platform_admin=true;await boot();request('proposal');await choose();await submit(pendingProposal({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbProposalHeld().length,1);
 await curatorContext();objects=[curatorObject()];await dbCuratorLoad();change('object','0');await curatorSubmit(curatorPending({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbCuratorHeld().length,1);
-route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
+route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();workbenchSetComputeStatus('available','tone-ok');route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
 const wap=dataopsPanels.get('p35-wap');schemas[0].capabilities.wap_models=true;route=async path=>({context:JSON.parse(new URL(path,'http://fixture').searchParams.get('context')),items:[]});await dataopsRefresh(wap);route=async()=>{throw Error('lost ACK');};await dataopsSubmit(wap,'/api/v1/wap/build',{model_id:'existing-model',version:1},{});
 editSQL('SELECT kept SQL');editDoctor('SELECT kept Doctor');request('kept Copilot');$('p35-wap-sql').value='SELECT kept WAP';wap.sources[0].alias.value='kept';
 await readyObservation('sre');await readyObservation('policy');await fetchObservation('sre');await fetchObservation('policy');const sre=dbObservations.sre.record,policy=dbObservations.policy.record;

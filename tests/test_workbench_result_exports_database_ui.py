@@ -123,7 +123,7 @@ for(const format of ['csv','json','tsv']){
  assert.equal(await blobs.at(-1).text(),'"n"\r\n"9007199254740993"\r\n');
  assert.equal(downloads.at(-1),'query-result-query-uuid.'+format);
 }
-assert.equal($('copy-tsv').hidden,true);assert.equal($('export-tsv').hidden,false);
+assert.equal($('copy-tsv').hidden,false);assert.equal($('copy-tsv').disabled,false);assert.equal($('export-tsv').hidden,false);
 assert.match($('result-action-state').textContent,/Saved 1 rows/);
 for(const locale of ['en','ja']){setLanguage(locale);assert.equal($('request-provenance').children[0].textContent,t(dbExportHelp));}
 assert.equal(calls.filter(c=>c.path==='/api/v1/queries'&&c.options?.method==='POST').length,1);

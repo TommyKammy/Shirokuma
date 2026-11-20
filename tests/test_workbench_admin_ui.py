@@ -46,7 +46,7 @@ for(const [platform,maximum,selected] of [[false,'admin','admin'],[true,'data_en
     def test_metadata_patch_exact_unicode_schema_and_safe_binding(self):
         self.javascript(SETUP + r'''
 assert.equal($('db-admin-database-db-name').value,adminItems[0].display_name);
-assert.equal($('db-admin-summary').textContent,'sales · db · REGISTERED · revision 3');
+assert.equal($('db-admin-summary').textContent,'sales · db');
 assert.equal($('db-admin-binding').textContent.includes('must-not-render'),false);
 assert.equal($('db-admin-binding').textContent.includes('desired_revision'),true);
 const name='  売上 <script> 🐻 e\u0301  ',description='\tline 1\r\n説明';
@@ -146,7 +146,7 @@ session.platform_admin=false;await dbRefreshAccess();assert.equal(dbAdmin.reques
 assert.equal(dbAdmin.databases.length,0);assert.equal($('db-admin-content').children.length,0);assert.equal($('tab-db-admin').hidden,true);
 held.resolve(metadataResponse);await saving;
 session.platform_admin=true;await dbRefreshAccess();await dbAdminOpen();await choose('finance');
-assert.equal($('db-admin-summary').textContent,'finance · finance · REGISTERED · revision 3');assert.equal(dbAdmin.requests.size,0);
+assert.equal($('db-admin-summary').textContent,'finance · finance');assert.equal(dbAdmin.requests.size,0);
 ''')
 
     def test_revalidated_retry_after_discarded_authorization_response(self):
@@ -170,7 +170,7 @@ assert.equal(writeCalls()[1].options.body,original.options.body);assert.equal(wr
 assert.equal($('db-admin-select').disabled,false);await choose('finance');assert.equal(dbAdmin.database,'finance');assert.equal(dbAdmin.requests.size,0);
 assert.equal($('db-admin-plan-result').textContent,'');assert.equal($('db-admin-generation').value,'gen');
 adminItems=adminItems.filter(d=>d.id!=='finance');await dbAdminRefresh();
-assert.equal(dbAdmin.database,'');assert.equal($('db-admin-detail').children.length,0);
+assert.equal(dbAdmin.database,'');assert.equal($('db-admin-detail-view').hidden,true);
 ''')
 
     def test_pending_mutation_blocks_selection_without_losing_accepted_receipt(self):
@@ -283,7 +283,7 @@ assert.equal($('db-admin-use-registration').hidden,false);await click('use-regis
 assert.notEqual($('db-admin-select').value,'new');
 adminItems.at(-1).sql_catalog='new_db';await click('use-registration');
 assert.equal($('db-admin-select').value,'new');assert.equal(writeCalls().length,1);
-assert.match($('db-admin-current-target').textContent,/new_db.*REGISTERED/);
+assert.match($('db-admin-summary').textContent,/new_db · new/);assert.match($('db-admin-detail-state').children[0].textContent,/Registered/);
 assert.equal(document.activeElement,$('db-admin-generation'));
 assert.match($('db-admin-target-guidance').textContent,/request apply.*verify/);
 $('db-admin-creation-entry').onclick();assert.equal(document.activeElement,$('db-creation-title'));

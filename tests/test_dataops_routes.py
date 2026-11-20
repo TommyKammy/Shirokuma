@@ -237,11 +237,23 @@ class HTTPRoutesTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result['context'], asdict(C))
         self.assertEqual(result['preview']['rows'], [['001', '12345678901234567890.123']])
+        self.assertEqual(result['preview']['impact'], dict(mode='create', incoming_rows=1,
+            existing_rows=0, after_rows=1))
         body['expected_preview_fingerprint'] = result['preview']['request_fingerprint']
         body['content_base64'] = base64.b64encode(b'id,amount\n002,1\n').decode()
         with patch.object(routes.manual_ingest, 'ingest') as ingest:
             self.assertEqual(self.request('/api/v1/ingests', body, key='one')[1]['code'], 'PREVIEW_CHANGED')
             ingest.assert_not_called()
+
+    def test_preview_passes_the_authenticated_principal_for_target_metadata(self):
+        with patch.object(routes.manual_ingest, 'input_preview',
+                          return_value={'request_fingerprint': 'f' * 64,
+                              'impact': dict(mode='append', incoming_rows=1,
+                                  existing_rows=None, after_rows=None)}) as preview:
+            status, result = self.request('/api/v1/ingests/preview', self.upload())
+        self.assertEqual(status, 200)
+        self.assertIs(preview.call_args.kwargs['principal'], self.principal)
+        self.assertEqual(result['preview']['impact']['existing_rows'], None)
 
     def test_real_basic_authentication_before_dispatch(self):
         salt = '12' * 16

@@ -112,6 +112,22 @@ class ControlStoreTests(unittest.TestCase):
             foreign_keys = db.execute('PRAGMA foreign_key_list(warehouse_admissions)').fetchall()
         return schema, history, columns, foreign_keys
 
+    def test_v24_team_migration_preserves_existing_database_rows_as_null(self):
+        import data_management as dm
+        with store.connect() as db:
+            database = dm.create_database(db, 'legacy_team', 'Legacy', '', 'test')
+            db.execute("UPDATE databases SET team='Old Team' WHERE id=?", (database.id,))
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            db.execute('PRAGMA foreign_keys=OFF')
+            db.execute('ALTER TABLE databases DROP COLUMN team')
+            db.execute('PRAGMA user_version=24')
+        with store.connect() as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+            row = db.execute('SELECT id,sql_catalog,display_name,description,managed_by,state,revision,team FROM databases WHERE id=?',
+                             (database.id,)).fetchone()
+            self.assertEqual(tuple(row), (database.id, 'legacy_team', 'Legacy', '', 'test', 'registered', 1, None))
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
     def test_v23_closure_upgrade_preserves_rows_references_and_schema_objects(self):
         schema, history, columns, foreign_keys = self.v23_admission_history()
         with store.connect() as db:

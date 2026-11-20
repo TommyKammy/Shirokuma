@@ -66,7 +66,9 @@ class CreationFixture(unittest.TestCase):
                 'X-Shirokuma-Role':'admin'}
 
     def create(self, *, actor=None, key='create', **payload):
-        return creations.create(actor or self.alice,'admin',dict(sql_catalog='research',**payload),key)[0]
+        intent = dict(sql_catalog='research', **payload)
+        intent.setdefault('team', 'Data Team')
+        return creations.create(actor or self.alice,'admin',intent,key)[0]
 
     def snapshot(self):
         with control_store.connect() as db:
@@ -93,6 +95,30 @@ class CreationFixture(unittest.TestCase):
             expected_operation_revision=plan['operation_revision'],delivery_digest=plan['delivery_digest'])
         approval = creations.mutate(self.alice,'admin',ack['creation_id'],'APPROVE',payload,'approval',phase='bootstrap')
         return approval,plan,observations
+
+
+class TeamTests(CreationFixture):
+    def test_team_is_required_normalized_saved_and_projected(self):
+        for invalid in ('', '   ', 'x' * 65, 'bad\x01team', 'bad\nteam', 1, None):
+            with self.subTest(team=invalid):
+                with self.assertRaises(operations.OperationError) as error:
+                    self.create(team=invalid)
+                self.assertEqual((error.exception.code, error.exception.status), ('INVALID_REQUEST', 400))
+        ack = self.create(team='  Data Team  ')
+        detail = creations.get(self.alice, 'admin', ack['creation_id'])
+        self.assertEqual(detail['team'], 'Data Team')
+        listing = creations.listing(self.alice, 'admin')['creations']
+        self.assertEqual(listing[0]['team'], 'Data Team')
+        with control_store.connect() as db:
+            self.assertEqual(dm.get_database(db, detail['database_id']).team, 'Data Team')
+            self.assertEqual(json.loads(db.execute('SELECT after_metadata FROM metadata_audit').fetchone()[0])['team'], 'Data Team')
+
+    def test_team_change_with_the_same_key_is_an_idempotency_conflict(self):
+        first = self.create(team='Alpha', key='same-key')
+        self.assertEqual(self.create(team='Alpha', key='same-key'), first)
+        with self.assertRaises(operations.OperationError) as error:
+            self.create(team='Beta', key='same-key')
+        self.assertEqual(error.exception.code, 'IDEMPOTENCY_CONFLICT')
 
 
 class ProjectionTests(CreationFixture):
@@ -692,7 +718,7 @@ class CreationTests(CreationFixture):
     def test_parallel_distinct_keys_have_one_winner_without_loser_children(self):
         def run(index):
             try:
-                return creations.create(self.alice,'admin',dict(sql_catalog='database_'+str(index)),str(index))[0]
+                return creations.create(self.alice,'admin',dict(sql_catalog='database_'+str(index),team='Data Team'),str(index))[0]
             except operations.OperationError as error:
                 return error.code
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -800,7 +826,7 @@ class CreationTests(CreationFixture):
 class CreationDispatchTests(CreationFixture):
     def test_frozen_environment_header_denies_replay_after_server_switch_before_saved(self):
         import database_creation_bridge as bridge
-        payload = dict(sql_catalog='research',initial_grants=[dict(principal_id='reader',maximum_role='bi_viewer')])
+        payload = dict(sql_catalog='research',team='Data Team',initial_grants=[dict(principal_id='reader',maximum_role='bi_viewer')])
         first = self.handler(creations.COLLECTION,payload,'frozen-environment')
         first.headers['X-Shirokuma-Environment'] = self.config.environment_id
         with patch.object(bridge,'dispatch',side_effect=self.committed_dispatch) as dispatch:
@@ -832,7 +858,7 @@ class CreationDispatchTests(CreationFixture):
             value = self.handler(path,payload,key,origin)
             value.headers['X-Shirokuma-Environment'] = self.config.environment_id
             return value
-        payload = dict(sql_catalog='research')
+        payload = dict(sql_catalog='research',team='Data Team')
         with patch.object(bridge,'dispatch',side_effect=self.committed_dispatch) as dispatch:
             ack,status = self.send(handler(creations.COLLECTION,payload,'matching'))
             self.assertEqual(status,201)
@@ -876,7 +902,7 @@ class CreationDispatchTests(CreationFixture):
             ('one\ttwo',),('one\ntwo',),('one\rtwo',),('one\x00two',),('日本語',),('one/two',),('a'*129,)]
         for headers in values:
             with self.subTest(headers=repr(headers)):
-                handler = self.handler(creations.COLLECTION,dict(sql_catalog='research'),'invalid-header')
+                handler = self.handler(creations.COLLECTION,dict(sql_catalog='research',team='Data Team'),'invalid-header')
                 for value in headers:
                     handler.headers['X-Shirokuma-Environment'] = value
                 handler.database_body = Mock(side_effect=AssertionError('body must not be read'))
@@ -895,7 +921,7 @@ class CreationDispatchTests(CreationFixture):
             ('role',403,'ADMIN_REQUIRED'),('authority',403,'ADMIN_REQUIRED'),('origin',403,'INVALID_ORIGIN')]
         for case,status,code in cases:
             with self.subTest(case=case):
-                handler = self.handler(creations.COLLECTION,dict(sql_catalog='research'),'auth-before-environment')
+                handler = self.handler(creations.COLLECTION,dict(sql_catalog='research',team='Data Team'),'auth-before-environment')
                 handler.headers['X-Shirokuma-Environment'] = 'wrong-environment'
                 if case == 'password':
                     handler.headers.replace_header('Authorization','Basic '+base64.b64encode(b'alice:wrong').decode())
@@ -925,7 +951,7 @@ class CreationDispatchTests(CreationFixture):
             self.assertEqual(db.execute('SELECT count(*) FROM db_creations').fetchone()[0],0)
 
     def test_environment_header_missing_enrollment_and_get_compatibility(self):
-        handler = self.handler(creations.COLLECTION,dict(sql_catalog='research'),'not-configured')
+        handler = self.handler(creations.COLLECTION,dict(sql_catalog='research',team='Data Team'),'not-configured')
         handler.headers['X-Shirokuma-Environment'] = self.config.environment_id
         with patch.object(creations,'_enrollment',None),patch.object(creations,'_saved') as saved:
             error,status = self.send(handler)
@@ -950,7 +976,7 @@ class CreationDispatchTests(CreationFixture):
 
     def route(self, action):
         if action == 'CREATE':
-            return creations.COLLECTION, dict(sql_catalog='research')
+            return creations.COLLECTION, dict(sql_catalog='research',team='Data Team')
         if action == 'APPROVE':
             ack, payload = CreationTests.approval_intake(self, action)
             suffix = 'phases/bootstrap/approve'

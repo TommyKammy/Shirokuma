@@ -135,7 +135,7 @@ class WorkerTests(CreationFixture):
             headers[key] = value
         headers['Idempotency-Key'] = 'same-public-key'
         handler = SimpleNamespace(path=creations.COLLECTION,headers=headers,
-            database_body=lambda:dict(sql_catalog='research'),respond=Mock())
+            database_body=lambda:dict(sql_catalog='research',team='Data Team'),respond=Mock())
         captured = []
         def dispatch(rid,**kwargs):
             with control_store.connect() as db:
@@ -164,7 +164,7 @@ class WorkerTests(CreationFixture):
             headers[key] = value
         headers['Idempotency-Key'] = 'standalone-key'
         handler = SimpleNamespace(path=creations.COLLECTION,headers=headers,
-            database_body=lambda:dict(sql_catalog='research'),respond=Mock())
+            database_body=lambda:dict(sql_catalog='research',team='Data Team'),respond=Mock())
         with patch.object(creations,'_enrollment',None),patch.object(creations,'_foundation',None),patch.object(bridge,'_managed',None):
             creations.dispatch(handler,'POST')
             self.assertEqual(handler.respond.call_args.args[1],503)

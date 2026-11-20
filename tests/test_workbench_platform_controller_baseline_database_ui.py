@@ -96,7 +96,7 @@ const body=deferred(),entered=deferred();route=async()=>({controllerResponse:{ok
 
     def test_refresh_authority_is_manual_independent_and_late_denial_ignored(self):
         self.navigation_javascript(r"""
-await controllerBoot();$('tab-compute').click();await controllerFetch('policy');const held=dbControllerBaseline.policy.record;
+await controllerBoot();dbAISettings.autoOpened=true;$('tab-compute').click();await controllerFetch('policy');const held=dbControllerBaseline.policy.record;
 const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbControllerBaselineRefreshAuth('policy');await tick();const busy=dbControllerBaseline.policy.busy;await controllerFetch('compute');assert.equal(dbControllerBaseline.policy.busy,busy);assert.equal(dbControllerBaseline.policy.record,held);
 $('tab-warehouse').click();$('tab-compute').click();const saved=dbControllerBaseline.compute.record;wait.resolve({controllerResponse:{ok:false,status:403,json:async()=>{throw Error('late');}}});await pending;assert.equal(dbControllerBaseline.compute.record,saved);assert.equal(dbAdmin.platform,true);
 for(const status of [401,403]){dbAdminSession(session);let parsed=0;sessionRoute=async()=>({controllerResponse:{ok:false,status,json:async()=>{parsed++;throw Error('must not parse');}}});await dbControllerBaselineRefreshAuth('compute');assert.equal(parsed,0);controllerEmpty();}

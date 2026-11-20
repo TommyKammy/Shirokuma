@@ -181,7 +181,7 @@ await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length
 
     def test_late_reauth_cannot_revoke_new_capture_current_bad_parse_purges(self):
             self.javascript(r"""
-    await controllerBoot();await controllerFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbFoundationControllersRefreshAuth();await tick();activeTab='compute';dbControls();await controllerFetch();const current=dbFoundationControllers.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbFoundationControllers.record,current);assert.equal(dbAdmin.platform,true);
+    await controllerBoot();dbAISettings.autoOpened=true;await controllerFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbFoundationControllersRefreshAuth();await tick();activeTab='compute';dbControls();await controllerFetch();const current=dbFoundationControllers.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbFoundationControllers.record,current);assert.equal(dbAdmin.platform,true);
     sessionRoute=async()=>({malformed:true});await dbFoundationControllersRefreshAuth();allControllersEmpty();assert.equal(dbAdmin.platform,true);
     """)
 

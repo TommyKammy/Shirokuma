@@ -218,6 +218,7 @@ else{
  }
  $('p35-wap-metadata-id').value='unsaved input';
 }
+if(action==='manual-wap-publish')await $('copilot-publish').onclick();
 const old={id:'old-receipt',key:'old-key',principal:dbPrincipal,context:p.context,state:'FINISHED',ambiguous:false,protected:false};p.op=old;
 const original=route;let mutations=0;
 route=async(path,options)=>{if(path===dataopsRecoveryPaths[action])mutations++;return original(path,options);};
@@ -430,6 +431,7 @@ else{
   dataopsCaptureWap(p,wapReceipt(kind,p.context,record).operation);
  }
 }
+if(action==='manual-wap-publish')await $('copilot-publish').onclick();
 const original=route;let postCount=0;
 route=async(path,options)=>{
  if(path===dataopsRecoveryPaths[action]&&options?.method==='POST'){
@@ -739,11 +741,11 @@ assert.equal(calls.length,before);assert.equal(submissions.length,0);
         self.javascript(r'''
 $('transformation').append(Object.assign($('run-dbt-build'),{tagName:'BUTTON'}),Object.assign($('run-dbt-test'),{tagName:'BUTTON'}),Object.assign($('transformation-view-marts'),{tagName:'BUTTON'}));
 const p=await ready('p35-wap');
-assert.equal(p.root.parentElement,$('transformation-wap'));
-assert.equal($('transformation-wap').hidden,true);
+assert.equal(p.root.parentElement,$('transformation-models'));
 assert.equal($('transformation-models').hidden,false);
-assert.equal($('transformation-view-wap').hidden,false);
-assert.match($('database-ingestion-notice').textContent,/file ingestion and registered Stages/);
+assert.equal($('transformation-wap').hidden,true);
+assert.equal($('transformation-view-wap').hidden,true);
+assert.equal(Object.hasOwn(nodes,'database-ingestion-notice'),false);
 assert.equal($('p35-wap-model-id').disabled,false);assert.equal($('transformation-view-marts').disabled,false);
 assert.equal($('db-marts-panel').hidden,false);
 assert.ok($('jobs').children.filter(n=>!n.hidden).every(n=>n.id==='db-jobs-panel'));
@@ -929,7 +931,7 @@ await $('p35-wap-save').onclick();assert.equal(submissions[0].body.expected_vers
 assert.deepEqual(submissions[0].body.sources,{source:ref('orders'),other:ref('other')});assert.equal(p.model.version,1);
 await $('p35-wap-build-action').onclick();assert.equal(submissions[1].body.version,1);assert.equal(submissions[1].body.model_id,'daily_orders');
 assert.equal($('p35-wap-build').value,'build_id-record');await $('p35-wap-audit-action').onclick();assert.equal(submissions[2].body.build_id,'build_id-record');
-assert.equal($('p35-wap-publish').disabled,true);await $('p35-wap-publish').onclick();assert.equal(submissions.length,3);
+await $('copilot-publish').onclick();assert.equal($('p35-wap-publish').disabled,true);await $('p35-wap-publish').onclick();assert.equal(submissions.length,3);
 $('p35-wap-sql').oninput();assert.equal($('p35-wap-build-action').disabled,true);await $('p35-wap-save').onclick();assert.equal(submissions[3].body.expected_version,1);
 // Admin resolves both shared artifacts through authorized metadata GETs.
 const engineer={...p.context,grant_revision:17},model=p.model,submit=route;
@@ -947,6 +949,7 @@ route=async(path,options)=>{
 for(const kind of ['build','audit']){
  $('p35-wap-metadata-kind').value=kind;$('p35-wap-metadata-id').value=kind+'_id-record';await $('p35-wap-metadata-load').onclick();
 }
+await $('copilot-publish').onclick();assert.equal($('p35-wap-publish').disabled,false);
 await $('p35-wap-publish').onclick();const publish=submissions.at(-1);
 assert.equal(publish.body.context.selected_role,'admin');assert.equal(publish.headers['X-Shirokuma-Role'],'admin');assert.equal(publish.body.build_id,'build_id-record');
 ''')
@@ -954,7 +957,7 @@ assert.equal(publish.body.context.selected_role,'admin');assert.equal(publish.he
     def test_guided_wap_requires_complete_matching_artifacts(self):
         self.javascript(r'''
 const p=await ready('p35-wap'),id=key=>$('p35-wap-'+key);
-const stage=i=>assert.equal(id('step-'+i).getAttribute('aria-current'),'step');
+const stage=i=>assert.equal(id('step-'+i).getAttribute('aria-current'),'step',i+':'+[0,1,2,3,4,5].map(n=>id('step-'+n).getAttribute('aria-current')).join(','));
 p.sources[0].table.value='0';id('model-id').value='daily_orders';id('name').value='raw.orders';id('min').value='0';
 const original=route;let build=0,audit=0,publish=0;
 route=async(path,options)=>{
@@ -978,25 +981,26 @@ assert.equal(id('name').getAttribute('aria-invalid'),'true');assert.equal(id('mi
 assert.equal(document.activeElement,id('name'));
 id('name').value='daily_orders';id('name').oninput();id('min').value='1';id('min').oninput();
 const bodyTarget={database_id:'db',schema_id:id('target-schema').value,physical_name:'daily_orders'};
-await id('save').onclick();stage(1);assert.equal(document.activeElement,id('build-action'));assert.match(id('action-target').textContent,/daily_orders/);
-await id('build-action').onclick();stage(1);assert.match(id('guide-next').textContent,/Outcome unknown/);
+await id('save').onclick();stage(2);assert.equal(document.activeElement,id('build-action'));assert.match(id('action-target').textContent,/daily_orders/);
+await id('build-action').onclick();stage(2);assert.match(id('stage-reason').textContent,/Outcome unknown/);assert.equal(id('guide-next').textContent,'');
 await id('audit-action').onclick();assert.equal(audit,0);
 // Reconcile the original request as failed before submitting a fresh build.
 const mutations=route;
 route=async(path,options)=>path.startsWith('/api/v1/dataops/unknown-build?')?
  accepted(p.context,{id:'unknown-build',state:'FAILED',committed:false}):mutations(path,options);
 await id('observe').onclick();route=mutations;
-await id('build-action').onclick();stage(2);await id('audit-action').onclick();stage(2);
+await id('build-action').onclick();stage(3);await id('audit-action').onclick();stage(2);
 assert.match(id('quality-result').textContent,/Failed.*Rows: 3.*code: 1/);
 await id('publish').onclick();assert.equal(publish,0);
-await id('build-action').onclick();await id('audit-action').onclick();stage(2);
+await id('build-action').onclick();await id('audit-action').onclick();stage(3);
 assert.ok(id('quality-result').hidden);await id('publish').onclick();assert.equal(publish,0);
-await id('audit-action').onclick();stage(3);
-assert.match(id('publish-review').textContent,/daily_orders.*Build built-3 and Audit audit-3/);
+await id('audit-action').onclick();stage(4);
+await $('copilot-publish').onclick();stage(5);
+assert.match(id('publish-review').textContent,/Create a new MARTS table with 3 rows/);
 id('build').value='built-2';id('build').onchange();await id('publish').onclick();assert.equal(publish,0);
-id('build').value='built-3';id('build').onchange();
-await id('publish').onclick();stage(3);
-await id('publish').onclick();assert.match(id('step-3').textContent,/complete/);
+id('build').value='built-3';id('build').onchange();await $('copilot-publish').onclick();
+await id('publish').onclick();assert.equal(publish,1);
+await $('copilot-publish').onclick();await id('publish').onclick();assert.match(id('step-5').textContent,/complete/);
 assert.equal(publish,2);
 dataopsInvalidate(p);stage(0);assert.ok(id('quality-result').hidden);assert.ok(id('publish-review').hidden);
 ''')
@@ -1045,7 +1049,7 @@ assert.deepEqual(JSON.parse(new URL('http://localhost'+request.path).searchParam
     def test_bilingual_labels_and_context_response_mismatch(self):
         self.javascript(r'''
 const p=await ready();
-for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('p35-ingest-confirm').textContent,t('Confirm preview and ingest'));assert.equal($('p35-wap-publish').textContent,t('Publish audited build (admin)'));assert.equal($('p35-export-observe').textContent,t('Observe operation'));}
+for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('p35-ingest-confirm').textContent,t('Confirm preview and ingest'));assert.equal($('p35-wap-publish').textContent,t('Publish to MARTS'));assert.equal($('p35-export-observe').textContent,t('Observe operation'));}
 route=async()=>({context:{...p.context,selected_role:'bi_viewer'},preview:{request_fingerprint:'forged'}});
 await preview(p).then(()=>assert.fail('preview must reject mismatched accepted context'),()=>{});
 assert.equal(p.preview,null);assert.equal($('p35-ingest-confirm').disabled,true);

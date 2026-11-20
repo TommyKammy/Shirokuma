@@ -116,11 +116,11 @@ catalogSession='first';const key=catalogKey('raw.a','columns');catalogSession='s
         self.javascript(r"""
 selectedTable='raw.a';activeInspector='preview';let load=loadCatalog();
 pending.shift().resolve({metadata:{raw:[['a']]}});await tick();assert.match(pending[0].path,/detail=preview$/);
-pending.shift().resolve(detail());await tick();pending.shift().resolve({metadata:{lineage:{}}});await load;
+pending.shift().resolve(detail());await load;
 load=loadCatalog();pending.shift().resolve({metadata:{raw:[]}});await tick();
-assert.equal(selectedTable,null);assert.equal(pending[0].path,'/api/lineage');pending.shift().resolve({metadata:{lineage:{}}});await load;
+assert.equal(selectedTable,null);await load;
 const old=loadCatalog(),oldRequest=pending.shift();load=loadCatalog();pending.shift().resolve({metadata:{raw:[['b']]}});await tick();
-pending.shift().resolve({metadata:{lineage:{}}});await load;oldRequest.reject(Error('late'));await old;
+await load;oldRequest.reject(Error('late'));await old;
 assert.deepEqual(catalogMetadata,{raw:[['b']]});assert.equal($('catalog-error').textContent,'');
 load=loadCatalog();const stale=pending.shift();invalidateCatalogDetails();stale.resolve({metadata:{raw:[['stale']]}});await load;
 assert.deepEqual(catalogMetadata,{raw:[['b']]});assert.equal(pending.length,0);
@@ -155,7 +155,7 @@ for(const reject of [false,true])for(const fence of ['request','role']){
  if(reject)list.reject(Error('old error'));else list.resolve({metadata:{raw:[['old']]}});await old;
  assert.equal($('catalog-tree').textContent,'current tree');assert.equal($('worksheet-tree').textContent,'current worksheet');
  assert.deepEqual(catalogMetadata,{});assert.equal($('catalog-error').textContent,'');
- if(fresh){pending.shift().resolve({metadata:{}});await tick();pending.shift().resolve({metadata:{lineage:{}}});await fresh;}
+ if(fresh){pending.shift().resolve({metadata:{}});await fresh;}
 }
 """)
 
@@ -185,7 +185,7 @@ for(const [path,body,make] of [
 selectedTable='raw.a';let load=cloneTable('raw.a');
 pending.shift().resolve({table:'sandbox.copy',audit:{quality_passed:false}});await tick();
 pending.shift().resolve({metadata:{raw:[['a']]}});await tick();
-pending.shift().resolve(detail());await tick();pending.shift().resolve({metadata:{lineage:{}}});await load;
+pending.shift().resolve(detail());await load;
 assert.equal($('catalog-error').textContent,'Clone audit needs review');assert.equal($('catalog-error').hidden,false);
 """)
 
@@ -246,8 +246,7 @@ for(const change of [{username:'other'},{maximum_role:'bi_viewer',role:'bi_viewe
  assert.equal(catalogPending.size,0);assert.equal($('table-columns').rows,undefined);
  assert.equal(pending[0].path,'/api/catalog');
  if(change.maximum_role){assert.equal(calls.at(-1).options.headers['X-Shirokuma-Role'],'bi_viewer');assert.equal(currentRole,'bi_viewer');assert.equal($('role-selector').value,'bi_viewer');assert.equal($('role-selector').options[2].disabled,true);}
- pending.shift().resolve({metadata:{marts:[['authorized']]}});await tick();
- pending.shift().resolve({metadata:{lineage:{}}});await load;
+ pending.shift().resolve({metadata:{marts:[['authorized']]}});await load;
  assert.deepEqual(catalogMetadata,{marts:[['authorized']]});assert.equal(selectedTable,null);
 }
 """)

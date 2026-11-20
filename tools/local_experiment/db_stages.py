@@ -321,11 +321,32 @@ def preview(principal, context, stage_id, *, key, expected_revision, file, versi
             raw, info = _input(row, file)
             if version != info['version']:
                 raise QueryError('STAGE_INPUT_CHANGED', 409)
+            options = _options(json.loads(row['definition']), file, raw)
+            mode = options['mode']
+            target = options.get('target')
             result = dict(stage_id=stage_id, revision=row['revision'],
-                preview=manual_ingest.input_preview(context, **_options(json.loads(row['definition']), file, raw)),
+                preview=manual_ingest.input_preview(context, principal=principal,
+                    existing_rows=None, **options),
                 confirmation_fingerprint=_confirmation(context, row, file, raw))
         _receipt(db, principal, route, key, payload, result)
-        return result
+    # The row count is display-only and not part of the confirmation fingerprint.
+    # Read it after the write transaction commits so a slow catalog cannot block
+    # other Stage or ingest writes. A replay keeps its saved response.
+    existing = (0 if mode == 'create' else
+        manual_ingest.preview_existing_rows(principal, context, target))
+    result['preview'] = manual_ingest.apply_existing_rows(result['preview'], existing)
+    if mode != 'create' and existing is not None:
+        try:
+            with control_store.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                db.execute('UPDATE db_stage_requests SET response=? WHERE actor=? AND route=? '
+                    'AND idempotency_key=? AND payload=?',
+                    (ds._json(result), principal.principal_id, route, key, payload))
+        except Exception:
+            # The first response still carries the count; a later replay may
+            # return the previously saved null count.
+            pass
+    return result
 
 
 def _run_row(db, principal, context, stage_id, run_id):

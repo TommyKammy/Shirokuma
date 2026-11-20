@@ -6,6 +6,7 @@ import unittest
 
 from test_catalog_ui import function
 from workbench_source import INDEX, SCRIPT_BOUNDARY, WorkbenchSource
+from workbench_source import function as source_function
 
 HTML = INDEX.read_text()
 WORKBENCH_SOURCE = WorkbenchSource(HTML)
@@ -25,6 +26,10 @@ NAVIGATION_HANDLERS = NAVIGATION[NAVIGATION.index('tabs.forEach'):]
 LEGACY_ACTIVATE = SCRIPT[SCRIPT.index('function activate('):SCRIPT.index('const tabs=')].replace('function activate(', 'function legacyActivate(')
 PERIODIC_REFRESH = SCRIPT[SCRIPT.index('setInterval(async()=>'):SCRIPT.index('// Small DOM helpers')].replace('setInterval(', 'const periodicRefresh=registerInterval(', 1)
 TRANSLATIONS = SCRIPT[SCRIPT.index('const i18n = '):SCRIPT.index("let language = 'en';")]
+BASE_I18N = WORKBENCH_SOURCE.asset_sources['/assets/base_i18n.js']
+FMT_JST = BASE_I18N[BASE_I18N.index('function fmtJST('):BASE_I18N.index('function fmtInputJST(')]
+JOB_STATUSES = re.search(r'const jobStatuses=\{[^}]+\};', SCRIPT).group(0)
+JOB_STATUS_HELPERS = '\n'.join(source_function(name, SCRIPT) for name in ('statusTone', 'jobStatus'))
 MENU = re.findall(r'<a id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</a>', HTML)
 
 
@@ -56,20 +61,20 @@ class Node {
 }
 let strictRemoved=false;
 const $=id=>strictRemoved&&['worksheet-tree','worksheet-tree-filter'].includes(id)&&!nodes['worksheet-explorer']?.descendants().some(node=>node.id===id)?null:nodes[id]??=Object.assign(new Node(),{id});
-const sampleButtons=['orders','revenue','customers'].map(sample=>Object.assign(new Node('button'),{dataset:{sample}}));
-const document={createElement:tag=>new Node(tag),documentElement:{dataset:{}},querySelectorAll:selector=>selector==='[data-sample]'?sampleButtons:selector==='[data-tab]'?tabs:selector.startsWith('[data-view=')?Object.values(nodes).filter(n=>n.dataset.view===selector.split('\"')[1]):[]};
+const document={createElement:tag=>new Node(tag),documentElement:{dataset:{}},querySelectorAll:selector=>selector==='[data-tab]'?tabs:selector.startsWith('[data-view=')?Object.values(nodes).filter(n=>n.dataset.view===selector.split('\"')[1]):[]};
 let narrow=false;const mediaListeners=[];const matchMedia=()=>({get matches(){return narrow;},addEventListener:(event,listener)=>mediaListeners.push(listener)});
 const Option=function(text,value){return Object.assign(new Node('option'),{textContent:text,value});};
 ''' + TRANSLATIONS + r'''
 const uiBindings=new Map(),uiAttributes=[],languageKey='language';
 let language='en';const renderChart=()=>{};
 const ui=(node,key,values={})=>{uiBindings.set(node,{key,values});node.isConnected=true;node.textContent=t(key,values);},message=(id,text)=>{$(id).textContent=text;$(id).hidden=!text;};
+''' + FMT_JST + '\n' + JOB_STATUSES + '\n' + JOB_STATUS_HELPERS + r'''
 const table=(node,columns,rows)=>{node.rows=rows;node.columns=columns;};
 let catalogSession='',currentRole='admin',databaseMode=true,worksheets=[],worksheetId='',queryResult=null,activeTab='warehouse',activeInspector='columns';
 const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshots:'table-snapshots',ddl:'table-ddl',profile:'inspect-profile',lineage:'table-lineage'};
-const inspectorTabs=['columns','preview','profile','ddl','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
+const inspectorTabs=['columns','preview','profile','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
 const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('a'),{id:'tab-'+tab,dataset:{tab},textContent:label,href:'#'+tab});ui(node,label);return node;});
-const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};
+const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10',customers:'SELECT * FROM marts.dim_customers LIMIT 10',revenue:`SELECT n.n_name AS nation,\n       SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue\nFROM tpch_tiny.customer c\nJOIN tpch_tiny.orders o ON c.c_custkey = o.o_custkey\nJOIN tpch_tiny.lineitem l ON o.o_orderkey = l.l_orderkey\nJOIN tpch_tiny.supplier s ON l.l_suppkey = s.s_suppkey\nJOIN tpch_tiny.nation n ON s.s_nationkey = n.n_nationkey\nWHERE c.c_nationkey = s.s_nationkey\nGROUP BY n.n_name\nORDER BY revenue DESC`};
 const confirm=()=>true,populateChartColumns=()=>{},stopJobsPolling=()=>{},stopMartsPolling=()=>{};
 const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>{storage.set(key,value);writes.push(key);}};
 const readStorage=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
@@ -83,6 +88,8 @@ let session={username:'owner',authenticated:true,maximum_role:'admin',platform_a
 let inventory=[{id:'db',display_name:'Sales',sql_catalog:'sales',state:'READY',revision:1,binding_revision:1,generation_id:'gen',grant_revision:4,allowed_roles:['admin','data_engineer','bi_viewer'],capabilities:{browse:true,query:true,manage:false}}];
 let schemas=[{id:'schema',database_id:'db',display_name:'Mart',sql_name:'marts',revision:1,allowed_modes:['read-only','sandbox-write'],capabilities:{browse:true,query:true,write:true}},{id:'raw',database_id:'db',display_name:'Raw',sql_name:'raw',revision:1,allowed_modes:['read-only','sandbox-write'],capabilities:{browse:true,query:true,write:true}}];
 let objects=[],serverHistory=[],sessionRoute=null,inventoryRoute=null,historyRoute=null,objectsRoute=null,schemasRoute=null,inspectRoute=null,route=async()=>({});
+let runtimeStrict=false;
+const healthyRuntime=()=>({warehouse:'LOCAL',physical_state:'active',replicas:1,ready_replicas:1,observed_at:new Date().toISOString(),engine_verified:true,engine_verified_at:new Date().toISOString(),policy:{minutes:15,revision:1},blockers:{runtime_operations:0,admissions:0,unknown:0,creation:{requests:0,effects:0,roots:0}},operation_phase:null,available_actions:['wake','chill','auto-chill','reconcile']});
 const fetch=async(path,options)=>{
  calls.push({path,options});let data;
  if(path==='/api/session')data=sessionRoute?await sessionRoute(path,options):structuredClone(session);
@@ -91,27 +98,44 @@ const fetch=async(path,options)=>{
  else if(path.includes('/objects?'))data=objectsRoute?await objectsRoute(path,options):{items:structuredClone(objects),next_cursor:null};
  else if(path.startsWith('/api/v1/queries?'))data=historyRoute?await historyRoute(path,options):{queries:structuredClone(serverHistory)};
  else if(/^\/api\/v1\/queries\/[^/]+$/.test(path)&&!options?.method)data=inspectRoute?await inspectRoute(path,options):structuredClone(serverHistory.find(q=>q.id===path.split('/').at(-1)));
+ else if(path==='/api/v1/warehouses/LOCAL/runtime'&&!runtimeStrict){
+  let observed;try{observed=await route(path,options);}catch{}
+  data=observed&&observed.warehouse==='LOCAL'&&['active','chilled','starting','unknown'].includes(observed.physical_state)&&typeof observed.observed_at==='string'&&Number.isFinite(Date.parse(observed.observed_at))?observed:healthyRuntime();
+ }
  else data=await route(path,options);
  if(data?.malformed)return {ok:true,status:200,json:async()=>{throw SyntaxError('Malformed response');}};
  if(data?.http)return {ok:data.http>=200&&data.http<300,status:data.http,json:async()=>data.body};
  return {ok:true,status:200,json:async()=>data};
 };
 $('query-schema').parentElement=new Node();
+const sampleQuery=$('sample-query');sampleQuery.tagName='SELECT';
+for(const [label,value] of [['Choose a sample SQL',''],['Recent orders','orders'],['TPC-H Revenue by Nation','revenue'],['Customers','customers']])sampleQuery.add(new Option(label,value));
+for(const option of sampleQuery.children)if(option.textContent)ui(option,option.textContent);
+$('copy-tsv').onclick=async()=>{};
+ui($('load-query'),'Load SQL');
 const layout=Object.assign(new Node(),{className:'sql-layout'}),main=Object.assign(new Node(),{className:'sql-main'}),editor=new Node(),results=new Node(),strip=new Node(),inspector=new Node(),head=new Node(),actions=new Node(),filter=new Node();
 $('warehouse').append(layout);layout.append($('worksheet-explorer'),main);$('worksheet-explorer').append(new Node('summary'),$('worksheet-tree-filter'),$('worksheet-tree'));
-main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('copilot-result'));editor.append(strip,$('sql'),copilot);
-const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('worksheet-closers'),$('add-worksheet-tab'));results.append($('query-results'));
+main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('open-transformation'),$('copilot-result'));const runFooter=Object.assign(new Node(),{className:'query-footer'});runFooter.append($('run-query'));editor.append(strip,$('sql'),runFooter,copilot);
+const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('worksheet-closers'),$('add-worksheet-tab'));
+const resultsTools=Object.assign(new Node(),{className:'results-tools'}),segmented=Object.assign(new Node(),{className:'segmented'});
+segmented.append($('result-view-table'),$('result-view-chart'));
+resultsTools.append(segmented,$('result-filter'),$('copy-tsv'),$('export-csv'),$('export-json'),$('export-tsv'),$('result-action-state'));
+results.append(resultsTools,$('query-results'));
 head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),...Object.values(inspectorTargets).map($),$('snapshot-preview'));actions.append($('open-table-sql'));
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['t', 'setLanguage', 'worksheetName', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['transformationTerm', 't', 'setLanguage', 'worksheetName', 'setSQL', 'syncRunLabel', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings', 'loadSampleSQL']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+$('load-query').onclick=loadSampleSQL;
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
  storage.set(dbWorksheetKey,JSON.stringify({active:tabs[0].id,tabs}));
  await initializeDatabaseUI(session);
  await dbPageHydration;await dbRuntimeHydration;
+ // Component tests exercise worksheet and Explorer surfaces explicitly now that
+ // the product default route is Home.
+ await activate($('tab-warehouse'));
  // Component tests explicitly prepare both independent workspaces.
  await dbEnsureWorkspace('worksheet');await dbEnsureWorkspace('details');
 }
@@ -193,8 +217,8 @@ for(const lang of ['ja','en']){
  setLanguage(lang);
  session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
  assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
- assert.equal($('ai-settings-button').disabled,true);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
- for(const id of ['wake','chill','quick-wake','quick-chill','copilot-generate','run-dbt-build','run-dbt-test']){
+ assert.equal($('ai-settings-button').disabled,false);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
+ for(const id of ['wake','chill','copilot-generate','run-dbt-build','run-dbt-test']){
   assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
   const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
  }
@@ -203,7 +227,7 @@ for(const lang of ['ja','en']){
  assert.equal($('drop-table-btn').disabled,true);assert.equal($('drop-table-btn').dataset.databaseUnavailable,'false');
  assert.equal($('drop-table-btn').title,t('Catalog removal requires current Admin, an explicit database grant, and a readable, writable TABLE in raw, sandbox, staging or marts.'));
  for(const format of ['csv','json','tsv']){assert.equal($('export-'+format).disabled,true);assert.equal($('export-'+format).dataset.databaseUnavailable,'true');assert.equal($('export-'+format)['aria-describedby'],'result-action-state');}
- assert.equal($('copy-tsv').hidden,true);
+ assert.equal($('copy-tsv').hidden,false);assert.equal($('copy-tsv').disabled,true);
  assert.equal($('result-action-state').textContent,t('Result saving unavailable. Received page receipts or cached results are unavailable; SQL is not rerun.'));
  for(const button of inspectorTabs.filter(b=>['profile','lineage'].includes(b.dataset.inspect))){assert.equal(button.disabled,true);assert.equal(button.title,t(button.dataset.inspect==='profile'?'Refresh profile context after selecting a readable TABLE.':'Select a readable TABLE or VIEW in Explorer.'));}
  session.maximum_role='admin';await dbRefreshContext();
@@ -217,17 +241,16 @@ assert.equal(calls.length,before);
         self.javascript(r'''
 api=async path=>(await fetch(path)).json();
 await boot();
+dbRuntime.installed=false;
 route=async()=>{throw Error('Failed to fetch');};
 await refreshStatus();
 assert.equal($('status-error').textContent,'Failed to fetch');assert.equal($('status-error').hidden,false);
-message('quick-status-error','Existing quick action error');$('quick-status-error').title='Existing quick action error';
+message('catalog-error','Existing independent message');
 route=async()=>({status:'healthy'});
 await refreshStatus();
 assert.equal($('warehouse-state').textContent,'Ready');
-assert.equal($('quick-warehouse-state').textContent,'Database mode supports LOCAL only.');
 assert.equal($('status-error').textContent,'');assert.equal($('status-error').hidden,true);
-assert.equal($('quick-status-error').textContent,'Existing quick action error');assert.equal($('quick-status-error').hidden,false);
-assert.equal($('quick-status-error').title,'Existing quick action error');
+assert.equal($('catalog-error').textContent,'Existing independent message');assert.equal($('catalog-error').hidden,false);
 route=async()=>{throw Error('Current status failure');};
 await refreshStatus();
 assert.equal($('status-error').textContent,'Current status failure');assert.equal($('status-error').hidden,false);
@@ -239,7 +262,7 @@ assert.equal(calls.filter(c=>c.path==='/api/status').length,3);
 api=async path=>(await fetch(path)).json();
 await boot();
 dbRuntime.installed=false; // Exercise the legacy status fallback separately from runtime observations.
-const snapshot=()=>['warehouse-state','quick-warehouse-state','status-error','quick-status-error'].map(id=>({text:$(id).textContent,hidden:$(id).hidden,title:$(id).title}));
+const snapshot=()=>['warehouse-state','database-compute-state','status-error','catalog-error'].map(id=>({text:$(id).textContent,hidden:$(id).hidden,title:$(id).title}));
 for(const change of [()=>{dbPrincipal+='-next';},()=>{currentRole=currentRole==='admin'?'bi_viewer':'admin';},()=>{dbEpoch++;}]){
  for(const outcome of ['healthy','unhealthy','error']){
   for(const currentFailure of [false,true]){
@@ -263,17 +286,17 @@ for(const change of [()=>{dbPrincipal+='-next';},()=>{currentRole=currentRole===
     def test_navigation_dom_order_keyboard_and_legacy_page(self):
         self.javascript(r'''
 assert.equal(tabs[0].tagName,'A');assert.equal(tabs[1].tagName,'A');
-assert.deepEqual(tabs.slice(0,2).map(b=>b.id),['tab-catalog','tab-warehouse']);
-assert.deepEqual(tabs.slice(0,2).map(b=>b.textContent),['Data Explorer','SQL Worksheets']);
-assert.deepEqual(tabs.slice(0,2).map(b=>b.href),['#catalog','#warehouse']);
+assert.deepEqual(tabs.slice(0,3).map(b=>b.id),['tab-home','tab-catalog','tab-warehouse']);
+assert.deepEqual(tabs.slice(0,3).map(b=>b.textContent),['Home','Data Explorer','SQL Worksheets']);
+assert.deepEqual(tabs.slice(0,3).map(b=>b.href),['#home','#catalog','#warehouse']);
 let refreshes=0;$('refresh-catalog').onclick=()=>refreshes++;
-activate=legacyActivate;tabs[0].onclick();assert.equal(activeTab,'catalog');assert.equal($('catalog').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal(refreshes,1);
-assert.equal(tabs[0].getAttribute('aria-current'),'page');assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);
+activate=legacyActivate;tabs[1].onclick();assert.equal(activeTab,'catalog');assert.equal($('catalog').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal(refreshes,1);
+assert.equal(tabs[1].getAttribute('aria-current'),'page');assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);
 assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);
-assert.equal(tabs[0].onkeydown,undefined);
+assert.equal(tabs[1].onkeydown,undefined);
 // Modified activation is left to the browser for its normal new-tab behavior.
-let prevented=0,active=activeTab;tabs[1].onclick({button:0,metaKey:true,preventDefault(){prevented++;}});assert.equal(prevented,0);assert.equal(activeTab,active);
-databaseMode=false;setLanguage('ja');assert.equal(tabs[0].textContent,'データ探索');assert.equal(tabs[1].textContent,'SQL ワークシート');
+let prevented=0,active=activeTab;tabs[2].onclick({button:0,metaKey:true,preventDefault(){prevented++;}});assert.equal(prevented,0);assert.equal(activeTab,active);
+databaseMode=false;setLanguage('ja');assert.equal(tabs[1].textContent,'データ探索');assert.equal(tabs[2].textContent,'SQL ワークシート');
 ''')
 
     def test_workspace_navigation_real_pane_switches_and_languages(self):
@@ -515,7 +538,7 @@ assert.equal($('database-worksheet-pane').getAttribute('aria-labelledby'),'works
 assert.equal($('worksheet-tabs').querySelectorAll('[role=tab]').filter(b=>b.getAttribute('aria-selected')==='true').length,1);
 assert.equal($('worksheet-tabs').querySelectorAll('[role=tab]').filter(b=>b.tabIndex===0).length,1);
 $('worksheet-explorer').open=true;mediaListeners[0]({matches:true});assert.equal($('worksheet-explorer').open,false);
-assert.equal($('role-selector-label').textContent,'Role ceiling');setLanguage('ja');assert.equal($('role-selector-label').textContent,'利用role上限');
+assert.equal($('role-selector-label').textContent,'Role ceiling');setLanguage('ja');assert.equal($('role-selector-label').textContent,'利用できるロールの上限');
 ''')
 
     def test_saved_roles_use_separate_inventories_and_grant_stamps(self):
@@ -856,9 +879,9 @@ assert.equal(queryResult,null);assert.equal($('run-query').disabled,true);assert
     def test_detail_query_pages_and_unresolved_views_and_disabled_actions(self):
         self.javascript(r'''
 for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])$(panel).append(new Node('button'),new Node('input'));
-await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-sre-recent-failures','observation-recent-failures-panel','observation-sre-telemetry-readiness','observation-telemetry-readiness-panel','observation-sre-telemetry-logs','observation-telemetry-logs-panel','observation-policy-pod-baseline','observation-pod-baseline-panel','observation-policy-controller-baseline','observation-controller-baseline-panel','observation-policy-manifest-advisory','observation-activity-panel'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','transformation-view-wap','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts'].includes(n.id)).every(n=>n.disabled));
+await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-sre-recent-failures','observation-recent-failures-panel','observation-sre-telemetry-readiness','observation-telemetry-readiness-panel','observation-sre-telemetry-logs','observation-telemetry-logs-panel','observation-policy-pod-baseline','observation-pod-baseline-panel','observation-policy-controller-baseline','observation-controller-baseline-panel','observation-policy-manifest-advisory','observation-activity-panel','ai-settings','compute-ai-settings-open'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','transformation-view-wap','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts','compute-ai-settings-open','ai-settings-title'].includes(n.id)).every(n=>n.disabled));
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
-for(const id of ['copilot-generate','copilot-stage','copilot-publish','ai-settings-button','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);
+for(const id of ['copilot-generate','copilot-stage','copilot-publish','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);
 const view={id:null,ref:null,display_name:'Unresolved',capabilities:{columns:false}};await dbDescribe(view);assert.equal(calls.length,n);assert.match($('table-columns').textContent,/identity is not verified/);
 const context=dbContext(dbCurrent()),first={id:'detail',request_id:'detail-request',worksheet_id:'inventory:object:preview',context,columns:[{name:'n'}],data:[[7]],next_uri:'/api/v1/queries/detail/pages/next',state:'RUNNING'};
@@ -894,6 +917,7 @@ dbCurrent().database_id='db';dbCurrent().schema_id='schema';dbCurrent().binding_
 schemas[0].allowed_modes=['read-only','admin-write'];await dbRefreshContext();
 assert.ok($('query-mode').options.some(o=>o.value==='admin-write'));assert.ok(!$('query-mode').options.some(o=>['read','write'].includes(o.value)));
 $('query-mode').value='admin-write';$('query-mode').onchange();
+$('sql').value='SELECT 1';dbSave();
 route=async()=>envelope(dbRuns.get(worksheetId));await dbRunQuery();
 const post=calls.find(c=>c.path==='/api/v1/queries'&&c.options?.method==='POST');
 assert.equal(JSON.parse(post.options.body).mode,'admin-write');
@@ -1092,22 +1116,33 @@ assert.equal($('worksheet-explorer').descendants().includes($('catalog-filter'))
 assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal($('sql').value,sql);assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
 ''')
 
-    def test_database_header_and_fixed_samples_disabled_with_bilingual_reasons(self):
-        buttons = re.findall(r'<button\b[^>]*(?:id="quick-(?:wake|chill)"|data-sample="[^"]+")[^>]*>', HTML)
-        self.assertEqual(len(buttons), 5)
-        self.assertTrue(all('disabled' not in button for button in buttons))
+    def test_database_header_and_sample_sql_use_a_select_and_load_button(self):
+        self.assertNotIn('data-sample=', HTML)
         self.javascript(r'''
-const controls=[$('quick-wake'),$('quick-chill'),...sampleButtons];
-assert.equal(sampleButtons.length,3);assert.ok(controls.every(node=>!node.disabled&&!node.title));
-databaseMode=false;setLanguage('en');assert.ok(controls.every(node=>!node.disabled&&!node.title));
-databaseMode=true;await boot();const inputs=JSON.stringify(dbInput(dbCurrent()));
-assert.ok(controls.every(node=>node.disabled));assert.ok(sampleButtons.every(node=>/unavailable in Database mode/.test(node.title)));assert.match($('quick-wake').title,/All databases share/);
-assert.match(sampleButtons[0].title,/Enter SQL for the selected database/);
-setLanguage('ja');assert.ok(controls.every(node=>node.disabled));assert.match($('quick-wake').title,/全 DB/);
-assert.match(sampleButtons[0].title,/SQL を入力/);
+await boot();
+assert.equal($('sample-query').tagName,'SELECT');
+assert.deepEqual([...$('sample-query').options].map(option=>option.value),['','orders','revenue','customers']);
+assert.ok(!$('load-query').disabled);
+const context=dbContext(dbCurrent());
+setLanguage('en');
+for(const [value,label] of [['orders','Recent orders'],['revenue','TPC-H Revenue by Nation'],['customers','Customers']]){
+ assert.equal($('sample-query').options.find(option=>option.value===value).textContent,label);
+ $('sample-query').value=value;$('load-query').click();
+ assert.equal($('sql').value,samples[value]);assert.equal(dbCurrent().sql,samples[value]);
+ assert.equal($('sample-query').value,'');assert.equal(document.activeElement,$('sql'));
+ assert.deepEqual(dbContext(dbCurrent()),context);
+}
+setLanguage('ja');
+for(const [value,label] of [['orders','最近の注文'],['revenue','TPC-H 国別売上'],['customers','顧客']])
+ assert.equal($('sample-query').options.find(option=>option.value===value).textContent,label);
+assert.equal($('load-query').textContent,'SQL を読み込む');
+for(const id of ['wake','chill']){assert.equal($(id).disabled,true);assert.match($(id).title,/全 DB/);}
+assert.equal($('database-compute-status').disabled,false);
+setLanguage('en');
+for(const id of ['wake','chill'])assert.match($(id).title,/All databases share/);
 currentRole='data_engineer';dbApplyRole();await dbRefreshContext();setLanguage('en');
-assert.ok(controls.every(node=>node.disabled));assert.ok(sampleButtons.every(node=>/unavailable in Database mode/.test(node.title)));assert.match($('quick-wake').title,/All databases share/);
-assert.equal(JSON.stringify(dbInput(dbCurrent())),inputs);assert.equal($('sql').disabled,false);
+for(const id of ['wake','chill'])assert.match($(id).title,/All databases share/);
+assert.equal($('sql').disabled,false);
 assert.equal($('add-worksheet-tab').disabled,false);assert.equal($('query-schema').disabled,false);assert.equal($('query-mode').disabled,false);
 assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
 ''')
@@ -1204,8 +1239,8 @@ assert.equal(dbCurrent().database_id,context.database_id);assert.equal(dbCurrent
 await dualBoot();const inputs=JSON.stringify(dbInput(dbCurrent())),before=calls.length;
 const tab=section=>inspectorTabs.find(b=>b.dataset.inspect===section),key=key=>({key,preventDefault(){}});
 tab('columns').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'preview');
-tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'ddl');assert.equal(document.activeElement,tab('ddl'));
-tab('ddl').onkeydown(key('Home'));assert.equal(activeInspector,'columns');
+tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'snapshots');assert.equal(document.activeElement,tab('snapshots'));
+tab('snapshots').onkeydown(key('Home'));assert.equal(activeInspector,'columns');
 assert.equal(tab('profile').disabled,true);assert.match(tab('profile').title,/readable TABLE/);
 assert.equal(tab('lineage').disabled,true);assert.match(tab('lineage').title,/readable TABLE or VIEW/);
 assert.ok($('table-lineage').descendants().some(n=>n.textContent.includes('readable TABLE or VIEW')));assert.ok(!$('table-lineage').textContent.includes('Loading'));

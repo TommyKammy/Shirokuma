@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 
-VERSION = 24
+VERSION = 25
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -629,6 +629,11 @@ def _migrate(connection):
     if _version(connection) == 23:
         _migrate_admission_closures(connection)
         connection.execute('PRAGMA user_version=24')
+    if _version(connection) == 24:
+        columns = {row['name'] for row in connection.execute('PRAGMA table_info(databases)')}
+        if 'team' not in columns:
+            connection.execute('ALTER TABLE databases ADD COLUMN team TEXT')
+        connection.execute('PRAGMA user_version=25')
 
 
 def _migrate_admission_closures(db):

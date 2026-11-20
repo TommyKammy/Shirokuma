@@ -103,12 +103,12 @@ class ComputeLayoutUI(unittest.TestCase):
     def test_state_usage_and_diagnostics_order_and_current_role_gate(self):
         self.javascript(r'''
 await start();
-const top=$('compute').children.filter(n=>['compute-overview','runtime-panel','compute-usage','observation-activity-panel','compute-diagnostics'].includes(n.id)).map(n=>n.id);
-assert.deepEqual(top,['compute-overview','runtime-panel','compute-usage','observation-activity-panel','compute-diagnostics']);
+const top=$('compute').children.filter(n=>['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics'].includes(n.id)).map(n=>n.id);
+assert.deepEqual(top,['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics']);
 assert.equal($('runtime-panel').parentElement,$('compute'));
-for(const [id,group] of [['observation-resources-panel','compute-usage-list'],['observation-usage-panel','compute-usage-list'],['observation-capacity-panel','compute-usage-list'],['observation-compute-panel','compute-diag-runtime'],['observation-history-panel','compute-diag-runtime'],['observation-baseline-panel','compute-diag-policy'],['observation-pod-baseline-panel','compute-diag-policy'],['observation-recent-failures-panel','compute-diag-logs']])assert.equal($(id).parentElement,$(group),id);
+for(const [id,group] of [['observation-resources-panel','compute-usage-list'],['observation-usage-panel','compute-usage-list'],['observation-capacity-panel','compute-usage-list'],['observation-activity-panel','compute-diag-history'],['observation-compute-panel','compute-diag-runtime'],['observation-history-panel','compute-diag-runtime'],['observation-baseline-panel','compute-diag-policy'],['observation-pod-baseline-panel','compute-diag-policy'],['observation-recent-failures-panel','compute-diag-logs']])assert.equal($(id).parentElement,$(group),id);
 assert.equal(dbAdminAllowed(),true);assert.equal($('compute-diagnostics').hidden,false);assert.equal($('compute-usage-list').hidden,false);assert.equal($('compute-usage-note').hidden,true);
-assert.match($('runtime-capability').textContent,/as a platform operator/);assert.equal($('runtime-authority').hidden,true);
+assert.equal($('runtime-capability').hidden,true);assert.equal($('runtime-authority').hidden,true);
 const before=$('compute').children.slice();for(let i=0;i<3;i++){dbRuntimeInstall();dbComputeLayout();dbRuntimeRender();}assert.deepEqual($('compute').children,before);
 assert.equal($('compute').descendants().filter(n=>n.id==='compute-diagnostics').length,1);
 currentRole='bi_viewer';dbApplyRole();dbRuntimeRender();
@@ -133,16 +133,16 @@ setLanguage('ja');assert.match($('runtime-capability').textContent,/閲覧のみ
     def test_summary_keeps_missing_failed_unsupported_stale_and_engine_record_distinct(self):
         self.javascript(r'''
 await start();const saved={status:dbRuntime.status,failed:dbRuntime.failed,support:dbRuntime.support};
-const read=()=>[$('runtime-state-badge').textContent,$('runtime-state-badge').className,$('runtime-summary').textContent];
+const read=()=>[$('runtime-state-badge').textContent,$('runtime-state-badge').className,$('runtime-summary').textContent,$('runtime-summary-detail').textContent];
 dbRuntime.status=null;dbRuntime.failed=false;dbRuntimeRender();assert.deepEqual(read().slice(0,2),[t('Loading…'),'badge']);assert.match(read()[2],/Reading the runtime state/);
-dbRuntime.failed=true;dbRuntimeRender();assert.equal(read()[1],'badge tone-bad');assert.match(read()[2],/current state is unknown; this is not the same as stopped or zero usage/);
+dbRuntime.failed=true;dbRuntimeRender();assert.equal(read()[1],'badge tone-bad');assert.match(read()[3],/current state is unknown; this is not the same as stopped or zero usage/);
 dbRuntime.support='unsupported';dbRuntimeRender();assert.equal(read()[0],'Not supported');assert.doesNotMatch(read()[2],/Reading/);
 Object.assign(dbRuntime,saved);
 dbRuntime.status={...saved.status,physical_state:'active',engine_verified:true,engine_verified_at:'2000-01-01T00:00:00Z',observed_at:new Date().toISOString()};dbRuntimeRender();
-assert.equal(read()[1],'badge tone-ok');assert.match(read()[2],/separate record and may be older/);assert.doesNotMatch(read()[2],/verified then|outdated/);
-dbRuntime.status={...dbRuntime.status,observed_at:new Date(Date.now()-25*60000).toISOString()};dbRuntimeRender();assert.match(read()[2],/Observed 25 min ago\. This observation may be outdated/);
-for(const [state,tone,pattern] of [['chilled','badge',/starts shared LOCAL automatically/],['starting','badge tone-run',/Starting or stopping/],['unknown','badge tone-warn',/Do not assume it is stopped/]]){dbRuntime.status={...dbRuntime.status,physical_state:state};dbRuntimeRender();assert.equal(read()[1],tone);assert.match(read()[2],pattern);}
-setLanguage('ja');assert.match(read()[2],/休止中とはみなさないでください/);assert.match(read()[2],/古い観測の可能性があります/);
+assert.equal(read()[1],'badge tone-ok');assert.match(read()[3],/separate record and may be older/);assert.doesNotMatch(read()[3],/verified then|outdated/);
+dbRuntime.status={...dbRuntime.status,observed_at:new Date(Date.now()-25*60000).toISOString()};dbRuntimeRender();assert.match(read()[3],/Observed 25 min ago\. This observation may be outdated/);
+for(const [state,tone,pattern] of [['chilled','badge',/Wake shared LOCAL, then run SQL/],['starting','badge tone-run',/Starting or stopping/],['unknown','badge tone-warn',/Do not assume it is stopped/]]){dbRuntime.status={...dbRuntime.status,physical_state:state};dbRuntimeRender();assert.equal(read()[1],tone);assert.match(read()[3],pattern);}
+setLanguage('ja');assert.match(read()[3],/休止中とはみなさないでください/);assert.match(read()[3],/古い観測の可能性があります/);
 ''')
 
     def test_chill_reason_is_shown_beside_controls_only_while_blocked(self):
@@ -152,8 +152,8 @@ dbRuntime.status.blockers.admissions=1;dbRuntimeRender();assert.equal($('runtime
 dbRuntime.status.blockers.admissions=0;dbRuntime.status.blockers.unknown=0;dbRuntimeRender();
 assert.equal($('runtime-chill').disabled,!dbRuntimeAllowed('chill'));assert.equal($('runtime-condition-chill').hidden,!$('runtime-chill').disabled);
 assert.equal($('runtime-condition-save').hidden,true);
-assert.equal($('runtime-condition-chill').parentElement,$('runtime-safety-section'));assert.equal($('runtime-actions').parentElement,$('runtime-controls-section'));
-const controls=$('runtime-controls-section').children;assert.ok(controls.indexOf($('runtime-capability'))<controls.indexOf($('runtime-impact')));assert.ok(controls.indexOf($('runtime-impact'))<controls.indexOf($('runtime-actions')));
+assert.equal($('runtime-condition-chill').parentElement,$('runtime-conditions'));assert.equal($('runtime-actions').parentElement,$('runtime-controls-section'));
+const controls=$('runtime-controls-section').children;assert.ok(controls.indexOf($('runtime-impact'))<controls.indexOf($('runtime-chill-impact')));assert.ok(controls.indexOf($('runtime-chill-impact'))<controls.indexOf($('runtime-actions')));assert.ok(controls.indexOf($('runtime-actions'))<controls.indexOf($('runtime-message')));
 ''')
 
 

@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experi
 import control_store
 import data_management as dm
 import dataops_service as ds
+import database_inventory as inv
 import lake_ingest as lake
 import manual_ingest as manual
 import query_service as qs
@@ -692,6 +693,112 @@ lake_ingest.manual_ingest(p,c,idempotency_key='crash',mode='create',destination=
         self.assertFalse(self.sql())
         with control_store.connect() as db:
             self.assertIsNotNone(db.execute('SELECT commit_result FROM dataops_queries WHERE operation_id=? AND step=?', (replay['id'], 'commit')).fetchone()[0])
+
+
+class PreviewImpactTests(unittest.TestCase):
+    """The preview impact is catalog-only and never changes confirmation identity."""
+
+    def setUp(self):
+        self.fixture = boundary.DataOpsTests()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.principal = self.fixture.principal
+        self.context = self.fixture.context()
+
+    def preview(self, *, principal=True, **options):
+        request = dict(filename='input.csv', content='id,label\n1,a\n2,b\n',
+                       key_columns=())
+        request.update(options)
+        if 'target' in request:
+            request.pop('destination', None)
+        else:
+            request['destination'] = self.fixture.locator()
+        if principal:
+            request['principal'] = self.principal
+        return manual.input_preview(self.context, **request)
+
+    def existing(self, name, rows=5):
+        ref = self.fixture.existing(name)
+        key = next(key for key in self.fixture.objects
+                   if key[2] == name and key[3] == 'tables')
+        metadata = self.fixture.objects[key]
+        if rows == 'empty':
+            metadata.update({'current-snapshot-id': None, 'snapshots': []})
+        else:
+            summary = {} if rows is None else {'total-records': 'not-a-number' if rows == 'invalid' else str(rows)}
+            metadata.update({'current-snapshot-id': 42,
+                'snapshots': [{'snapshot-id': 42, 'summary': summary}]})
+        return ref
+
+    def test_create_append_replace_and_upsert_impacts(self):
+        create = self.preview(mode='create')
+        self.assertEqual(create['impact'], dict(mode='create', incoming_rows=2,
+            existing_rows=0, after_rows=2))
+        append = self.preview(mode='append', target=self.existing('append_target', 5))
+        self.assertEqual(append['impact'], dict(mode='append', incoming_rows=2,
+            existing_rows=5, after_rows=7))
+        replace = self.preview(mode='replace', target=self.existing('replace_target', 5))
+        self.assertEqual(replace['impact'], dict(mode='replace', incoming_rows=2,
+            existing_rows=5, after_rows=2))
+        upsert = self.preview(mode='upsert', target=self.existing('upsert_target', 5),
+            key_columns=['id'])
+        self.assertEqual(upsert['impact'], dict(mode='upsert', incoming_rows=2,
+            existing_rows=5, after_rows=None))
+
+    def test_missing_or_invalid_total_records_is_null_not_guessed(self):
+        for name, rows in (('missing_total', None), ('invalid_total', 'invalid')):
+            preview = self.preview(mode='append', target=self.existing(name, rows))
+            self.assertIsNone(preview['impact']['existing_rows'], name)
+            self.assertIsNone(preview['impact']['after_rows'], name)
+        empty = self.preview(mode='append', target=self.existing('empty_zero', 'empty'))
+        self.assertEqual(empty['impact']['existing_rows'], 0)
+        self.assertEqual(empty['impact']['after_rows'], 2)
+
+    def test_integer_and_string_total_records_are_accepted(self):
+        ref = self.existing('integer_total', 5)
+        key = next(key for key in self.fixture.objects if key[2] == 'integer_total')
+        self.fixture.objects[key]['snapshots'][0]['summary']['total-records'] = 5
+        preview = self.preview(mode='append', target=ref)
+        self.assertEqual(preview['impact']['existing_rows'], 5)
+
+    def test_catalog_failure_keeps_preview_and_never_runs_sql(self):
+        ref = self.existing('catalog_failure', 5)
+        calls = len(self.fixture.calls)
+        with patch.object(inv, 'catalog_api', side_effect=inv.InventoryError(
+                'CATALOG_UNAVAILABLE', 502, 'catalog unavailable')), \
+                patch.object(qs, 'submit') as submit:
+            preview = self.preview(mode='append', target=ref)
+        self.assertIsNone(preview['impact']['existing_rows'])
+        self.assertIsNone(preview['impact']['after_rows'])
+        self.assertEqual(preview['total_rows'], 2)
+        self.assertEqual(len(self.fixture.calls), calls)
+        submit.assert_not_called()
+
+    def test_unreadable_target_is_null_and_preview_succeeds(self):
+        ref = self.existing('unreadable_target', 5)
+        with patch.object(inv, '_schema', side_effect=PermissionError()):
+            preview = self.preview(mode='replace', target=ref)
+        self.assertIsNone(preview['impact']['existing_rows'])
+        self.assertEqual(preview['impact']['incoming_rows'], 2)
+
+    def test_stale_incarnation_is_null(self):
+        ref = self.existing('stale_target', 5)
+        stale = replace(ref, incarnation=ref.incarnation + 1)
+        self.assertIsNone(self.preview(mode='append', target=stale)['impact']['existing_rows'])
+
+    def test_existing_rows_are_not_part_of_the_confirmation_fingerprint(self):
+        ref = self.existing('fingerprint_target', 5)
+        first = self.preview(mode='append', target=ref)
+        key = next(key for key in self.fixture.objects if key[2] == 'fingerprint_target')
+        self.fixture.objects[key]['snapshots'][0]['summary']['total-records'] = '99'
+        second = self.preview(mode='append', target=ref)
+        self.assertEqual(first['request_fingerprint'], second['request_fingerprint'])
+        self.assertEqual(second['impact']['existing_rows'], 99)
+
+    def test_preview_without_an_authorized_principal_reports_unknown(self):
+        ref = self.existing('stage_preview_target', 5)
+        preview = self.preview(principal=False, mode='append', target=ref)
+        self.assertIsNone(preview['impact']['existing_rows'])
 
 
 class TypedValueTests(unittest.TestCase):

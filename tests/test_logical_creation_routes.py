@@ -24,11 +24,11 @@ class LogicalRouteTests(legacy_routes.NameLookupRouteChecks, LogicalFixture):
                 self.dispatch = result
 
     def test_normal_create_replay_get_location_no_store(self):
-        status, ack, headers = self.request(body=dict(sql_catalog='research'))
+        status, ack, headers = self.request(body=dict(sql_catalog='research',team='Data Team'))
         self.assertEqual(status, 202)
         self.assertEqual(headers['Location'], legacy.COLLECTION+'/'+ack['creation_id'])
         self.assertEqual(headers['Cache-Control'], 'no-store')
-        self.assertEqual(self.request(body=dict(sql_catalog='research'))[:2], (200, ack))
+        self.assertEqual(self.request(body=dict(sql_catalog='research',team='Data Team'))[:2], (200, ack))
         self.dispatch.assert_called_once_with(ack['request_id'])
         self.dispatch.reset_mock()
         status, detail, headers = self.request('/'+ack['creation_id'])
@@ -47,13 +47,13 @@ class LogicalRouteTests(legacy_routes.NameLookupRouteChecks, LogicalFixture):
                 ([('X-Shirokuma-Environment','a'),('X-Shirokuma-Environment','b')], 'key', 400),
                 ([], None, 400)]:
             with self.subTest(headers=headers):
-                status, _, response = self.request(body=dict(sql_catalog='research'), headers=headers, key=key)
+                status, _, response = self.request(body=dict(sql_catalog='research',team='Data Team'), headers=headers, key=key)
                 self.assertEqual(status, expected)
                 self.assertEqual(response['Cache-Control'], 'no-store')
         self.dispatch.assert_not_called()
 
     def test_old_phase_routes_rejected_and_withdraw_permanent(self):
-        _, ack, _ = self.request(body=dict(sql_catalog='research'))
+        _, ack, _ = self.request(body=dict(sql_catalog='research',team='Data Team'))
         for action in ('plans','phases/bootstrap/approve','phases/full/recover-verify','replan'):
             status, result, _ = self.request('/'+ack['creation_id']+'/'+action,
                 body=dict(expected_revision=1), key=action)

@@ -142,7 +142,7 @@ if(kind==='resource')await resourceFetch(denied);else{sessionRoute=()=>denied;aw
 
     def test_stale_auth_response_and_body_cannot_downgrade_or_restore(self):
         self.navigation_javascript(r"""
-await resourceBoot();$('tab-compute').click();for(const bodyStage of [false,true])for(const denied of [false,true]){
+await resourceBoot();dbAISettings.autoOpened=true;$('tab-compute').click();for(const bodyStage of [false,true])for(const denied of [false,true]){
 const old=deferred();sessionRoute=()=>bodyStage?{http:200,body:old.promise}:old.promise;const pending=dbResourcesRefreshAuth();await tick();$('tab-warehouse').click();$('tab-compute').click();sessionRoute=null;await dbResourcesRefreshAuth();await resourceFetch();const saved=dbResources.record;
 old.resolve(denied?{http:403,body:{platform_admin:false}}:{...session,authenticated:false,platform_admin:false,maximum_role:'bi_viewer'});await pending;assert.equal(dbResources.record,saved);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');}
 """)
@@ -209,7 +209,7 @@ for(const action of ['fetch','auth']){
 const nativeAppend=Node.prototype.append;Node.prototype.append=function(...items){return nativeAppend.apply(this,items.map(n=>typeof n==='string'?Object.assign(new Node('text'),{textContent:n}):n));};
 session.platform_admin=true;await boot();request('proposal');await choose();await submit(pendingProposal({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbProposalHeld().length,1);
 await curatorContext();objects=[curatorObject()];await dbCuratorLoad();change('object','0');await curatorSubmit(curatorPending({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbCuratorHeld().length,1);
-route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
+route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();workbenchSetComputeStatus('available','tone-ok');route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
 const wap=dataopsPanels.get('p35-wap');schemas[0].capabilities.wap_models=true;route=async path=>({context:JSON.parse(new URL(path,'http://fixture').searchParams.get('context')),items:[]});await dataopsRefresh(wap);route=async()=>{throw Error('lost ACK');};await dataopsSubmit(wap,'/api/v1/wap/build',{model_id:'existing-model',version:1},{});
 editSQL('SELECT kept SQL');editDoctor('SELECT kept Doctor');request('kept Copilot');$('p35-wap-sql').value='SELECT kept WAP';wap.sources[0].alias.value='kept';
 await readyObservation('sre');await readyObservation('policy');await fetchObservation('sre');await fetchObservation('policy');const sre=dbObservations.sre.record,policy=dbObservations.policy.record;

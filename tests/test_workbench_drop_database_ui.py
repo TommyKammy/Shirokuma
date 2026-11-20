@@ -8,7 +8,7 @@ from test_workbench_lineage_database_ui import catalog_markup
 
 SETUP = DATAOPS_SETUP + 'const removalMarkup='+json.dumps(catalog_markup.root)+r''';
 function mountRemovalMarkup(spec){
- const a=spec.attrs,n=a['data-inspect']?inspectorTabs.find(b=>b.dataset.inspect===a['data-inspect']):a.id?$(a.id):document.createElement(spec.tag);
+ const a=spec.attrs,n=a['data-inspect']?(inspectorTabs.find(b=>b.dataset.inspect===a['data-inspect'])||document.createElement('button')):a.id?$(a.id):document.createElement(spec.tag);
  n.tagName=spec.tag.toUpperCase();
  for(const [k,v] of Object.entries(a)){
   if(k==='class')n.className=v;else if(k==='hidden')n.hidden=true;

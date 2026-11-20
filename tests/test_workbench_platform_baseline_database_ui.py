@@ -41,7 +41,7 @@ class PlatformBaselineDatabaseUI(unittest.TestCase):
 
     def navigation_javascript(self, body):
         harness = resources_ui.compute_ui.platform_ui.observations.harness
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
+        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
         self.javascript(r"""
 const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
 eval(""" + json.dumps(handlers) + r""");
@@ -154,7 +154,7 @@ await dbBaselineRefreshAuth();assert.equal(calls.length,count);dbAdminSession(se
 
     def test_late_reauth_cannot_revoke_new_capture_current_bad_parse_purges(self):
         self.javascript(r"""
-await baselineBoot();await baselineFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbBaselineRefreshAuth();await tick();activeTab='compute';dbControls();await baselineFetch();const current=dbBaseline.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbBaseline.record,current);assert.equal(dbAdmin.platform,true);
+await baselineBoot();await baselineFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbBaselineRefreshAuth();await tick();dbAISettings.autoOpened=true;activeTab='compute';dbControls();await baselineFetch();const current=dbBaseline.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbBaseline.record,current);assert.equal(dbAdmin.platform,true);
 sessionRoute=async()=>({malformed:true});await dbBaselineRefreshAuth();allBaselineEmpty();assert.equal(dbAdmin.platform,true);
 """)
 

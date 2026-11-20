@@ -9,7 +9,9 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import ANY, Mock, patch
-from urllib.parse import urlsplit, unquote
+from urllib.parse import parse_qs, urlsplit, unquote
+
+from email.message import Message
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 import control_store
@@ -437,6 +439,149 @@ class DatabaseInventoryTests(unittest.TestCase):
             record = registry.observe_object(db, marts.id, 'a', 'TABLE', 'uuid-a', 'a')
         with self.assertRaises(inventory.InventoryError):
             inventory.object_detail(self.principal, 'bi_viewer', record.id, detail='ddl')
+
+    def _add_ready_database(self, sql_catalog, schema_names=('raw', 'marts')):
+        generation = 'generation-' + sql_catalog
+        with control_store.connect() as db:
+            database = registry.create_database(db, sql_catalog, sql_catalog.title(), '', 'test')
+            db.execute("UPDATE databases SET state='READY' WHERE id=?", (database.id,))
+            registry.create_binding(db, database.id, 'polaris', 'SALES', sql_catalog, 'storage', 'credential', 's3://synthetic/')
+            registry.record_generation(db, registry.WarehouseConfigGeneration(generation, 'LOCAL', 'apply-' + sql_catalog, (), (), (), 'READY'))
+            registry.update_binding(db, database.id, 1, 1, generation)
+            registry.create_grant(db, 'alice', database.id, 'data_engineer')
+            db.execute('''UPDATE effective_grants SET maximum_role='data_engineer', applied_revision=1,
+                applied_generation_id=? WHERE principal_id='alice' AND database_id=?''',
+                (generation, database.id))
+            for name in schema_names:
+                registry.create_schema(db, database.id, name, name.title(), name, 'test')
+        return database.id
+
+    def test_search_uses_role_browse_scope_and_ready_databases_only(self):
+        other = self._add_ready_database('second_catalog')
+        self.allowed_database_ids.add(other)
+        with control_store.connect() as db:
+            retired = registry.create_database(db, 'retired_catalog', 'Retired', '', 'test')
+            db.execute("UPDATE databases SET state='RETIRING' WHERE id=?", (retired.id,))
+        self.allowed_database_ids.add(retired.id)
+        expected = {
+            'bi_viewer': {'marts'},
+            'data_engineer': {'raw', 'sandbox', 'staging', 'marts'},
+            'admin': {'raw', 'sandbox', 'staging', 'marts', 'other'},
+        }
+        for role, schemas in expected.items():
+            with self.subTest(role=role):
+                result = inventory.search_objects(self.principal, role, q='a')
+                self.assertEqual({item['schema_sql_name'] for item in result['items']}, schemas)
+                self.assertEqual({item['sql_catalog'] for item in result['items']},
+                    {'arbitrary_catalog', 'second_catalog'})
+                self.assertNotIn('retired_catalog', {item['sql_catalog'] for item in result['items']})
+                self.assertEqual(result['unavailable_databases'], [])
+                self.assertFalse(result['truncated'])
+                self.assertTrue(all(set(item) == {'database_id', 'sql_catalog', 'database_display_name',
+                    'schema_id', 'schema_sql_name', 'name', 'kind'} for item in result['items']))
+
+    def test_search_matches_casefold_name_without_metadata_and_filters_kind(self):
+        self.objects['TABLE']['a'].clear()
+        self.objects['TABLE'].update({'Sales Orders': self.metadata('uuid-sales'),
+            'SALES_ORDERS_2': self.metadata('uuid-sales-2')})
+        with patch.object(inventory, '_metadata', side_effect=AssertionError('metadata must not be read')):
+            tables = inventory.search_objects(self.principal, 'data_engineer', q='sales', kind='TABLE')
+            views = inventory.search_objects(self.principal, 'data_engineer', q='sales', kind='VIEW')
+        self.assertEqual([item['name'] for item in tables['items']],
+            ['SALES_ORDERS_2', 'Sales Orders'] * 4)
+        self.assertEqual(views, {'items': [], 'truncated': False, 'unavailable_databases': []})
+        self.assertTrue(all('/tables/' not in call and '/views/' not in call for call in self.calls))
+
+    def test_search_sorts_and_truncates_at_the_limit(self):
+        self.objects['TABLE'].update({'aa': self.metadata('uuid-aa'), 'ab': self.metadata('uuid-ab')})
+        result = inventory.search_objects(self.principal, 'data_engineer', q='a', limit=2)
+        self.assertEqual([(item['schema_sql_name'], item['name']) for item in result['items']],
+            [('marts', 'a'), ('marts', 'aa')])
+        self.assertTrue(result['truncated'])
+        self.assertEqual(inventory.search_objects(self.principal, 'data_engineer', q='a', limit=50)['truncated'], False)
+
+    def test_search_partial_failure_and_unauthorized_database_absence(self):
+        other = self._add_ready_database('second_catalog')
+        self.allowed_database_ids.add(other)
+        good = inventory.catalog_api
+
+        @contextmanager
+        def failing_api(database, binding):
+            if database.id == other:
+                raise inventory.InventoryError('CATALOG_UNAVAILABLE', 502, 'down')
+            with good(database, binding) as api:
+                yield api
+
+        with patch.object(inventory, 'catalog_api', failing_api):
+            result = inventory.search_objects(self.principal, 'data_engineer', q='a')
+        self.assertEqual({item['database_id'] for item in result['items']}, {self.database.id})
+        self.assertEqual(result['unavailable_databases'],
+            [{'id': other, 'sql_catalog': 'second_catalog'}])
+        self.allowed_database_ids.remove(other)
+        with patch.object(inventory, 'catalog_api', failing_api):
+            hidden = inventory.search_objects(self.principal, 'data_engineer', q='a')
+        self.assertEqual({item['database_id'] for item in hidden['items']}, {self.database.id})
+        self.assertEqual(hidden['unavailable_databases'], [])
+
+    def test_search_rejects_invalid_parameters(self):
+        for q in ('', '   ', None, 1):
+            with self.subTest(q=q), self.assertRaises(ValueError):
+                inventory.search_objects(self.principal, 'data_engineer', q=q)
+        for limit in (0, 51, True, '10', 1.5):
+            with self.subTest(limit=limit), self.assertRaises(ValueError):
+                inventory.search_objects(self.principal, 'data_engineer', q='a', limit=limit)
+        for kind in ('table', 'FUNCTION', 1):
+            with self.subTest(kind=kind), self.assertRaises(ValueError):
+                inventory.search_objects(self.principal, 'data_engineer', q='a', kind=kind)
+        self.assertEqual(self.calls, [])
+
+    def test_search_route_parameters_body_and_method(self):
+        import db_inventory_routes
+        import dataops_routes
+
+        class Handler:
+            def __init__(self, path):
+                self.path = path
+                self.headers = Message()
+                self.result = None
+
+            def respond(self, value, status=200):
+                self.result = (status, value)
+
+        def call(path, method='GET', body_length='0'):
+            handler = Handler(path)
+            if body_length != '0':
+                handler.headers['Content-Length'] = body_length
+            params = parse_qs(urlsplit(path).query, keep_blank_values=True)
+            dispatched = db_inventory_routes.dispatch(handler, method, urlsplit(path).path,
+                params, self.principal, 'data_engineer')
+            return dispatched, handler
+
+        with patch.object(inventory, 'search_objects', return_value={'items': []}) as search:
+            dispatched, handler = call('/api/v1/objects/search?q=order&kind=TABLE&limit=7')
+            self.assertTrue(dispatched)
+            self.assertEqual(handler.result, (200, {'items': []}))
+            search.assert_called_once_with(self.principal, 'data_engineer', q='order', kind='TABLE', limit=7)
+            search.reset_mock()
+            self.assertTrue(call('/api/v1/objects/search?q=order')[0])
+            search.assert_called_once_with(self.principal, 'data_engineer', q='order', kind=None, limit=20)
+            search.reset_mock()
+            for path in ('/api/v1/objects/search', '/api/v1/objects/search?q=a&x=1',
+                    '/api/v1/objects/search?q=a&q=b', '/api/v1/objects/search?q=a&limit=x'):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    call(path)
+            search.assert_not_called()
+        for path in ('/api/v1/objects/search?q=', '/api/v1/objects/search?q=a&limit=0',
+                '/api/v1/objects/search?q=a&limit=51', '/api/v1/objects/search?q=a&kind=table'):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                call(path)
+        with self.assertRaises(ValueError):
+            call('/api/v1/objects/search?q=a#fragment')
+        with self.assertRaises(ValueError):
+            call('/api/v1/objects/search?q=a', body_length='1')
+        with patch.object(inventory, 'search_objects', return_value={'items': []}) as search:
+            self.assertFalse(call('/api/v1/objects/search?q=a', method='POST')[0])
+            search.assert_not_called()
 
     def test_binding_credentials_exact_and_private(self):
         path = self.root / 'catalog-private.json'

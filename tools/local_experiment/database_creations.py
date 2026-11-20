@@ -143,8 +143,8 @@ def validate_key(key):
 
 
 def _intent(payload):
-    if type(payload) is not dict or 'sql_catalog' not in payload or set(payload) - {
-            'sql_catalog', 'display_name', 'description', 'initial_grants'}:
+    if type(payload) is not dict or 'sql_catalog' not in payload or 'team' not in payload or set(payload) - {
+            'sql_catalog', 'display_name', 'description', 'initial_grants', 'team'}:
         raise OperationError('INVALID_REQUEST', 400)
     try:
         name = dm.validate_sql_name(payload['sql_catalog'])
@@ -152,8 +152,10 @@ def _intent(payload):
             raise ValueError()
     except (ValueError, TypeError):
         raise OperationError('INVALID_NAME', 400) from None
+    team = display_management.normalize_team(payload['team'], 'INVALID_REQUEST')
     value = dict(sql_catalog=name, display_name=payload.get('display_name', name),
-                 description=payload.get('description', ''), initial_grants=payload.get('initial_grants', []))
+                 description=payload.get('description', ''), team=team,
+                 initial_grants=payload.get('initial_grants', []))
     display_management.validate_payload('database', dict(display_name=value['display_name'],
         description=value['description'], expected_revision=1))
     grants, seen = value['initial_grants'], set()
@@ -307,7 +309,8 @@ def create(principal, role, payload, key):
             root_id+'/CREATE/1', _json(dict(sql_catalog=intent['sql_catalog'], profile_id='local-polaris-1.8.0')))
         database_id = registered['database_id']
         metadata = display_management._mutate(principal, role, 'database', database_id,
-            dict(expected_revision=1, display_name=intent['display_name'], description=intent['description']),
+            dict(expected_revision=1, display_name=intent['display_name'], description=intent['description'],
+                 team=intent['team']),
             root_id+'/METADATA/1', connection=db)
         grants = {}
         for grant in intent['initial_grants']:
@@ -519,7 +522,8 @@ def _summary(db, root, principal, availability=None):
             if not running and not unknown and not recovery_running:
                 progress = 'BLOCKED'
     return dict(creation_id=root['id'], database_id=root['database_id'], sql_catalog=database['sql_catalog'],
-        display_name=database['display_name'], description=database['description'], requester_id=root['actor'],
+        display_name=database['display_name'], description=database['description'], team=database['team'],
+        requester_id=root['actor'],
         revision=root['revision'], lifecycle=database['state'], initial_grants=grants, plans=plans,
         blocker=blocker, progress_code=progress, next_actions=actions, access_source=access)
 

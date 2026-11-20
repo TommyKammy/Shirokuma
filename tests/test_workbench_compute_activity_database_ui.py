@@ -40,8 +40,8 @@ class ComputeActivityDatabaseUI(unittest.TestCase):
     def test_mount_single_sibling_exact_sources_and_explicit_ready_target(self):
         self.javascript(r'''
 await activityBoot();const panel=$('observation-activity-panel');
-assert.equal(panel.parentElement,$('compute'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-activity-title');
-assert.ok($('compute').children.indexOf(panel)>$('compute').children.indexOf($('compute-usage')));assert.ok($('compute').children.indexOf(panel)<$('compute').children.indexOf($('compute-diagnostics')));
+assert.equal(panel.parentElement,$('compute-diag-history'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-activity-title');
+assert.ok($('compute-diag-history').children.indexOf(panel)>=0);assert.ok($('compute').children.indexOf($('compute-diagnostics'))>$('compute').children.indexOf($('compute-usage')));
 for(let i=0;i<3;i++)dbActivityInstall();assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);
 assert.deepEqual($('observation-activity-source').options.map(o=>o.value),['query','job_run']);assert.equal(dbActivity.source,'query');assert.equal(dbActivity.limit,'20');
 assert.deepEqual($('observation-activity-scope').options.map(o=>o.value),['self','database']);

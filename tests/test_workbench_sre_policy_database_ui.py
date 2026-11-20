@@ -195,7 +195,7 @@ await boot();route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_sta
 await readyObservation('sre');await readyObservation('policy');const snapshot=otherState(),start=calls.length;
 for(const kind of ['sre','policy']){await fetchObservation(kind);await fetchObservation(kind);route=async()=>({http:503,body:{error:{code:'AUDIT_STORE_UNAVAILABLE',message:'secret store'}}});await dbObservationFetch(dbObservations[kind]);assert.equal(dbObservations[kind].record,null);assert.doesNotMatch(observationText(kind),/secret store/);await fetchObservation(kind);}
 assert.equal(otherState(),snapshot);assert.equal(calls.length-start,8);assert.ok(calls.slice(start).every(c=>c.path.startsWith('/api/v1/bears/context-observations?')&&!c.options?.method));assert.equal(dbExplanation.intents[0].id,'explanation-1');assert.equal(dbSourceA1Held(dbExplanation.intents[0]),true);
-for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest','bear-data-run','ai-settings-button'])assert.equal($(id).disabled,true,id);
+for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest','bear-data-run'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 assert.equal($('bear-tab-data').disabled,false);assert.equal($('bear-data-legacy').hidden,true);for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest'])assert.equal($(id).hidden,true,id);
 """)
 
@@ -214,7 +214,7 @@ assert.equal(otherState(),before);assert.equal(p.op,wapIntent);assert.equal(p.op
 """)
 
     def test_production_bear_tab_mouse_keyboard_navigation_fences_late_reads(self):
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
+        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
         self.javascript(r"""
 const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
 eval(""" + json.dumps(handlers) + r""");await boot();assert.equal($('bear-tab-query')['aria-selected'],'true');
@@ -364,7 +364,7 @@ changeObservation('sre','schema','raw');assert.equal($('observation-sre-fetch').
     def navigation_javascript(self, body):
         # The adapter extracts setLanguage from production (test_catalog_ui.function),
         # and installs production main-tab handlers. Add the real Bear wireTabs chain.
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
+        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
         self.javascript(r"""
 const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
 eval(""" + json.dumps(handlers) + r""");

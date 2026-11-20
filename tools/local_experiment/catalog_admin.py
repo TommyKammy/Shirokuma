@@ -47,7 +47,7 @@ def register_spec(principal, role, public_spec, idempotency_key):
             if db.execute('SELECT 1 FROM '+table+' LIMIT 1').fetchone():
                 raise operations.OperationError('REGISTER_SPEC_REQUIRES_EMPTY_REGISTRY')
         for key, value in spec['databases'].items():
-            db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                 (key, value['sql_catalog'], value['sql_catalog'], '', 'user', 'registered', value['database_revision']))
             binding = value['binding']
             dm.create_binding(db, key, **{field: setting for field, setting in binding.items() if field != 'desired_revision'})

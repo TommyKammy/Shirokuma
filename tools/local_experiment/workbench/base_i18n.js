@@ -4,19 +4,19 @@
 const i18n = {ja: {
 // Redesigned navigation, page structure and state copy.
 'SQL Worksheets':'SQL ワークシート', 'Ingestion & Stages':'取り込み・ステージ', 'Transformation':'データ変換',
-'AI Bears':'AI Bears（専門AI）', 'Data Explorer':'データ探索', 'Audit Log':'監査ログ', 'DB management':'DB 管理', 'Database Jobs':'データベース Jobs',
+'AI Bears':'AI Bears（専門AI）', 'Data Explorer':'データ探索', 'Audit Log':'監査ログ', 'Database Management':'データベース管理', 'Database Jobs':'ジョブ',
 'Query Iceberg tables with the resident Trino warehouse.':'常駐 Trino ウェアハウスで Iceberg テーブルを照会します。',
 'Warehouse status':'ウェアハウスの状態', 'Components':'コンポーネント', 'Sample queries':'サンプルクエリ',
 'Select a table to insert its name at the cursor.':'テーブルを選ぶとカーソル位置に名前を挿入します。',
-'Runs selected text when present':'選択中のテキストがあればその部分だけを実行', 'Result view':'結果の表示形式',
-'Ingestion views':'取り込みの表示', 'File upload':'ファイル取り込み', 'Stages':'ステージ',
+ 'Result view':'結果の表示形式',
+'Ingestion views':'取り込みの表示', 'File import':'ファイル取込', 'Stages':'ステージ', 'Saved stages':'保存済みステージ',
 'No stages yet. Choose New stage to register a folder.':'ステージはまだありません。「ステージを登録」からフォルダーを登録してください。',
-'Transformation views':'データ変換の表示', 'Models':'モデル', 'Refresh targets':'更新対象',
+'Transformation views':'データ変換の表示', 'Models':'モデル',
 'Manual refresh':'手動更新', 'Manual refresh required':'手動更新が必要', 'Outcome unknown. Check {table}, then run a manual refresh. Automatic refresh stays off until one succeeds.':'結果が不明です。{table} を確認してから手動更新を実行してください。手動更新が成功するまで自動更新は再開できません。',
 'Builds, audits and publishes the saved version. Rows are fully replaced; nothing is computed incrementally.':'保存済みの版をビルド・品質確認して公開します。全件を置き換え、増分計算は行いません。',
 'Last status: {status}':'前回の状態: {status}',
-'Save ordered steps, run them now, or schedule them.':'順序付きの処理を保存し、すぐに実行するかスケジュールを設定します。',
-'Jobs views':'ジョブの表示', 'Select a job to edit, run or schedule it.':'ジョブを選ぶと、定義の編集・実行・スケジュール設定ができます。',
+
+ 'Select a job to edit, run or schedule it.':'ジョブを選ぶと、定義の編集・実行・スケジュール設定ができます。',
 'Open':'開く', 'Discard unsaved changes to the job definition?':'ジョブ定義の未保存の変更を破棄しますか？', 'Last run':'前回の実行', '1 step':'1 ステップ', '{count} steps':'{count} ステップ',
 'No saved jobs yet. Choose New job to create the first one.':'ジョブはまだありません。「ジョブを登録」から作成してください。',
 'Save the job before running or scheduling it.':'実行やスケジュール設定の前にジョブを保存してください。',
@@ -51,7 +51,7 @@ const i18n = {ja: {
 "Check unchanged · {time}":"変更なしを確認 · {time}",
 "Last check / refresh":"前回の確認・更新",
 "Run time":"実行時刻",
-"{enabled} · Next run: {time} · Last status: {status}":"{enabled} · 次回: {time} · 前回の状態: {status}",
+
 "Outcome unknown. Complete a successful manual refresh before enabling automatic refresh.":"結果が不明です。手動更新の成功を確認してから自動更新を有効にしてください。",
 "Save at least one watched source table before enabling automatic refresh.":"監視元テーブルを1つ以上保存してから自動更新を有効にしてください。",
 "Failure pauses automatic refresh. Saving a definition pauses its schedule and resets its source baseline.":"失敗すると自動更新を停止します。定義を保存すると予定を停止し、監視元の基準をリセットします。",
@@ -96,21 +96,27 @@ const i18n = {ja: {
  'Schedule saved.':'定期確認の設定を保存しました。',
  'Automatic ingestion stopped.':'自動取込を停止しました。',
  'Scan queued.':'確認・取込を受け付けました。',
- 'Interval must be an integer from 1 to 10080 minutes.':'間隔には 1〜10080 分の整数を入力してください。',
+
  'Next check':'次回確認',
  'Last check':'前回の確認',
- 'Automatic ingestion is off.':'自動取込は無効です。',
- 'Waiting for next check':'次回確認を待機中',
+
+
  'Submitting scan…':'確認・取込を受け付け中…',
  'Retry file':'ファイルを再実行',
  'Scan stage':'ステージを確認・取込',
  'Parquet requires pyarrow in the Workbench server Python.':'Parquet 出力には Workbench サーバーの Python に pyarrow が必要です。',
- 'parquet export requires pyarrow':'Parquet 出力には pyarrow が必要です。',
- 'export filename already exists; choose a new filename':'同名ファイルが存在します。別のファイル名を指定してください。',
- 'stage changed; refresh stages before exporting':'ステージが変更されました。ステージを更新してから出力してください。',
- 'export must contain the complete table within the 100000 row limit':'テーブル全体が 100000 行以下の場合に出力できます。',
- 'export exceeds the 25 MiB limit':'出力が上限の 25 MiB を超えています。',
- 'exports directory is unavailable or outside the stage directory':'ステージの出力先フォルダーを利用できません。',
+  'parquet export requires pyarrow':'Parquet 出力には pyarrow が必要です。',
+  'export filename already exists; choose a new filename':'同名ファイルが存在します。別のファイル名を指定してください。',
+  'stage changed; refresh stages before exporting':'ステージが変更されました。ステージを更新してから出力してください。',
+  'export must contain the complete table within the 100000 row limit':'テーブル全体が 100000 行以下の場合に出力できます。',
+  'export exceeds the 25 MiB limit':'出力が上限の 25 MiB を超えています。',
+  'exports directory is unavailable or outside the stage directory':'ステージの出力先フォルダーを利用できません。',
+
+
+
+
+
+
  'Operation failed.':'操作に失敗しました。',
  'Manual export':'手動エクスポート',
  'Export the whole table, up to 100000 rows and 25 MiB. Existing filenames are refused. Outputs stay in exports/ and are excluded from input scans.':'テーブル全体を最大 100000 行・25 MiB まで出力します。同名ファイルは拒否します。出力先は exports/ で、取込確認の対象外です。',
@@ -148,7 +154,7 @@ const i18n = {ja: {
  'Preview a file before importing.':'取込前にファイルをプレビューしてください。',
  'Successfully imported content is skipped, even after a file is renamed. Failed or uncertain imports need explicit confirmation before retry.':'取込済みの内容はファイル名を変更しても除外します。失敗・結果不明の取込を再実行するには明示的な確認が必要です。',
  'View run history':'実行履歴を見る',
- 'No saved stages.':'登録されたステージはありません。',
+
  'No files available.':'対象のファイルはありません。',
  'Stage saved.':'ステージを保存しました。', 'Stage preview did not include its saved settings.':'プレビューの保存済み設定を取得できませんでした。',
  'Save changes before previewing.':'変更を保存してからプレビューしてください。',
@@ -185,9 +191,9 @@ const i18n = {ja: {
  "Inspect run in Jobs":"ジョブで実行を確認",
  "No refresh targets registered. Save a SELECT definition to begin.":"更新対象は未登録です。SELECT 定義を保存してください。",
  "Select target":"更新対象を選択",
- "Last refresh":"前回の更新",
+
  "Last successful refresh":"前回の更新成功",
- "Refresh time":"更新日時",
+
  "Never refreshed":"未実行",
  "Saved version {version} · Owner: {owner}":"保存済みの版 {version}・所有者: {owner}",
  "Unsaved changes. Save the definition before refreshing.":"未保存の変更があります。更新前に定義を保存してください。",
@@ -196,27 +202,27 @@ const i18n = {ja: {
  "Refresh {status} · {time}":"更新 {status}・{time}",
  "Minimum rows must be a positive integer.":"最小行数は1以上の整数を入力してください。",
  "Saved definition changed. Select the target again to load its latest version.":"保存済みの定義が変更されました。更新対象を選択し直して最新の版を読み込んでください。",
- 'Importance':'重要度', 'Acknowledged':'確認済み', 'Times use your browser timezone: {timezone}':'日時はブラウザのタイムゾーンで表示します: {timezone}', '{time}':'{time}', 'Job: {job} · Step: {step} · Owner: {owner}':'ジョブ: {job}・ステップ: {step}・所有者: {owner}',
+ 'Importance':'重要度', 'Acknowledged':'確認済み', '{time}':'{time}', 'Job: {job} · Step: {step} · Owner: {owner}':'ジョブ: {job}・ステップ: {step}・所有者: {owner}',
  'Evaluate alert':'アラート判定', 'Alert message':'通知メッセージ', 'Severity':'重要度', 'warning':'警告', 'critical':'重大',
  'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.':'読み取り専用で判定します。1行1列の boolean を返してください。true は異常、false は正常です。',
  'Notifications':'通知', 'Refresh notifications':'通知を更新', 'No notifications loaded.':'通知はまだ読み込まれていません。', 'No notifications.':'通知はありません。',
  'Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.':'同じ異常の継続は1件に集約します。確認済みにしても異常が解消されたことにはなりません。',
  'Up to 100 notifications, unacknowledged first.':'未確認の通知を優先して最大100件表示します。',
  '{count} unacknowledged':'未確認{count}件', 'Notification':'通知', 'First seen':'初回検知', 'Last seen':'最終検知', 'Occurrences':'検知回数', 'Acknowledgement':'確認', 'Resolution':'解消',
- 'Unacknowledged':'未確認', 'Acknowledged {time}':'確認済み {time}', 'Active condition':'異常継続', 'Condition cleared':'正常化により解消', 'Definition changed':'定義変更により終了', 'Resolved':'解消済み', 'Acknowledge':'確認済みにする',
+ 'Unacknowledged':'未確認', 'Active condition':'異常継続', 'Condition cleared':'正常化により解消', 'Definition changed':'定義変更により終了', 'Resolved':'解消済み', 'Acknowledge':'確認済みにする',
  'Notification failed: {error}':'通知を取得・更新できませんでした: {error}', 'Condition met':'異常あり', 'Condition clear':'異常なし', 'New notification':'新しい通知', 'Ongoing notification':'異常継続', 'Notification resolved':'通知を解消', 'No active notification':'異常継続なし', 'Notification {id}':'通知 {id}',
  'Closed after rule change':'定義変更により終了',
  'Schedule':'スケジュール', 'Frequency':'実行タイミング', 'Every N minutes':'一定の間隔で実行', 'Daily':'毎日', 'Interval (minutes)':'実行間隔（分）', 'Local time':'現地の実行時刻', 'Timezone (IANA)':'タイムゾーン（IANA）',
  'Enable schedule':'スケジュールを有効にする', 'Save schedule':'スケジュールを保存', 'Schedule saved.':'スケジュールを保存しました。', 'Schedule failed: {error}':'スケジュールを保存できませんでした: {error}',
  'Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.':'サービスの起動中にのみ実行します。60秒以上遅れた予定や他のジョブと競合した予定はスキップします。後追い実行や自動再試行は行いません。',
  'Uses the argument values entered above. Saving captures your current authenticated role.':'上の実行引数を使用します。保存時の認証済みロールで実行します。',
- 'Enabled':'有効', 'Disabled':'無効', 'No saved schedule.':'保存されたスケジュールはありません。', 'Saved role: {role}':'保存した権限: {role}', 'Next run (UTC): {time}':'次回実行（UTC）: {time}',
- 'Authentication: {mode}':'認証: {mode}', 'Manual':'手動', 'Scheduled':'スケジュール', 'Trigger':'実行方法', 'Scheduled for (UTC)':'予定時刻（UTC）',
+ 'Enabled':'有効', 'Disabled':'無効', 'No saved schedule.':'保存されたスケジュールはありません。', 'Saved role: {role}':'保存した権限: {role}',
+ 'Authentication: {mode}':'認証: {mode}', 'Manual':'手動', 'Scheduled':'スケジュール', 'Trigger':'実行方法',
  'Interval must be an integer from 1 to 10080.':'実行間隔は1〜10080の整数で入力してください。', 'Enter a valid time and IANA timezone.':'正しい時刻と IANA タイムゾーンを入力してください。',
- 'Run SQL':'SQL 実行', 'Build dbt models':'dbt モデル更新', 'Test dbt models':'dbt テスト', 'Ingest file':'ファイル取込', 'Refresh WAP model':'WAP 更新', 'Publish WAP model':'WAP 公開',
+ 'Run SQL':'SQL 実行', 'Build dbt models':'dbt モデル更新', 'Test dbt models':'dbt テスト', 'Ingest file':'ファイル取込', 'Refresh WAP model':'WAP 更新', 'Publish WAP model':'WAP 公開', 'Table export':'テーブル出力',
  '1 result row':'結果行1件', '{count} result rows':'結果行{count}件', '1 model':'モデル1件', '{count} models':'モデル{count}件', '{count} rows ingested':'取込{count}件', 'Target table {table}':'対象表 {table}', '{summary}':'{summary}',
  'Jobs':'ジョブ', 'Saved jobs':'登録済みジョブ', 'Refresh jobs':'ジョブを更新', 'New job':'ジョブを登録', 'No jobs loaded.':'ジョブはまだ読み込まれていません。',
- 'Save ordered steps and run them manually with typed arguments.':'順序付きの処理を保存し、型付きの引数で手動実行します。',
+
  'Job definition':'ジョブ定義', 'New definition':'新しい定義', 'Job name':'ジョブ名', 'Argument definitions (JSON)':'引数の定義（JSON）',
  'Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes.':'型は string・integer・boolean・date。宣言した引数はすべて、SQL 内でテンプレート値として引用符なしで使います。',
  'Argument definition example':'引数定義の例', 'Steps':'ステップ', 'Add step':'ステップを追加', 'Save job':'ジョブを保存',
@@ -224,13 +230,13 @@ const i18n = {ja: {
  'Run job':'ジョブを実行', 'Run history':'実行履歴', 'Refresh runs':'実行履歴を更新', 'No runs loaded.':'実行履歴はまだ読み込まれていません。', 'Step history':'ステップの実行履歴',
  'Choose a run to inspect its steps.':'実行履歴を選択するとステップの詳細を表示します。', 'Step {number}':'ステップ {number}', 'Remove step':'ステップを削除', 'Step name':'ステップ名', 'Step type':'処理の種類',
  'SQL text':'SQL 文', 'Server file path':'サーバー上のファイルパス', 'Target table':'書き込み先テーブル', 'Upsert key (optional)':'更新キー（任意）', 'WAP model':'WAP モデル',
- 'Edit job':'定義を編集', 'Select job':'実行するジョブを選択', 'Inspect run':'実行詳細を表示', 'No saved jobs.':'登録されたジョブはありません。', 'No runs yet.':'実行履歴はありません。',
+ 'Inspect run':'実行詳細を表示',
  'Job saved.':'ジョブを保存しました。', 'Save failed: {error}':'保存できませんでした: {error}', 'Run failed: {error}':'実行を開始できませんでした: {error}',
  'Queued':'待機中', 'Running':'実行中', 'Succeeded':'成功', 'Failed':'失敗', 'Interrupted':'中断・結果不明', 'Unknown outcome':'結果不明', 'Skipped':'スキップ', 'Pending':'未実行',
  'Outcome unknown. Check the target before running again.':'結果が不明です。再実行する前に書き込み先を確認してください。', 'Run {id} · {status}':'実行 {id} · {status}', 'Failed step: {step}':'失敗したステップ: {step}',
  'No steps recorded.':'記録されたステップはありません。', 'Argument definitions must be a JSON object.':'引数定義は JSON オブジェクトで入力してください。', 'No arguments required.':'引数はありません。',
  'Started':'開始時刻', 'Duration (ms)':'実行時間（ミリ秒）', 'Summary':'概要', 'Run ID':'実行 ID', 'Job':'ジョブ', 'Required':'必須', 'Description':'説明',
- 'Arguments must match their declared types.':'引数は定義した型に合わせて入力してください。', 'SQL steps only for Data Engineer.':'データ作成者は SQL ステップのみ登録できます。', 'Unknown':'不明', 'Read-only definition':'参照のみの定義',
+ 'Arguments must match their declared types.':'引数は定義した型に合わせて入力してください。', 'Unknown':'不明', 'Read-only definition':'参照のみの定義',
  'Catalog changed. Use Refresh catalog in Data Explorer.':'カタログが変更されました。データ探索で「カタログを更新」を実行してください。',
  'Role':'ロール', 'Admin':'管理者', 'Data Engineer':'データ作成者', 'BI Viewer':'閲覧者', 'Read-only role':'閲覧専用ロール',
  'AI Model Settings':'AI モデル設定', 'Provider':'プロバイダー', 'Model Name':'モデル名', 'API URL':'API の URL', 'API Key':'API キー', 'Timeout (seconds)':'タイムアウト（秒）',
@@ -241,53 +247,369 @@ const i18n = {ja: {
  'Clone to Sandbox':'サンドボックスに複製', 'Clone Snapshot':'スナップショットを複製', 'Cloned {source} to {table}.':'{source} を {table} に複製しました。', 'Clone audit needs review':'複製の監査結果を確認してください', 'Clone failed: {error}':'複製に失敗しました: {error}',
  'Export format':'エクスポート形式', 'CSV':'CSV', 'JSONL':'JSONL', 'Parquet':'Parquet', 'Export Table':'テーブルをエクスポート', 'Exported {table} ({row_count} / {total_rows} rows) to {filename}.':'{table}（{row_count} / {total_rows} 行）を {filename} にエクスポートしました。', 'Export failed: {error}':'エクスポートに失敗しました: {error}',
  'Auto-Chill (idle minutes)':'自動休止（アイドル時間・分）', 'Off':'無効', '5m':'5 分', '15m':'15 分', '30m':'30 分', '60m':'60 分', 'Apply Auto-Chill':'自動休止を適用', 'Auto-Chill: Off':'自動休止: 無効', 'Auto-Chill: {minutes}m':'自動休止: {minutes} 分', 'Auto-Chill failed: {error}':'自動休止の設定・確認に失敗しました: {error}',
- 'Query & Load History':'クエリ・読み込み履歴', 'Refresh History':'履歴を更新', 'Trino Query History':'Trino クエリ履歴', 'Copy & Data Load History':'コピー・データ読み込み履歴', 'History failed: {error}':'履歴を取得できません: {error}', 'Query ID':'クエリ ID', 'User':'ユーザー', 'Source':'実行元', 'SQL':'SQL 文', 'Target':'対象',
+ 'Query ID':'クエリ ID', 'User':'ユーザー', 'Source':'実行元', 'SQL':'SQL 文', 'Target':'対象',
 
- 'Work with Data':'データを扱う', 'Catalog':'カタログ', 'Manage & Monitor':'監視・管理',
-    'Autonomous Bears':'自律 AI Bears', 'Data Explorer · Catalog':'データ探索 · カタログ',
- 'AgentHouse Pawprints':'AgentHouse 監査ログ (Pawprints)', 'Compute & Governance':'コンピュート & ガバナンス',
+ 'Catalog':'カタログ',
+
+ 'Compute & Governance':'コンピュート & ガバナンス',
  'Columns':'カラム定義', 'Data Preview':'データプレビュー', 'Profile & NULL Stats':'プロファイル & NULL統計',
  'DDL':'DDL 定義', 'Snapshots & Time Travel':'スナップショット & Time Travel', 'Table Lineage':'テーブルリネージ',
-  'Warehouse controls and Data Bear actions change the local lab. Review audit results after writes.':'ウェアハウス操作と Data Bear の実行はローカルラボを変更します。書き込み後は監査結果を確認してください。',
+
  'Workbench':'ワークベンチ', 'Local lab · mac-studio-solo':'ローカルラボ · mac-studio-solo',
- 'Global warehouse controls':'ウェアハウスの共通操作', 'Workbench sections':'ワークベンチのセクション',
- 'Warehouse & SQL':'ウェアハウス & SQL', 'Explore your Iceberg data with the resident Trino warehouse.':'常駐 Trino ウェアハウスで Iceberg データを探索します。',
- 'Wake':'起動', 'Chill':'休止', 'Refresh':'更新', 'Loading…':'読み込み中…', 'Warehouse: Loading…':'ウェアハウス: 読み込み中…', 'Replicas —':'レプリカ —',
+ 'Workbench sections':'ワークベンチのセクション',
+
+ 'Wake':'起動', 'Chill':'休止', 'Refresh':'更新', 'Loading…':'読み込み中…', 'Replicas —':'レプリカ —',
  'Database Object Explorer':'データベースオブジェクト探索', 'Find schema or table':'スキーマやテーブルを検索', 'Search objects':'オブジェクトを検索', 'Loading catalog…':'カタログを読み込み中…',
- 'SQL workspace':'SQL ワークスペース', 'Catalog: iceberg · Schema: marts':'カタログ: iceberg · スキーマ: marts', 'SQL worksheets':'SQL ワークシート', 'Add SQL worksheet':'SQL ワークシートを追加', '+ Worksheet':'+ ワークシート',
+ 'SQL worksheets':'SQL ワークシート', 'Add SQL worksheet':'SQL ワークシートを追加', '+ Worksheet':'+ ワークシート',
  'Close {name}':'{name}を閉じる', 'Keep at least one worksheet.':'ワークシートは最低1つ必要です。', 'Closing removes this worksheet’s SQL. Close {name}?':'閉じるとこのワークシートの SQL が削除されます。{name}を閉じますか？',
  'Recent Query History':'最近のクエリ履歴', 'Restore a past query…':'過去のクエリを復元…', 'AI Bear Copilot':'AI Bear コパイロット',
  'Describe the SQL you need':'作成したい SQL を説明', 'Revenue by nation':'国別の売上', 'Generate SQL':'SQL を生成', 'Explain Plan':'実行計画を確認', 'WAP table':'WAP テーブル', 'Stage & Audit':'ステージングと監査', 'Publish':'公開',
- 'Recent orders':'最近の注文', 'TPC-H Revenue by Nation':'TPC-H 国別売上', 'Customers':'顧客', 'SQL statement':'SQL 文', 'Warehouse':'ウェアハウス', 'Mode':'モード', 'Max rows':'最大行数', 'Run Query':'クエリを実行',
+ 'Recent orders':'最近の注文', 'TPC-H Revenue by Nation':'TPC-H 国別売上', 'Customers':'顧客', 'SQL statement':'SQL 文', 'Warehouse':'ウェアハウス', 'Mode':'モード', 'Max rows':'最大行数',
  'read-only':'読み取り専用', 'sandbox-write':'サンドボックス書き込み', 'admin-write':'管理者書き込み',
- 'Results':'実行結果', 'Query results':'クエリ結果', 'Ready · ⌘/Ctrl + Enter to run':'準備完了 · ⌘/Ctrl + Enter で実行', 'Filter rows':'行を絞り込み', 'Search returned rows':'結果の行を検索', 'Download CSV':'CSV をダウンロード', 'Download JSON':'JSON をダウンロード', 'Copy TSV':'TSV をコピー',
- 'Run a query to inspect rows and column types. Chilled warehouses wake automatically.':'クエリを実行して行とカラム型を確認できます。休止中のウェアハウスは自動で起動します。',
- 'Preview file columns and sample rows before loading an Iceberg table.':'Iceberg テーブルに取り込む前に、ファイルのカラムとサンプル行を確認します。',
+ 'Results':'実行結果', 'Query results':'クエリ結果', 'Filter rows':'行を絞り込み', 'Search returned rows':'結果の行を検索', 'Download CSV':'CSV をダウンロード', 'Download JSON':'JSON をダウンロード', 'Copy TSV':'TSV をコピー',
+
+
  'Local File Ingestion (CSV / JSONL / Parquet)':'ローカルファイルの取り込み (CSV / JSONL / Parquet)',
  'Import a file from the Workbench server into the local lake. Replace overwrites the target table; append adds rows; upsert updates matching keys and adds new rows. For repeated keys, the last row in the file wins.':'ワークベンチサーバーのファイルをローカルレイクに取り込みます。「置換」はテーブルを上書きし、「追加」は行を追加します。「更新・追加」はキーが一致する行を更新し、新しい行を追加します。同じキーが複数ある場合はファイルの最後の行を採用します。',
  'Choose a browser file or drop it here':'ファイルを選択するか、ここにドロップ', 'No browser file selected. Use a server path below.':'ファイルが選択されていません。下のサーバーパスも使用できます。', 'Use server path':'サーバーパスを使用', 'Local file path':'ローカルファイルパス', 'Target table (optional)':'取り込み先テーブル（任意）',
  'replace':'置換', 'append':'追加', 'upsert':'更新・追加', 'Upsert key columns (required for upsert)':'更新キーのカラム（更新・追加では必須）', 'Upsert key columns, e.g. order_id':'更新キーのカラム（例: order_id）', 'Use input column names, separated by commas for a composite key.':'入力ファイルのカラム名を指定します。複合キーはカンマで区切ってください。',
- 'Preview Schema & Sample Rows':'スキーマとサンプル行を確認', 'Ingest File':'ファイルを取り込む', 'Ready':'準備完了', 'Ingestion audit summary':'取り込み監査の概要',
- 'Transformation views':'変換の作業メニュー', 'Inspect model definitions and dependencies, then build or refresh.':'モデル定義と依存関係を確認し、ビルドや更新を実行します。', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
- 'Catalog & Lineage':'カタログ & リネージ', 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Catalog access changed. Refresh the page to sign in or reload permissions.':'カタログへのアクセス権が変更されました。ページを再読み込みしてサインインまたは権限を更新してください。', 'Details changed. Refresh details to continue.':'詳細が変更されました。詳細を更新して続行してください。', 'Refresh details':'詳細を更新', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。', 'Iceberg snapshots':'Iceberg スナップショット', 'dbt model lineage':'dbt モデルのリネージ', 'Local model definitions':'ローカルのモデル定義', 'Loading dependencies…':'依存関係を読み込み中…',
- 'Autonomous Bears Cockpit':'自律 AI Bears コックピット', 'Run the five resident specialists. Inspect their findings, recommendations, and telemetry.':'5 体の常駐スペシャリストを実行し、検出結果、推奨事項、実行記録を確認します。',
- 'Recent warehouse and Bear activity, recorded in ClickHouse.':'ClickHouse に記録された最近のウェアハウスと Bear の操作履歴です。', 'Recent telemetry':'最近の実行記録', 'Latest 100 events':'最新 100 件のイベント', 'Search Pawprints':'監査ログを検索', 'Action, Bear, trace, or model':'操作、Bear、トレース、モデルを検索', 'Status':'状態', 'All statuses':'すべての状態', 'Refresh to load recent Pawprints.':'更新して最近の監査ログを読み込んでください。',
- 'Virtual warehouse readiness and resident cluster checks.':'仮想ウェアハウスの稼働状態と常駐クラスターを確認します。', 'Refresh status':'状態を更新', 'SRE Cluster Health Check':'SRE クラスター稼働チェック', 'Policy Gatekeeper Audit':'Policy Gatekeeper 監査', 'Virtual warehouse status':'仮想ウェアハウスの状態', 'Component readiness':'コンポーネントの稼働状態',
+ 'Preview Schema & Sample Rows':'スキーマとサンプル行を確認', 'Ingest File':'ファイルを取り込む', 'Ready':'準備完了', 'Loaded':'読み込み済み', 'Ingestion audit summary':'取り込み監査の概要',
+ 'Transformation views':'変換の作業メニュー', 'Refresh Models':'モデル一覧を更新', 'Run dbt Build':'dbt ビルドを実行', 'Run dbt Test':'dbt テストを実行', 'Persistent dbt Models':'永続 dbt モデル', 'Registered Dynamic WAP Models':'登録済み動的 WAP モデル', 'Choose a model':'モデルを選択', 'Open SQL in Worksheet':'SQL をワークシートで開く', 'Refresh WAP Model':'WAP モデルを更新', 'Choose a model to inspect its SQL.':'モデルを選択して SQL を確認してください。',
+ 'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Iceberg スキーマやカラムを確認し、dbt モデルの依存関係をたどります。', 'Catalog access changed. Refresh the page to sign in or reload permissions.':'カタログへのアクセス権が変更されました。ページを再読み込みしてサインインまたは権限を更新してください。', 'Details changed. Refresh details to continue.':'詳細が変更されました。詳細を更新して続行してください。', 'Refresh details':'詳細を更新', 'Refresh catalog':'カタログを更新', 'Iceberg tables':'Iceberg テーブル', 'Search catalog':'カタログを検索', 'Load the catalog to browse tables.':'カタログを読み込んでテーブルを探索してください。', 'Table Inspector':'テーブルインスペクター', 'Open in Worksheet':'ワークシートで開く', 'Drop Table':'テーブルを削除', 'Choose a table to see its columns and types.':'テーブルを選択してカラムと型を確認してください。',
+
+ 'Status':'状態',
+ 'Refresh status':'状態を更新', 'SRE Cluster Health Check':'SRE クラスター稼働チェック', 'Policy Gatekeeper Audit':'Policy Gatekeeper 監査', 'Virtual warehouse status':'仮想ウェアハウスの状態', 'Component readiness':'コンポーネントの稼働状態',
  'SRE Bear':'SRE Bear（運用担当）', 'Query Doctor Bear':'Query Doctor Bear（クエリ診断）', 'Data Engineer Bear':'Data Engineer Bear（データエンジニア）', 'Catalog Curator Bear':'Catalog Curator Bear（カタログ管理）', 'Policy Gatekeeper Bear':'Policy Gatekeeper Bear（ポリシー監査）',
  'Inspect workload readiness, recent errors, and runtime metrics.':'ワークロードの稼働状態、最近のエラー、実行時メトリクスを確認します。',
  'Explain SQL or inspect a recent query for performance advice.':'SQL の実行計画や最近のクエリを分析し、性能改善を提案します。',
  'Generate SQL, stage and audit a sandbox table, publish to marts, refresh a saved model, or restore a snapshot. Publish, refresh, and rollback change table data.':'SQL の生成、サンドボックステーブルのステージングと監査、marts への公開、保存済みモデルの更新、スナップショットの復元を実行します。公開・更新・ロールバックはテーブルのデータを変更します。',
  'Search tables or inspect a table’s columns and dependencies.':'テーブルを検索し、カラムや依存関係を確認します。', 'Review the resident workload baseline or check a local manifest.':'常駐ワークロードの基準設定やローカルマニフェストを検証します。',
- 'Query target':'診断対象のクエリ', 'SQL to explain (optional)':'実行計画を確認する SQL（任意）', 'WAP Action':'WAP 操作', 'Describe the data you need (for generate/stage)':'必要なデータの説明（生成・ステージング用）', 'Explicit SELECT SQL (optional override)':'SELECT SQL を直接指定（任意・説明より優先）', 'Target table name (e.g. nation_summary)':'対象テーブル名（例: nation_summary）', 'Snapshot ID (for rollback)':'スナップショット ID（ロールバック用）', 'Action':'操作', 'Table (for describe or lineage)':'テーブル（詳細・リネージ確認用）', 'Local manifest path (for check)':'ローカルマニフェストのパス（検証用）', 'Run Bear':'Bear を実行', '{bear} response':'{bear} の応答',
+ 'Query target':'診断対象のクエリ', 'SQL to explain (optional)':'実行計画を確認する SQL（任意）', 'WAP Action':'WAP 操作', 'Action':'操作', 'Table (for describe or lineage)':'テーブル（詳細・リネージ確認用）', 'Local manifest path (for check)':'ローカルマニフェストのパス（検証用）', 'Run Bear':'Bear を実行', '{bear} response':'{bear} の応答',
  'generate':'生成', 'stage':'ステージング', 'publish':'公開', 'rollback':'ロールバック', 'refresh':'更新', 'search':'検索', 'describe':'詳細確認', 'lineage':'リネージ', 'baseline':'基準設定の監査', 'check':'検証',
- 'Working…':'処理中…', 'No rows returned.':'該当する行はありません。', 'Unavailable':'利用不可', 'Running':'実行中', 'Chilled':'休止中', 'Starting':'起動中', 'Warehouse: {state}':'ウェアハウス: {state}', 'Replicas {ready} / {desired}':'レプリカ {ready} / {desired}', 'Readiness unavailable: {error}':'稼働状態を取得できません: {error}',
+ 'Working…':'処理中…', 'No rows returned.':'該当する行はありません。', 'Unavailable':'利用不可', 'Running':'実行中', 'Chilled':'休止中', 'Starting':'起動中', 'Replicas {ready} / {desired}':'レプリカ {ready} / {desired}', 'Readiness unavailable: {error}':'稼働状態を取得できません: {error}',
  'Component':'コンポーネント', 'Ready replicas':'稼働レプリカ数', 'Desired replicas':'設定レプリカ数', 'Executing…':'実行中…', '{rows} rows{truncated} · {duration} ms · {id}':'{rows} 行{truncated} · {duration} ms · {id}', ' · truncated':' · 表示上限あり', 'Query failed':'クエリ失敗',
  'Ingesting…':'取り込み中…', 'Audit needs review':'監査結果の確認が必要', 'Ingestion complete':'取り込み完了', 'Ingestion failed':'取り込み失敗', 'Column':'カラム', 'Type':'型', 'Extra':'追加情報', 'Comment':'コメント', 'Snapshot ID':'スナップショット ID', 'Parent ID':'親 ID', 'Committed at':'コミット日時', 'Rows: {rows} · Columns: {columns}':'行数: {rows} · カラム数: {columns}', 'Quality: {state}':'品質: {state}', 'Passed':'合格', 'Needs review':'要確認', 'NULL count':'NULL 件数', 'NULL %':'NULL 率', 'Definition unavailable':'定義を取得できません', 'Actions':'操作', 'Preview Snapshot':'スナップショットを確認', 'Rollback':'ロールバック',
  'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}':'スナップショット {snapshot} · 過去の行数: {rows} · 現在の行数: {current} · 差分: {delta}', 'unavailable':'取得不可', 'Rollback {table} to snapshot {snapshot}?':'{table} をスナップショット {snapshot} に戻しますか？', 'Rollback audit needs review':'ロールバックの監査結果を確認してください', 'Rollback failed: {error}':'ロールバックに失敗しました: {error}', 'Details unavailable':'詳細を取得できません',
- 'Loading tables…':'テーブルを読み込み中…', 'Catalog unavailable. Check warehouse readiness and refresh.':'カタログを取得できません。ウェアハウスの状態を確認して更新してください。', 'Catalog unavailable. Use Refresh catalog in Data Explorer.':'カタログを取得できません。データ探索で「カタログを更新」を実行してください。', 'No model dependencies recorded.':'モデルの依存関係は記録されていません。', 'Findings to review':'検出結果の確認が必要', 'Complete':'完了', 'Failed':'失敗', 'Refresh failed':'更新失敗', 'Upstream sources':'上流ソース', 'Model':'モデル', 'Downstream models':'下流モデル', 'None recorded':'記録なし', 'No matching tables.':'一致するテーブルはありません。', 'Drop {table}? This deletes the table.':'{table} を削除しますか？テーブルのデータも削除されます。', 'Table dropped':'テーブルを削除しました',
- 'Browser storage unavailable. Changes stay in this session.':'ブラウザーに保存できません。変更はこのセッション内で保持されます。', 'Worksheet {number}':'ワークシート {number}', 'Worksheet to close':'閉じるワークシート', 'Close worksheet':'ワークシートを閉じる', 'Choose worksheet to close':'閉じるワークシートを選択', 'Downloaded visible rows.':'表示中の行をダウンロードしました。', 'Copied visible rows.':'表示中の行をコピーしました。', 'Copy failed: {error}':'コピーに失敗しました: {error}', 'Describe the SQL you need first.':'作成したい SQL の説明を入力してください。', 'Enter a WAP table to publish.':'公開する WAP テーブルを入力してください。', 'Enter a WAP table to stage.':'ステージングする WAP テーブルを入力してください。',
+ 'Loading tables…':'テーブルを読み込み中…', 'Catalog unavailable. Check warehouse readiness and refresh.':'カタログを取得できません。ウェアハウスの状態を確認して更新してください。', 'Catalog unavailable. Use Refresh catalog in Data Explorer.':'カタログを取得できません。データ探索で「カタログを更新」を実行してください。', 'Findings to review':'検出結果の確認が必要', 'Complete':'完了', 'Failed':'失敗', 'Upstream sources':'上流ソース', 'Model':'モデル', 'Downstream models':'下流モデル', 'None recorded':'記録なし', 'No matching tables.':'一致するテーブルはありません。', 'Drop {table}? This deletes the table.':'{table} を削除しますか？テーブルのデータも削除されます。', 'Table dropped':'テーブルを削除しました',
+ 'Browser storage unavailable. Changes stay in this session.':'ブラウザーに保存できません。変更はこのセッション内で保持されます。', 'Worksheet {number}':'ワークシート {number}', 'Worksheet to close':'閉じるワークシート', 'Close worksheet':'ワークシートを閉じる', 'Choose worksheet to close':'閉じるワークシートを選択', 'Downloaded visible rows.':'表示中の行をダウンロードしました。', 'Copied visible rows.':'表示中の行をコピーしました。', 'Copy failed: {error}':'コピーに失敗しました: {error}', 'Describe the SQL you need first.':'作成したい SQL の説明を入力してください。',
  '{name} · {size} bytes':'{name} · {size} バイト', 'Choose a browser file or enter a local file path.':'ファイルを選択するか、ローカルファイルパスを入力してください。', 'Could not read {name}':'{name} を読み込めませんでした', 'File reading cancelled':'ファイルの読み込みを中止しました', 'Reading file…':'ファイルを読み込み中…', 'Inferred type':'推定される型', '{rows} file rows · {samples} sample rows':'ファイル全体 {rows} 行 · サンプル {samples} 行', 'No SQL recorded':'SQL は記録されていません', 'No models registered.':'登録済みモデルはありません。', 'No models registered':'登録済みモデルなし',
- 'Timestamp (UTC)':'日時 (UTC)', 'Action / Bear':'操作 / Bear', 'Latency (ms)':'所要時間 (ms)', 'Details':'詳細', '{visible} / {total} events':'{visible} / {total} 件のイベント', 'success':'成功', 'failed':'失敗', 'degraded':'要確認', 'denied':'拒否', 'healthy':'正常', 'active':'稼働中', 'starting':'起動中', 'chilled':'休止中',
- '{target}{model} · tokens {prompt} prompt / {completion} · trace {trace}':'{target}{model} · トークン 入力 {prompt} / 出力 {completion} · trace {trace}',
+ 'Details':'詳細', 'success':'成功', 'failed':'失敗', 'degraded':'要確認', 'denied':'拒否', 'healthy':'正常', 'active':'稼働中', 'starting':'起動中', 'chilled':'休止中',
+
+ // Atlas SQL worksheet (UX-A3). The run label follows the editor selection.
+  '▶ Run selection':'▶ 選択範囲を実行', '▶ Run all':'▶ 全文を実行',
+  'Accepted or running. Wait for it to finish or cancel it.':'受付・実行中です。完了を待つか取り消してください。',
+  'Outcome unknown. Check the original query in Recent Query History; SQL is not resent.':'結果不明です。「最近のクエリ履歴」で元のクエリを確認してください。SQL は再送しません。',
+  'Compute is chilled, so SQL cannot run. An administrator wakes it from Compute.':'コンピュートが休止中のため実行できません。起動は管理者がコンピュート画面で行います。',
+  'The compute state is not confirmed. An administrator must reconcile it before SQL can run.':'コンピュートの休止・起動が確定していません。管理者の照合後に実行できます。',
+  'Choose a database (catalog) next.':'次にDB（カタログ）を選択してください。',
+  'This database is not READY, or the execution role is not permitted. Check its status and access in Database Management.':'このDBはREADYではないか、実行ロールの許可がありません。DB管理で状態・アクセス権を確認してください。',
+  'Choose a schema next.':'次にスキーマを選択してください。',
+  'Enter SQL to run.':'SQLを入力してください。',
+  'The selection is empty. Select SQL again or clear the selection.':'選択範囲が空白のみです。SQL を選び直すか、選択を解除してください。',
+  'Scope: {scope} · Compute: {compute}':'実行範囲: {scope} · コンピュート: {compute}',
+  'Selection':'選択範囲', 'Full editor':'全文',
+  'Run a query to inspect rows and column types.':'クエリを実行して行とカラム型を確認できます。',
+  'Not run yet':'未実行',
+  'Load SQL':'SQL を読み込む', 'Choose a sample SQL':'サンプルSQLを選択',
+  'Not supported':'未対応', 'Download TSV':'TSV を保存',
 }};
+// Atlas terminology (2026-11-18). Existing keys are aligned to the approved vocabulary.
+Object.assign(i18n.ja, {
+ 'Work with data':'データを扱う', 'Administration':'運用管理', 'Workspace':'ワークスペース',
+ 'Data Explorer':'データ探索', 'SQL Worksheets':'SQL ワークシート', 'Ingestion & Stages':'取り込み・ステージ',
+ 'Transformation':'データ変換', 'Jobs':'ジョブ', 'AI Bears':'AI Bears',
+ 'Database Management':'データベース管理', 'Audit Log':'監査ログ', 'Compute & Governance':'コンピュート & ガバナンス',
+ 'Available':'利用可能', 'Paused':'休止中', 'Switching':'切替中', 'Unknown':'状態不明', 'Stale':'観測期限切れ',
+ 'Retire':'利用終了', 'Retired':'利用終了（完了）', 'Retiring':'利用終了（処理中）',
+ 'Full replace':'全件置換', 'Append':'追加', 'Update and add by key':'キーで更新・追加',
+ 'Outcome unknown':'結果不明', 'Reconciled':'照合済み',
+ 'LOCAL · {state}':'LOCAL · {state}', 'Compute status: {state}':'コンピュート: {state}',
+ 'Breadcrumb':'パンくず', 'Notifications':'通知',
+  'Audit log is available in Database mode.':'監査ログは Database モードで利用できます。',
+ 'Open job notifications':'ジョブ画面の通知を開く', '{count} unread notifications':'未読の通知 {count} 件',
+ 'Search and commands':'検索・コマンド', 'Search pages, actions, tables and databases…':'ページ・操作・テーブル・DBを検索…',
+ 'Find a destination':'移動先を検索', 'Close search':'検索を閉じる', 'Destinations':'移動先',
+ 'No matching destinations.':'一致する移動先がありません。', '↑↓ to select · Enter to open · Esc to close':'↑↓ で選択 · Enter で開く · Esc で閉じる',
+ 'Page':'ページ', 'Action':'操作', 'Table':'テーブル', 'Database':'データベース',
+ 'Create database':'DBを作成', 'Import a file':'ファイルを取り込む', 'Open a saved stage':'保存済みステージを開く',
+ 'Check compute status':'コンピュートの状態を確認', 'User menu':'ユーザーメニュー', 'User settings':'ユーザー設定',
+ 'Menu':'メニュー', 'Open SQL':'SQL を開く',
+ // Atlas home (UX-A2). Server state is rendered with the same vocabulary as each destination.
+ 'Home':'ホーム', 'Could not load':'取得できませんでした', 'Reload':'再読み込み',
+ 'Could not load notifications':'通知を取得できませんでした',
+ 'Could not load job runs':'ジョブの実行履歴を取得できませんでした',
+ 'Could not load databases':'データベース一覧を取得できませんでした',
+ '{count} items to review today':'今日の確認は {count} 件です', 'Nothing to review today':'今日の確認はありません',
+ 'Review required':'確認が必要', 'Next actions':'次のアクション', 'Recent job runs':'最近のジョブ実行',
+ 'View all →':'すべて見る →', 'Current work context':'現在の作業コンテキスト', 'Not selected':'未選択',
+ 'Recently used objects':'最近のオブジェクト', 'No job runs yet.':'ジョブの実行履歴はまだありません。',
+ 'Explore data':'データを探索', 'Explore data →':'データを探索する', 'Open SQL worksheet':'SQL ワークシートを開く', 'Open SQL worksheet →':'SQL ワークシートを開く →',
+ 'Choose a table to inspect or query':'テーブルを選んで確認・照会',
+ 'Start a new query in the current context':'現在のコンテキストで新しいクエリを開始',
+ 'Load a file into a permitted table':'許可されたテーブルへファイルを取り込む',
+ 'Review the unknown outcome of {name}':'{name} の結果不明を照合',
+ 'Check the status without resending':'再送せずに状態を確認', 'Awaiting reconciliation':'照合待ち',
+ 'Reconcile compute state':'コンピュートの状態を照合',
+ 'No wake or chill response observed; do not resend':'休止・起動の応答を確認できていません · 再送しない',
+ 'Confirm the compute switch result':'コンピュートの切替結果を確定',
+ 'Accepted; confirm with the original receipt':'受付済み · 元受付を照合して確定',
+ 'Compute is chilled':'コンピュートが休止中',
+ 'New SQL is stopped; an administrator wakes it':'SQL の新規実行は停止中 · 起動は管理者',
+ 'Recheck compute state':'コンピュートの状態を再確認',
+ 'The observation is old; fetch the current state':'観測が古くなっています · 現在の状態を取得',
+ 'Complete retirement of {name}':'{name} の利用終了を完了',
+ 'Observe and reconcile the remaining work':'残りの処理を観測・照合して完了', 'In progress':'処理中',
+ 'Review the failed run of {name}':'ジョブ {name} の実行失敗を確認',
+ 'Review the unacknowledged notification':'未確認の通知を確認',
+ 'Reference role':'参照ロール', 'Search object names':'オブジェクト名を検索',
+ 'Object type':'種別', 'All types':'すべての種別', 'Tables':'テーブル', 'Views':'ビュー', 'View':'ビュー',
+ 'Loading objects…':'オブジェクトを読み込み中…', '{count} objects':'{count} 件のオブジェクト',
+ '{database} / {schema} · {shown} of {total} objects':'{database} / {schema} · {total} 件中 {shown} 件表示',
+ '{count} databases could not be loaded':'{count} 件のDBは取得できませんでした',
+ 'Showing the top {limit} results. Narrow the search.':'上位 {limit} 件を表示。条件を絞ってください',
+ 'No matching objects. Change the search term or type.':'一致するオブジェクトがありません。検索語または種別を変更してください。',
+ 'Choose a database and schema, or enter a search term.':'DBとスキーマを選ぶか、検索語を入力してください。',
+ 'Choose a schema to search its objects.':'スキーマを選ぶとオブジェクトを検索できます。',
+ 'This object cannot be opened.':'このオブジェクトを開けません',
+ 'Back to data exploration':'データ探索に戻る', 'Use in SQL':'SQL で使う',
+ // UX-A4 ingestion impact and confirm labels. The impact line precedes the commit.
+ 'Change input file':'取込元ファイルを変更', 'Selected input: {name}':'選択中の取込元: {name}',
+ 'Destination and update method':'取込先と更新方法', 'Update method':'更新方法', 'Clear selected file':'選択したファイルを解除',
+ 'Create new':'新規作成', 'Create a new table and write {incoming} rows.':'新規テーブルを作成し {incoming} 行を書き込みます。',
+ 'Add {incoming} rows to the existing {existing} rows (total {after}).':'既存 {existing} 行に {incoming} 行を追加します（合計 {after} 行）。',
+ 'Add {incoming} rows. The existing row count is unavailable.':'{incoming} 行を追加します。既存の行数を取得できませんでした。',
+ 'Delete all {existing} existing rows and replace them with {incoming} rows.':'既存 {existing} 行をすべて削除し、{incoming} 行に置き換えます。',
+ 'Replace the table with {incoming} rows. The existing row count is unavailable.':'{incoming} 行に置き換えます。既存の行数を取得できませんでした。',
+ 'Update or add {incoming} rows by key (existing {existing} rows).':'{incoming} 行をキーで更新・追加します（既存 {existing} 行）。',
+ 'Update or add {incoming} rows by key. The existing row count is unavailable.':'{incoming} 行をキーで更新・追加します。既存の行数を取得できませんでした。',
+ 'Downstream transformations: {names} · Published contents stay unchanged until rebuilt.':'下流の変換: {names} · 再ビルドまで公開内容は変わりません',
+ 'Create and ingest':'作成して取り込む', 'Append {incoming} rows':'{incoming} 行を追加する',
+ 'Delete {existing} rows and replace':'{existing} 行を削除して置き換える', 'Delete all rows and replace':'全件を削除して置き換える',
+ 'Update or add {incoming} rows':'{incoming} 行を更新・追加する',
+ 'Latest run: {time} · {status}':'最新実行: {time} · {status}',
+ // UX-A4 transformation flow. The screen is one ordered flow; the published MARTS
+ // section keeps update review and save together.
+ 'Transformation flow':'データ変換の流れ', 'Transform model':'変換モデル', 'Published MARTS':'公開済み MARTS',
+ 'Candidate and quality checks':'候補と品質検査', 'Saved transformation metadata':'保存済みのデータ変換メタデータ',
+ 'Saved transformation target: {target}':'保存済みの変換先: {target}',
+ 'Choose or refresh the transformation context.':'データ変換の接続先を選択または更新してください。',
+ 'Loading publication impact…':'公開の影響を確認中…', 'Quality failed. Edit the model or build again.':'品質検査に失敗しました。モデルを編集するか再ビルドしてください。',
+ 'Open transformation recovery':'データ変換の復旧を開く',
+ 'Update review and save':'更新のレビューと保存', 'Source RAW table':'取込元 RAW テーブル', 'Source RAW tables and SQL':'取込元 RAW テーブルと SQL',
+ 'Choose the input RAW tables and use their aliases in SQL.':'取込元の RAW テーブルを選び、SQL ではその別名を使用してください。', 'dbt plan':'dbt プラン',
+ 'Save model and create version':'モデルを保存・バージョン作成',
+ 'Build SANDBOX candidate':'SANDBOX 候補をビルド', 'Run quality checks':'品質検査を実行', 'Quality check':'品質検査',
+ 'Review publication':'公開内容を確認', 'Preview MARTS publication':'MARTS 公開をプレビュー',
+ 'Publish to MARTS':'MARTS に公開', 'Replace and publish':'置き換えて公開',
+ 'Open published table':'公開テーブルを開く', 'Publication record {id}':'公開記録 {id}',
+ 'Save the model to build a candidate.':'モデルを保存すると候補をビルドできます。',
+ 'Build a candidate from the saved model.':'保存したモデルから候補をビルドしてください。',
+ 'Pass the quality check to review publication.':'品質検査に合格すると公開を確認できます。',
+ 'Review the publication to publish.':'公開内容を確認すると公開できます。',
+ 'Publication reviewed. Publish the candidate.':'公開内容を確認済みです。公開してください。',
+ 'Published. Open the table to use it.':'公開済みです。テーブルを開いて利用できます。',
+ 'Replace {existing} published rows with {incoming} rows.':'公開中の {existing} 行を {incoming} 行に置き換えます。',
+ 'Create a new MARTS table with {incoming} rows.':'新しい MARTS テーブルを {incoming} 行で作成します。',
+ 'The published row count is unavailable.':'公開中の行数を取得できませんでした。',
+ 'Replace published rows with {incoming} rows. The published row count is unavailable.':'公開中の行数を取得できませんでした。{incoming} 行に置き換えます。',
+ 'Referencing roles: {roles} · Previous versions can be restored from publication history.':'参照中のロール: {roles} · 以前の版は公開履歴から戻せます',
+ 'The referencing roles are unavailable.':'参照中のロールを取得できませんでした。',
+ 'Input changed; the candidate is invalid. Save and rebuild.':'入力変更により無効。保存して再ビルドしてください。',
+ 'Quality check passed':'品質検査に合格', 'Quality check failed · publication is blocked':'品質検査に失敗 · 公開できません',
+ 'Awaiting quality check':'品質検査待ち', 'Published':'公開済み',
+ 'Candidate: {target} · model v{version} / build {build}':'候補: {target} · モデル v{version} / ビルド {build}',
+ 'Selected saved version: {version}':'選択中の保存バージョン: {version}',
+ 'No saved version':'未保存', 'Matches the current inputs':'現在の入力と一致',
+ 'Inputs differ from the saved version. Save again.':'入力が保存時と不一致。再保存が必要',
+ 'AI draft':'AI の下書き', 'Load AI draft into the model':'AI 案を下書きに読み込む',
+
+ 'Open in Transformation':'データ変換で開く',
+ 'Unavailable in Database mode in this phase.':'この段階では Database モードで利用できません。',
+});
+// UX-A5 database management: list, team, detail sub-screens and retirement impact.
+Object.assign(i18n.ja, {
+ 'Database list':'データベース一覧', 'Search databases':'DB名・表示名で検索',
+ 'All states':'すべての状態', 'All teams':'すべてのチーム', 'Database state':'状態', 'Database revision number':'リビジョン',
+ 'Team':'担当チーム', 'Not set':'未設定', 'DB name':'DB名',
+ 'DB name A–Z':'DB名 A–Z', 'DB name Z–A':'DB名 Z–A', 'Revision':'リビジョン',
+ 'Registered':'登録済み', 'Preparing':'準備中',
+ 'Manage':'管理',
+ 'Database access rights':'DB別のアクセス権',
+ 'Database and schema display information':'DB・スキーマの表示情報', 'Display information':'表示情報',
+ 'Back to database list':'データベース一覧に戻る', 'Back to database details':'DB詳細に戻る',
+ 'Name and team':'名前・担当チーム', 'Initial access':'初期アクセス', 'Review and create':'確認・作成', 'Sort':'並び順',
+
+
+
+ 'Review the request, then submit it to prepare for two separate approvals.':'内容を確認して作成要求を送信し、2回の承認に備えます。',
+ 'Team (required)':'担当チーム（必須）',
+ 'Required. 1 to 64 characters. Existing teams are suggestions.':'必須です。1〜64文字。既存のチーム名を候補にしています。',
+ 'Team must be 1 to 64 characters without control characters.':'担当チームは制御文字を含まない1〜64文字で入力してください。',
+ 'Review creation':'内容を確認', 'Back to name and team':'名前と担当チームに戻る',
+ 'Users losing access':'アクセスが終了する利用者', 'Principal ID':'利用者 ID',
+ 'Retire database':'利用を終了する',
+ '{name} will be retired. {count} users will lose access.':'{name} の利用を終了します。{count} 人の利用者がアクセスできなくなります。',
+ 'Observed {time} · Scope: selected database · Role: {role}':'観測日時 {time} · 範囲: 選択した DB · ロール: {role}',
+ 'Retiring · New work is blocked. UNKNOWN keeps retirement open until closure is verified.':'利用終了（処理中） · 新規処理は受け付けません。UNKNOWN の処理は、終了が確認されるまで利用終了の完了を妨げます。',
+ 'Retired · Retirement is complete. New work remains blocked.':'利用終了（完了） · 利用終了が完了しました。引き続き新規処理は受け付けません。',
+ 'No databases match these filters.':'条件に一致するDBがありません。',
+ 'Failed':'失敗', 'Unknown':'状態不明',
+});
+// UX-A6a jobs and audit log: Atlas list/detail, JST times and localized sources.
+Object.assign(i18n.ja, {
+ 'Audit log':'監査ログ', 'Back to job list':'ジョブ一覧に戻る',
+ 'Recent runs':'最近の実行', 'Run history (latest 100)':'実行履歴（直近100件）',
+ 'Step list':'処理ステップ', 'No steps yet.':'ステップはまだありません。',
+ 'Unread: {count}':'未読 {count} 件', 'Latest alerts':'最新のアラート',
+ 'No unread alerts.':'未読のアラートはありません。',
+ 'Filters':'絞り込み条件', 'Filters · {count} results':'絞り込み条件 · {count} 件',
+ 'Filters · 1 result':'絞り込み条件 · 1 件',
+ 'Start (JST)':'開始日時（JST）', 'End (JST)':'終了日時（JST）',
+ 'Period (JST, inclusive): {from} to {to}':'期間 (JST、境界を含む): {from} ～ {to}',
+ 'Time JST':'時刻 JST',
+ 'Audit record {id}':'監査記録 {id}', 'Back to audit log':'監査ログに戻る',
+ 'Query executions':'クエリ実行',
+ '{count} saved jobs':'保存済みジョブ {count} 件',
+ 'Select a job to see its alerts.':'アラートを確認するジョブを選択してください。',
+ 'Step JSON is invalid. Fix it before saving.':'ステップの JSON が無効です。保存前に修正してください。',
+ 'No job selected.':'ジョブが選択されていません。',
+ 'Saved job selector':'保存済みジョブの選択',
+ 'Revision {revision}':'リビジョン {revision}',
+ 'Job schedule times use the selected timezone; the next run is also shown in JST.':'ジョブのスケジュール時刻は選択したタイムゾーンで入力し、次回実行は JST でも表示します。',
+ 'Times use JST.':'時刻は JST で表示します。', 'Scheduled for (JST)':'予定時刻（JST）',
+ 'Enter valid JST dates and a page size from 1 to 100.':'有効な JST 日時と1〜100の取得件数を入力してください。',
+ 'Saved metadata audit':'保存済みメタデータの監査',
+ 'Created':'作成日時', 'Updated':'更新日時', 'Finished':'終了日時',
+ 'Operation IDs':'操作 ID', 'Query IDs':'クエリ ID', 'Count':'件数', 'Rows':'行数',
+ 'interval':'一定間隔', 'daily':'毎日', 'once':'1回だけ', 'weekly':'毎週', 'monthly':'毎月',
+ 'read-write':'読み書き', 'Rejected':'拒否', 'execute':'実行', 'query':'クエリ',
+ // UX-A6b: AI Bears handoff and shared compute.
+
+ 'SQL draft and handoff':'SQL 案と受け渡し',
+ 'The draft inherits the database, schema and role of the active worksheet.':'案は現在のワークシートのデータベース・スキーマ・ロールを引き継ぎます。',
+ 'Request (same as worksheet Copilot)':'依頼内容（ワークシートの Copilot と同じ）',
+ 'Choose sources in worksheet Copilot':'ワークシートの Copilot で参照元を選ぶ',
+ 'Create draft':'案を作る',
+ 'Verify a candidate in Transformation':'データ変換で候補を確認',
+ 'Open Manual WAP':'データ変換を開く',
+ 'WAP navigation requires data_engineer or admin (E/A).':'データ変換にはデータ作成者または管理者のロールが必要です。',
+ 'Published MARTS navigation requires admin and an available MARTS tab.':'公開済み MARTS の案内には管理者と利用可能な MARTS タブが必要です。',
+ 'Database SQL workflows':'データベースの SQL ワークフロー',
+ 'Refresh a published table in Published MARTS':'公開済み MARTS で公開テーブルを更新',
+ 'Open Published MARTS':'公開済み MARTS を開く',
+ 'Open worksheet Copilot':'ワークシートの Copilot を開く',
+ 'No SQL draft yet. Choose sources in worksheet Copilot, then create a draft.':'SQL 案はまだありません。ワークシートの Copilot で参照元を選び、案を作成してください。',
+ 'Review the target, context and content, then approve the handoff.':'対象・文脈・内容を確認し、受け渡しを承認してください。',
+ 'Generating a SQL draft…':'SQL 案を生成しています…',
+ 'Approve and open in worksheet':'承認してワークシートを開く',
+ 'Approve and hand to Transformation':'承認してデータ変換へ渡す',
+ 'Select the approval checkbox before handing off.':'受け渡す前に承認のチェックを入れてください。',
+ 'Opened the approved draft in a SQL worksheet. It has not run.':'承認した案を SQL ワークシートの下書きに開きました。SQL は未実行です。',
+ 'Handed the approved draft to Transformation for review. No model was saved.':'承認した案をデータ変換の下書きレビューに渡しました。モデルは未保存です。',
+
+ 'The selected role cannot hand a draft to Transformation. Use {engineer} or {admin}.':'選択中のロールではデータ変換へ渡せません。{engineer} または {admin} を使用してください。',
+ 'The worksheet context is not ready for this handoff.':'この受け渡しに使えるワークシートの文脈がありません。',
+ 'No SQL draft is available to hand off.':'受け渡せる SQL 案がありません。',
+ 'Inherited context: {context}':'引き継ぐ文脈: {context}',
+ 'Selected sources: {sources}':'選択済みの参照元: {sources}',
+ 'No sources selected yet.':'参照元はまだ選択されていません。',
+ 'The proposed SQL was not executed or published.':'提案された SQL は実行も公開もしていません。',
+ 'Shared LOCAL compute':'共有 LOCAL コンピュート',
+ 'Observed at {time}':'観測時刻 {time}',
+ 'Not supported for this profile.':'このプロファイルでは利用できません。',
+ 'State unavailable. Refresh status.':'状態を取得できません。「状態を更新」を実行してください。',
+
+ 'Chill confirmation':'休止の確認',
+ 'I understand the impact on all users.':'すべての利用者への影響を確認しました。',
+ 'Chill now':'休止する',
+ 'Back':'戻る',
+
+ 'Chill is blocked because {count} processes are running.':'実行中の処理 {count} 件があるため休止できません。',
+ 'Chilling stops all SQL. There are no running processes.':'休止すると SQL を実行できなくなります。実行中の処理はありません。',
+ 'Chill safety could not be confirmed. Refresh the status.':'休止の可否を確認できません。状態を更新してください。',
+
+ 'Confirmed processes: {processes}':'確認できた処理: {processes}',
+ 'job {name}':'ジョブ {name}',
+ 'worksheet {name}':'ワークシート {name}',
+ 'Checking job names…':'ジョブ名を確認中…',
+ 'Checking confirmed process names…':'確認できた処理名を確認中…',
+ 'No process names were returned by the server.':'サーバーから処理名は返されていません。',
+
+ 'Wake shared LOCAL':'共有 LOCAL を起動',
+
+
+
+ 'Chilled at the last observation. Wake shared LOCAL, then run SQL.':'最後の観測では休止中です。共有 LOCAL を起動してから SQL を実行してください。',
+ 'Shared LOCAL is active. Authorized SQL can run.':'共有 LOCAL は稼働中です。許可された SQL を実行できます。',
+ 'Shared LOCAL is transitioning. Wait for the state to settle.':'共有 LOCAL は状態を移行中です。状態が確定するまでお待ちください。',
+ 'The state is not confirmed. Refresh or revalidate before running SQL.':'状態が確定していません。SQL を実行する前に状態を更新するか照合してください。',
+ 'Wake shared LOCAL, then run authorized SQL. Database creation also requires a platform operator to Wake LOCAL in Compute.':'共有 LOCAL を起動してから許可済みの SQL を実行してください。データベース作成も、プラットフォーム運用者がコンピュート画面で共有 LOCAL を起動する必要があります。',
+ 'Read-only: you can check the state. Wake shared LOCAL before running SQL; platform operators Wake, Chill and change Auto-Chill.':'閲覧のみ：状態を確認できます。SQL を実行する前に共有 LOCAL を起動してください。起動・休止・自動休止の変更はプラットフォーム運用者が行います。',
+ 'The chill request was rejected because work is still running. The state was refreshed; review the running processes before trying again.':'処理が実行中のため休止要求は拒否されました。状態を再取得しました。実行中の処理を確認してから再試行してください。',
+ 'The chill request was rejected because work is still running. The state could not be refreshed; use Refresh status.':'処理が実行中のため休止要求は拒否されました。状態を再取得できませんでした。「状態を更新」を実行してください。',
+ 'The request was rejected. Refreshing the state…':'要求は拒否されました。状態を再取得しています…',
+ 'The chill request was rejected. The state was refreshed.':'休止要求は拒否されました。状態を再取得しました。',
+ 'The chill request was rejected. The state could not be refreshed.':'休止要求は拒否されました。状態を再取得できませんでした。',
+ 'The chill request was rejected ({reason}). The state was refreshed.':'休止要求は拒否されました（{reason}）。状態を再取得しました。',
+ 'The chill request was rejected ({reason}). The state could not be refreshed.':'休止要求は拒否されました（{reason}）。状態を再取得できませんでした。',
+ 'Admission conflict':'受付処理の競合',
+ 'Warehouse unavailable':'ウェアハウスを利用できません',
+ 'Runtime operation failed':'ランタイム操作に失敗しました',
+ 'Operation conflict':'操作の競合',
+ 'State conflict':'状態の競合',
+ 'Idempotency conflict':'冪等キーの競合',
+
+ 'AI settings':'AI 設定',
+ 'Open AI settings':'AI 設定を開く',
+ 'AI model settings are shared by the platform.':'AI モデル設定はプラットフォームで共有します。',
+ 'Operational diagnostics':'運用診断',
+ 'Usage and headroom':'使用量と空き容量',
+ 'Usage, capacity, history and foundation observations are grouped here. Each fetch is manual and shows its own observation time.':'使用量・容量・履歴・基盤の観測をここにまとめています。取得は手動で、結果ごとに観測時刻を表示します。',
+
+
+ 'Job runs could not be confirmed in this context.':'この文脈ではジョブ実行を確認できませんでした。',
+});
 i18n.en = Object.fromEntries(Object.keys(i18n.ja).map(key => [key, key]));
+// Product terminology: the transformation surface is called "データ変換" /
+// "Transformation". Keys and internal identifiers keep their historical names.
+function atlasTransformationTerm(text, lang) {
+ return String(text)
+  .replace(/Manual WAP/g, lang === 'ja' ? 'データ変換' : 'Transformation')
+  .replace(/手動 WAP/g, 'データ変換')
+  .replace(/WAP/g, lang === 'ja' ? 'データ変換' : 'Transformation');
+}
+for (const key of Object.keys(i18n.ja)) {
+ i18n.ja[key] = atlasTransformationTerm(i18n.ja[key], 'ja');
+ i18n.en[key] = atlasTransformationTerm(i18n.en[key] ?? key, 'en');
+}
+
+// All user-facing times are shown in JST; datetime-local values are read as JST too.
+const JST_OFFSET = '+09:00';
+function fmtJST(value, seconds = false) {
+ const d = new Date(value);
+ if (!Number.isFinite(d.getTime())) return String(value ?? '');
+ const parts = new Intl.DateTimeFormat('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hour12: false, hourCycle: 'h23' }).formatToParts(d);
+ const g = type => parts.find(part => part.type === type)?.value;
+ return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}${seconds ? ':' + g('second') : ''} JST`;
+}
+function fmtInputJST(value) {
+ return value ? String(value).replace('T', ' ') + ' JST' : '';
+}
+function jstInputToDate(value) {
+ if (!value) return null;
+ const text = String(value);
+ if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(text)) return null;
+ const date = new Date((text.length === 16 ? text + ':00' : text) + JST_OFFSET);
+ return Number.isFinite(date.getTime()) ? date : null;
+}
+function jstInputToISO(value) {
+ const date = jstInputToDate(value);
+ if (!date) return '';
+ // Reject calendar overflow (for example 2026-02-30) instead of silently rolling over.
+ const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false, hourCycle: 'h23' }).formatToParts(date);
+ const g = type => parts.find(part => part.type === type)?.value;
+ const canonical = `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}`;
+ return canonical === String(value).slice(0, 16) ? date.toISOString() : '';
+}

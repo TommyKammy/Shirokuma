@@ -9,11 +9,28 @@ import data_management as dm
 from warehouse_operations import OperationError, _json, _text
 
 
+def normalize_team(value, code='INVALID_DISPLAY_METADATA'):
+    """Shared database-team validation for creation and display edits."""
+    if not isinstance(value, str):
+        raise OperationError(code, 400)
+    team = value.strip()
+    if (not 1 <= len(team) <= 64
+            or any(unicodedata.category(c) == 'Cc' for c in team)):
+        raise OperationError(code, 400)
+    try:
+        team.encode('utf-8')
+    except UnicodeError:
+        raise OperationError(code, 400) from None
+    return team
+
+
 def validate_payload(resource_type, payload):
     fields = {'display_name', 'expected_revision'}
     if resource_type == 'database':
         fields.add('description')
-    if resource_type not in ('database', 'schema') or type(payload) is not dict or set(payload) != fields:
+    allowed = fields | ({'team'} if resource_type == 'database' else set())
+    if (resource_type not in ('database', 'schema') or type(payload) is not dict
+            or not fields <= set(payload) or set(payload) - allowed):
         raise OperationError('INVALID_DISPLAY_METADATA', 400)
     name = payload['display_name']
     revision = payload['expected_revision']
@@ -26,6 +43,8 @@ def validate_payload(resource_type, payload):
         if (not isinstance(description, str) or len(description) > 2048 or
                 any(unicodedata.category(c) == 'Cc' and c not in '\r\n\t' for c in description)):
             raise OperationError('INVALID_DISPLAY_METADATA', 400)
+        if 'team' in payload:
+            normalize_team(payload['team'])
     try:
         name.encode('utf-8')
         if resource_type == 'database':
@@ -39,7 +58,7 @@ def list_databases(principal, role):
     require_admin(principal, role)
     with control_store.connect() as db:
         result = []
-        for row in db.execute('SELECT id,sql_catalog,display_name,description,state,revision FROM databases ORDER BY sql_catalog,id'):
+        for row in db.execute('SELECT id,sql_catalog,display_name,description,team,state,revision FROM databases ORDER BY sql_catalog,id'):
             item = dict(row)
             item['schemas'] = [dict(s) for s in db.execute('''SELECT id,sql_name,display_name,purpose,revision
                 FROM schemas WHERE database_id=? ORDER BY sql_name,id''', (row['id'],))]
@@ -92,7 +111,9 @@ def _mutate(principal, role, resource_type, resource_id, payload, key, *, connec
         if before.revision != payload['expected_revision']:
             raise OperationError('REVISION_CONFLICT')
         if resource_type == 'database':
-            after = dm.update_database_display(db, resource_id, before.revision, payload['display_name'], payload['description'])
+            team = normalize_team(payload['team']) if 'team' in payload else dm._UNSET
+            after = dm.update_database_display(db, resource_id, before.revision, payload['display_name'],
+                                               payload['description'], team)
         else:
             after = dm.update_schema_display(db, resource_id, before.revision, payload['display_name'])
         operation_id = str(uuid.uuid4())
@@ -102,7 +123,7 @@ def _mutate(principal, role, resource_type, resource_id, payload, key, *, connec
             'APPLIED', (), None, (), (('created_at', _now()),)))
         db.execute('INSERT INTO metadata_requests VALUES (?,?,?,?,?,?)',
             (operation_id, actor, route, key, normalized, _json(response)))
-        fields = ('display_name', 'description', 'revision') if resource_type == 'database' else ('display_name', 'revision')
+        fields = ('display_name', 'description', 'revision', 'team') if resource_type == 'database' else ('display_name', 'revision')
         db.execute('INSERT INTO metadata_audit VALUES (?,?,?,?,?)', (operation_id, resource_type, resource_id,
             _json({k: getattr(before, k) for k in fields}), _json({k: getattr(after, k) for k in fields})))
         return response
