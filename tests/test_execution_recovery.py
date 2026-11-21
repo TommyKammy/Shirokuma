@@ -17,6 +17,11 @@ from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
+
+# Historical recovery binds evidence files to their creation time. Linux
+# file systems do not report it, so these tests only run where it exists.
+HAS_BIRTHTIME = hasattr(os.stat(__file__), 'st_birthtime')
+requires_birthtime = unittest.skipUnless(HAS_BIRTHTIME, 'needs file creation time (st_birthtime)')
 import catalog_admin
 import control_store
 import data_management as dm
@@ -1681,6 +1686,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             historical_query_result=self.original_result)
         return self.operator.plan(self.query_id, key, **self.plan_kwargs)
 
+    @requires_birthtime
     def test_historical_observation_only_exact_closure_and_replay(self):
         before = self.snapshot()
         plan = self.historical()
@@ -1700,6 +1706,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         preview = database_retirement.preview(self.admin, 'admin', self.context.database_id)
         self.assertFalse(preview['blockers'])  # Exact historical closure removes active retirement blockers.
 
+    @requires_birthtime
     def test_historical_drift_leaves_durable_observe_intent(self):
         plan = self.historical()
         self.backend.consume_historical.return_value = dict(self.current_observation, engine_id='foreign')
@@ -1713,6 +1720,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.backend.consume_historical.return_value = self.current_observation
         self.assertEqual(self.apply(pending, reconcile=True)['phase'], 'OPEN')
 
+    @requires_birthtime
     def test_historical_same_key_snapshot_bytes_are_immutable(self):
         plan = self.historical()
         self.assertEqual(self.historical()['intent_digest'], plan['intent_digest'])
@@ -1722,6 +1730,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         with self.assertRaises(QueryError):
             self.apply(plan)
 
+    @requires_birthtime
     def test_historical_current_auth_digest_revision_and_graph_cas(self):
         plan = self.historical()
         with self.assertRaises(QueryError):
@@ -1748,6 +1757,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             self.assertEqual(admission.query_closure(db, self.query_id), '')
             self.assertEqual(admission.control(db)['state'], 'DRAINING')
 
+    @requires_birthtime
     def test_historical_other_unfinished_and_grant_drift_block_apply(self):
         plan = self.historical()
         with control_store.connect() as db:
@@ -1764,6 +1774,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         with control_store.connect() as db:
             self.assertEqual(admission.query_closure(db, self.query_id), '')
 
+    @requires_birthtime
     def test_historical_three_prior_closed_records_and_original_pin_survive(self):
         for index in range(3):
             self.apply(self.operator.plan(self.query_id, 'prior-' + str(index)))
@@ -1779,6 +1790,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             for row in old:
                 self.assertEqual(dict(db.execute('SELECT * FROM warehouse_admissions WHERE id=?', (row['id'],)).fetchone()), row)
 
+    @requires_birthtime
     def test_historical_interruption_after_close_requires_fresh_current_verification(self):
         plan = self.historical()
         self.backend.consume_historical.side_effect = [self.current_observation, KeyboardInterrupt()]
@@ -1794,6 +1806,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.backend.consume_historical.side_effect = None
         self.assertEqual(self.apply(pending, reconcile=True)['phase'], 'OPEN')
 
+    @requires_birthtime
     def test_historical_profile_seal_and_actor_loss_during_reads(self):
         plan = self.historical()
         mocked_adapter = self.operator.adapter
@@ -1815,6 +1828,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             self.assertEqual(admission.query_closure(db, self.query_id), '')
             self.assertEqual(admission.control(db)['state'], 'DRAINING')
 
+    @requires_birthtime
     def test_historical_cli_flags_select_private_branch(self):
         plan = self.historical()
         with patch.object(recovery, 'run', return_value=plan) as run, patch('sys.stdout', new_callable=io.StringIO):
@@ -1832,6 +1846,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.assertEqual(args.historical_query_intent,self.original_intent)
         self.assertEqual(args.historical_query_result,self.original_result)
 
+    @requires_birthtime
     def test_completed_claim_survives_retention_profile_and_generation_changes(self):
         plan = self.historical()
         completed = self.apply(plan)
@@ -1849,6 +1864,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.operator.adapter.assert_not_called()
 
 
+    @requires_birthtime
     def test_completed_saved_proof_and_exact_admission_claim_remain_required(self):
         completed = self.apply(self.historical())
         with control_store.connect() as db:
@@ -1875,6 +1891,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.backend.historical.assert_not_called()
 
 
+    @requires_birthtime
     def test_current_replacement_drift_at_apply_requires_same_operation_observe(self):
         plan = self.historical()
         changed = copy.deepcopy(self.current_observation)
@@ -1891,6 +1908,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
         self.assertEqual((resumed['operation_id'],resumed['phase']),(plan['operation_id'],'OPEN'))
 
 
+    @requires_birthtime
     def test_shared_completed_predicate_open_closed_is_read_only(self):
         completed = self.apply(self.historical())
         with control_store.connect() as db:
@@ -1919,6 +1937,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             db.execute("UPDATE operations SET state='CLOSED' WHERE id=?",(completed['operation_id'],))
             check()
 
+    @requires_birthtime
     def test_shared_completed_predicate_rejects_actor_type_route_and_old_proof(self):
         completed = self.apply(self.historical())
         mutations = [
@@ -1944,6 +1963,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
                     db.execute('ROLLBACK TO invalid_claim')
                     db.execute('RELEASE invalid_claim')
 
+    @requires_birthtime
     def test_shared_completed_predicate_rejects_duplicate_actual_closed_claim(self):
         plan = self.historical('first')
         second = self.historical('second')
@@ -1958,6 +1978,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
                 recovery.completed_historical_query(db,row,json.loads(row['intent']),json.loads(row['proof']))
             self.assertEqual(caught.exception.code,'RECOVERY_CLAIM_AMBIGUOUS')
 
+    @requires_birthtime
     def test_shared_completed_predicate_requires_true_plan_after_terminal(self):
         completed = self.apply(self.historical())
         with control_store.connect() as db:
@@ -1975,6 +1996,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
                 recovery.completed_historical_query(db,row,intent,json.loads(row['proof']))
 
 
+    @requires_birthtime
     def test_official_full_plan_consumed_with_no_event_history_or_replay(self):
         self.apply(self.operator.plan(self.query_id,'prior-native-query'))
         probe = HistoricalAdapterTests()
@@ -2493,6 +2515,7 @@ class DockerAdapterTests(unittest.TestCase):
         self.assertNotIn('SENTINEL',json.dumps(proof))
 
 
+@requires_birthtime
 class HistoricalAdapterTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

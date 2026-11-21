@@ -16676,6 +16676,7 @@ function workbenchAtlasComputeLanguageChanged(){if(dbRuntime.installed)dbCompute
 let initialLanguage;
 try { initialLanguage = localStorage.getItem(languageKey); } catch { /* Use browser preference. */ }
 setLanguage(['en','ja'].includes(initialLanguage) ? initialLanguage : navigator.language?.toLowerCase().startsWith('ja') ? 'ja' : 'en');
+workbenchInitTheme();
 async function initializeSession() {
  // Read the authenticated role before sending any role-selected API request.
  const response=await fetch('/api/session');
@@ -16696,7 +16697,6 @@ async function initializeSession() {
  refreshStatus();loadCatalog();
  if(currentRole!=='bi_viewer')loadJobAlerts(false);
 }
-workbenchInitTheme();
 startWorkbench();
 </script>
 </body>

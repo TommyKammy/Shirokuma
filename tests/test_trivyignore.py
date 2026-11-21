@@ -114,6 +114,30 @@ class TrivyIgnoreContractTests(unittest.TestCase):
                 check=False,
             )
 
+    def test_default_run_checks_a_fresh_live_scan_against_the_real_clock(
+        self,
+    ) -> None:
+        # CI runs the checker without --now on a report Trivy just produced.
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = datetime.now(timezone.utc).isoformat()
+        with tempfile.TemporaryDirectory() as directory:
+            live = Path(directory) / "trivy-live-flux-rbac.json"
+            live.write_text(json.dumps(report), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "--live-scan-report-file",
+                    str(live),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("live_scan_sha256=", result.stdout)
+
     def test_repository_ignore_file_is_valid_at_review_date(self) -> None:
         result = subprocess.run(
             [

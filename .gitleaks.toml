@@ -104,3 +104,13 @@ targetRules = ["sourcegraph-access-token"]
 paths = [
   '''^security/evidence/seaweedfs-v4\.39/trivy\.json$''',
 ]
+
+[[allowlists]]
+description = "Browser storage key name for pinned databases in the Atlas UI mockup"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^shirokuma-atlas-db-pins-v1$''']
+targetRules = ["generic-api-key"]
+paths = [
+  '''^docs/design/assets/ui_mockups/shirokuma-atlas\.html$''',
+]

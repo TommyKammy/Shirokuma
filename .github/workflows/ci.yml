@@ -151,4 +151,4 @@ jobs:
             --project tools/local_experiment/dataops
 
       - name: Run repo-owned checks
-        run: make verify
+        run: make verify PYTHON=tools/local_experiment/dataops/.venv/bin/python3

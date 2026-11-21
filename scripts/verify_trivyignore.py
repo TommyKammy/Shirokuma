@@ -492,6 +492,13 @@ def main() -> int:
             if args.now is not None
             else APPROVAL_CREATED_AT + timedelta(days=1)
         )
+        # The reviewed exception is evaluated at its pinned review time, but a
+        # live scan is produced now and must be checked against the real clock.
+        live_now = (
+            parse_timestamp(args.now, "--now")
+            if args.now is not None
+            else datetime.now(timezone.utc)
+        )
         expiry = validate_document(load_document(args.ignore_file), now)
         manifest_digest = validate_manifest(
             load_regular_file(args.manifest_file, "Flux manifest")
@@ -506,7 +513,7 @@ def main() -> int:
                     args.live_scan_report_file,
                     "live Trivy config report",
                 ),
-                now,
+                live_now,
             )
             if args.live_scan_report_file is not None
             else None

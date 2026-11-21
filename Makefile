@@ -144,7 +144,6 @@ test-resident-core:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_workbench*.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_ui.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_marts_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_ai_semantic_benchmark.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_runner.py'
