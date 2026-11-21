@@ -33,14 +33,14 @@ APPROVED_STATEMENTS = (
     "Flux v2.9.2 generates cluster-scoped controller RBAC that reads credential, decryption, and provider Secrets for reconciliation; this path-scoped exception is limited to the single-user local lab while the upstream RBAC surface is reviewed.",
     "Flux v2.9.2 generates cluster-scoped controller RBAC for reconciliation; this path-scoped exception is limited to the single-user local lab while the upstream RBAC surface is reviewed.",
 )
-APPROVAL_COMMENT_ID = 5290345820
+APPROVAL_COMMENT_ID = 7070435157
 APPROVAL_COMMENT_URL = (
     "https://github.com/TommyKammy/Shirokuma/issues/150"
-    "#issuecomment-5290345820"
+    "#issuecomment-7070435157"
 )
-APPROVAL_CREATED_AT = datetime(2026, 8, 14, 6, 43, 14, tzinfo=timezone.utc)
-APPROVED_ON = date(2026, 8, 14)
-APPROVED_EXPIRY = date(2026, 9, 13)
+APPROVAL_CREATED_AT = datetime(2026, 11, 21, 22, 48, 0, tzinfo=timezone.utc)
+APPROVED_ON = date(2026, 11, 21)
+APPROVED_EXPIRY = date(2026, 12, 21)
 APPROVED_MANIFEST_SHA256 = (
     "ed307189fd1f9e49819a50843bb6f3c9257fe6d4d8359d1950b38207c26c3854"
 )
@@ -487,14 +487,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     try:
+        # Both the exception window and a live scan are checked against the
+        # real clock, so CI fails once the owner approval expires.
         now = (
-            parse_timestamp(args.now, "--now")
-            if args.now is not None
-            else APPROVAL_CREATED_AT + timedelta(days=1)
-        )
-        # The reviewed exception is evaluated at its pinned review time, but a
-        # live scan is produced now and must be checked against the real clock.
-        live_now = (
             parse_timestamp(args.now, "--now")
             if args.now is not None
             else datetime.now(timezone.utc)
@@ -513,7 +508,7 @@ def main() -> int:
                     args.live_scan_report_file,
                     "live Trivy config report",
                 ),
-                live_now,
+                now,
             )
             if args.live_scan_report_file is not None
             else None

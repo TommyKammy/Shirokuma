@@ -106,6 +106,11 @@ CIはignore前にfreshなcanonical-manifest scanを取得して完全一致す�
 作成時刻を検証し、同じIDの追加発生も拒否する。blocking scanだけがcanonical
 `.trivyignore.yaml`を使用する。resident imageと
 RBACのどちらも自動更新を禁止し、期限到来時はfail closedへ戻す。
+
+2026-11-21のOWNER [comment 7070435157](https://github.com/TommyKammy/Shirokuma/issues/150#issuecomment-7070435157)
+は、同じmanifest SHA-256とTrivy 0.72.0の`KSV-0041` 1件・`KSV-0046` 8件だけを明示的に再承認した。
+承認日（UTC）から30日上限の`2026-12-21T00:00:00Z`を期限とする。resident image例外は更新せず、
+2026-09-13で期限切れのままとする。
 retained config report SHA-256は
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw
 Trivy/check-bundle metadata SHA-256は
