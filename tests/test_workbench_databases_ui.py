@@ -11,30 +11,50 @@ import test_workbench_retirement_ui as retirement
 class DatabaseManagementUI(unittest.TestCase):
     javascript = admin.harness.DatabaseUI.javascript
 
-    def test_list_uses_retirement_terms_team_and_canonical_routes(self):
+    def test_list_uses_retirement_terms_team_paging_and_canonical_routes(self):
         self.javascript(admin.SETUP + r'''
 adminItems[0].state='RETIRING';adminItems[0].team='Data Team';adminItems[1].state='RETIRED';adminItems[1].team=null;
 dbAdmin.databases[0].state='RETIRING';dbAdmin.databases[0].team='Data Team';dbAdmin.databases[1].state='RETIRED';dbAdmin.databases[1].team=null;
 dbAdminSelect('');await dbAdminRefresh();setLanguage('ja');dbAdminRenderList();
-const rows=$('db-admin-list').rows;
-assert.deepEqual(rows.map(row=>row[2]),['未設定','Data Team']);
-assert.deepEqual(rows.map(row=>row[1]),['利用終了（完了）','利用終了（処理中）']);
-assert.equal($('db-admin-list').columns[0],'DB name');
+const rows=$('db-admin-list-rows').children;
+const rowFor=id=>rows.find(row=>row.children[0].children[0].id==='db-admin-link-'+id);
+assert.equal(rowFor('db').children[1].children[0].textContent,'利用終了（処理中）');
+assert.equal(rowFor('db').children[2].textContent,'Data Team');
+assert.equal(rowFor('finance').children[1].children[0].textContent,'利用終了（完了）');
+assert.equal(rowFor('finance').children[2].textContent,'未設定');
+assert.equal(rowFor('db').children[3].textContent,'—');
+assert.equal(rowFor('db').children[3].children.length,0);
+assert.equal(rowFor('db').children[3].title,'更新日時はサーバーから取得できません');
+assert.equal($('db-admin-list-updated-note').hidden,false);
+assert.equal($('db-admin-list-updated-note').descendants().some(node=>node.className?.includes('visually-hidden')),false);
+assert.equal(rowFor('db').children[1].children[0].className,'status warning');
+assert.equal(rowFor('finance').children[1].children[0].className,'status');
+assert.equal(new URL('http://local/'+rowFor('db').children[0].children[0].getAttribute('href')).hash,'#databases/db');
 assert.equal($('db-admin-list-team').options.some(option=>option.value==='Data Team'),true);
-assert.equal($('db-admin-link-db').getAttribute('href'),'#databases/db');
+assert.equal($('db-admin-list-team').options.some(option=>option.value==='__unset__'&&option.textContent==='未設定'),true);
+assert.equal($('db-admin-list-head-0').textContent,'DB名');
+assert.equal($('db-admin-list-head-3').textContent,'最終更新');
+assert.equal($('db-admin-list-head-4').textContent,'ピン留め');
+assert.match($('db-admin-range').textContent,/1–2 \/ 2件 · 1 \/ 1ページ/);
+assert.equal($('db-admin-page-first').getAttribute('aria-disabled'),'true');
+assert.equal($('db-admin-page-last').getAttribute('aria-disabled'),'true');
 globalThis.location={href:'http://localhost/#db-admin',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 workbenchRememberPage('db-admin');
 assert.equal(new URL(location.href).hash,'#databases');
-for(const [hash,expected] of [['#databases',['list']],['#databases/db',['detail','db','info']],['#databases/create',['create']],['#databases/access~db',['detail','db','access']]]){
+for(const [hash,expected] of [['#databases',['list']],['#databases/db',['detail','db','info']],['#databases/create',['create']],['#databases/access~db',['detail','db','access']],['#databases/retire~db',['retire','db']]]){
  location.href='http://localhost/'+hash;const route=dbAdminRoute();
  assert.equal(route.view,expected[0]);
  if(expected[0]==='detail'){assert.equal(route.id,expected[1]);assert.equal(route.panel,expected[2]);}
+ if(expected[0]==='retire'){assert.equal(route.id,expected[1]);assert.equal(route.confirm,false);}
 }
-location.href='http://localhost/#databases/access~db';dbAdminApplyRoute();
+location.href='http://localhost/#databases/confirm~db';assert.equal(dbAdminRoute().confirm,true);
+location.href='http://localhost/#databases/access~db';$('db-admin-detail-view').hidden=false;dbAdminApplyRoute();
 assert.equal($('db-admin-access-panel').hidden,false);assert.equal($('db-admin-info-panel').hidden,true);
 location.href='http://localhost/#databases/metadata~db';dbAdminApplyRoute();
 assert.equal($('db-admin-metadata-panel').hidden,false);assert.equal($('db-admin-access-panel').hidden,true);
+location.href='http://localhost/#databases/operation~db';dbAdminApplyRoute();
+assert.equal($('db-admin-operation-panel').hidden,false);assert.equal($('db-admin-metadata-panel').hidden,true);
 ''')
 
     def test_creation_requires_team_uses_existing_team_suggestions_and_review(self):
@@ -64,10 +84,14 @@ assert.equal($('db-admin-detail-actions').children[0].id,'db-admin-use-sql');
 assert.equal($('db-admin-detail-actions').children[0].textContent,'Use in SQL');
 assert.equal($('db-admin-use-sql').className,'primary');
 assert.equal($('db-admin-management').tagName,'DETAILS');assert.equal(!!$('db-admin-management').open,false);
-assert.equal($('db-admin-management').descendants().some(node=>node.id==='db-admin-retire-preview'),true);
 assert.equal($('db-admin-management').descendants().some(node=>node.id==='db-admin-register-name'),true);
+assert.equal($('db-admin-retire-view').descendants().some(node=>node.id==='db-admin-retire-preview'),true);
 assert.equal($('db-admin-access-open').getAttribute('href'),'#databases/access~db');
+assert.equal($('db-admin-operation-open').getAttribute('href'),'#databases/operation~db');
 assert.equal($('db-admin-metadata-open').getAttribute('href'),'#databases/metadata~db');
+assert.equal($('db-admin-retire-open').getAttribute('href'),'#databases/retire~db');
+assert.equal($('db-admin-summary').textContent,'売上 <img onerror=x> 🐻 · sales');
+assert.equal($('db-admin-summary').textContent.includes(' · db'),false);
 $('db-admin-database-db-team').value='  Data Team  ';adminRoute=async()=>metadataResponse;await save();
 const call=writeCalls().at(-1);
 assert.equal(call.path,'/api/v1/databases/db/display');assert.equal(JSON.parse(call.options.body).team,'Data Team');
@@ -96,6 +120,7 @@ assert.equal($('db-admin-retire-save').textContent,'利用を終了する');
 assert.deepEqual($('db-admin-retire-users').rows.map(row=>row[1]),['閲覧者','データ作成者']);
 assert.equal(t('Principal ID'),'利用者 ID');
 assert.match($('db-admin-retire-scope').textContent,/ロール: 管理者/);
+assert.equal($('db-admin-retire-summary').textContent.includes(' · db ·'),false);
 setLanguage('en');
 assert.equal($('db-admin-retire-save').textContent,'Retire database');
 assert.deepEqual($('db-admin-retire-users').rows.map(row=>row[1]),['BI Viewer','Data Engineer']);
@@ -118,22 +143,26 @@ assert.equal($('db-admin-list').tabIndex,0);
 adminItems[0].state='RETIRING';adminItems[0].team='Data Team';
 dbAdmin.databases[0].state='RETIRING';dbAdmin.databases[0].team='Data Team';
 dbAdminSelect('');await dbAdminRefresh();setLanguage('ja');
-assert.deepEqual($('db-admin-list').rows.map(row=>row.slice(1,3)),[['登録済み','未設定'],['利用終了（処理中）','Data Team']]);
+const listRows=()=>$('db-admin-list-rows').children.map(row=>({state:row.children[1].children[0].textContent,team:row.children[2].textContent}));
+assert.equal(listRows().some(row=>row.state==='登録済み'&&row.team==='未設定'),true);
+assert.equal(listRows().some(row=>row.state==='利用終了（処理中）'&&row.team==='Data Team'),true);
 assert.equal($('db-admin-list-sort').options.map(option=>option.textContent).join('|'),'DB名 A–Z|DB名 Z–A');
-const headers=()=>$('db-admin-list').descendants().filter(node=>node.tagName==='TH'&&node.scope==='col').map(node=>node.textContent);
+assert.equal($('db-admin-list-sort').value,'name-asc');
+const headers=()=>[0,1,2,3,4].map(index=>$('db-admin-list-head-'+index).textContent);
 assert.equal(headers()[1],'状態');
 assert.match($('db-admin-select').options.find(option=>option.value==='db').textContent,/利用終了（処理中）$/);
+assert.equal($('db-admin-select').options.find(option=>option.value==='db').textContent.includes(' · db'),false);
 setLanguage('en');
-assert.equal($('db-admin-list').rows.find(row=>row[2]==='Data Team')[1],'Retiring');
+assert.equal(listRows().find(row=>row.team==='Data Team').state,'Retiring');
 assert.match($('db-admin-select').options.find(option=>option.value==='db').textContent,/Retiring$/);
 assert.equal($('db-admin-list-sort').options.map(option=>option.textContent).join('|'),'DB name A–Z|DB name Z–A');
 assert.equal(headers()[1],'State');
 await choose('db');setLanguage('ja');
 assert.equal($('db-admin-detail-state').children[0].textContent,'利用終了（処理中）');
-assert.deepEqual($('db-admin-info').children.filter(node=>node.tagName==='DT').map(node=>node.textContent),['表示名','説明','担当チーム','リビジョン']);
+assert.deepEqual($('db-admin-info').children.filter(node=>node.tagName==='DT').map(node=>node.textContent),['表示名','説明','担当チーム','状態','リビジョン']);
 setLanguage('en');
 assert.equal($('db-admin-detail-state').children[0].textContent,'Retiring');
-assert.deepEqual($('db-admin-info').children.filter(node=>node.tagName==='DT').map(node=>node.textContent),['Display name','Description','Team','Revision']);
+assert.deepEqual($('db-admin-info').children.filter(node=>node.tagName==='DT').map(node=>node.textContent),['Display name','Description','Team','State','Revision']);
 ''')
 
     def test_empty_team_for_configured_database_is_rejected_inline_and_not_sent(self):
@@ -167,16 +196,20 @@ assert.equal(JSON.parse(writeCalls().at(-1).options.body).team,'Next Team');
                 problems.append((number, 'getElementsBy*', line.strip()))
         self.assertEqual(problems, [], 'DOM collections must be spread or Array.from before array methods')
 
-    def test_styles_cover_narrow_tap_targets_focus_and_no_wide_tables(self):
+    def test_styles_cover_narrow_tap_targets_focus_and_horizontal_table_scroll(self):
         css = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/workbench.css').read_text()
-        self.assertIn('#db-admin :is(button,select,input:not([type=checkbox])', css)
-        self.assertIn('min-height:44px', css)
-        self.assertIn('outline:2px solid var(--focus)', css)
-        self.assertIn('.db-table{width:100%', css)
-        self.assertIn('table-layout:fixed', css)
-        self.assertIn('.db-table thead{position:absolute', css)
-        self.assertIn('.db-table a{display:inline-flex', css)
-        self.assertIn('input:not([type=checkbox])', css)
+        compact = ''.join(css.split())
+        self.assertIn('#db-admin:is(button,a,input,select,textarea,summary):focus{outline:2pxsolidvar(--focus)', compact)
+        self.assertIn('.db-table{table-layout:fixed;min-width:690px;}', compact)
+        self.assertIn('.db-table{min-width:590px;}', compact)
+        self.assertIn('table-layout:fixed', compact)
+        self.assertIn('.db-filters[data-open="false"].db-filter-controls{display:none;}', compact)
+        self.assertIn('.db-filter-toggle{display:inline-flex', compact)
+        self.assertIn('.tablewrap{position:relative;overflow:auto', compact)
+        self.assertNotIn('.db-table thead{position:absolute', compact)
+        self.assertIn('.db-pin{min-height:36px', compact)
+        self.assertIn('#db-admin:is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a)', compact)
+        self.assertIn('min-height:44px', compact)
 
 
 if __name__ == '__main__':

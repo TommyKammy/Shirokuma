@@ -136,7 +136,7 @@ assert.equal($('catalog').hidden,true);
 assert.equal(action.hidden,true);const ancestors=[];for(let node=action.parentElement;node;node=node.parentElement){ancestors.push(node.id);assert.equal(node.hidden,false,'hidden ancestor '+node.id);assert.notEqual(node.style?.display,'none');}
 assert.ok(ancestors.includes('database-details'));assert.ok(ancestors.includes('warehouse'));assert.ok(!ancestors.includes('catalog'));
 const tab=inspectorTabs.find(b=>b.dataset.inspect==='lineage');
- dbObject={...stable('orders'),kind};dbExplorerControls();setLanguage(locale);
+ dbObject={...stable('orders'),kind,capabilities:{...stable('orders').capabilities,columns:true}};dbExplorerControls();setLanguage(locale);
  await dbSelectInspector(inspectorTabs.find(b=>b.dataset.inspect==='columns'));
  assert.equal(activeInspector,'columns');assert.equal($('inspect-lineage').hidden,true);
  const before=calls.length,count=submissions.length;
@@ -313,5 +313,5 @@ assert.equal(calls.length,before);assert.equal(submissions.length,1);
 await lineageReady();dbObject={...dbObject,kind:'VIEW'};dbExplorerControls();assert.equal(inspectorTabs.find(b=>b.dataset.inspect==='lineage').disabled,false);
 route=async()=>({...lineageReply(),focus:{label:'sales.raw.orders',kind:'VIEW',ref:ref('orders'),view_version:2},confirmed:[],declared:[],coverage:{scope:'visible_saved_records',limit:200,limited:true,empty_reason:'no_visible_saved_evidence'}});
 await dbLineageRefresh();assert.ok(lineageText('table-lineage').includes(t('No visible saved evidence for this object.')));assert.ok(lineageText('table-lineage').includes(t('VIEW version')+' 2'));
-currentRole='bi_viewer';dbLineageControls();const last=inspectorTabs.find(b=>b.dataset.inspect==='snapshots');let prevented=false;last.onkeydown({key:'ArrowRight',preventDefault(){prevented=true;}});assert.ok(prevented);assert.notEqual(document.activeElement.dataset.inspect,'lineage');
+currentRole='bi_viewer';dbLineageControls();const last=inspectorTabs.filter(b=>!b.disabled).at(-1);let prevented=false;last.onkeydown({key:'ArrowRight',preventDefault(){prevented=true;}});assert.ok(prevented);assert.notEqual(document.activeElement.dataset.inspect,'lineage');
 ''')

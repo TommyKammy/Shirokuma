@@ -10,13 +10,12 @@ from workbench_source import WorkbenchSource
 class IngestionStyles(unittest.TestCase):
     def test_ingestion_css_wraps_and_scales_to_touch_widths(self):
         css = WorkbenchSource(database_ui.HTML).css
-        self.assertIn('#p35-ingest-panel,#db-stages-panel,#p35-ingest-form,#db-stages-form{min-width:0}', css)
+        self.assertIn('#db-stages-panel,#p35-ingest-form,#db-stages-form{min-width:0}', css)
         self.assertIn('#p35-ingest-impact,#db-stages-impact{max-width:100%;overflow-wrap:anywhere}', css)
         self.assertIn('#p35-ingest-form :is(button,select,input,textarea,summary),', css)
         self.assertIn('#db-stages-panel :is(button,select,input,textarea,summary),', css)
         self.assertIn('#db-marts-panel :is(button,select,input,textarea,summary),', css)
         self.assertIn('#transformation :is(button,select,input:not([type=checkbox]),textarea,summary){min-height:44px}', css)
-        self.assertIn('#ingestion .subnav button,#transformation .subnav button{min-height:44px}', css)
         self.assertIn('#p35-ingest-form .job-fields,', css)
         self.assertIn('#db-stages-panel .toolbar,', css)
         self.assertIn('#db-marts-panel .toolbar{flex-wrap:wrap}', css)
@@ -29,10 +28,10 @@ class IngestionUI(unittest.TestCase):
         self.javascript(r'''
 const p=await ready(),details=$('p35-ingest-file-details'),summaryText=()=>details.children[0].textContent;
 assert.equal(details.tagName,'DETAILS');assert.equal(details.open,true);
-assert.equal(summaryText(),'Input file (or drop here)');
+assert.equal(summaryText(),'Input file (CSV / JSON / JSONL · up to 10 MiB)');
 assert.equal($('p35-ingest-dropzone').parentElement,details);
 const order=node=>p.form.children.indexOf(node);
-assert.ok(order(details)<order($('p35-ingest-destination-fields')));
+assert.ok(order(details)<order($('p35-ingest-destination')));
 assert.ok(order($('p35-ingest-preview').parentElement)<order($('p35-ingest-sample')));
 assert.ok(order($('p35-ingest-sample'))<order($('p35-ingest-impact')));
 assert.ok(order($('p35-ingest-impact'))<order($('p35-ingest-confirm').parentElement));
@@ -45,7 +44,7 @@ assert.match($('p35-ingest-selected-file').textContent,/Selected input: rows\.cs
 assert.equal($('clear-upload').hidden,false);
 await $('clear-upload').onclick();
 assert.equal(details.open,true);
-assert.equal(summaryText(),'Input file (or drop here)');
+assert.equal(summaryText(),'Input file (CSV / JSON / JSONL · up to 10 MiB)');
 assert.equal($('clear-upload').hidden,true);
 ''')
 
@@ -140,25 +139,22 @@ class SavedStagesUI(unittest.TestCase):
     def test_deep_link_restores_saved_stages_and_tab_click_updates_hash(self):
         self.javascript(r'''
 storage.set(dbWorksheetKey,JSON.stringify({active:'a',tabs:[input()]}));
-const fileTab=$('ingestion-view-file'),stagesTab=$('ingestion-view-stages');
-for(const [tab,panel] of [[fileTab,'ingestion-file'],[stagesTab,'ingestion-stages']]){tab.dataset.view='ingestion';tab.setAttribute('aria-controls',panel);$('ingestion').append(tab);tab.onclick=()=>{if(!tab.disabled)selectSubView(tab);};}
-fileTab.setAttribute('aria-selected','true');stagesTab.setAttribute('aria-selected','false');
 globalThis.location={href:'http://local/#ingestion/stages'};
 globalThis.history={replaceState:(state,title,url)=>{globalThis.location.href=String(url);},pushState:(state,title,url)=>{globalThis.location.href=String(url);}};
 await initializeDatabaseUI(session);await dbPageHydration;await dbRuntimeHydration;await tick();await tick();await new Promise(resolve=>setTimeout(resolve,0));
-assert.equal(activeTab,'ingestion',JSON.stringify({activeTab,page:workbenchRoute().page,hidden:$('ingestion-view-stages').hidden,disabled:$('ingestion-view-stages').disabled}));
-assert.equal($('ingestion-view-stages').getAttribute('aria-selected'),'true',JSON.stringify({activeTab,page:workbenchRoute().page,hidden:$('ingestion-view-stages').hidden,disabled:$('ingestion-view-stages').disabled}));
+assert.equal(activeTab,'ingestion',JSON.stringify({activeTab,page:workbenchRoute().page,hidden:$('ingestion-tab-stages').hidden,disabled:$('ingestion-tab-stages').disabled}));
+assert.equal($('ingestion-tab-stages').getAttribute('aria-selected'),'true',JSON.stringify({activeTab,page:workbenchRoute().page,hidden:$('ingestion-tab-stages').hidden,disabled:$('ingestion-tab-stages').disabled}));
 assert.equal($('ingestion-file').hidden,true);assert.equal($('ingestion-stages').hidden,false);
 assert.equal($('db-stages-status').textContent,'Loaded');
-$('ingestion-view-file').click();
+await $('ingestion-tab-file').onclick({preventDefault(){}});await tick();
 assert.equal(globalThis.location.href,'http://local/#ingestion');
-assert.equal($('ingestion-view-file').getAttribute('aria-selected'),'true');
-$('ingestion-view-stages').click();
+assert.equal($('ingestion-tab-file').getAttribute('aria-selected'),'true');
+await $('ingestion-tab-stages').onclick({preventDefault(){}});await tick();
 assert.equal(globalThis.location.href,'http://local/#ingestion/stages');
-assert.equal($('ingestion-view-stages').getAttribute('aria-selected'),'true');
+assert.equal($('ingestion-tab-stages').getAttribute('aria-selected'),'true');
 globalThis.location.href='http://local/#ingestion';
-await workbenchRestorePage(session,{history:true});
-assert.equal($('ingestion-view-file').getAttribute('aria-selected'),'true');
+await workbenchRestorePage(session,{history:true});await tick();
+assert.equal($('ingestion-tab-file').getAttribute('aria-selected'),'true');
 assert.equal($('ingestion-file').hidden,false);assert.equal($('ingestion-stages').hidden,true);
 ''')
 
@@ -172,8 +168,10 @@ setLanguage('ja');
 assert.equal($('db-stages-status').textContent,'読み込み済み');
 assert.equal($('db-stages-role').options.find(o=>o.value==='admin').textContent,'管理者');
 const order=id=>$('db-stages-panel').descendants().indexOf($(id));
-assert.ok(order('db-stages-list')<order('db-stages-observe'));
-assert.ok(order('db-stages-observe')<order('db-stages-scan'));
+assert.ok(order('db-stages-list')<order('db-stages-overview'));
+assert.ok(order('db-stages-overview')<order('db-stages-schedule-slot'));
+assert.ok(order('db-stages-schedule-slot')<order('db-stages-scan'));
+assert.equal($('db-stages-records').descendants().includes($('db-stages-observe')),true);
 assert.ok(order('db-stages-scan')<order('db-stages-file'));
 assert.ok(order('db-stages-file')<order('db-stages-preview'));
 assert.ok(order('db-stages-preview')<order('db-stages-impact'));

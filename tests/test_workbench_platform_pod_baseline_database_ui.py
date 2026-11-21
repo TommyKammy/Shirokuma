@@ -194,7 +194,7 @@ dbAdminSession({...session,platform_admin:false});podEmpty();for(const kind of p
 
     def test_real_policy_navigation_no_sre_panel_preserves_receipts(self):
         self.navigation_javascript(r"""
-await podBoot();$('tab-compute').click();await podFetch();const held=dbPodBaseline.compute.record,count=calls.length;
+await podBoot();$('tab-compute').click();await podFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const held=dbPodBaseline.compute.record,count=calls.length;
 for(const locale of ['ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-policy').click();scope('policy');assert.equal($(podRoot('policy')).hidden,false);assert.equal($('observation-policy-database-controls').hidden,true);scope('policy','database');assert.equal($(podRoot('policy')).hidden,true);$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-pod-baseline'),null);$('tab-compute').click();assert.equal(dbPodBaseline.compute.record,held);assert.equal(calls.length,count);}
 """)
 

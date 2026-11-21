@@ -43,7 +43,7 @@ await boot();
 const reason=$('database-context-state'),button=$('run-query');
 assert.equal(reason.parentElement,button.parentElement);
 assert.ok(reason.parentElement.children.indexOf(reason)>reason.parentElement.children.indexOf(button));
-assert.equal(button.getAttribute('aria-describedby'),'database-context-state');
+assert.equal(button.getAttribute('aria-describedby'),'database-context-state sql-next');
 assert.equal(reason.getAttribute('role'),'status');
 assert.equal(button.disabled,false);assert.equal(reason.textContent,'');
 
@@ -75,10 +75,13 @@ dbCurrent().database_id='db';dbCurrent().schema_id='';dbControls();
 assert.equal(reason.textContent,t('Choose a schema next.'));
 inventory[0]={...inventory[0],state:'RETIRING'};await dbRefreshContext();dbControls();
 assert.equal(button.disabled,true);
-assert.equal(reason.textContent,t('This database is not READY, or the execution role is not permitted. Check its status and access in Database Management.'));
+assert.equal(reason.textContent,'');
+assert.equal($('sql-next').textContent,t('This worksheet context is unavailable. Choose a database and schema again.'));
 inventory[0]={...inventory[0],state:'READY',allowed_roles:['data_engineer']};await dbRefreshContext();dbControls();
-assert.equal(reason.textContent,t('This database is not READY, or the execution role is not permitted. Check its status and access in Database Management.'));
+assert.equal(reason.textContent,'');
+assert.equal($('sql-next').textContent,t('This worksheet context is unavailable. Choose a database and schema again.'));
 inventory[0]={...inventory[0],state:'READY',allowed_roles:['admin','data_engineer','bi_viewer']};await dbRefreshContext();
+assert.equal($('sql-next').textContent,'');
 
 // Empty SQL and a whitespace-only selection are last.
 dbCurrent().schema_id='schema';$('sql').value='';$('sql').dispatchEvent({type:'input'});dbControls();
@@ -104,15 +107,17 @@ for(const state of ['available','loading','unsupported']){
  assert.equal($('run-query').disabled,false,state);
  assert.equal($('database-context-state').textContent,'',state);
 }
+workbenchSetComputeStatus('available','tone-ok');
 assert.match($('database-compute-state').textContent,/LOCAL/);
-assert.match($('sql-context-state').textContent,/Scope: Full editor/);
-assert.match($('sql-context-state').textContent,/Compute: /);
+assert.equal($('sql-mode').textContent,t('read-only'));
+assert.match($('sql-warehouse').textContent,/^LOCAL · /);
+assert.match($('sql-warehouse').textContent,new RegExp(t('Available')));
 $('sql').setSelectionRange(0,3);$('sql').dispatchEvent({type:'select'});
-assert.match($('sql-context-state').textContent,/Scope: Selection/);
+assert.equal($('run-query').textContent,'▶ Run selection');
 workbenchSetComputeStatus('available','tone-ok');
 setLanguage('ja');dbControls();
-assert.match($('sql-context-state').textContent,/実行範囲: 選択範囲/);
-assert.match($('sql-context-state').textContent,/コンピュート: 利用可能/);
+assert.equal($('sql-mode').textContent,'読み取り専用');
+assert.match($('sql-warehouse').textContent,/^LOCAL · 利用可能/);
 setLanguage('en');
 ''')
         block = function('dbComputeBlockReason', SCRIPT)
@@ -128,9 +133,12 @@ inventory.push({...inventory[0],id:'retiring',sql_catalog:'retiring',display_nam
 await dbRefreshContext();dbControls();
 assert.deepEqual([...$('query-database').options].map(option=>option.value).filter(Boolean),['db']);
 dbCurrent().database_id='retiring';await dbRefreshContext();dbControls();
-assert.equal($('query-database').value,'');
-assert.ok(![...$('query-database').options].some(option=>option.value==='retiring'));
-assert.match($('database-context-state').textContent,/not READY/);
+assert.equal($('query-database').value,'retiring');
+const retained=[...$('query-database').options].find(option=>option.value==='retiring');
+assert.equal(retained.disabled,true);assert.equal(retained.textContent,'Retiring');
+assert.ok(![...$('query-database').options].some(option=>option.textContent.includes('retiring')));
+assert.match($('sql-next').textContent,/context is unavailable/);
+assert.equal($('run-query').disabled,true);
 ''')
         self.assertRegex(SCRIPT, r"dbSelectOptions\('query-database',dbReadyDatabases\(w\.selected_role\)")
 
@@ -144,27 +152,42 @@ assert.equal(w.database_id,'finance');assert.equal(w.schema_id,'finance-marts');
 assert.equal(w.selected_role,currentRole);assert.equal(dbReason(),'');
 assert.equal(dbRunBlockReason().text,'');
 assert.equal($('run-query').disabled,false);
-assert.equal($('run-query').getAttribute('aria-describedby'),'database-context-state');
+assert.equal($('run-query').getAttribute('aria-describedby'),'database-context-state sql-next');
 ''')
 
-    def test_tabs_context_editor_run_results_and_tools_follow_the_atlas_order(self):
+    def test_mockup_structure_and_order_for_editor_results_and_bottom_parts(self):
         self.javascript(r'''
 await boot();
-const pane=$('database-worksheet-pane'),editor=$('sql').parentElement,results=$('query-results').parentElement;
-const children=pane.children,at=node=>children.indexOf(node);
-assert.ok(at(editor)>=0);assert.equal(at(results),at(editor)+1);
-assert.ok(at($('copilot-request').closest('details.copilot'))>at(results));
-assert.ok(at($('sample-sql-tools'))>at(results));
-const context=$('database-context-bar');
-assert.ok($('sql').parentElement.children.indexOf(context)<$('sql').parentElement.children.indexOf($('sql')));
-const strip=$('worksheet-tabs').parentElement;
-assert.ok($('database-workspace-main').children.indexOf(strip)>=0);
-const tools=$('result-view-table').parentElement.parentElement;
-assert.equal(tools.parentElement,results);
-assert.ok(results.children.indexOf(tools)<results.children.indexOf($('query-results')));
-for(const id of ['result-view-table','result-view-chart','copy-tsv','export-csv','export-json','export-tsv'])
- assert.equal($(id).hidden,false,id);
-assert.equal($('export-tsv').hidden,false);
+const page=$('warehouse'),pane=$('database-worksheet-pane'),editor=$('database-editor'),results=$('database-results');
+const order=[];const walk=node=>{order.push(node);for(const child of node.children)walk(child);};walk(page);
+const at=node=>order.indexOf(node),has=(node,name)=>(node.className||'').split(' ').includes(name);
+assert.ok(at($('database-page-title'))<at($('worksheet-tabs')));
+assert.ok(at($('worksheet-bar'))<at(editor));
+assert.ok(has($('worksheet-bar'),'worksheet-bar'));
+assert.equal($('worksheet-tabs').getAttribute('role'),'tablist');
+assert.equal(has(editor,'panel'),true);assert.equal(has(results,'panel'),true);assert.equal(at(editor)<at(results),true);
+const context=$('database-context-bar');assert.equal(context.className,'contextbar sql-context');
+assert.equal(has(context,'contextbar'),true);assert.equal(has(context,'sql-context'),true);
+assert.ok(context.children.some(node=>node.className==='sql-fixed'));
+const fixed=context.children.find(node=>node.className==='sql-fixed');
+assert.ok(fixed.descendants().some(node=>node.id==='sql-mode'));assert.ok(fixed.descendants().some(node=>node.id==='sql-warehouse'));
+const wrap=$('sql').parentElement;assert.equal(wrap.className,'editor');assert.ok(wrap.children.includes($('sql-linenumbers')));
+assert.ok(wrap.children.indexOf($('sql-linenumbers'))<wrap.children.indexOf($('sql')));
+const footer=$('run-query').parentElement.parentElement;assert.equal(footer.className,'editorfooter sql-actions');
+assert.ok(footer.children.includes($('run-query').parentElement));assert.ok(footer.descendants().includes($('cancel-query')));
+assert.equal($('sql-next').className,'sql-note');assert.equal($('sql-next').parentElement,editor);
+const head=results.children.find(node=>has(node,'panelhead'));assert.ok(head);assert.equal($('query-meta').className,'resultmeta');
+assert.equal($('result-heading').parentElement,head);assert.equal($('result-heading').textContent,'Result');
+const tools=$('result-view-table').parentElement.parentElement;assert.equal(tools.parentElement,results);assert.equal(has(tools,'sql-result-tools'),true);
+assert.equal($('result-view-table').parentElement.className,'sql-view-switch');
+assert.equal($('export-csv').parentElement.className,'sql-downloads');
+assert.equal($('query-results').parentElement,results);assert.equal(has($('query-results'),'tablewrap'),true);
+assert.equal($('sql-supported').className,'sqlhint');
+const copilot=$('copilot-request').closest('details.copilot');assert.equal(has(copilot,'sql-note'),true);
+const bottom=[$('sql-supported'),copilot,$('worksheet-explorer'),$('sql-history-details'),$('sql-connection'),$('sample-sql-tools')];
+for(let index=1;index<bottom.length;index++)assert.ok(at(bottom[index-1])<at(bottom[index]),index);
+assert.equal($('worksheet-explorer').parentElement,pane);assert.equal($('sample-sql-tools').parentElement,pane);
+for(const id of ['result-view-table','result-view-chart','copy-tsv','export-csv','export-json','export-tsv'])assert.equal($(id).hidden,false,id);
 ''')
 
     def test_execution_role_options_use_display_names_and_keep_internal_values(self):
@@ -215,12 +238,17 @@ assert.equal($('load-query').textContent,'SQL を読み込む');
 await boot();
 assert.equal($('worksheet-closers').hidden,true);
 assert.match($('worksheet-close-action').title,/at least one/);
+assert.equal($('close-worksheet').disabled,true);
 addWorksheet('SELECT 2');await tick();
 assert.equal(worksheets.length,2);
 assert.equal($('worksheet-closers').hidden,false);
 assert.equal($('worksheet-close-action').disabled,true);
-const main=$('database-workspace-main');
-assert.ok(main.children.indexOf($('worksheet-tabs').parentElement)<main.children.indexOf($('database-worksheet-pane')));
+assert.equal($('close-worksheet').disabled,false);
+const page=$('warehouse'),order=[];const walk=node=>{order.push(node);for(const child of node.children)walk(child);};walk(page);
+assert.ok(order.indexOf($('worksheet-bar'))<order.indexOf($('database-workspace')));
+assert.equal($('worksheet-tabs').parentElement,$('worksheet-bar'));
+$('close-worksheet').click();assert.equal(worksheets.length,1);
+assert.equal($('close-worksheet').disabled,true);
 ''')
 
     def test_narrow_layout_is_two_columns_with_44px_targets_and_16px_text(self):
@@ -232,8 +260,14 @@ assert.ok(main.children.indexOf($('worksheet-tabs').parentElement)<main.children
         self.assertIn(':focus-visible{outline:2px solid var(--focus)', compact)
         self.assertIn('button.run::before{content:""', compact)
         self.assertIn('button#run-query.run::before{content:none}', compact)
+        self.assertIn('#database-workspace{display:block', compact)
+        self.assertIn('.sql-fixed{display:grid;grid-template-columns:minmax(0,1fr)', compact)
+        self.assertIn('.sql-fixed>span{white-space:normal}', compact)
+        self.assertIn('main :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary)', compact)
+        self.assertIn('min-height:44px!important', compact)
+        self.assertIn('#query-results', compact)
         narrow = '\n'.join(re.findall(r'@media\(max-width:760px\)\{(.*?)\n\}', CSS, re.S))
-        self.assertIn('#database-workspace-main{min-width:0;max-width:100%}', narrow)
+        self.assertIn(':is(.topbar,#role-controls,#role-selector,.toolbar,.editor-tabs,#database-workspace-main){min-width:0;max-width:100%}', narrow)
         six = next(block for block in re.findall(r'@media\(max-width:600px\)\{(.*?)\n\}', CSS, re.S)
                    if 'grid-template-columns:repeat(2,minmax(0,1fr))' in block)
         self.assertIn('#warehouse :is(button,select,input:not([type=checkbox])){min-height:44px}', six)

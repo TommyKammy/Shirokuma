@@ -30,7 +30,8 @@ BASE_I18N = WORKBENCH_SOURCE.asset_sources['/assets/base_i18n.js']
 FMT_JST = BASE_I18N[BASE_I18N.index('function fmtJST('):BASE_I18N.index('function fmtInputJST(')]
 JOB_STATUSES = re.search(r'const jobStatuses=\{[^}]+\};', SCRIPT).group(0)
 JOB_STATUS_HELPERS = '\n'.join(source_function(name, SCRIPT) for name in ('statusTone', 'jobStatus'))
-MENU = re.findall(r'<a id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</a>', HTML)
+MENU = [(name, re.sub('<[^>]+>', '', re.sub(r'<span class="icon"[^>]*>.*?</span>', '', label)))
+        for name, label in re.findall(r'<a id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</a>', HTML)]
 
 
 class DatabaseUI(unittest.TestCase):
@@ -51,7 +52,7 @@ class Node {
  addEventListener(key,fn){(this.listeners[key]??=[]).push(fn);} focus(){document.activeElement=this;}
  click(){if(this.disabled)return;const result=this.onclick?.();for(const fn of this.listeners.click||[])fn({type:'click',target:this});return result;}
  scrollIntoView(options){this.scrolled=options;}
- closest(selector){for(let n=this;n;n=n.parentElement)if(selector==='details.copilot'&&n.tagName==='DETAILS'&&n.className==='copilot')return n;return null;}
+ closest(selector){for(let n=this;n;n=n.parentElement)if(selector==='details.copilot'&&n.tagName==='DETAILS'&&(n.className||'').split(' ').includes('copilot'))return n;return null;}
  dispatchEvent(event){for(const fn of this.listeners[event.type]||[])fn(event);}
  setRangeText(value,start,end){this.value=this.value.slice(0,start)+value+this.value.slice(end);}
  setSelectionRange(start,end){this.selectionStart=start;this.selectionEnd=end;}
@@ -59,9 +60,21 @@ class Node {
  querySelector(selector){const all=this.children.flatMap(c=>[c,...c.descendants()]);return all.find(c=>selector.startsWith('.')?c.className?.split(' ').includes(selector.slice(1)):c.tagName===selector.toUpperCase());}
  descendants(){return this.children.flatMap(c=>[c,...c.descendants()]);}
 }
-let strictRemoved=false;
-const $=id=>strictRemoved&&['worksheet-tree','worksheet-tree-filter'].includes(id)&&!nodes['worksheet-explorer']?.descendants().some(node=>node.id===id)?null:nodes[id]??=Object.assign(new Node(),{id});
+let strictRemoved=false,connectedOnly=false;
+const documentRoot=new Node('html');
+const connected=node=>{let current=node;while(current&&current!==documentRoot){const parent=current.parentElement;if(!parent||!parent.children.includes(current))return false;current=parent;}return current===documentRoot;};
+const $=id=>strictRemoved&&['worksheet-tree','worksheet-tree-filter'].includes(id)&&!nodes['worksheet-explorer']?.descendants().some(node=>node.id===id)?null:connectedOnly?(nodes[id]?(connected(nodes[id])?nodes[id]:null):(documentRoot.append(nodes[id]=Object.assign(new Node(),{id})),nodes[id])):nodes[id]??=Object.assign(new Node(),{id});
 const document={createElement:tag=>new Node(tag),documentElement:{dataset:{}},querySelectorAll:selector=>selector==='[data-tab]'?tabs:selector.startsWith('[data-view=')?Object.values(nodes).filter(n=>n.dataset.view===selector.split('\"')[1]):[]};
+// The retired tab rail is a test-only navigation shim. Production uses the flat
+// Atlas page, but existing state-machine tests still exercise tab selection.
+const bearTabButtons=new Map();
+for(const kind of ['sre','policy','query','data','catalog']){
+ const button=Object.assign(new Node('button'),{id:'bear-tab-'+kind,dataset:{bear:kind}});
+ button.click=()=>{for(const other of bearTabButtons.values())other.setAttribute('aria-selected',String(other===button));
+  const panel=nodes['bear-panel-'+kind];if(panel)panel.hidden=false;
+  return typeof dbObservationNavigate==='function'?dbObservationNavigate(kind):undefined;};
+ bearTabButtons.set(kind,button);
+}
 let narrow=false;const mediaListeners=[];const matchMedia=()=>({get matches(){return narrow;},addEventListener:(event,listener)=>mediaListeners.push(listener)});
 const Option=function(text,value){return Object.assign(new Node('option'),{textContent:text,value});};
 ''' + TRANSLATIONS + r'''
@@ -71,7 +84,7 @@ const ui=(node,key,values={})=>{uiBindings.set(node,{key,values});node.isConnect
 ''' + FMT_JST + '\n' + JOB_STATUSES + '\n' + JOB_STATUS_HELPERS + r'''
 const table=(node,columns,rows)=>{node.rows=rows;node.columns=columns;};
 let catalogSession='',currentRole='admin',databaseMode=true,worksheets=[],worksheetId='',queryResult=null,activeTab='warehouse',activeInspector='columns';
-const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshots:'table-snapshots',ddl:'table-ddl',profile:'inspect-profile',lineage:'table-lineage'};
+const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshots:'table-snapshots',ddl:'table-ddl',profile:'table-profile-panel-body',lineage:'table-lineage'};
 const inspectorTabs=['columns','preview','profile','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
 const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('a'),{id:'tab-'+tab,dataset:{tab},textContent:label,href:'#'+tab});ui(node,label);return node;});
 const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10',customers:'SELECT * FROM marts.dim_customers LIMIT 10',revenue:`SELECT n.n_name AS nation,\n       SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue\nFROM tpch_tiny.customer c\nJOIN tpch_tiny.orders o ON c.c_custkey = o.o_custkey\nJOIN tpch_tiny.lineitem l ON o.o_orderkey = l.l_orderkey\nJOIN tpch_tiny.supplier s ON l.l_suppkey = s.s_suppkey\nJOIN tpch_tiny.nation n ON s.s_nationkey = n.n_nationkey\nWHERE c.c_nationkey = s.s_nationkey\nGROUP BY n.n_name\nORDER BY revenue DESC`};
@@ -80,7 +93,7 @@ const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>{st
 const readStorage=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 const writeStorage=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
 const historyPlaceholder=()=>new Option('Restore','');
-let renderResults=()=>{for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;if(queryResult)table($('query-results'),queryResult.columns,queryResult.rows);};
+let renderResults=()=>{for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;const count=$('sql-row-count');if(!queryResult){if(count){count.hidden=true;count.textContent='';}return;}if(count){count.hidden=false;ui(count,'Received {rows} rows / showing {visible} rows',{rows:queryResult.rows.length,visible:queryResult.rows.length});}table($('query-results'),queryResult.columns,queryResult.rows);};
 let api=async()=>({status:'healthy'}),applyRole=()=>{},loadCatalog=()=>{},activate=()=>{},download=()=>{},refreshStatus=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
@@ -107,15 +120,18 @@ const fetch=async(path,options)=>{
  if(data?.http)return {ok:data.http>=200&&data.http<300,status:data.http,json:async()=>data.body};
  return {ok:true,status:200,json:async()=>data};
 };
-$('query-schema').parentElement=new Node();
+const querySchema=Object.assign(new Node('select'),{id:'query-schema'});querySchema.parentElement=new Node();
+for(const id of ['query-mode','query-warehouse'])Object.assign(new Node('select'),{id});
 const sampleQuery=$('sample-query');sampleQuery.tagName='SELECT';
 for(const [label,value] of [['Choose a sample SQL',''],['Recent orders','orders'],['TPC-H Revenue by Nation','revenue'],['Customers','customers']])sampleQuery.add(new Option(label,value));
 for(const option of sampleQuery.children)if(option.textContent)ui(option,option.textContent);
 $('copy-tsv').onclick=async()=>{};
 ui($('load-query'),'Load SQL');
 const layout=Object.assign(new Node(),{className:'sql-layout'}),main=Object.assign(new Node(),{className:'sql-main'}),editor=new Node(),results=new Node(),strip=new Node(),inspector=new Node(),head=new Node(),actions=new Node(),filter=new Node();
-$('warehouse').append(layout);layout.append($('worksheet-explorer'),main);$('worksheet-explorer').append(new Node('summary'),$('worksheet-tree-filter'),$('worksheet-tree'));
-main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotBody=new Node();copilot.append(copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('open-transformation'),$('copilot-result'));const runFooter=Object.assign(new Node(),{className:'query-footer'});runFooter.append($('run-query'));editor.append(strip,$('sql'),runFooter,copilot);
+const pageTitle=Object.assign(new Node(),{id:'database-page-title'}),pageDescription=Object.assign(new Node('p'),{id:'database-page-description'}),warehouseStrip=Object.assign(new Node(),{className:'warehouse-strip'});
+for(const id of ['warehouse-state','replicas','components','warehouse-compute-link','chill','wake','refresh-status']){const control=Object.assign(new Node(),{id});warehouseStrip.append(control);}
+const pageHead=Object.assign(new Node(),{className:'page-head'});pageHead.append(pageTitle,pageDescription,warehouseStrip);
+$('warehouse').append(pageHead,layout);layout.append($('worksheet-explorer'),main);$('worksheet-explorer').append(new Node('summary'),$('worksheet-tree-filter'),$('worksheet-tree'));main.append(editor,results);const copilot=Object.assign(new Node('details'),{className:'copilot'}),copilotSummary=Object.assign(new Node('summary'),{textContent:'AI Bear Copilot'}),copilotBody=new Node();copilot.append(copilotSummary,copilotBody);copilotBody.append($('copilot-request'),$('copilot-stage'),$('copilot-publish'),$('open-transformation'),$('copilot-result'));const runFooter=Object.assign(new Node(),{className:'query-footer'});runFooter.append($('run-query'));editor.append(strip,$('sql'),runFooter,copilot);
 const transformationTabs=['models','wap','marts'].map(kind=>{const button=$('transformation-view-'+kind),panel=$('transformation-'+kind);button.dataset.view='transformation';button.setAttribute('aria-controls',panel.id);button.setAttribute('aria-selected',String(kind==='models'));if(kind==='marts')button.setAttribute('data-admin-view','');button.hidden=kind==='wap';panel.hidden=kind!=='models';$('transformation').append(button,panel);return button;});strip.append($('worksheet-tabs'),$('worksheet-closers'),$('add-worksheet-tab'));
 const resultsTools=Object.assign(new Node(),{className:'results-tools'}),segmented=Object.assign(new Node(),{className:'segmented'});
 segmented.append($('result-view-table'),$('result-view-chart'));
@@ -125,7 +141,7 @@ head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['transformationTerm', 't', 'setLanguage', 'worksheetName', 'setSQL', 'syncRunLabel', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'selectView', 'selectSubView', 'busy', 'pruneUIBindings', 'loadSampleSQL']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\nwireTabs(transformationTabs,selectSubView);\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['transformationTerm', 't', 'setLanguage', 'worksheetName', 'setSQL', 'syncRunLabel', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'busy', 'pruneUIBindings', 'loadSampleSQL']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 $('load-query').onclick=loadSampleSQL;
 const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
@@ -218,7 +234,7 @@ for(const lang of ['ja','en']){
  session.maximum_role='bi_viewer';await dbRefreshContext();await dbRefreshExplorer();
  assert.equal(document.activeElement,$('sql'));assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
  assert.equal($('ai-settings-button').disabled,false);assert.notEqual($('ai-settings-button').dataset.databaseUnavailable,'true');
- for(const id of ['wake','chill','copilot-generate','run-dbt-build','run-dbt-test']){
+ for(const id of ['wake','chill','copilot-generate']){
   assert.equal($(id).disabled,true,id);assert.equal($(id).dataset.databaseUnavailable,'true',id);
   const binding=uiAttributes.find(b=>b.node===$(id)&&b.attribute==='title');assert.ok(binding,id);assert.equal($(id).title,t(binding.key));
  }
@@ -302,7 +318,7 @@ databaseMode=false;setLanguage('ja');assert.equal(tabs[1].textContent,'データ
     def test_workspace_navigation_real_pane_switches_and_languages(self):
         self.javascript(r'''
 await dualBoot();
-const check=(pane)=>{const details=pane==='details',selected=details?'tab-catalog':'tab-warehouse';assert.equal(dbWorkspacePane,pane);assert.equal($('warehouse').getAttribute('aria-labelledby'),selected);assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);assert.equal($(selected).getAttribute('aria-current'),'page');assert.equal($('database-page-title').textContent,t(details?'Data Explorer':'SQL Worksheets'));assert.equal(document.title,t(details?'Data Explorer':'SQL Worksheets')+' · Shirokuma Workbench');assert.equal($('database-page-description').textContent,t(details?'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Query Iceberg tables with the resident Trino warehouse.'));};
+const check=(pane)=>{const details=pane==='details',selected=details?'tab-catalog':'tab-warehouse';assert.equal(dbWorkspacePane,pane);assert.equal($('warehouse').getAttribute('aria-labelledby'),selected);assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);assert.equal($(selected).getAttribute('aria-current'),'page');assert.equal($('database-page-title').textContent,t(details?'Data Explorer':'SQL Worksheets'));assert.equal(document.title,(details&&dbObject?dbObject.display_name+' · ':'')+t(details?'Data Explorer':'SQL Worksheets')+' · Shirokuma Workbench');assert.equal($('database-page-description').textContent,t(details?'Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.':'Query Iceberg tables with the resident Trino warehouse.'));};
 check('worksheet');
 assert.equal($('tab-warehouse').onkeydown,undefined);
 $('tab-catalog').onclick();check('details');
@@ -317,7 +333,7 @@ for(const lang of ['ja','en']){
  await treeActions('select-database').find(n=>n.dataset.treeKey==='database:finance').onclick({preventDefault(){}});check('details');
  await treeActions('select-schema').find(n=>n.dataset.treeKey==='schema:finance:finance-marts').onclick({preventDefault(){}});check('details');
  $('tab-warehouse').onclick();await objectButtons()[0].onclick();check('details');
- $('tab-warehouse').onclick();$('explorer-schema-details').onclick();check('details');
+ $('tab-warehouse').onclick();$('tab-catalog').onclick();check('details');
  await $('open-table-sql').onclick();await tick();check('worksheet');
  const history=historyEntry({context:{...dbContext(dbCurrent())},mode:'read-only'});serverHistory=[history];await dbLoadHistory();$('query-history').value='past';await $('query-history').onchange();check('worksheet');
 }
@@ -473,7 +489,9 @@ assert.match(hint.textContent,/Select a schema/);
 assert.match(search.parentElement.querySelector('label').textContent,/tables and views in the selected schema/);
 assert.equal(search.getAttribute('aria-describedby'),hint.id);
 assert.equal($('refresh-catalog').parentElement,search.parentElement);
-assert.deepEqual($('table-columns').rows,[['Finance marts · marts','']]);assert.equal(calls.filter(c=>c.path.includes('/schemas/finance-marts/objects?')).length,0);
+assert.equal($('explore-status').textContent,'Next, choose a schema.');
+assert.equal($('explore-results').children.length,0);
+assert.equal(calls.filter(c=>c.path.includes('/schemas/finance-marts/objects?')).length,0);
 await treeActions('select-schema').find(n=>n.dataset.treeKey==='schema:finance:finance-marts').onclick({preventDefault(){}});
 assert.equal(search.disabled,false);assert.equal(hint.hidden,true);
 assert.equal(search.hasAttribute('aria-describedby'),false);
@@ -514,29 +532,33 @@ assert.equal(dbRuns.has(worksheetId),false);assert.equal(calls.filter(c=>c.optio
     def test_details_and_worksheet_tab_keyboard_contract_and_narrow_collapse(self):
         self.javascript(r'''
 narrow=true;await boot([input(),{...input('b'),name:'Worksheet 2'},{...input('c'),name:'Worksheet 3'},{...input('d'),name:'Worksheet 4'}]);assert.equal($('worksheet-explorer').open,false);
-const tabs=$('worksheet-tabs').querySelectorAll('[role=tab]');assert.equal(tabs.length,5);assert.equal(tabs[0].id,'workspace-details');
+const tabs=$('worksheet-tabs').querySelectorAll('[role=tab]');assert.equal(tabs.length,4);assert.equal(tabs[0].id,'worksheet-a');
 assert.equal($('worksheet-tabs').children.every(n=>n.getAttribute('role')==='tab'),true);
+assert.equal($('worksheet-tabs').parentElement.id,'worksheet-bar');assert.equal($('worksheet-bar').parentElement.id,'warehouse');
 const closeSelect=$('worksheet-close-select');
 assert.equal(closeSelect.disabled,false);assert.equal(closeSelect.children.length,5);
 assert.deepEqual(closeSelect.children.slice(1).map(n=>n.textContent),['Close Worksheet 1','Close Worksheet 2','Close Worksheet 3','Close Worksheet 4']);
 assert.ok(closeSelect.children.slice(1).every(n=>n.value));
 const closeAction=$('worksheet-close-action');assert.equal(closeAction.disabled,true);
-closeSelect.value=closeSelect.children[1].value;updateWorksheetCloseAction();assert.equal(closeAction.disabled,false);assert.equal($('worksheet-tabs').children.length,5);
+closeSelect.value=closeSelect.children[1].value;updateWorksheetCloseAction();assert.equal(closeAction.disabled,false);assert.equal($('worksheet-tabs').children.length,4);
 closeSelect.value='';updateWorksheetCloseAction();assert.equal(closeAction.disabled,true);
-const key=value=>({key:value,preventDefault(){}});$('worksheet-a').onkeydown(key('Home'));
-assert.equal(dbWorkspacePane,'details');assert.equal(document.activeElement,$('workspace-details'));assert.equal($('workspace-details').getAttribute('aria-selected'),'true');
-assert.equal($('database-details').getAttribute('role'),'tabpanel');assert.equal($('database-details').getAttribute('aria-labelledby'),'workspace-details');assert.equal($('database-details').hidden,false);
-assert.equal($('workspace-details').getAttribute('aria-controls'),'database-details');assert.equal($('database-worksheet-pane').hidden,true);
-const draft=$('sql').value,before=calls.length,context=$('explorer-task-context');
-assert.equal(context.hidden,false);assert.ok(!$('worksheet-explorer').descendants().includes(context));
-assert.match(context.children[0].textContent,/Role: admin/);
-$('explorer-open-selection').click();assert.equal($('worksheet-explorer').open,true);
-assert.equal(document.activeElement,$('worksheet-explorer').querySelector('summary'));
-assert.equal($('sql').value,draft);assert.equal(worksheetId,'a');assert.equal(calls.length,before);
-$('workspace-details').onkeydown(key('End'));await tick();assert.equal(worksheetId,'d');assert.equal(dbWorkspacePane,'worksheet');
-assert.equal($('database-worksheet-pane').getAttribute('aria-labelledby'),'worksheet-d');assert.equal($('worksheet-d').getAttribute('aria-controls'),'database-worksheet-pane');
+const key=value=>({key:value,preventDefault(){}});$('worksheet-a').onkeydown(key('End'));await tick();assert.equal(worksheetId,'d');
+assert.equal(dbWorkspacePane,'worksheet');assert.equal(document.activeElement,$('worksheet-d'));
+assert.equal($('worksheet-d').getAttribute('aria-controls'),'database-worksheet-pane');
+$('workspace-details').onclick();
+assert.equal(dbWorkspacePane,'details');assert.equal($('workspace-details').getAttribute('aria-pressed'),'true');
+assert.equal($('database-details').getAttribute('role'),'region');assert.equal($('database-details').getAttribute('aria-label'),'Data Explorer');assert.equal($('database-details').hidden,false);
+assert.equal($('database-worksheet-pane').hidden,true);assert.equal($('worksheet-bar').hidden,true);
+const draft=$('sql').value,before=calls.length;
+assert.equal($('database-workspace').dataset.pane,'details');
+assert.equal($('explore-page').hidden,false);assert.equal($('explore-detail').hidden,true);
+assert.equal($('database-details').descendants().some(node=>node.id==='catalog-tree'),false);
+assert.equal($('sql').value,draft);assert.equal(worksheetId,'d');assert.equal(calls.length,before);
+$('tab-warehouse').onclick();assert.equal(dbWorkspacePane,'worksheet');assert.equal($('worksheet-bar').hidden,false);
+assert.equal($('database-worksheet-pane').getAttribute('aria-labelledby'),'worksheet-d');
 assert.equal($('worksheet-tabs').querySelectorAll('[role=tab]').filter(b=>b.getAttribute('aria-selected')==='true').length,1);
 assert.equal($('worksheet-tabs').querySelectorAll('[role=tab]').filter(b=>b.tabIndex===0).length,1);
+$('worksheet-a').onkeydown(key('Home'));await tick();assert.equal(worksheetId,'a');
 $('worksheet-explorer').open=true;mediaListeners[0]({matches:true});assert.equal($('worksheet-explorer').open,false);
 assert.equal($('role-selector-label').textContent,'Role ceiling');setLanguage('ja');assert.equal($('role-selector-label').textContent,'利用できるロールの上限');
 ''')
@@ -559,25 +581,18 @@ assert.equal(dbCurrent()._grantChanged,true);assert.equal(worksheets[1]._grantCh
 assert.equal(dbSchemaCache.has(dbSchemaKey('bi_viewer','db')),false);assert.ok([...dbSchemaCache.keys()].some(key=>JSON.parse(key)[2]==='admin'));
 ''')
 
-    def test_breadcrumb_keeps_nodes_and_focus_through_periodic_refresh(self):
+    def test_detail_heading_keeps_nodes_and_focus_through_periodic_refresh(self):
         self.javascript(r'''
 await dualBoot();await exploreFinance();await objectButtons()[0].onclick();await tick();
-const crumb=$('database-breadcrumb'),schemaCrumb=$('explorer-schema-details'),before=[...crumb.children];
-assert.ok(before.includes(schemaCrumb));assert.equal(schemaCrumb.textContent,'Finance marts');schemaCrumb.focus();
-// The 15-second access check re-renders controls; an unchanged path keeps the same nodes and focus.
+const detail=$('explore-detail'),title=$('table-title'),eyebrow=$('explore-eyebrow'),favorite=$('explore-favorite');
+assert.equal(detail.hidden,false);assert.equal(title.textContent,dbObject.display_name);
+favorite.focus();
 await dbRefreshAccess();await dbRefreshContext();dbControls();dbExplorerControls();await tick();
-assert.deepEqual([...crumb.children],before);assert.equal(document.activeElement,schemaCrumb);
-// A real change (here the language) rebuilds and returns focus to the crumb with the same key.
-const dbCrumb=crumb.children.find(node=>node.dataset.crumbKey==='database:finance');dbCrumb.focus();
-language='ja';dbExplorerControls();const rebuilt=crumb.children.find(node=>node.dataset.crumbKey==='database:finance');
-assert.notEqual(rebuilt,dbCrumb);assert.equal(document.activeElement,rebuilt);
-// A kept database crumb acts on the current inventory entry, not the one captured when it was drawn.
-inventory[1]={...inventory[1],revision:2};await dbRefreshAccess();await tick();
-const current=crumb.children.find(node=>node.dataset.crumbKey==='database:finance');await current.onclick();await tick();
-assert.equal(dbExplorer.database_id,'finance');assert.equal(dbExplorer.schema_id,'');assert.equal(dbDatabases.find(d=>d.id==='finance').revision,2);
-// Focus is not returned to a crumb that disappeared with the selection.
-schemaCrumb.focus();language='en';dbExplorerControls();
-assert.equal(schemaCrumb.hidden,true);assert.equal(crumb.children.some(node=>node.dataset.crumbKey?.startsWith('schema:')&&!node.hidden),false);
+assert.equal($('explore-detail'),detail);assert.equal($('table-title'),title);assert.equal($('explore-eyebrow'),eyebrow);
+assert.equal(document.activeElement,favorite);assert.match(eyebrow.textContent,/Finance/);
+setLanguage('ja');dbExplorerControls();
+assert.equal($('explore-detail'),detail);assert.equal($('table-title'),title);assert.equal($('explore-eyebrow'),eyebrow);
+assert.match(eyebrow.textContent,/Finance/);assert.match(eyebrow.textContent,/テーブル/);assert.equal($('explore-back').textContent,'← データ探索');
 ''')
 
     def test_periodic_access_checks_saved_role_without_a_run(self):
@@ -609,7 +624,7 @@ await dualBoot();addWorksheet('SELECT second');await dbRefreshContext();
 $('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.dataset.worksheet==='a').onclick();await dbRefreshContext();
 route=async()=>envelope(dbRuns.get('a'));await dbRunQuery();const run=dbRuns.get('a'),before={...dbInput(dbCurrent())},other=JSON.stringify(dbInput(worksheets[1]));
 dbCurrent().mode='sandbox-write';dbCurrent().max_rows=29;dbSave();const preserved={...dbInput(dbCurrent())};
-await exploreFinance();$('explorer-schema-details').onclick();assert.equal(dbWorkspacePane,'details');
+await exploreFinance();$('tab-catalog').onclick();assert.equal(dbWorkspacePane,'details');
 await $('use-explorer-schema').onclick();
 assert.deepEqual(dbInput(dbCurrent()),{...preserved,database_id:'finance',schema_id:'finance-marts',binding_revision:2,generation_id:'finance-gen'});
 assert.equal(dbRuns.get('a'),run);assert.equal(run.origin.context.database_id,before.database_id);assert.deepEqual(queryResult.rows,[[1]]);
@@ -728,8 +743,7 @@ schema.allowed_modes=['sandbox-write'];dbControls();
 assert.equal($('run-query').disabled,false);assert.equal(example.disabled,true);
 assert.match(example.title,/Choose a permitted mode/);
 assert.equal($('database-context-state').textContent,'');
-assert.match($('worksheet-task-context').children[0].textContent,/Execution context: .*raw \/ data_engineer/i);
-assert.match($('worksheet-task-context').children[1].textContent,/Enter SQL, then run/);
+assert.equal($('sql-next').textContent,'');
 const deniedRequests=calls.length;
 example.onclick();
 assert.equal(calls.length,deniedRequests);assert.equal(worksheets.length,1);assert.equal(dbCurrent(),original);
@@ -791,11 +805,12 @@ schemas=schemas.filter(s=>s.id==='schema').map(s=>({...s,allowed_modes:['read-on
 currentRole='bi_viewer';dbApplyRole();await dbRefreshContext();
 assert.equal(dbCurrent().schema_id,'raw');assert.equal(dbCurrent().mode,'sandbox-write');assert.equal($('sql').value,'SELECT 1');
 assert.equal($('query-schema').value,'raw');assert.equal($('query-schema').options.find(o=>o.value==='raw').disabled,true);assert.equal($('run-query').disabled,true);
-assert.match($('worksheet-task-context').children[0].textContent,/Execution selection: .*Unavailable/);
+const optionText=[$('query-database'),$('query-schema'),$('query-execution-role')].map(node=>[...node.options].map(option=>option.textContent).join(' ')).join(' ');
+assert.ok(!optionText.includes('db_')&&!optionText.includes('schema_'),optionText);assert.ok(!optionText.includes(' / '),optionText);
 assert.match($('database-context-state').textContent,/Saved execution role exceeds the current role ceiling/);
 assert.equal(dbCurrent().selected_role,'admin');
 $('query-execution-role').value='bi_viewer';await $('query-execution-role').onchange();
-assert.match($('database-context-state').textContent,/Selected context is unavailable/);
+assert.match($('sql-next').textContent,/context is unavailable/);
 $('query-schema').value='schema';await $('query-schema').onchange();
 assert.equal($('query-mode').value,'sandbox-write');assert.equal($('query-mode').disabled,false);assert.equal($('run-query').disabled,true);
 $('query-mode').value='read-only';$('query-mode').onchange();assert.equal(dbReason(),'');assert.equal($('run-query').disabled,false);
@@ -879,7 +894,7 @@ assert.equal(queryResult,null);assert.equal($('run-query').disabled,true);assert
     def test_detail_query_pages_and_unresolved_views_and_disabled_actions(self):
         self.javascript(r'''
 for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])$(panel).append(new Node('button'),new Node('input'));
-await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['p35-ingest','p35-wap','db-marts-panel','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-sre-recent-failures','observation-recent-failures-panel','observation-sre-telemetry-readiness','observation-telemetry-readiness-panel','observation-sre-telemetry-logs','observation-telemetry-logs-panel','observation-policy-pod-baseline','observation-pod-baseline-panel','observation-policy-controller-baseline','observation-controller-baseline-panel','observation-policy-manifest-advisory','observation-activity-panel','ai-settings','compute-ai-settings-open'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','transformation-view-wap','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts','compute-ai-settings-open','ai-settings-title'].includes(n.id)).every(n=>n.disabled));
+await boot();for(const panel of ['ingestion','transformation','jobs','bears','compute','pawprints'])assert.ok($(panel).querySelectorAll('button,input,select,textarea').filter(n=>!['bears-atlas','compute-atlas','p35-ingest','p35-wap','db-marts-panel','ingestion-atlas','transformation-atlas','transformation-publications','db-stages-panel','transformation-atlas-models','transformation-atlas-dbt','db-jobs-panel','db-audit-panel','runtime-panel','db-dbt-panel','observation-compute-panel','observation-resources-panel','observation-usage-panel','observation-capacity-panel','observation-history-panel','observation-baseline-panel','observation-foundation-baseline-panel','observation-foundation-controllers-panel','observation-sre-recent-failures','observation-recent-failures-panel','observation-sre-telemetry-readiness','observation-telemetry-readiness-panel','observation-sre-telemetry-logs','observation-telemetry-logs-panel','observation-policy-pod-baseline','observation-pod-baseline-panel','observation-policy-controller-baseline','observation-controller-baseline-panel','observation-policy-manifest-advisory','observation-activity-panel','ai-settings','compute-ai-settings-open'].some(id=>$(id).descendants().includes(n))&&!['ingestion-view-file','transformation-view-models','transformation-view-wap','bears-guide-copilot','bears-guide-wap','bears-guide-marts','copilot-guide-wap','copilot-guide-marts','compute-ai-settings-open','ai-settings-title','bears-database','bears-schema','bears-role','bears-table','bears-source','bears-recipe','bears-inherit','bears-explain','bears-transform','bear-query-sql','bear-query-run','bears-curator-propose'].includes(n.id)).every(n=>n.disabled));
 for(const id of ['p35-ingest-role','p35-ingest-database','p35-ingest-schema','p35-wap-role','p35-wap-database','p35-wap-schema'])assert.equal($(id).disabled,false,id);
 for(const id of ['copilot-generate','copilot-stage','copilot-publish','export-csv','export-json','copy-tsv','export-table-btn'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 await assert.rejects(api('/api/jobs/run',{}),/Unavailable/);const n=calls.length;download('csv');await $('copy-tsv').onclick();assert.equal(calls.length,n);
@@ -1149,17 +1164,17 @@ assert.equal(calls.filter(c=>c.options?.method==='POST').length,0);
 
     def test_catalog_selectors_are_independent_of_worksheet_and_tab_switches(self):
         self.javascript(r'''
-await dualBoot();route=async path=>path.startsWith('/api/v1/objects/')?{columns:[{name:'finance_column',type:'int',nullable:true}]}:envelope(dbRuns.get('a'));
+await dualBoot();route=async path=>path.includes('detail=preview')?{columns:['finance_column'],data:[['int']],state:'FINISHED'}:path.startsWith('/api/v1/objects/')?{columns:[{name:'finance_column',type:'int',nullable:true}]}:envelope(dbRuns.get('a'));
 await dbRunQuery();serverHistory=[historyEntry()];await dbLoadHistory();
 const original=JSON.stringify(dbInput(dbCurrent())),run=dbRuns.get('a'),history=dbHistory;
-for(const id of ['catalog-database','catalog-schema']){assert.equal($(id).tagName,'SELECT');assert.ok($(id).parentElement.children.some(n=>n.tagName==='LABEL'&&n.htmlFor===id));}
+for(const id of ['catalog-database','catalog-schema']){assert.equal($(id).tagName,'SELECT');assert.equal($(id).parentElement.tagName,'LABEL');assert.equal($(id).parentElement.htmlFor,id);assert.equal($(id).parentElement.parentElement.className,'explore-controls');}
 $('catalog-database').value='finance';await $('catalog-database').onchange();
 assert.equal($('catalog-schema').value,'');assert.equal(dbExplorer.schema_id,'');assert.equal($('open-table-sql').disabled,true);
 $('catalog-schema').value='finance-marts';await $('catalog-schema').onchange();
 await objectButtons()[0].onclick();
-assert.deepEqual($('table-columns').rows,[['finance_column','int',true]]);assert.equal(dbObject.id,'finance-object');assert.equal(dbDetails.size,1);
+assert.deepEqual($('table-preview').rows,[['int']]);assert.equal(dbObject.id,'finance-object');assert.equal(dbDetails.size,1);
 assert.equal(JSON.stringify(dbInput(dbCurrent())),original);assert.equal(dbRuns.get('a'),run);assert.deepEqual(queryResult.rows,[[1]]);assert.equal(dbHistory,history);
-assert.equal(dbWorkspacePane,'details');assert.equal(dbObjects[0].id,'finance-object');assert.equal($('worksheet-tabs').parentElement.parentElement,main);
+assert.equal(dbWorkspacePane,'details');assert.equal(dbObjects[0].id,'finance-object');assert.equal($('worksheet-tabs').parentElement.id,'worksheet-bar');assert.equal($('worksheet-bar').parentElement,$('warehouse'));
 const selected=dbObject;addWorksheet('SELECT another draft');await tick();
 assert.equal(dbExplorer.database_id,'finance');assert.equal(dbExplorer.schema_id,'finance-marts');assert.equal(dbObject,selected);assert.equal(dbDetails.size,1);
 $('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.dataset.worksheet==='a').onclick();await tick();
@@ -1238,9 +1253,9 @@ assert.equal(dbCurrent().database_id,context.database_id);assert.equal(dbCurrent
         self.javascript(r'''
 await dualBoot();const inputs=JSON.stringify(dbInput(dbCurrent())),before=calls.length;
 const tab=section=>inspectorTabs.find(b=>b.dataset.inspect===section),key=key=>({key,preventDefault(){}});
-tab('columns').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'preview');
-tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'snapshots');assert.equal(document.activeElement,tab('snapshots'));
-tab('snapshots').onkeydown(key('Home'));assert.equal(activeInspector,'columns');
+tab('preview').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'columns');
+tab('columns').onkeydown(key('ArrowRight'));assert.equal(activeInspector,'snapshots');assert.equal(document.activeElement,tab('snapshots'));
+tab('snapshots').onkeydown(key('Home'));assert.equal(activeInspector,'preview');
 assert.equal(tab('profile').disabled,true);assert.match(tab('profile').title,/readable TABLE/);
 assert.equal(tab('lineage').disabled,true);assert.match(tab('lineage').title,/readable TABLE or VIEW/);
 assert.ok($('table-lineage').descendants().some(n=>n.textContent.includes('readable TABLE or VIEW')));assert.ok(!$('table-lineage').textContent.includes('Loading'));

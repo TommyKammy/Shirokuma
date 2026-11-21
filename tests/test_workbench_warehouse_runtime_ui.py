@@ -119,6 +119,8 @@ assert.equal($('runtime-wake').disabled,true);assert.equal($('runtime-physical')
     def test_ack_is_acceptance_then_terminal_detail(self):
         self.javascript(r'''
 await start();const draft=JSON.stringify(dbInput(dbCurrent()));await $('runtime-wake').onclick();
+assert.equal(posts().length,0);assert.equal($('runtime-chill-confirm').hidden,false);
+$('runtime-chill-confirm-check').checked=true;await $('runtime-chill-confirm-submit').onclick();
 assert.equal(posts().length,1);assert.equal(posts()[0].path,BASE+'/wake');assert.equal(posts()[0].options.body,'{}');assert.ok(posts()[0].options.headers['Idempotency-Key']);
 assert.equal(dbRuntime.operation.phase,'ACCEPTED');assert.match($('runtime-guidance').textContent,/completion is not verified/);assert.equal($('runtime-chill').disabled,true);
 await dbRuntimeObserve();assert.equal(dbRuntime.operation.phase,'RUNNING');assert.match($('runtime-guidance').textContent,/Starting/);
@@ -207,7 +209,7 @@ await start();const prior=route;route=async(path,options)=>{
         self.javascript(r'''
 await start();const draft=JSON.stringify(dbInput(dbCurrent()));await dbRuntimeAct('wake');const op=dbRuntime.operation;
 activate($('tab-compute'));activate($('tab-warehouse'));assert.equal(dbRuntime.operation,op);assert.equal(JSON.stringify(dbInput(dbCurrent())),draft);
-for(const id of ['compute-sre-check','compute-policy-check','copilot-generate'])assert.equal($(id).disabled,true);
+assert.equal($('copilot-generate').disabled,true);
 for(const path of ['/api/warehouse/wake','/api/warehouse/chill','/api/warehouse/auto-chill','/api/lake/dbt/build'])await assert.rejects(api(path,{}));assert.equal(posts().length,1);
 setLanguage('ja');assert.match($('runtime-guidance').textContent,/受付済み/);assert.match($('runtime-wake').title,/全 DB/);
 ''')
@@ -243,7 +245,7 @@ assert.equal(dbRuntime.conflict,false);assert.equal(dbRuntime.dirty,false);asser
     def test_real_dto_202_running_succeeded_requires_separate_engine_proof(self):
         self.javascript(r"""
 await start();const draft=JSON.stringify(dbInput(dbCurrent())),sql=$('sql').value;
-assert.equal($('run-query').disabled,true);assert.equal($('database-context-state').textContent,t('The compute state is not confirmed. An administrator must reconcile it before SQL can run.'));await $('runtime-wake').onclick();
+assert.equal($('run-query').disabled,true);assert.equal($('database-context-state').textContent,t('The compute state is not confirmed. An administrator must reconcile it before SQL can run.'));await $('runtime-wake').onclick();$('runtime-chill-confirm-check').checked=true;await $('runtime-chill-confirm-submit').onclick();
 assert.equal(dbRuntime.operation.phase,'ACCEPTED');assert.match($('runtime-guidance').textContent,/completion is not verified/);
 runtime.operation_id=detail.id;runtime.operation_action='WAREHOUSE_WAKE';runtime.operation_phase='RUNNING';runtime.physical_state='starting';await refreshStatus();
 assert.equal(dbRuntime.operation.phase,'RUNNING');assert.match($('runtime-guidance').textContent,/Starting shared LOCAL/);
@@ -324,7 +326,7 @@ await refreshStatus();await dbRuntimeAct('wake');detail.phase='SUCCEEDED';await 
 
     def test_real_nested_blocker_zeroes_enable_chill_without_summing(self):
         self.javascript(r"""
-await start();assert.equal($('runtime-chill').disabled,false);assert.equal($('chill').disabled,false);
+await start();runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();assert.equal($('runtime-chill').disabled,false);assert.equal($('chill').disabled,false);
 assert.equal($('runtime-blockers').textContent,'Blockers: Runtime operations: 0 · Admitted work: 0 · Unresolved admissions (included in admitted work): 0 · Creation requests: 0 · Creation effects: 0 · Creation roots: 0');
 setLanguage('ja');assert.match($('runtime-blockers').textContent,/結果不明の受付（受付済み処理の内数）: 0/);assert.match($('runtime-blockers').textContent,/DB 作成要求: 0.*適用処理: 0.*基盤処理: 0/);assert.doesNotMatch($('runtime-blockers').textContent,/取得できません/);
 await $('runtime-chill').onclick();assert.equal(posts().length,0);assert.equal($('runtime-chill-confirm').hidden,false);assert.match($('runtime-chill-impact').textContent,/実行中の処理はありません/);$('runtime-chill-confirm-check').checked=true;await $('runtime-chill-confirm-submit').onclick();assert.equal(posts().length,1);assert.equal(posts()[0].path,BASE+'/chill');
@@ -356,8 +358,8 @@ runtime.blockers={...valid,unknown:1};await refreshStatus();assert.match($('runt
         self.javascript(r"""
 await start();currentRole='bi_viewer';dbApplyRole();runtime.available_actions=[];await refreshStatus();assert.match($('runtime-blockers').textContent,/Creation roots: 0/);
 for(const id of ['runtime-chill','runtime-wake','runtime-reconcile'])assert.equal($(id).disabled,true);
-currentRole='admin';dbApplyRole();runtime.available_actions=['wake','chill','auto-chill','reconcile'];await dbRefreshContext();await refreshStatus();
-for(const id of ['runtime-chill','runtime-wake','runtime-reconcile'])assert.equal($(id).disabled,false);
+currentRole='admin';dbApplyRole();runtime.available_actions=['wake','chill','auto-chill','reconcile'];runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await dbRefreshContext();await refreshStatus();
+assert.equal($('runtime-chill').disabled,false);assert.equal($('runtime-wake').disabled,true);assert.equal($('runtime-reconcile').disabled,false);
 assert.equal(dbRuntime.dirty,false);assert.equal(dbRuntime.operation,null);assert.equal(dbRuntime.intent,null);assert.equal($('runtime-minutes').value,'15');
 """)
 
@@ -374,13 +376,13 @@ setLanguage('en');assert.equal($('runtime-physical'),physical);assert.equal($('r
 runtime.physical_state='arbitrary';await refreshStatus();assert.equal($('database-compute-state').textContent,'LOCAL · Unknown');assert.match(physical.textContent,/Unknown/);assert.match($('runtime-proof').textContent,/unverified/);
 """)
 
-    def test_database_hides_whole_legacy_compute_panels_and_keeps_ids(self):
+    def test_database_uses_atlas_compute_without_legacy_panels(self):
         self.javascript(r"""
-const legacyStatus=$('compute-legacy-status'),legacyPolicy=$('compute-legacy-auto-chill');legacyStatus.append($('compute-summary'),$('compute-warehouse'),$('compute-components'));legacyPolicy.append($('auto-chill-minutes'),$('save-auto-chill'),$('auto-chill-state'));$('compute').append(legacyStatus,legacyPolicy);
-assert.equal(legacyStatus.hidden,false);assert.equal(legacyPolicy.hidden,false);await start();
-assert.equal(legacyStatus.hidden,true);assert.equal(legacyPolicy.hidden,true);assert.equal($('compute-warehouse').parentElement,legacyStatus);assert.equal($('auto-chill-minutes').parentElement,legacyPolicy);assert.equal($('runtime-panel').hidden,false);
-for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();const notice=t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');assert.equal($('database-compute-notice').textContent,notice);assert.equal($('compute').descendants().filter(n=>n.textContent===notice).length,1);assert.equal(legacyStatus.hidden,true);assert.equal(legacyPolicy.hidden,true);}
-assert.equal($('compute-sre-check').disabled,true);assert.equal($('compute-policy-check').disabled,true);assert.equal($('copilot-generate').disabled,true);assert.equal($('runtime-minutes').disabled,false);
+await start();
+for(const id of ['compute-legacy','compute-legacy-status','compute-legacy-auto-chill','compute-summary','compute-warehouse','compute-components','auto-chill-minutes','save-auto-chill','auto-chill-state'])assert.equal(documentRoot.descendants().some(n=>n.id===id),false,id);
+assert.equal($('runtime-panel').hidden,false);assert.equal($('runtime-minutes').disabled,false);
+for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();const notice=t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.');assert.equal($('database-compute-notice').textContent,notice);assert.equal($('compute').descendants().filter(n=>n.textContent===notice).length,1);}
+assert.equal($('copilot-generate').disabled,true);
 """)
 
     def test_legacy_profile_status_does_not_promise_runtime_or_auto_resume(self):
@@ -421,7 +423,7 @@ fail=true;await assert.rejects(dbCreationRequest('/api/v1/admin/database-creatio
         self.javascript(r"""
 await start();const panel=$('runtime-panel'),input=$('runtime-minutes');
 assert.equal(panel.getAttribute('role'),'region');assert.equal(panel.getAttribute('aria-labelledby'),'runtime-title');
-assert.equal($('runtime-refresh').parentElement,$('runtime-heading'));assert.equal($('runtime-title').parentElement,$('runtime-heading'));
+assert.equal($('runtime-refresh').parentElement,$('runtime-actions'));assert.equal($('runtime-title').parentElement,$('runtime-panel'));
 for(const [id,group] of [['runtime-physical','runtime-physical-group'],['runtime-proof','runtime-physical-group'],['runtime-operation','runtime-operation-group'],['runtime-blockers','runtime-safety-section'],['runtime-policy','runtime-policy-section'],['runtime-draft','runtime-policy-section']]){assert.equal($(id).parentElement,$(group));assert.equal($(id).getAttribute('role'),'status');assert.equal($(id).getAttribute('aria-atomic'),'true');}
 for(const name of ['controls','safety','policy'])assert.equal($('runtime-'+name+'-section').getAttribute('aria-labelledby'),'runtime-'+name+'-title');
 assert.equal($('runtime-minutes-label').htmlFor,'runtime-minutes');assert.equal(input.type,'number');assert.equal(input.min,'0');assert.equal(input.max,'1440');assert.equal(input.step,'1');assert.equal(input.parentElement,$('runtime-minutes-field'));
@@ -431,18 +433,17 @@ for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').oncl
 runtime.policy={minutes:90,revision:4};await refreshStatus();assert.equal(input.value,'37');assert.equal(dbRuntime.base,base);assert.equal(dbRuntime.conflict,true);assert.equal(document.activeElement,input);assert.equal($('runtime-save').disabled,true);
 """)
 
-    def test_database_uses_one_refresh_and_hides_legacy_compute_ctas(self):
+    def test_database_uses_one_refresh_and_no_legacy_compute_ctas(self):
         self.javascript(r"""
-const overview=$('compute-legacy-overview'),legacyRefresh=$('compute-refresh'),sre=$('compute-sre-check'),policy=$('compute-policy-check');overview.append(legacyRefresh,sre,policy);$('compute').append(overview);
-assert.equal(overview.hidden,false);assert.equal(legacyRefresh.hidden,false);assert.equal(sre.hidden,false);assert.equal(policy.hidden,false);
-await start();assert.equal(overview.hidden,true);for(const node of [legacyRefresh,sre,policy])assert.equal(node.hidden,true);assert.equal(sre.disabled,true);assert.equal(policy.disabled,true);assert.equal($('runtime-refresh').hidden,false);
-assert.equal($('compute-refresh'),legacyRefresh);assert.equal($('compute-sre-check'),sre);assert.equal($('compute-policy-check'),policy);
-for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();assert.equal(overview.hidden,true);assert.equal($('runtime-refresh').hidden,false);assert.equal($('database-compute-notice').textContent,t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.'));}
+await start();
+for(const id of ['compute-legacy-overview','compute-refresh','compute-sre-check','compute-policy-check'])assert.equal(documentRoot.descendants().some(n=>n.id===id),false,id);
+assert.equal($('runtime-refresh').hidden,false);
+for(const lang of ['ja','en']){setLanguage(lang);await $('runtime-refresh').onclick();assert.equal($('runtime-refresh').hidden,false);assert.equal($('database-compute-notice').textContent,t('P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.'));}
 """)
 
     def test_grouped_receipt_recovery_stays_hidden_until_uncertain_post(self):
         self.javascript(r"""
-await start();const receipt=$('runtime-receipt');assert.equal(receipt.parentElement,$('runtime-actions'));assert.equal(receipt.hidden,true);
+await start();const receipt=$('runtime-receipt');assert.equal(receipt.parentElement,$('runtime-controls-section'));assert.equal(receipt.hidden,true);
 actionRoute=()=>{throw Error('lost ACK');};await dbRuntimeAct('wake');const key=dbRuntime.intent.key;assert.equal(receipt.hidden,false);assert.equal(receipt.disabled,false);assert.match($('runtime-message').textContent,/UNKNOWN/);
 $('runtime-refresh').focus();for(const lang of ['ja','en']){setLanguage(lang);await refreshStatus();assert.equal(receipt.hidden,false);assert.equal(dbRuntime.intent.key,key);assert.equal(posts().length,1);assert.equal(document.activeElement,$('runtime-refresh'));}
 actionRoute=null;await receipt.onclick();assert.equal(receipt.hidden,true);assert.equal(dbRuntime.operation.phase,'ACCEPTED');assert.equal(posts()[1].options.headers['Idempotency-Key'],key);

@@ -11,7 +11,13 @@ from test_workbench_ai_sql_proposals_database_ui import PROPOSAL
 
 OBSERVATIONS = r"""
 const observationCalls=()=>calls.filter(c=>c.path.startsWith('/api/v1/bears/context-observations'));
-const changeObservation=(kind,name,value)=>{const n=$('observation-'+kind+'-'+name);n.value=value;return n.onchange();};
+const changeObservation=(kind,name,value)=>{
+ const p=dbObservations[kind];
+ if(name==='role'){p.role=value;p.database='';p.schema='';p.databases=[];p.schemas=[];}
+ else if(name==='database'){p.database=value;p.schemas=[];p.schema='';}
+ else if(name==='schema'){p.schema=value;}
+ p.shared=false;dbObservationClear(p);return dbObservationSync(p);
+};
 async function readyObservation(kind,role='admin',database='db',schema='schema'){
  const p=dbObservations[kind];if(p.role!==role)changeObservation(kind,'role',role);
  await dbObservationRefresh(p);changeObservation(kind,'database',database);await dbObservationRefresh(p);changeObservation(kind,'schema',schema);await dbObservationRefresh(p);assert.equal(dbObservationAllowed(p),true);
@@ -23,6 +29,7 @@ async function fetchObservation(kind='sre',reply=observationReply(kind)){
  await $('observation-'+kind+'-fetch').onclick();
 }
 const observationText=kind=>visibleText($('observation-'+kind+'-output'));
+const observationRefreshDisabled=kind=>!dbRoleWithinHeader(dbObservations[kind].role);
 const durableState=()=>JSON.stringify({worksheets,worksheetId,sql:$('sql').value,doctor:$('bear-query-sql').value,draft:$('copilot-request').value,result:queryResult,explanation:dbExplanation.intents,proposal:dbProposal.intents,curator:dbCurator.intents,forms:dbProposal.forms,wap:[...dataopsPanels].map(([key,p])=>[key,p.context,p.model,p.sources,p.op]),storage:[...storage],writes},(_,v)=>v instanceof Node?{id:v.id,value:v.value}:v);
 const otherState=()=>JSON.stringify({worksheets,worksheetId,sql:$('sql').value,doctor:$('bear-query-sql').value,draft:$('copilot-request').value,result:queryResult,runs:[...dbRuns],explorer:dbExplorer,history:dbHistory,explanation:dbExplanation,proposal:dbProposal,curator:dbCurator,wap:[...dataopsPanels].map(([key,p])=>[key,p.context,p.model,p.sources,p.op]),storage:[...storage],writes},(_,v)=>v instanceof Node?{id:v.id,value:v.value}:v);
 """
@@ -45,7 +52,7 @@ class SREPolicyDatabaseUI(unittest.TestCase):
         self.javascript(r"""
 assert.equal($('observation-sre-panel'),null);assert.equal($('observation-policy-panel'),null);await boot();
 for(const kind of ['sre','policy']){
- const p=dbObservations[kind],panel=$('observation-'+kind+'-panel'),role=$('observation-'+kind+'-role');assert.ok(panel);role.focus();
+ const p=dbObservations[kind],panel=$('observation-'+kind+'-panel'),scope=$('observation-'+kind+'-scope');assert.ok(panel);scope.focus();
  const stages=[
  [()=>{},'Refresh context to load Databases for the selected role.'],
  [()=>dbObservationRefresh(p),'Choose a Database, then refresh context to load its schemas.'],
@@ -53,8 +60,8 @@ for(const kind of ['sre','policy']){
  [()=>dbObservationRefresh(p),'Choose a primary schema, then refresh context to verify it.'],
  [()=>changeObservation(kind,'schema','schema'),'Refresh context to verify the selected primary schema.'],
  [()=>dbObservationRefresh(p),'Context verified. Select Fetch observation.']];
- for(const [setup,key] of stages){await setup();for(const locale of ['ja','en']){setLanguage(locale);dbControls();dbObservationRender(p);assert.equal($('observation-'+kind+'-output').children[0].textContent,t(key));assert.notEqual(t(key),locale==='ja'?key:'');assert.equal(document.activeElement,role);}}
- const count=calls.length;for(let i=0;i<3;i++){dbObservationsInstall();dbControls();}assert.equal(calls.length,count);assert.equal($('observation-'+kind+'-panel'),panel);assert.equal($('observation-'+kind+'-role'),role);assert.equal($('bear-panel-'+kind).descendants().filter(n=>n.id===panel.id).length,1);
+ for(const [setup,key] of stages){await setup();for(const locale of ['ja','en']){setLanguage(locale);dbControls();dbObservationRender(p);assert.equal($('observation-'+kind+'-output').children[0].textContent,t(key));assert.notEqual(t(key),locale==='ja'?key:'');assert.equal(document.activeElement,scope);}}
+ const count=calls.length;for(let i=0;i<3;i++){dbObservationsInstall();dbControls();}assert.equal(calls.length,count);assert.equal($('observation-'+kind+'-panel'),panel);assert.equal($('observation-'+kind+'-scope'),scope);assert.equal($('bear-panel-'+kind).descendants().filter(n=>n.id===panel.id).length,1);
  assert.equal($('observation-'+kind+'-fetch').disabled,false);
 }
 assert.equal(observationCalls().length,0);assert.notEqual(dbObservations.sre.context,dbObservations.policy.context);
@@ -77,10 +84,10 @@ changeObservation('sre','role','admin');assert.equal(sre.databases.length,0);ass
 await boot();
 for(const role of ['bi_viewer','data_engineer','admin']){
  currentRole=role;session.maximum_role=role;dbMaximumRole=role;dbControls();changeObservation('sre','role',role);await dbObservationRefresh(dbObservations.sre);assert.equal(dbObservations.sre.database,'');
- for(const option of $('observation-sre-role').options)if(option.value)assert.equal(option.disabled,!dbRoleWithinHeader(option.value));
+
  changeObservation('sre','database','db');schemas[0].capabilities.query=false;await dbObservationRefresh(dbObservations.sre);assert.equal(dbObservations.sre.schemas.some(s=>s.id==='schema'),false);changeObservation('sre','schema','schema');await dbObservationRefresh(dbObservations.sre);assert.equal(dbObservationAllowed(dbObservations.sre),false);schemas[0].capabilities.query=true;
 }
-currentRole='bi_viewer';dbControls();changeObservation('sre','role','admin');const count=calls.length;await dbObservationRefresh(dbObservations.sre);await dbObservationFetch(dbObservations.sre);assert.equal(calls.length,count);assert.equal($('observation-sre-refresh').disabled,true);
+currentRole='bi_viewer';dbControls();changeObservation('sre','role','admin');const count=calls.length;await dbObservationRefresh(dbObservations.sre);await dbObservationFetch(dbObservations.sre);assert.equal(calls.length,count);assert.equal(observationRefreshDisabled('sre'),true);
 """)
 
     def test_exact_get_window_copy_stored_states_and_safe_dom(self):
@@ -98,7 +105,7 @@ for(const role of ['bi_viewer','data_engineer','admin'])for(const allowed of [fa
  if(allowed&&role!=='admin')continue;
  await readyObservation('policy',role,'db','raw');const reply=observationReply('policy');reply.platform={allowed,code:allowed?'PLATFORM_OBSERVATION_DEFERRED':'PLATFORM_ADMIN_REQUIRED'};reply.policy.sql_modes=role==='admin'?['read-only','sandbox-write','admin-write']:role==='data_engineer'?['read-only','sandbox-write']:['read-only'];reply.policy.schema_permissions.write=role!=='bi_viewer';
  const before=calls.length;await fetchObservation('policy',reply);assert.ok(dbObservations.policy.record);assert.equal(calls.length,before+1);
- for(const locale of ['ja','en']){setLanguage(locale);dbControls();const text=observationText('policy');assert.ok(text.includes(t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.')));assert.ok(text.includes(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.')));assert.ok(text.includes(t(allowed?'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.')));assert.ok(text.includes(locale==='ja'?'読み取り専用':'Read only'));assert.equal($('observation-policy-panel').descendants().filter(n=>n.tagName==='SELECT').length,4);}
+ for(const locale of ['ja','en']){setLanguage(locale);dbControls();const text=observationText('policy');assert.ok(text.includes(t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.')));assert.ok(text.includes(t('Shared LOCAL: these Database permissions do not imply dedicated compute or platform control.')));assert.ok(text.includes(t(allowed?'This Database report omits platform sources. Use the separate Platform (P-only) scope with global Admin authority.':'This Database report omits platform sources. The separate Platform (P-only) scope requires platform administrator and global Admin authority.')));assert.ok(text.includes(locale==='ja'?'読み取り専用':'Read only'));assert.equal($('observation-policy-panel').descendants().filter(n=>n.tagName==='SELECT').length,1);}
 }
 assert.equal(calls.some(c=>c.options?.method==='POST'),false);
 """)
@@ -195,8 +202,8 @@ await boot();route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_sta
 await readyObservation('sre');await readyObservation('policy');const snapshot=otherState(),start=calls.length;
 for(const kind of ['sre','policy']){await fetchObservation(kind);await fetchObservation(kind);route=async()=>({http:503,body:{error:{code:'AUDIT_STORE_UNAVAILABLE',message:'secret store'}}});await dbObservationFetch(dbObservations[kind]);assert.equal(dbObservations[kind].record,null);assert.doesNotMatch(observationText(kind),/secret store/);await fetchObservation(kind);}
 assert.equal(otherState(),snapshot);assert.equal(calls.length-start,8);assert.ok(calls.slice(start).every(c=>c.path.startsWith('/api/v1/bears/context-observations?')&&!c.options?.method));assert.equal(dbExplanation.intents[0].id,'explanation-1');assert.equal(dbSourceA1Held(dbExplanation.intents[0]),true);
-for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest','bear-data-run'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
-assert.equal($('bear-tab-data').disabled,false);assert.equal($('bear-data-legacy').hidden,true);for(const id of ['bear-sre-run','bear-policy-run','bear-policy-action','bear-policy-manifest'])assert.equal($(id).hidden,true,id);
+assert.equal($('ai-settings-button').disabled,false);
+
 """)
 
     def test_real_unknown_sql_curator_proposal_and_wap_intents_survive_observation_reads(self):
@@ -213,14 +220,12 @@ for(const kind of ['sre','policy']){await fetchObservation(kind);route=async()=>
 assert.equal(otherState(),before);assert.equal(p.op,wapIntent);assert.equal(p.op.ambiguous,true);assert.equal($('p35-wap-sql').value,wapDraft);assert.equal(p.sources[0].alias.value,'kept_alias');assert.equal(dbProposalHeld().length,1);assert.equal(dbCuratorHeld().length,1);assert.equal(dbRuns.get(worksheetId).state,'UNKNOWN');assert.equal(calls.length-start,6);assert.ok(calls.slice(start).every(c=>c.path.startsWith('/api/v1/bears/context-observations?')&&!c.options.method));
 """)
 
-    def test_production_bear_tab_mouse_keyboard_navigation_fences_late_reads(self):
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
+    def test_observation_navigation_fences_late_reads(self):
         self.javascript(r"""
-const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
-eval(""" + json.dumps(handlers) + r""");await boot();assert.equal($('bear-tab-query')['aria-selected'],'true');
-await readyObservation('sre');$('bear-tab-sre').click();assert.equal(dbObservations.sre.selected,true);const old=deferred(),reply=observationReply();route=()=>old.promise;const pending=dbObservationFetch(dbObservations.sre);await tick();
-$('bear-tab-sre').onkeydown({key:'ArrowDown',preventDefault(){}});assert.equal($('bear-tab-query')['aria-selected'],'true');assert.equal(dbObservations.sre.selected,false);$('bear-tab-sre').click();old.resolve(reply);await pending;assert.equal(dbObservations.sre.record,null);assert.ok(dbObservations.sre.context);
-$('bear-tab-data').click();assert.equal($('bear-tab-data')['aria-selected'],'true');assert.equal(dbObservations.sre.selected,false);assert.equal($('bear-data-legacy').hidden,true);
+await boot();
+await readyObservation('sre');dbObservationNavigate('sre');assert.equal(dbObservations.sre.selected,true);const old=deferred(),reply=observationReply();route=()=>old.promise;const pending=dbObservationFetch(dbObservations.sre);await tick();
+dbObservationNavigate('query');assert.equal(dbObservations.sre.selected,false);dbObservationNavigate('sre');old.resolve(reply);await pending;assert.equal(dbObservations.sre.record,null);assert.ok(dbObservations.sre.context);
+dbObservationNavigate('data');assert.equal(dbObservations.sre.selected,false);
 """)
 
     def test_own_denials_leave_other_database_bear_and_all_other_state_byte_equal(self):
@@ -315,7 +320,7 @@ for(const locale of ['ja','en']){
  assert.ok(text.includes((locale==='ja'?'レコード ID':'Record ID')+': query-trace-0'));assert.ok(text.includes(t('Older candidate records exist; eligible older records are not guaranteed.')));
  const permissionLabels=locale==='ja'?['参照: 許可','クエリ: 許可','書き込み: 許可']:['Browse: Allowed','Query: Allowed','Write: Allowed'];for(const label of permissionLabels)assert.ok(policyLines.includes(label));for(const mode of locale==='ja'?['読み取り専用','サンドボックス書き込み','管理者書き込み']:['Read only','Sandbox write','Admin write'])assert.ok(policyText.includes(mode));
  assert.equal(policyLines.filter(line=>line===t('Current schema permission ceiling; statement and resource guards still apply. This is not statement approval.')).length,1);
- for(const [value,en,ja] of [['bi_viewer','BI Viewer','BI 閲覧者'],['data_engineer','Data Engineer','データエンジニア'],['admin','Admin','管理者']])assert.equal($('observation-sre-role').options.find(o=>o.value===value).textContent,locale==='ja'?ja:en);
+ for(const [value,en,ja] of [['bi_viewer','BI Viewer','BI 閲覧者'],['data_engineer','Data Engineer','データエンジニア'],['admin','Admin','管理者']])assert.equal(dbObservationLabel('role',value),locale==='ja'?ja:en);
  assert.equal(JSON.stringify([dbObservations.sre.record,dbObservations.policy.record]),wire);assert.equal(JSON.stringify([sre,policy]),original);assert.equal(otherState(),before);assert.equal(calls.length,start);
 }
 // False permissions have human labels too, with unchanged boolean wire values.
@@ -343,8 +348,8 @@ assert.equal(JSON.stringify(reply),original);
     def test_guidance_disallowed_role_requests_permitted_role_without_side_effects(self):
         self.javascript(r"""
 await boot();await readyObservation('sre');editSQL('SELECT kept worksheet');editDoctor('SELECT kept Doctor');currentRole='bi_viewer';dbControls();const p=dbObservations.sre;assert.equal(p.role,'admin');
-for(const locale of ['en','ja']){setLanguage(locale);const before=otherState(),state=JSON.stringify(p),count=calls.length,key='Choose an execution role within the current role ceiling.';assert.equal(dbObservationGuidance(p),key);dbObservationRender(p);assert.equal($('observation-sre-output').children[0].textContent,locale==='ja'?'現在のロール上限内で実行ロールを選んでください。':key);assert.equal($('observation-sre-refresh').disabled,true);assert.equal($('observation-sre-fetch').disabled,true);assert.equal(JSON.stringify(p),state);assert.equal(otherState(),before);assert.equal(calls.length,count);}
-changeObservation('sre','role','bi_viewer');assert.equal($('observation-sre-refresh').disabled,false);assert.equal($('observation-sre-fetch').disabled,true);await readyObservation('sre','bi_viewer');assert.equal($('observation-sre-fetch').disabled,false);
+for(const locale of ['en','ja']){setLanguage(locale);const before=otherState(),state=JSON.stringify(p),count=calls.length,key='Choose an execution role within the current role ceiling.';assert.equal(dbObservationGuidance(p),key);dbObservationRender(p);assert.equal($('observation-sre-output').children[0].textContent,locale==='ja'?'現在のロール上限内で実行ロールを選んでください。':key);assert.equal(observationRefreshDisabled('sre'),true);assert.equal($('observation-sre-fetch').disabled,true);assert.equal(JSON.stringify(p),state);assert.equal(otherState(),before);assert.equal(calls.length,count);}
+changeObservation('sre','role','bi_viewer');assert.equal(observationRefreshDisabled('sre'),false);assert.equal($('observation-sre-fetch').disabled,true);await readyObservation('sre','bi_viewer');assert.equal($('observation-sre-fetch').disabled,false);
 """)
 
     def test_guidance_revoked_nonempty_database_requests_authorized_database(self):
@@ -362,24 +367,18 @@ changeObservation('sre','schema','raw');assert.equal($('observation-sre-fetch').
 """)
 
     def navigation_javascript(self, body):
-        # The adapter extracts setLanguage from production (test_catalog_ui.function),
-        # and installs production main-tab handlers. Add the real Bear wireTabs chain.
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
-        self.javascript(r"""
-const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
-eval(""" + json.dumps(handlers) + r""");
-""" + body)
+        self.javascript(body)
 
     def test_real_tabs_main_navigation_and_production_language_keep_both_dated_snapshots(self):
         self.navigation_javascript(r"""
-await dualBoot();await readyObservation('sre','admin','finance','finance-marts');await readyObservation('policy');$('tab-bears').click();$('bear-tab-sre').click();
-const sreReply=observationReply('sre');sreReply.observed_at='2026-11-01T01:00:00Z';await fetchObservation('sre',sreReply);$('bear-tab-policy').click();const policyReply=observationReply('policy');policyReply.observed_at='2026-11-01T02:00:00Z';await fetchObservation('policy',policyReply);
+await dualBoot();await readyObservation('sre','admin','finance','finance-marts');await readyObservation('policy');$('tab-bears').click();dbObservationNavigate('sre');
+const sreReply=observationReply('sre');sreReply.observed_at='2026-11-01T01:00:00Z';await fetchObservation('sre',sreReply);dbObservationNavigate('policy');const policyReply=observationReply('policy');policyReply.observed_at='2026-11-01T02:00:00Z';await fetchObservation('policy',policyReply);
 const sre=dbObservations.sre.record,policy=dbObservations.policy.record,sc=dbObservations.sre.context,pc=dbObservations.policy.context,count=calls.length;
 editSQL('SELECT kept worksheet');editDoctor('SELECT kept Doctor');$('copilot-request').value='kept request';const held=dbExplanation.intents,curatorIntents=dbCurator.intents,proposalIntents=dbProposal.intents,saved=new Map([...storage].filter(([key])=>key!==languageKey));
 for(const locale of ['ja','en','ja','en']){
  setLanguage(locale);assert.equal(document.documentElement.lang,locale);
- $('bear-tab-sre').click();assert.equal($('bear-tab-sre')['aria-selected'],'true');assert.equal($('bear-panel-sre').hidden,false);assert.ok(observationText('sre').includes('finance.marts'));assert.ok(observationText('sre').includes(sre.observed_at));assert.ok(observationText('sre').includes(locale==='ja'?'クエリ · 完了':'Query · Finished'));
- $('bear-tab-policy').click();assert.equal($('bear-tab-policy')['aria-selected'],'true');assert.equal($('bear-panel-policy').hidden,false);assert.ok(observationText('policy').includes('sales.marts'));assert.ok(observationText('policy').includes(policy.observed_at));assert.ok(observationText('policy').includes(locale==='ja'?'参照: 許可':'Browse: Allowed'));
+ dbObservationNavigate('sre');assert.equal(dbObservations.sre.selected,true);assert.ok(observationText('sre').includes('finance.marts'));assert.ok(observationText('sre').includes(sre.observed_at));assert.ok(observationText('sre').includes(locale==='ja'?'クエリ · 完了':'Query · Finished'));
+ dbObservationNavigate('policy');assert.equal(dbObservations.policy.selected,true);assert.ok(observationText('policy').includes('sales.marts'));assert.ok(observationText('policy').includes(policy.observed_at));assert.ok(observationText('policy').includes(locale==='ja'?'参照: 許可':'Browse: Allowed'));
  $('tab-warehouse').click();assert.equal(activeTab,'warehouse');$('tab-bears').click();assert.equal(activeTab,'bears');
  assert.equal(dbObservations.sre.record,sre);assert.equal(dbObservations.policy.record,policy);assert.equal(dbObservations.sre.context,sc);assert.equal(dbObservations.policy.context,pc);assert.equal(sre.context.database_id,'finance');assert.equal(policy.context.database_id,'db');assert.equal(sre.observed_at,'2026-11-01T01:00:00Z');assert.equal(policy.observed_at,'2026-11-01T02:00:00Z');assert.equal(calls.length,count);
  assert.equal($('sql').value,'SELECT kept worksheet');assert.equal($('bear-query-sql').value,'SELECT kept Doctor');assert.equal($('copilot-request').value,'kept request');assert.equal(dbExplanation.intents,held);assert.equal(dbCurator.intents,curatorIntents);assert.equal(dbProposal.intents,proposalIntents);assert.deepEqual(new Map([...storage].filter(([key])=>key!==languageKey)),saved);
@@ -388,10 +387,10 @@ for(const locale of ['ja','en','ja','en']){
 
     def test_real_navigation_still_rejects_late_get_and_late_403_without_wiping_other_bear(self):
         self.navigation_javascript(r"""
-await dualBoot();await readyObservation('sre','admin','finance','finance-marts');await readyObservation('policy');$('tab-bears').click();$('bear-tab-policy').click();await fetchObservation('policy');const retained=dbObservations.policy.record,context=dbObservations.policy.context;
+await dualBoot();await readyObservation('sre','admin','finance','finance-marts');await readyObservation('policy');$('tab-bears').click();dbObservationNavigate('policy');await fetchObservation('policy');const retained=dbObservations.policy.record,context=dbObservations.policy.context;
 for(const main of [false,true])for(const failure of [false,true]){
- $('bear-tab-sre').click();const old=deferred(),reply=observationReply('sre');route=()=>old.promise;const pending=dbObservationFetch(dbObservations.sre);await tick();
- if(main){$('tab-warehouse').click();$('tab-bears').click();}else{$('bear-tab-policy').click();$('bear-tab-sre').click();}
+ dbObservationNavigate('sre');const old=deferred(),reply=observationReply('sre');route=()=>old.promise;const pending=dbObservationFetch(dbObservations.sre);await tick();
+ if(main){$('tab-warehouse').click();$('tab-bears').click();}else{dbObservationNavigate('policy');dbObservationNavigate('sre');}
  old.resolve(failure?{http:403,body:{error:{code:'DB_ACCESS_REVOKED',message:'old private denial'}}}:reply);await pending;
  assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.policy.record,retained);assert.equal(dbObservations.policy.context,context);assert.doesNotMatch(observationText('sre'),/old private denial/);assert.ok(dbObservations.sre.context);
 }
@@ -400,10 +399,10 @@ for(const main of [false,true])for(const failure of [false,true]){
     def test_retained_snapshots_still_purge_on_real_auth_platform_and_schema_hooks(self):
         self.navigation_javascript(r"""
 session.platform_admin=true;await dualBoot();
-async function populate(){await readyObservation('sre','bi_viewer','finance','finance-marts');await readyObservation('policy','admin');$('tab-bears').click();$('bear-tab-sre').click();await fetchObservation('sre');$('bear-tab-policy').click();await fetchObservation('policy');$('bear-tab-sre').click();}
+async function populate(){await readyObservation('sre','bi_viewer','finance','finance-marts');await readyObservation('policy','admin');$('tab-bears').click();dbObservationNavigate('sre');await fetchObservation('sre');dbObservationNavigate('policy');await fetchObservation('policy');dbObservationNavigate('sre');}
 await populate();const policy=dbObservations.policy.record,pc=dbObservations.policy.context;
 dbInvalidateReceipt('bi_viewer');assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.sre.context,null);assert.equal(dbObservations.policy.record,policy);assert.equal(dbObservations.policy.context,pc);
-await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');$('bear-tab-policy').click();$('bear-tab-sre').click();assert.ok(dbObservations.sre.record);changeObservation('sre','schema','');assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.sre.context,null);assert.equal(dbObservations.policy.record,policy);
+await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');dbObservationNavigate('policy');dbObservationNavigate('sre');assert.ok(dbObservations.sre.record);changeObservation('sre','schema','');assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.sre.context,null);assert.equal(dbObservations.policy.record,policy);
 await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');const removedSchema=dbObservations.sre.schemas.find(s=>s.id==='finance-marts');removedSchema.capabilities.query=false;dbControls();assert.equal(dbObservations.sre.record,null);assert.equal(dbObservations.sre.context,null);assert.equal(dbObservations.policy.record,policy);removedSchema.capabilities.query=true;
 await readyObservation('sre','bi_viewer','finance','finance-marts');await fetchObservation('sre');session.platform_admin=false;dbAdminSession(session);for(const p of Object.values(dbObservations)){assert.equal(p.record,null);assert.equal(p.context,null);}
 session.platform_admin=true;dbAdminSession(session);await populate();dbInvalidateReceipt('admin',true);for(const p of Object.values(dbObservations)){assert.equal(p.record,null);assert.equal(p.context,null);}
@@ -419,7 +418,7 @@ $('observation-sre-fetch').focus();dbObservationRender(dbObservations.sre);asser
 
     def test_existing_wrapping_scroll_components_and_no_new_css_or_product_inputs(self):
         self.javascript(r"""
-await boot();narrow=true;for(const kind of ['sre','policy']){const panel=$('observation-'+kind+'-panel');assert.equal(panel.className,'panel-body');assert.equal($('observation-'+kind+'-database-controls').className,'table-wrap');assert.equal($('observation-'+kind+'-database-controls').children[0].className,'toolbar');assert.equal($('observation-'+kind+'-output').className,'table-wrap');assert.equal(panel.descendants().filter(n=>n.tagName==='INPUT'||n.tagName==='TEXTAREA').length,0);assert.equal(panel.descendants().filter(n=>n.tagName==='SELECT').length,4);assert.equal(panel.descendants().filter(n=>n.tagName==='BUTTON').length,4);}
+await boot();narrow=true;for(const kind of ['sre','policy']){const panel=$('observation-'+kind+'-panel');assert.equal(panel.className,'panel-body');assert.equal($('observation-'+kind+'-database-controls').className,'table-wrap');assert.equal($('observation-'+kind+'-database-controls').children[0].className,'toolbar');assert.equal($('observation-'+kind+'-output').className,'table-wrap');assert.equal(panel.descendants().filter(n=>n.tagName==='INPUT'||n.tagName==='TEXTAREA').length,0);assert.equal(panel.descendants().filter(n=>n.tagName==='SELECT').length,1);assert.equal(panel.descendants().filter(n=>n.tagName==='BUTTON').length,3);}
 """)
 
 

@@ -1,24 +1,31 @@
-
-/* Design tokens. Every colour, radius and type size below comes from this block. */
+/* Shirokuma Atlas design foundation. Tokens follow the approved mock-up
+   (docs/design/assets/ui_mockups/shirokuma-atlas.html); legacy aliases below
+   keep screens that are not rebuilt yet on the same palette and type scale. */
 :root{color-scheme:light;
---bg:oklch(.975 .004 255);--surface:oklch(1 0 0);--surface-2:oklch(.968 .006 255);--surface-3:oklch(.935 .01 255);
---ink:oklch(.25 .03 258);--ink-2:oklch(.4 .025 258);--muted:oklch(.5 .02 258);
---line:oklch(.905 .01 255);--line-strong:oklch(.82 .015 255);
---accent:oklch(.5 .14 256);--accent-hover:oklch(.44 .14 256);--accent-ink:oklch(.43 .13 256);--accent-soft:oklch(.952 .025 256);--on-accent:oklch(1 0 0);
---ok:oklch(.45 .11 155);--ok-soft:oklch(.955 .035 155);--warn:oklch(.48 .1 65);--warn-soft:oklch(.965 .045 85);--bad:oklch(.5 .17 27);--bad-soft:oklch(.962 .025 27);
---focus:oklch(.58 .16 256);--radius:6px;--radius-lg:8px;
---sans:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Hiragino Sans","Noto Sans JP",sans-serif;
+--bg:#fff;--rail:#fafafb;--surface:#fafafb;
+--line:#e4e6ea;--ink:#1a1d21;--muted:#5c6470;--selected:#eff0f2;
+--button:#202226;--onbutton:#fff;--green:#39744e;--amber:#96611c;--red:#b94c42;
+--code:#f7f8fa;--ring:#4976b2;
+--surface-2:var(--selected);--surface-3:#e9ebee;--ink-2:#3c424b;--line-strong:#d3d7dd;
+--accent:var(--button);--accent-hover:#000;--accent-ink:var(--ink);--accent-soft:var(--selected);--on-accent:var(--onbutton);
+--ok:var(--green);--ok-soft:#eef6f0;--warn:var(--amber);--warn-soft:#fbf4e7;--bad:var(--red);--bad-soft:#fbeeec;
+--focus:var(--ring);--radius:6px;--radius-lg:8px;
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;
 --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 --chevron:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.5 6.5 5 3 8.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 --icon-database:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'%3E%3Cellipse cx='8' cy='4' rx='5.5' ry='2'/%3E%3Cpath d='M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2'/%3E%3C/svg%3E");
 --icon-folder:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M1.8 4.2c0-.6.5-1 1-1h3.4l1.5 1.6h5.5c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.8c-.5 0-1-.4-1-1z'/%3E%3C/svg%3E");
 --icon-table:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Crect x='2' y='2.5' width='12' height='11' rx='1.5'/%3E%3Cpath d='M2 6.5h12M2 10h12M6.5 6.5v7'/%3E%3C/svg%3E");
 --icon-view:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Cpath d='M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/svg%3E")}
-@media(prefers-color-scheme:dark){:root{color-scheme:dark;
---bg:oklch(.18 .02 258);--surface:oklch(.215 .022 258);--surface-2:oklch(.245 .024 258);--surface-3:oklch(.29 .026 258);
---ink:oklch(.95 .008 255);--ink-2:oklch(.85 .015 255);--muted:oklch(.73 .02 255);--line:oklch(.32 .022 255);--line-strong:oklch(.43 .025 255);
---accent:oklch(.74 .12 252);--accent-hover:oklch(.8 .1 252);--accent-ink:oklch(.84 .09 252);--accent-soft:oklch(.3 .05 256);--on-accent:oklch(.18 .02 258);
---ok:oklch(.82 .12 155);--ok-soft:oklch(.3 .05 155);--warn:oklch(.85 .11 85);--warn-soft:oklch(.31 .05 80);--bad:oklch(.8 .13 25);--bad-soft:oklch(.31 .06 25);--focus:oklch(.78 .12 252)}}
+:root[data-theme=dark]{color-scheme:dark;
+--bg:#17191c;--rail:#1c1e22;--surface:#202328;
+--line:#34383f;--ink:#e8eaed;--muted:#a1a8b3;--selected:#2e3238;
+--button:#eceef0;--onbutton:#1a1d21;--green:#8fcea4;--amber:#e6b770;--red:#ec9c94;
+--code:#1c1f24;--ring:#91baff;
+--surface-2:var(--selected);--surface-3:#3a3e45;--ink-2:#c6cbd2;--line-strong:#454a52;
+--accent:var(--button);--accent-hover:#fff;--accent-ink:var(--ink);--accent-soft:var(--selected);--on-accent:var(--onbutton);
+--ok:var(--green);--ok-soft:#24352a;--warn:var(--amber);--warn-soft:#3a2f1e;--bad:var(--red);--bad-soft:#3d2422;
+--focus:var(--ring)}
 
 /* Base */
 *{box-sizing:border-box}
@@ -33,6 +40,10 @@ code{font-size:12px;overflow-wrap:anywhere}
 .muted,small{color:var(--muted)}small{font-size:12px}
 [hidden]{display:none!important}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* Route changes move focus to a heading with tabindex="-1". That focus is a
+   screen-reader starting point, not a keyboard target, so it draws no frame.
+   Keyboard-focusable controls keep the visible outline above. */
+h1[tabindex="-1"]:focus,h2[tabindex="-1"]:focus,h3[tabindex="-1"]:focus,h4[tabindex="-1"]:focus,h5[tabindex="-1"]:focus,h6[tabindex="-1"]:focus{outline:none}
 .visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
 /* Keep the existing grid in place while authentication and route restoration run. */
@@ -63,14 +74,13 @@ button.primary.danger:hover:not(:disabled){background:color-mix(in oklch,var(--b
 .impact{margin:8px 0;padding:6px 10px;border-left:3px solid var(--bad);background:var(--bad-soft);overflow-wrap:anywhere}
 .impact.neutral{border-left-color:var(--line);background:var(--surface-2)}
 /* Ingestion and saved stages (UX-A4): one primary action per step, impact before commit. */
-#p35-ingest-panel,#db-stages-panel,#p35-ingest-form,#db-stages-form{min-width:0}
+#db-stages-panel,#p35-ingest-form,#db-stages-form{min-width:0}
 #p35-ingest-file-details>summary,#db-stages-panel details>summary{cursor:pointer;font-weight:600;color:var(--ink-2);padding:4px 0}
 #p35-ingest-destination-heading{margin:14px 0 2px}
 #p35-ingest-impact,#db-stages-impact{max-width:100%;overflow-wrap:anywhere}
 #p35-ingest-selected-file{overflow-wrap:anywhere}
 #db-stages-roots{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 @media(max-width:600px){
- #ingestion .subnav button,#transformation .subnav button{min-height:44px}
  #p35-ingest-form :is(button,select,input,textarea,summary),
  #db-stages-panel :is(button,select,input,textarea,summary),
  #p35-wap-form :is(button,select,input,textarea,summary),
@@ -151,77 +161,10 @@ td.tone-ok,td.tone-bad,td.tone-warn,td.tone-run{background:none;font-family:var(
 .state{margin:8px 0 0;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}
 .state:empty{display:none}
 
-/* Application shell */
-.app-header{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;min-height:48px;padding:7px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
-.brand{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700;letter-spacing:-.01em}
-.brand svg{color:var(--accent)}
-.brand-product{font-weight:500;color:var(--muted)}
-.environment{font:12px var(--mono);color:var(--muted);padding:1px 8px;border:1px solid var(--line);border-radius:999px;white-space:nowrap}
-.header-spacer{flex:1}
-.mobile-menu{display:none}
-.breadcrumb{font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
-.compute-chip{min-height:28px;padding:2px 10px;border-color:var(--warn-soft);background:var(--warn-soft);color:var(--warn);font-size:12px;gap:6px}
-.compute-chip:hover:not(:disabled){border-color:var(--warn);background:var(--warn-soft)}
-.compute-chip[class*=tone-ok]{border-color:var(--ok-soft);background:var(--ok-soft);color:var(--ok)}
-.compute-chip[class*=tone-run]{border-color:var(--accent-soft);background:var(--accent-soft);color:var(--accent-ink)}
-.compute-chip[class*=tone-bad]{border-color:var(--bad-soft);background:var(--bad-soft);color:var(--bad)}
-#database-compute-state{font-weight:600;white-space:nowrap}
-.header-popover{position:relative;display:inline-flex}
-.icon-button{position:relative;width:32px;height:32px;min-height:32px;padding:0;border-color:transparent;background:transparent}
-.header-count{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--bad);color:var(--on-accent);font:600 10px/16px var(--sans);text-align:center}
-.popover{position:absolute;top:calc(100% + 6px);right:0;z-index:50;width:min(300px,calc(100vw - 24px));padding:10px;border:1px solid var(--line-strong);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 8px 24px color-mix(in oklch,var(--ink) 16%,transparent)}
-.popover p{margin:0 0 8px;max-width:none;overflow-wrap:anywhere}
-.popover button{width:100%}
-.search-button{min-height:28px;padding:2px 10px;font-size:12px;gap:7px}
-.search-button kbd{font:11px var(--mono);color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
-.user-menu{position:relative}
-.user-menu summary{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--line);border-radius:999px;background:var(--surface);cursor:pointer;list-style:none}
-.user-menu summary::-webkit-details-marker{display:none}
-.user-menu[open] summary{background:var(--surface-2)}
-.user-menu-panel{position:absolute;top:calc(100% + 6px);right:0;z-index:50;width:260px;padding:10px;border:1px solid var(--line-strong);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 8px 24px color-mix(in oklch,var(--ink) 16%,transparent)}
-.user-menu-panel>*+*{margin-top:10px}
-#role-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-#role-controls label{margin:0;font-weight:500;color:var(--muted)}
-#role-selector{width:auto;min-height:28px;padding:2px 6px;flex:1 1 120px}
-#lang-switcher{display:inline-flex;gap:2px;padding:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);flex-shrink:0}
-#lang-switcher button{min-height:24px;border:0;background:transparent;color:var(--muted);padding:2px 8px;font-size:12px;border-radius:4px}
-#lang-switcher button:hover{color:var(--ink);background:transparent}
-#lang-switcher button[aria-pressed="true"]{background:var(--surface);color:var(--accent-ink);box-shadow:0 0 0 1px var(--line)}
-#ai-settings-button{width:100%}
-#workbench-open-sql{border-radius:var(--radius);padding:5px 12px;font-size:12px;text-decoration:none}
-.layout{display:grid;grid-template-columns:244px minmax(0,1fr);min-height:calc(100vh - 48px)}
-nav{position:sticky;top:48px;align-self:start;display:flex;flex-direction:column;height:calc(100vh - 48px);overflow:auto;padding:8px 8px 12px;background:var(--surface);border-right:1px solid var(--line)}
-.nav-brand{margin:6px 8px 16px;padding:0}
-.nav-category{margin:14px 8px 4px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-nav a{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:10px;width:100%;min-height:32px;margin:1px 0;padding:5px 8px;border:0;border-radius:var(--radius);background:transparent;color:var(--ink-2);font-weight:500;text-align:left;text-decoration:none;white-space:nowrap}
-nav a:hover{background:var(--surface-2);color:var(--ink)}
-nav a[aria-current=page]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
-nav a[aria-current=page]::after{content:"";position:absolute;left:-8px;top:6px;bottom:6px;width:3px;border-radius:0 2px 2px 0;background:var(--accent)}
-.icon{flex:none;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-#jobs-alert-count{margin-left:auto;background:var(--bad);color:var(--on-accent);min-height:18px;padding:0 6px;font-size:11px}
-.nav-workspace{margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
-#nav-workspace-context{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#workbench-command{width:min(640px,calc(100vw - 24px));max-height:min(72vh,680px);padding:0;border:1px solid var(--line-strong);border-radius:var(--radius-lg);background:var(--surface);color:var(--ink);box-shadow:0 18px 48px color-mix(in oklch,var(--ink) 24%,transparent)}
-#workbench-command::backdrop{background:color-mix(in oklch,var(--ink) 32%,transparent)}
-.command-head{display:flex;align-items:center;gap:8px;padding:10px;border-bottom:1px solid var(--line)}
-.command-head input{flex:1;min-width:0}
-.command-list{display:flex;flex-direction:column;gap:2px;max-height:52vh;overflow:auto;padding:6px}
-.command-list button{justify-content:space-between;gap:12px;width:100%;text-align:left;border-color:transparent;background:transparent;font-weight:500}
-.command-list button:hover,.command-list button:focus-visible{background:var(--surface-2);border-color:var(--line)}
-.command-kind{color:var(--muted);font-size:11px;white-space:nowrap}
-.command-foot{padding:8px 12px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px}
-main{min-width:0;padding:18px 24px 48px}
+/* Application shell layout comes from the Atlas foundation appended below. */
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px 24px;flex-wrap:wrap;margin-bottom:14px}
 .page-title p{margin:3px 0 0;color:var(--muted)}
 .page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-
-/* Views inside a page */
-.subnav{display:flex;gap:2px;margin:0 0 14px;border-bottom:1px solid var(--line);overflow-x:auto}
-.subnav button{min-height:34px;margin-bottom:-1px;padding:6px 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--ink-2);font-weight:550}
-.subnav button:hover:not(:disabled){background:transparent;color:var(--ink)}
-.subnav button[aria-selected=true]{color:var(--accent-ink);border-bottom-color:var(--accent)}
-.subnav .badge{min-height:18px;padding:0 6px;font-size:11px}
-html:not([data-role="admin"]) [data-admin-view]{display:none!important}
 
 /* Surfaces */
 .panel{min-width:0;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
@@ -317,7 +260,6 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .copilot-body{padding:0 12px 12px}
 .copilot-body label{margin-top:0}
 .copilot .toolbar{margin-top:8px}
-#copilot-stage-table{width:180px}
 #database-bears-workflows,#database-copilot-workflows{min-width:0;max-width:100%;flex-wrap:wrap}
 #database-bears-workflows>*,#database-copilot-workflows>*{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
 #database-bears-workflows>.help,#database-copilot-workflows>.help{flex-basis:100%}
@@ -342,10 +284,6 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .chart-mark{fill:var(--accent)}.chart-line{fill:none;stroke:var(--accent);stroke-width:2}.chart-axis{stroke:var(--line);stroke-width:1}.chart-label{fill:currentColor;font:12px var(--sans)}
 
 /* Ingestion */
-#ingest-dropzone{display:grid;gap:6px;padding:14px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
-#ingest-dropzone label{margin:0}
-#ingest-dropzone.dragging{border-color:var(--accent);background:var(--accent-soft);outline:2px solid var(--accent)}
-#ingest-dropzone .toolbar{justify-content:space-between}
 #p35-ingest{container:manual-ingest / inline-size}
 #p35-ingest>.panel-body{max-width:56rem;min-width:0}
 #p35-ingest-form{display:grid;gap:16px;min-width:0}
@@ -373,25 +311,11 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 @container manual-ingest (min-width:51rem){
  #p35-ingest-form #p35-ingest-context-controls{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
 }
-#ingest-preview p,#stage-preview p{margin:12px 0 6px;font-weight:600}
-#ingest-preview .table-wrap,#stage-preview .table-wrap{margin-top:8px;border:1px solid var(--line);border-radius:var(--radius);max-height:320px}
-#ingest-result{margin-top:10px}
-#stages-area,#stages-area .section,#stage-files-area,#stage-preview{min-width:0;max-width:100%}
-#stages-area p,#stages-area .error{overflow-wrap:anywhere}
-#stages-area .table-wrap{max-width:100%;overflow:auto}
-#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}
-#stages-list table,#stage-files table{min-width:520px}
-#stage-export-directory,#stage-exports th,#stage-exports td{white-space:normal;overflow-wrap:anywhere}
-#stage-files,#stage-exports{margin-top:8px;border:1px solid var(--line);border-radius:var(--radius)}
-:is(#stages-list,#stage-files,#stage-exports) th{white-space:nowrap}
-:is(#stages-list,#stage-files) td:not(:first-child){overflow-wrap:break-word}
 
 /* Schedules (jobs, stages, refresh targets share one layout) */
 .schedule-status{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:6px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);font-size:12px;color:var(--ink-2)}
 .schedule-status p{margin:0}
 .schedule-status>button{margin-left:auto}
-#job-schedule-state,#stage-schedule-state{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;min-width:0}
-#job-schedule-state span,#stage-schedule-state p{overflow-wrap:anywhere}
 .schedule-daily{display:contents}
 .schedule-weekdays{margin:12px 0 0}
 .schedule-weekdays .toolbar{gap:4px 14px;margin-top:4px}
@@ -421,20 +345,10 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 .notes{display:grid;gap:2px;padding:10px 14px 0;font-size:12px;color:var(--muted)}
 
 /* Transformation */
-#marts-admin,#marts-admin .detail-grid>*{min-width:0}
-#marts-admin .error,#mart-schedule-help{overflow-wrap:anywhere}
-.model-layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
-.model-list{padding:6px}
-.model-list h2{margin:8px 8px 4px;font-size:12px;color:var(--ink-2)}
-.model-list .table-link{padding-left:8px}
-#dbt-models,#wap-models{padding:2px 0 6px}
 .lineage{display:grid;gap:10px}
 .lineage-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .lineage-row strong{min-width:120px;font-size:12px;color:var(--ink-2)}
 .node{padding:3px 8px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;font:12px var(--mono);overflow-wrap:anywhere}
-.arrow{color:var(--muted)}
-#model-sql-preview{margin:0 14px 14px}
-#models-state{margin-bottom:14px}
 
 /* Catalog */
 .catalog-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
@@ -449,12 +363,6 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 #table-title{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
 
 /* AI Bears */
-.bear-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:14px;align-items:start}
-.bear-layout>*{min-width:0}
-.bear-list{display:grid;gap:2px;padding:6px}
-.bear-list button{display:grid;justify-items:start;justify-content:stretch;gap:2px;width:100%;min-height:0;padding:8px 10px;border:0;background:transparent;text-align:left;white-space:normal;font-weight:600}
-.bear-list button[aria-selected=true]{background:var(--accent-soft);color:var(--accent-ink)}
-.bear-list .badge{font-size:11px}
 
 /* Jobs: size each workflow row from the available panel width. */
 #db-jobs-panel{container:db-jobs / inline-size}
@@ -498,28 +406,10 @@ kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid va
 #bears .workflow-details :is(p,pre,summary){white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
 .bear-workflows{display:grid;gap:8px;justify-items:start}
 .bear-workflows button{white-space:normal;text-align:start}
-@media(max-width:1024px){
- #bears .bear-list{display:flex;flex-wrap:wrap;gap:2px}
- #bears .bear-list button{width:auto;min-height:44px;padding:6px 8px}
- #transformation .subnav{flex-wrap:wrap}
- #transformation .subnav button{min-height:44px}
- html[data-data-mode=database] #bears .bear-list .badge{display:none}
-}
 .bear-panel p{color:var(--muted)}
 .bear-panel textarea{min-height:84px}
-.bear-footer{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
 .bear-panel pre{margin-top:12px}
 
-/* Compute & monitor */
-.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
-.facts>div{padding:10px 14px;background:var(--surface)}
-.facts dt{font-size:12px;color:var(--muted)}
-.facts dd{margin:2px 0 0;font-weight:600;overflow-wrap:anywhere}
-.raw{padding:10px 14px}
-.raw summary{font-weight:500;color:var(--ink-2)}
-.raw pre{margin-top:8px}
-#compute-check-result{margin-top:12px}
-.subhead{padding:12px 14px 6px;font-size:12.5px}
 
 /* Dialog */
 dialog{width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto;padding:20px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
@@ -527,47 +417,18 @@ dialog::backdrop{background:oklch(.2 .02 258 / .45)}
 
 /* Roles: hidden controls are a convenience only; the server enforces every permission. */
 #role-indicator{background:var(--warn-soft);color:var(--warn)}
-html:not([data-role="admin"]) #marts-admin{display:none}
-html[data-role="bi_viewer"] :is(#run-dbt-build,#run-dbt-test,#drop-table-btn,#run-ingest,#ai-settings-button,#clone-table-btn,#copilot-stage,#copilot-publish,#refresh-wap-model,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,#copilot-publish,#refresh-wap-model,[data-role-write="admin"]){display:none!important}
+html[data-role="bi_viewer"] :is(#drop-table-btn,#ai-settings-button,#clone-table-btn,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,[data-role-write="admin"]){display:none!important}
 
 /* Responsive */
 @media(max-width:1180px){.detail-grid{grid-template-columns:1fr}.detail-grid>*+*{border-left:0;border-top:1px solid var(--line)}}
-@media(max-width:1024px){.layout{grid-template-columns:244px minmax(0,1fr)}main{padding:16px 16px 40px}.sql-layout,.catalog-grid,.model-layout,.bear-layout{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{display:contents}.sql-main .panel{margin-bottom:0}.editor-panel{order:1}.explorer{order:2}.results-panel{order:3}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}.environment{display:none}}
-@media(max-width:1024px){.bear-layout{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:1024px){main{padding:16px 16px 40px}.sql-layout,.catalog-grid{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{display:contents}.sql-main .panel{margin-bottom:0}.editor-panel{order:1}.explorer{order:2}.results-panel{order:3}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}}
 @media(max-width:760px){
-.app-header{position:static;padding:8px 12px}.header-spacer{flex-basis:100%;order:1;height:0}
-#role-controls,#lang-switcher,#ai-settings-button{order:2}
-.layout{display:block}
-nav{position:static;height:auto;flex-direction:row;align-items:center;gap:2px;padding:6px 8px;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line)}
-#workbench-nav{display:none}
-nav a{width:auto;flex:none;white-space:nowrap}nav a[aria-current=page]::after{left:8px;right:8px;top:auto;bottom:-6px;width:auto;height:2px}
-.nav-category{display:none}
-.nav-brand{display:none}
-.nav-workspace{margin-top:0;border-top:0}
-.mobile-menu{display:block;position:relative}
-.mobile-menu summary{display:inline-flex;min-height:32px;padding:4px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);cursor:pointer;list-style:none}
-.mobile-menu summary::-webkit-details-marker{display:none}
-#workbench-mobile-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:60;display:none;flex-direction:column;gap:2px;min-width:220px;padding:8px;border:1px solid var(--line-strong);border-radius:var(--radius-lg);background:var(--surface);box-shadow:0 8px 24px color-mix(in oklch,var(--ink) 16%,transparent)}
-.mobile-menu[open] #workbench-mobile-menu{display:flex}
-#workbench-mobile-menu a{white-space:nowrap;padding:6px 8px;border-radius:var(--radius);color:var(--ink-2);text-decoration:none}
-#workbench-mobile-menu a:hover{background:var(--surface-2);color:var(--ink)}
-#workbench-mobile-menu a[aria-current=page]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
-.mobile-nav-category{margin:8px 8px 2px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
-main{padding:14px 12px 32px}
-.editor{min-height:112px;height:clamp(112px,20vh,220px)}
-.query-footer .run-group{order:-1;width:100%;justify-content:space-between}
-.sql-layout{gap:10px}
-.results-tools input[type=search]{width:100%}
-}
-@media(max-width:600px){
- .app-header :is(button,summary,#workbench-open-sql){min-height:44px}
- .app-header .icon-button,.user-menu summary{width:44px;height:44px;min-width:44px}
- #lang-switcher button{min-height:44px;min-width:44px}
- #role-selector,#ai-settings-button,#workbench-mobile-summary{min-height:44px}
- #workbench-mobile-menu a{display:flex;align-items:center;min-height:44px}
- .command-list button{min-height:44px}
- .header-popover,.user-menu{position:static}
- .popover,.user-menu-panel{left:12px;right:12px;width:auto;max-width:none}
+ #role-controls,#lang-switcher,#ai-settings-button{order:2}
+ main{padding:14px 20px 32px}
+ .editor{min-height:112px;height:clamp(112px,20vh,220px)}
+ .query-footer .run-group{order:-1;width:100%;justify-content:space-between}
+ .sql-layout{gap:10px}
+ .results-tools input[type=search]{width:100%}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 /* Database-mode explorer and SQL workspace (UX-D1). Aligned with the UX-D1 mock: one tree pane, one
@@ -582,12 +443,6 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #database-worksheet-pane>.panel{margin:0}
 #database-details{min-width:0;margin:12px;border:1px solid var(--line);box-shadow:none}
 /* Explorer: title, search and refresh first; the tree takes the remaining height; context last. */
-#database-workspace>.explorer{display:flex;flex-direction:column;padding:0;overflow:auto;max-height:calc(100vh - 72px);top:60px}
-@supports selector(details::details-content){
- #database-workspace>.explorer[open]::details-content{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
-}
-#database-workspace>.explorer>summary{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}
-#database-workspace>.explorer:not([open])>summary{border-bottom:0}
 #database-workspace .explorer-search{display:grid;gap:6px;flex:none;padding:8px 10px;border-bottom:1px solid var(--line)}
 #database-workspace .explorer-search label,#database-workspace .explorer-search .help{margin:0}
 #database-workspace .explorer-search input{width:100%;min-width:0;min-height:28px;font-size:12px}
@@ -622,40 +477,17 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #database-workspace #catalog-tree summary:hover,#database-workspace #catalog-tree .table-link:hover:not(:disabled){background:var(--surface-2)}
 #database-workspace #catalog-tree summary[aria-current=true],#database-workspace #catalog-tree .table-link[aria-current=true]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
 #database-workspace #catalog-tree summary:focus-visible,#database-workspace #catalog-tree .table-link:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
-/* One tab strip: Details, worksheets with their close buttons, and + at the end. */
-#database-workspace-main>.editor-tabs{flex-wrap:nowrap;align-items:center;gap:6px;min-width:0;padding:6px 8px;border-radius:var(--radius-lg) var(--radius-lg) 0 0}
-#database-workspace #worksheet-tabs{gap:4px;padding:0;scrollbar-width:thin}
-#database-workspace #worksheet-tabs>button{border:1px solid transparent;border-radius:5px}
-#database-workspace .worksheet-closers{padding:0}
-#database-workspace #worksheet-tabs>button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--accent-ink)}
-#database-workspace #add-worksheet-tab{flex:none}
-/* Details: breadcrumb and title first, actions next to them. */
-#database-details .panel-head{flex-wrap:wrap;align-items:center}
-#database-details .panel-head>.db-breadcrumb{flex-basis:100%;margin:0}
-#database-details .panel-head>h2{flex:1 1 auto;min-width:0;font-size:15px;overflow-wrap:anywhere}
-#database-object-meta{flex-basis:100%;max-width:none;margin:-4px 0 2px;font-size:12px;color:var(--muted)}
-#database-object-meta code{font-size:11.5px;padding:1px 5px;border-radius:4px;background:var(--surface-2);color:var(--ink-2)}
-#database-details .panel-head>.toolbar{flex-basis:100%}
-#database-details #open-table-sql{order:1}#database-details #insert-table-sql{order:2}#database-details #use-explorer-schema{order:3}#database-details #refresh-table-details{order:4}
-#database-details .unavailable-actions{order:5;display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:auto}
+/* Explorer details: the rebuilt page owns its heading, actions and management sections. */
 #database-details .toolbar{flex-wrap:wrap}
-.db-breadcrumb{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin:0 0 4px;font-size:12px;color:var(--muted)}
-.db-breadcrumb button{min-height:22px;padding:0 4px;border:0;background:transparent;color:var(--accent-ink);font-size:12px;font-weight:500}
-.db-breadcrumb button:hover:not(:disabled){background:var(--surface-2)}
-.db-breadcrumb span[aria-hidden]{color:var(--line-strong)}
 /* Editor: execution context bar above, run actions below. */
 #database-context-bar{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px 10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
-#database-context-bar .field{display:grid;gap:3px;flex:1 1 130px;min-width:0}
-#database-context-bar .field label{margin:0;font-size:11px;font-weight:600;color:var(--muted)}
-#database-context-bar select,#database-context-bar input{width:100%;min-height:30px;font-size:12.5px}
-#database-context-bar #max-rows{width:100%}
-#database-context-bar .field:has(#query-warehouse),#database-context-bar .field:has(#max-rows){flex:0 1 92px}
-#database-context-bar .field:has(#query-mode){flex-basis:120px}
-#database-context-bar .context-actions{display:flex;gap:6px;flex:none}
-#database-context-bar .context-actions button{min-height:30px;padding:2px 8px;border-color:transparent;background:transparent;color:var(--accent-ink);font-size:12px;font-weight:500}
-#database-context-bar .context-actions button:hover:not(:disabled){background:var(--surface-2);border-color:var(--line)}
-#database-context-bar #sql-context-state{flex-basis:100%;margin:0;min-width:0;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
-#database-context-bar #sql-context-state:empty{display:none}
+#database-context-bar label{display:grid;gap:5px;min-width:0;font-size:12px;color:var(--ink);flex:0 1 auto}
+#database-context-bar label[hidden]{display:none}
+#database-context-bar label:has(> #query-database){flex:1 1 230px}
+#database-context-bar label:has(> #query-schema){flex:1 1 200px}
+#database-context-bar label:has(> #query-execution-role){flex:0 1 160px}
+#database-context-bar label:has(> #max-rows){flex:0 1 120px}
+#database-context-bar select,#database-context-bar input{width:100%;min-width:0;min-height:30px;font-size:12.5px}
 /* Run row: the single block reason sits next to the button and is its description. */
 #database-editor .run-group #database-context-state{flex:1 1 220px;min-width:0;margin:0;padding:0;border:0;background:transparent;font-size:12px;line-height:1.45;color:var(--warn);overflow-wrap:anywhere}
 #database-editor .run-group #database-context-state:empty{display:none}
@@ -663,17 +495,12 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #sample-sql-tools label{margin:0;font-weight:500;color:var(--muted)}
 #sample-sql-tools select{width:auto;max-width:100%;min-width:0;min-height:30px;padding:2px 6px}
 #sample-sql-tools button{min-height:30px}
-#database-editor .query-footer{justify-content:flex-end}
-#database-editor .query-footer>.toolbar:empty{display:none}
 #database-editor .run-group{flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
 #database-editor #cancel-query{min-height:30px}
 @media(max-width:600px){
  #database-context-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:10px 8px;min-width:0}
- #database-context-bar .field{flex:none;min-width:0}
- #database-context-bar .context-actions{grid-column:1 / -1;flex-wrap:wrap}
+ #database-context-bar label{flex:none;min-width:0}
  #database-context-bar :is(select,input){min-height:44px;font-size:1rem;padding-inline:6px}
- #database-context-bar .context-actions button{min-height:44px}
- #database-context-bar #sql-context-state{grid-column:1 / -1}
  #database-editor .run-group{width:100%;justify-content:flex-start}
  #database-editor :is(#run-query,#cancel-query){min-height:44px}
  #database-editor .run-group #database-context-state{flex-basis:100%}
@@ -681,8 +508,7 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
  #sample-sql-tools label{grid-column:1 / -1}
  #sample-sql-tools select{width:100%;min-height:44px;font-size:1rem}
  #sample-sql-tools button{min-height:44px}
- #database-workspace-main .editor-tabs :is(button,select){min-height:44px}
- #database-results .results-tools :is(button,select,input){min-height:44px}
+ #database-results :is(button,select,input){min-height:44px}
  #database-workspace .explorer-search input,
  #database-workspace .explorer-search select,
  #database-workspace .explorer-foot select,
@@ -693,8 +519,6 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
  #warehouse :is(button,select,input:not([type=checkbox])){min-height:44px}
  .editor{font-size:1rem}
 }
-/* Results: status first; history restore sits in the results footer like the mock. */
-#database-results .results-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:8px 14px;border-top:1px solid var(--line)}
 #database-results .history-field{max-width:none;flex:1 1 280px;justify-content:flex-end}
 #database-results .history-field select{max-width:360px}
 #database-results>details{padding:8px 14px;border-top:1px solid var(--line);font-size:12px}
@@ -704,20 +528,13 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
  #database-workspace>.explorer{order:0;position:static;max-height:none}
  #database-workspace-main{order:1}
  #database-workspace #catalog-tree{max-height:300px}
- #database-workspace #worksheet-tabs{flex-wrap:wrap;overflow:visible}
- #database-workspace-main>.editor-tabs{align-items:flex-start}
- #database-workspace-main .editor-panel,#database-workspace-main .results-panel{order:initial}
- html[data-data-mode=database] .app-header .environment{display:none}
  :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0;max-width:100%}
  :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) select{min-width:0;max-width:100%}
 }
 .wb-task-context{min-width:0;max-width:100%;overflow-wrap:anywhere;line-height:1.5;margin-block:8px 12px}
 .wb-task-context p{margin:0}
 .wb-task-context p+p{margin-top:4px;color:var(--muted)}
-#explorer-task-context{flex-basis:100%;margin-block:0}
 @media(max-width:760px){
- #database-results .history-field{flex-wrap:wrap;justify-content:flex-start}
- #database-results .history-field select{min-width:0;max-width:100%}
  #p35-ingest .job-fields>*{min-width:0}
  #p35-ingest :is(input,select,textarea,button){max-width:100%}
 }
@@ -728,24 +545,13 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 @media(max-width:760px){
  #database-worksheet-pane{padding:8px}
  #database-details{margin:8px}
- #database-context-bar .field{flex-basis:120px}
- html[data-data-mode=database] .app-header .header-spacer{display:none}
- html[data-data-mode=database] .app-header :is(#database-compute-status,#role-controls,#ai-settings-button,#lang-switcher){order:0}
- html[data-data-mode=database] #role-controls{max-width:100%;flex-wrap:wrap}
  html[data-data-mode=database] .warehouse-strip{min-width:0;max-width:100%}
  html[data-data-mode=database] .warehouse-strip .badge{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 }
-@media(min-width:601px) and (max-width:760px){html[data-data-mode=database] :is(#role-selector,#ai-settings-button){min-height:32px}}
 @media(max-width:360px){
- html[data-data-mode=database] .app-header .brand-product{display:none}
- .app-header{gap:6px 8px;padding:6px 10px}
- .app-header .search-label{display:none}
  .breadcrumb{flex:0 1 auto;min-width:0}
  #database-compute-status{font-size:11px;padding:2px 7px}
 }
-.db-creation-steps{display:flex;flex-wrap:wrap;gap:12px 28px;padding-inline-start:24px;margin:16px 0 20px;max-width:75ch}
-.db-creation-steps li{flex:1 1 150px;min-width:0;overflow-wrap:anywhere;padding-inline-end:8px}
-.db-creation-steps [aria-current="step"]{font-weight:700;color:var(--accent)}
 #db-creation-history{margin-block-start:16px}
 #db-creation-history summary{cursor:pointer}
 #db-creation-history .toolbar{align-items:end;margin-block-start:8px}
@@ -754,48 +560,12 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #db-creation-next-action{font-weight:600;max-width:75ch}
 #db-creation-actions{margin-block:16px;overflow-wrap:anywhere}
 #db-creation-observation{max-width:75ch;font-size:13px}
-#db-audit-panel{padding:20px;container:db-audit / inline-size}
-#db-audit-panel>*{min-width:0;max-width:100%}
-#db-audit-panel>h2{margin:0 0 12px}
-#db-audit-panel p{overflow-wrap:anywhere}
-#db-audit-panel #db-audit-target{margin:0 0 24px}
-#db-audit-panel .toolbar{flex-wrap:wrap;align-items:end;gap:12px}
-#db-audit-panel .field{display:grid;gap:6px;min-width:0;max-width:100%;flex:1 1 220px}
-#db-audit-panel .field label{margin:0;overflow-wrap:anywhere}
-#db-audit-panel .field input,#db-audit-panel .field select{width:100%;max-width:100%;min-width:0}
-#db-audit-panel button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
-#db-audit-panel #db-audit-form{display:grid;grid-template-columns:minmax(0,1fr);gap:20px 12px;margin-bottom:24px}
-#db-audit-panel #db-audit-submit{grid-column:1 / -1;justify-self:end}
-#db-audit-panel #db-audit-presets-label{flex-basis:100%;font-weight:600}
-#db-audit-panel #db-audit-presets-help{margin:8px 0 24px}
-#db-audit-panel #db-audit-status{margin:0 0 12px}
-#db-audit-panel #db-audit-context{margin-bottom:20px;overflow-wrap:anywhere}
-#db-audit-panel .table-wrap{max-width:100%;overflow-x:auto}
-#db-audit-panel td{overflow-wrap:anywhere}
-#db-audit-panel>#db-audit-rows+.toolbar{margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
-#db-audit-panel #db-audit-detail{margin-top:24px;overflow-wrap:anywhere}
-#db-audit-panel #db-audit-detail:empty{margin-top:0}
-#db-audit-panel #db-audit-guide{margin-block:24px;padding-top:20px;border-top:1px solid var(--line)}
-#db-audit-panel #db-audit-guide p{margin-block:12px}
+#db-audit-panel{padding:0}
 #db-audit-panel #db-audit-guide li+li{margin-top:8px}
-@container db-audit (min-width:480px){
- #db-audit-panel #db-audit-form{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
-@container db-audit (min-width:760px){
- #db-audit-panel #db-audit-form{grid-template-columns:repeat(3,minmax(0,1fr))}
-}
-@container db-audit (min-width:1380px){
- #db-audit-panel #db-audit-form{grid-template-columns:repeat(6,minmax(0,1fr))}
- #db-audit-panel #db-audit-form>.field:nth-child(-n+3){grid-column:span 2}
-}
-@media(max-width:600px){#db-audit-panel{padding:14px}}
 #runtime-panel{min-width:0;max-width:100%}
 #runtime-panel p{max-width:75ch;overflow-wrap:anywhere;margin:0 0 8px}
 #runtime-panel p:last-child{margin-bottom:0}#runtime-panel p:empty{display:none}
 #runtime-panel h3{margin-bottom:8px}#runtime-panel .panel-head{gap:12px;padding:14px}
-#runtime-panel .runtime-status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:18px 28px}
-#runtime-panel .runtime-status-grid>div{min-width:0}
-#runtime-panel .runtime-status-grid p{color:var(--ink-2)}
 #runtime-panel #runtime-physical{color:var(--ink);font-weight:600}
 #runtime-panel .toolbar{gap:8px;flex-wrap:wrap;min-width:0}
 #runtime-panel .runtime-policy-editor{align-items:flex-end;margin-top:12px;gap:12px 16px}
@@ -864,7 +634,6 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 #p35-wap #p35-wap-publish-review{max-width:100%;overflow-wrap:anywhere;white-space:pre-line}
 #p35-wap #p35-wap-published{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 #p35-wap #p35-wap-stage-reason{max-width:100%;overflow-wrap:anywhere}
-#transformation-models>.panel,#transformation-wap>.panel{max-width:100%;min-width:0}
 #p35-wap .wap-editor h3{margin-block:18px 0}
 #p35-wap button{max-width:100%;white-space:normal}
 @container transformation (min-width:600px){
@@ -902,8 +671,7 @@ html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 :is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) .toolbar{flex-wrap:wrap}
 html[data-data-mode="database"] #table-lineage{grid-template-columns:minmax(0,1fr);min-width:0;overflow-wrap:anywhere}
-html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywhere}
-.lineage-fact{overflow-wrap:anywhere;min-width:0}.lineage section{min-width:0}.lineage ul{padding-inline-start:1.25rem}
+html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywhere}.lineage section{min-width:0}.lineage ul{padding-inline-start:1.25rem}
 #db-drop-panel{min-width:0;max-width:100%;padding:16px;border-top:1px solid var(--line)}
 #db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;word-break:normal;min-width:0;max-width:100%}#db-drop-panel input{box-sizing:border-box;max-width:100%}#db-drop-panel .toolbar{flex-wrap:wrap}
 html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inline-block!important}
@@ -947,10 +715,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #observation-policy-manifest-advisory textarea{display:block;inline-size:min(75ch,100%);box-sizing:border-box;resize:vertical}
 #observation-policy-manifest-advisory .toolbar{flex-wrap:wrap}
 /* Explorer details: primary SQL actions first, data management apart (2026-11-04). */
-#database-details #refresh-table-details{order:6;margin-left:auto}
-#database-details .panel-head>.toolbar{gap:10px;margin-top:4px}
 #database-details #explorer-open-lineage[hidden]{display:none}
-#inspector-tabs #inspect-tab-ddl,#inspector-tabs #inspect-tab-snapshots{margin-left:14px}
 .db-manage{min-width:0;margin:0;padding:16px 14px 18px;border-top:1px solid var(--line)}
 .db-manage>summary{font-weight:600;cursor:pointer}
 .db-manage summary:focus-visible,.db-manage-recovery button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
@@ -978,10 +743,6 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #p35-table-export[hidden]{display:none}
 #p35-table-export>button{margin:6px 8px 0 0}
 /* Compute: state, usage and controls first; operator diagnostics by purpose. */
-#compute-overview{margin-bottom:14px}
-#runtime-panel .runtime-summary-row{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:14px 14px 0}
-#runtime-panel .runtime-summary-row p{flex:1 1 30ch;margin:0;color:var(--ink);font-weight:550}
-#runtime-panel #runtime-impact{margin:0 0 12px;padding:8px 12px;border-left:3px solid var(--warn);border-radius:var(--radius);background:var(--warn-soft);color:var(--ink)}
 #runtime-panel #runtime-capability{color:var(--ink);margin-bottom:10px}
 #runtime-panel details.runtime-meaning{margin-top:6px;font-size:12px;color:var(--muted)}
 #runtime-panel details.runtime-meaning>summary{font-weight:500;color:var(--ink-2)}
@@ -995,125 +756,94 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #compute-usage-list[hidden]{display:none}
 #compute-usage-list>.panel{margin-bottom:0}
 .compute-kind{display:inline-block;margin:0 0 2px;font-size:11.5px;font-weight:600;color:var(--accent-ink)}
-#compute-diagnostics{min-width:0;margin:8px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+#compute-diagnostics{min-width:0}
 #compute-diagnostics[hidden]{display:none}
-#compute-diagnostics>summary{font-size:14px}
 #compute-diagnostics>p{max-width:75ch;margin:6px 0 0;color:var(--muted)}
 #compute-diagnostics .compute-diag-group{min-width:0;margin-top:16px}
 #compute-diagnostics .compute-diag-group>h3{margin:0 0 8px;color:var(--ink-2)}
 #compute-diagnostics .panel{margin-bottom:12px}
-#database-details .panel-head>.toolbar>.unavailable-actions:empty{display:none}
 .panel-head>.compute-kind{flex-basis:100%;margin-bottom:-6px}
-/* Atlas home: review items, next actions, recent runs and the current context. */
-.homegrid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(280px,.9fr);gap:24px;align-items:start;min-width:0}
-.homegrid>*{min-width:0}
-.home-main{min-width:0}
-.home-heading{font-size:20px;line-height:1.3;font-weight:650;letter-spacing:-.01em;margin:0;overflow-wrap:anywhere}
-.taskgroup{min-width:0;margin:0 0 20px}
-.grouplabel{margin:0 0 6px;font-size:11px;font-weight:650;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-.grouplabel.urgent{color:var(--warn)}
-.actionrow{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:44px;margin-top:6px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--ink);text-decoration:none;min-width:0}
-.actionrow:hover{background:var(--surface-2);border-color:var(--line-strong)}
-.actionrow.review{border-left:3px solid var(--warn)}
-.actionrow .rowmark{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;color:var(--warn);font-weight:700}
-.actionrow .rowbody{min-width:0}
-.actionrow strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
-.actionrow small{display:block;margin-top:1px;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-.actionrow .rowend{color:var(--ink-2);font-size:12px;white-space:nowrap}
-.home-source-loading{margin:8px 0 0;color:var(--muted);font-size:12px}
+/* Atlas Home (UX-R1): the mock-up grid and row components come from the Atlas
+   foundation appended below. These rules bind the rebuilt markup and add the
+   status/empty treatment without reviving the old home layout. */
+.home-main,.homeright{min-width:0}
+.target .primary.full{display:block;text-align:center;padding:8px 12px;margin-right:0;max-width:100%}
+.status.error{padding:0;border:0;background:none;margin:0;max-width:none;white-space:nowrap;overflow-wrap:normal}
 .home-source-error{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding:6px 10px;border-left:3px solid var(--bad);background:var(--bad-soft);color:var(--bad);font-size:12px}
 .home-source-error p{margin:0}
 .home-source-error button{flex:none}
-.home-section{margin-top:4px;padding:14px 0 0;border-top:1px solid var(--line)}
-.home-section .section-head{margin-bottom:8px}
-.textlink{display:inline-flex;align-items:center;min-height:32px;color:var(--accent-ink);font-size:12px;text-decoration:none;white-space:nowrap}
-.textlink:hover{text-decoration:underline}
-.run{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:8px 10px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;min-width:0}
-.run:first-of-type{border-top:0}
-.run:hover{background:var(--surface-2)}
-.run>div{min-width:0}
-.run strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
-.run small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-.homeright{display:grid;gap:16px;min-width:0}
-.home-context{padding:16px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
-.eyebrow{font-size:11px;font-weight:650;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
-.home-context h2{margin:2px 0 12px;font-size:18px;overflow-wrap:anywhere}
-.kv-home{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 14px;margin:0 0 14px;font-size:12px}
-.kv-home dt{color:var(--muted)}
-.kv-home dd{margin:0;color:var(--ink);overflow-wrap:anywhere}
-.home-context a.primary.full{display:flex;width:100%;margin-bottom:8px;text-align:center}
-.secondaryaction{display:inline-flex;align-items:center;justify-content:center;min-height:40px;width:100%;padding:6px 12px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);font-weight:550;text-decoration:none}
-.secondaryaction:hover{background:var(--surface-2);border-color:var(--muted)}
-.objectrow{display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:10px;min-height:44px;padding:8px 4px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none;min-width:0}
-.objectrow:first-of-type{border-top:0}
-.objectrow:hover{background:var(--surface-2)}
-.objectrow>div{min-width:0}
-.objectrow strong{display:block;font-size:13px;font-weight:600;overflow-wrap:anywhere}
-.objectrow small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-.objecticon{color:var(--accent-ink)}
-.objectrow .rowend{color:var(--ink-2);font-size:12px}
-/* Atlas data exploration (UX-A3): controls, search and lightweight rows. */
-.explore-page{display:grid;gap:10px;padding:10px 14px 14px;border-bottom:1px solid var(--line)}
-.explore-controls,.explore-search{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:8px 10px;min-width:0}
-.explore-controls .field,.explore-search .field{display:grid;gap:3px;min-width:0;margin:0}
-.explore-controls label,.explore-search label{margin:0;font-size:11px;font-weight:600;color:var(--muted)}
-.explore-controls select,.explore-search input,.explore-search select{width:100%;min-height:32px}
-.explore-status{margin:0;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
-.explore-status:empty{display:none}
+/* Atlas data exploration (UX-R3): the mock's list and detail inside the details pane.
+   The old tree + inspector two-pane layout is not used on this screen. */
+#database-workspace[data-pane=details]{grid-template-columns:minmax(0,1fr)}
+#database-workspace[data-pane=details]>.explorer{display:none}
+#database-workspace[data-pane=details] #database-workspace-main{border:0;border-radius:0;background:transparent}
+#database-workspace[data-pane=details] #database-details{margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+#explore-page,#explore-detail{min-width:0}
+#table-title,#explore-heading{min-width:0;overflow-wrap:anywhere}
+#explore-detail #table-title{font-family:var(--sans);font-size:22px;font-weight:650;line-height:1.45;letter-spacing:-.6px}
+@media(max-width:600px){#explore-detail #table-title{font-size:20px}}
+.explore-detail-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0}
+#explore-more-actions{margin:0 0 18px}
+#explore-more-actions>summary{cursor:pointer;padding-block:10px;color:var(--muted);font-size:12px}
+#explore-more-actions>.toolbar{margin:4px 0 0}
+#explore-eyebrow{overflow-wrap:anywhere}
+#explore-back{display:inline-flex;align-items:center;min-height:44px;margin:0 0 16px;color:var(--muted);font-size:11px}
+#explore-back:hover{text-decoration:underline}
+.explore-rows{min-width:0}
+.explore-rows .objectrow{padding:10px 0}
+.explore-rows .objectrow .rowend{white-space:nowrap}
+#explore-more{margin-top:12px}
 .explore-note{margin:0;padding:6px 8px;border-left:3px solid var(--line-strong);background:var(--surface-2);font-size:12px;overflow-wrap:anywhere}
 .explore-note.error{border-left-color:var(--bad);background:var(--bad-soft);color:var(--bad)}
-.explore-rows{min-width:0}
-.explore-rows .objectrow{padding:8px 2px}
-.explore-rows .objectrow .rowend{white-space:nowrap}
-.explore-empty{margin:0}
-#explore-back{align-self:flex-start;margin:10px 14px 0;min-height:44px;display:inline-flex;align-items:center;color:var(--accent-ink);text-decoration:none;font-weight:550}
-#explore-back:hover{text-decoration:underline}
-#database-details[data-detail-empty=true] > :not(#explore-page):not(#explore-back){display:none!important}
+#inspector-context p:empty,#snapshot-context:empty{display:none}
+#table-null-hint{display:block}
 @media(max-width:600px){
- .explore-controls select,.explore-search input,.explore-search select{min-height:44px}
+ .explore-controls select,.explore-search input,.explore-search select{min-height:44px;font-size:16px}
  .explore-rows .objectrow{min-height:44px}
- #explore-back{margin-inline:10px}
-}
-@media(max-width:900px){
- .homegrid{grid-template-columns:minmax(0,1fr);gap:18px}
- .homeright{grid-template-columns:minmax(0,1fr)}
+ .pageheading{flex-wrap:wrap}
+ .tabletabs{overflow-x:auto;max-width:100%;gap:16px}
+ .tabletabs button{min-height:44px;white-space:nowrap}
+ #explore-detail .explore-detail-actions{justify-content:flex-start}
+ #explore-detail .explore-detail-actions>button{min-height:44px}
 }
 @media(max-width:600px){
- .actionrow{grid-template-columns:20px minmax(0,1fr);align-items:start}
- .actionrow .rowend{grid-column:2;white-space:normal}
- .actionrow,.run,.objectrow,.secondaryaction,.home-context a.primary.full,.textlink,.home-source-error button{min-height:44px}
- .home-context{padding:12px}
+ .homegrid{grid-template-columns:minmax(0,1fr);gap:26px}
+ .actionrow{grid-template-columns:17px minmax(0,1fr) auto;gap:7px}
+ .actionrow,.run,.objectrow,.target .primary.full,.secondaryaction,.textlink,.home-source-error button{min-height:44px}
+ .secondaryaction{display:flex;justify-content:center;width:100%}
+ .textlink{display:inline-flex;align-items:center;justify-content:center}
+ .target{padding:17px}
 }
-/* Atlas database management (UX-A5): list, detail, access, metadata and manage. */
+/* Atlas database management (UX-R5): list, detail, access, metadata, flow and retirement.
+   The list/flow/retirement rules below follow the approved shirokuma-atlas mock-up. */
 #db-admin{min-width:0}
-.db-list-view{min-width:0}
+.db-list-view{min-width:0;max-width:1100px}
 .db-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.db-heading h2{margin:0;font-size:16px;overflow-wrap:anywhere}
-.db-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:8px 10px;margin-bottom:10px;min-width:0}
-.db-filters label{margin:0;font-size:11px;font-weight:600;color:var(--muted)}
-.db-filters .field{min-width:0}
-.db-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.db-heading h1,.db-heading h2{margin:0;overflow-wrap:anywhere}
+.db-title-line{display:flex;flex:1 1 auto;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.db-title-line .db-title{min-width:0;overflow-wrap:anywhere}
+.db-title-line .status{flex:none}
+.db-heading .db-actions{margin:0;margin-left:auto;flex:none}
 .db-table caption{text-align:left}
-.db-table th,.db-table td{padding:9px 8px;border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
-.db-table thead th{color:var(--muted);font-size:11px;font-weight:650;letter-spacing:.03em}
+.db-table{width:100%;border-collapse:collapse}
+.db-table th,.db-table td{border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
 .db-table tbody th{font-weight:600}
 .db-table small{display:block;margin-top:2px;color:var(--muted);font-size:11.5px;font-weight:400}
-.db-table td:nth-child(4){width:5ch;text-align:right;font-variant-numeric:tabular-nums}
 .db-table a{color:var(--accent-ink);text-decoration:none}
 .db-table a:hover{text-decoration:underline}
 .db-table .badge{white-space:normal;overflow-wrap:anywhere}
-#db-admin-detail-state{margin:4px 0 6px}
+.db-table time{white-space:nowrap;font-variant-numeric:tabular-nums}
+#db-admin-detail-state{margin:0}
 #db-admin-detail-state:empty{display:none}
 #db-admin-detail-title{margin:8px 0 4px;font-size:20px;font-weight:650;overflow-wrap:anywhere}
-#db-admin-back,#db-admin-access-back,#db-admin-metadata-back{display:inline-flex;align-items:center;min-height:36px;color:var(--accent-ink);text-decoration:none;font-weight:550}
-#db-admin-back:hover,#db-admin-access-back:hover,#db-admin-metadata-back:hover{text-decoration:underline}
+#db-admin-back,#db-admin-access-back,#db-admin-metadata-back,#db-admin-operation-back,#db-admin-retire-back,#db-admin-retire-confirm-back,#db-creation-list-back{display:inline-flex;align-items:center;min-height:36px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-admin-back:hover,#db-admin-access-back:hover,#db-admin-metadata-back:hover,#db-admin-operation-back:hover,#db-admin-retire-back:hover,#db-admin-retire-confirm-back:hover,#db-creation-list-back:hover{text-decoration:underline}
 #db-admin-info{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 #db-admin-info dt{color:var(--muted);font-size:12px}
 #db-admin-info dd{margin:0;color:var(--ink);font-size:12px;overflow-wrap:anywhere}
 #db-admin-detail-actions{flex-wrap:wrap;gap:8px;margin:10px 0}
-#db-admin-subnav{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0;padding:8px 0;border-block:1px solid var(--line)}
-#db-admin-subnav a{display:inline-flex;align-items:center;min-height:36px;padding:4px 10px;border:1px solid var(--line);border-radius:var(--radius);color:var(--accent-ink);text-decoration:none;font-weight:550}
-#db-admin-subnav a:hover{background:var(--surface-2)}
+#db-admin-subnav a{display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-admin-subnav a:hover{text-decoration:underline}
 #db-admin-management{margin:14px 0;padding:10px 0;border-top:1px solid var(--line)}
 #db-admin-management>summary{font-weight:650;cursor:pointer}
 #db-admin-management :is(input,select,textarea,button){min-width:0;max-width:100%;box-sizing:border-box}
@@ -1124,31 +854,38 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 #db-admin-retire-impact-summary{margin:12px 0 8px}
 #db-admin-retire-impact-summary[hidden]{display:none}
 #db-admin-retire-users{min-width:0}
-#db-admin :is(button,a,input,select,textarea,summary):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.db-creation-form-shell{display:grid;gap:14px;min-width:0}
+.db-creation-form-shell fieldset{display:grid;gap:14px;min-width:0;border:1px solid var(--line);padding:14px;margin:0}
+#db-creation-form{display:grid;gap:14px;min-width:0}
+#db-creation-form .form-actions{margin-top:0}
+#db-admin-request-history{margin:0 0 8px}
+#db-admin-request-history>summary{cursor:pointer;font-weight:550;padding-block:8px}
+#db-admin-request-history ul{margin:8px 0 0;padding-left:22px}
+#db-admin-request-history li{margin:8px 0;overflow-wrap:anywhere}
+#db-admin-request-history .badge{margin-inline:4px}
+#db-admin-retire-operation-panel{margin-top:24px;border-top:1px solid var(--line);padding-top:14px}
+#db-admin-retire-operation-panel>summary{cursor:pointer;font-weight:550;padding-block:8px}
+#db-admin-retire-steps{margin-top:8px}
+#db-admin-retire-impact-panel>section>h2,#db-admin-retire-impact-panel>section>h2{margin-top:18px}
+#db-admin-retire-confirm-panel>.db-actions{flex-wrap:wrap}
+#db-admin :is(button,a,input,select,textarea,summary):focus{outline:2px solid var(--focus);outline-offset:2px}
 @media(max-width:600px){
- #db-admin :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),#db-admin-subnav a,#db-admin-back,#db-admin-access-back,#db-admin-metadata-back{min-height:44px}
- .db-filters{grid-template-columns:minmax(0,1fr)}
- .db-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
- .db-table,.db-table tbody,.db-table tr,.db-table th,.db-table td{display:block;width:100%}
- .db-table tr{padding:10px 0;border-top:1px solid var(--line)}
- .db-table th,.db-table td{border:0;padding:3px 0}
- .db-table tbody th{font-size:14px}
- .db-table a{display:inline-flex;align-items:center}
- .db-table td:nth-child(4){width:auto;text-align:left}
- .db-table td::before{content:attr(data-label);display:inline-block;min-width:8em;color:var(--muted);font-size:11px}
+ #db-admin :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),#db-admin-subnav a,
+ #db-admin-back,#db-admin-access-back,#db-admin-metadata-back,#db-admin-operation-back,#db-admin-retire-back,
+ #db-admin-retire-confirm-back,#db-creation-list-back,.db-creation-form-shell button,.db-pin{min-height:44px}
  #db-admin-info{grid-template-columns:minmax(0,1fr);gap:2px}
  #db-admin-info dd{margin-bottom:6px}
+ .db-table{min-width:590px}
 }
 
 @media(max-width:760px){
  :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:1rem}
  .editor,#database-workspace .explorer-search input,#database-workspace .explorer-foot select,#database-context-bar select,#database-context-bar input,.db-manage-group .toolbar select{font-size:1rem}
- .app-header,#role-controls,#role-selector,.toolbar,.editor-tabs,#database-workspace-main{min-width:0;max-width:100%}
+ :is(.topbar,#role-controls,#role-selector,.toolbar,.editor-tabs,#database-workspace-main){min-width:0;max-width:100%}
  main>section,.results-tools,.panel-body{min-width:0;max-width:100%}
  pre{max-width:100%;overflow:auto}
  .toolbar{flex-wrap:wrap}
  .toolbar select,.toolbar input{max-width:100%}
- #copilot-stage-table{width:auto;max-width:100%}
  #worksheet-closers{max-width:100%}
  #worksheet-close-select{font-size:1rem}
  #database-workspace-main>.editor-tabs{flex-wrap:wrap}
@@ -1180,12 +917,6 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
 .alert-preview .badge{grid-row:1 / span 2;align-self:start;white-space:nowrap}
 .alert-preview-text{min-width:0;overflow-wrap:anywhere;font-size:12px}
 .alert-preview-meta{grid-column:2;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
-#db-audit-filters{margin:8px 0}
-#db-audit-filters>summary{display:flex;align-items:center;min-height:36px;cursor:pointer;font-weight:650;overflow-wrap:anywhere}
-#db-audit-filters .toolbar{margin-top:8px}
-#db-audit-filters-summary{overflow-wrap:anywhere}
-.audit-detail-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:12px 0 8px}
-.audit-detail-head h2{margin:0;font-size:16px;overflow-wrap:anywhere}
 #db-audit-back{display:inline-flex;align-items:center;min-height:36px;color:var(--accent-ink);text-decoration:none;font-weight:550}
 #db-audit-back:hover{text-decoration:underline}
 #db-audit-detail small.muted{overflow-wrap:anywhere}
@@ -1194,8 +925,7 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
  #pawprints :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),
  #workbench-alerts-popover button,#workbench-alerts-popover a{min-height:44px}
  #db-jobs-list-rows .objectrow,#db-jobs-recent-runs .run{min-height:44px}
- #db-jobs-panel .db-heading{align-items:flex-start}
- #db-audit-filters>summary,#db-audit-back,#db-jobs-back{min-height:44px}
+ #db-jobs-panel .db-heading{align-items:flex-start}#db-audit-back,#db-jobs-back{min-height:44px}
 }
 
 /* UX-A6b: AI Bears handoff and the Atlas compute order. */
@@ -1221,3 +951,1621 @@ html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inlin
  #bear-handoff .toolbar,#runtime-chill-confirm .toolbar{align-items:stretch}
  #bear-handoff .toolbar button,#runtime-chill-confirm .toolbar button{width:100%}
 }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP",
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      textarea,
+      select {
+        outline-offset: 4px;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--ring);
+      }
+      button,
+      a {
+        touch-action: manipulation;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.6;
+      }
+      button {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 7px 12px;
+      }
+      button:hover{
+        background: var(--selected);
+      }
+      .primary {
+        border-radius: 6px;
+        background: var(--button);
+        border-color: var(--button);
+        color: var(--onbutton);
+      }
+      .primary:hover {
+        opacity: 0.85;
+        background: var(--button);
+      }
+      a.primary {
+        display: inline-block;
+        padding: 7px 12px;
+        border: 1px solid var(--button);
+        margin-right: 8px;
+      }
+      .primary.danger,
+      .primary.danger:hover {
+        background: var(--red);
+        border-color: var(--red);
+        color: var(--bg, #fff);
+      }
+      .impact {
+        border-left: 3px solid var(--red);
+        padding: 6px 10px;
+        margin: 8px 0;
+      }
+      .impact.neutral {
+        border-left-color: var(--line, currentColor);
+      }
+      .compute-chip {
+        color: var(--amber);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .compute-chip[hidden] {
+        display: none;
+      }
+      /* Keep the editor focus ring inside its card. */
+      .editor textarea:focus-visible {
+        outline-offset: -2px;
+      }
+      .pageheading > .badge {
+        flex: none;
+        white-space: nowrap;
+      }
+      @media (max-width: 600px) {
+        /* One-line breadcrumb on phones; the page title below carries the full name. */
+        #breadcrumb {
+          display: block;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          max-width: 34vw;
+        }
+        .pageheading {
+          flex-wrap: wrap;
+        }
+        .pageheading > .badge {
+          font-size: 11px;
+        }
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 244px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+      .sidebar {
+        overflow-y: auto;
+        background: var(--rail);
+        border-right: 1px solid var(--line);
+        padding: 24px 16px 18px;
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 0 10px;
+        margin-bottom: 32px;
+      }
+      .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: #202226;
+        display: grid;
+        place-items: center;
+      }
+      .mark:after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        background: #b9f227;
+        border-radius: 2px;
+      }
+      .brand strong {
+        font-size: 14px;
+        letter-spacing: -0.2px;
+      }
+      .brand small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 0;
+      }
+      .navlist {
+        display: grid;
+        gap: 4px;
+      }
+      .navlink {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        gap: 11px;
+        padding: 9px 11px;
+        border-radius: 6px;
+        color: var(--muted);
+      }
+      .navlink:hover {
+        background: var(--selected);
+      }
+      .navlink[aria-current="page"] {
+        color: var(--ink);
+        background: var(--selected);
+        font-weight: 600;
+      }
+      .icon {
+        width: 17px;
+        font-size: 17px;
+        line-height: 1;
+        text-align: center;
+        font-family: system-ui;
+      }
+      .navtitle {
+        margin: 28px 11px 9px;
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+      .favorite {
+        font-size: 12px;
+        padding: 7px 11px;
+        display: flex;
+        gap: 10px;
+        color: var(--muted);
+        border-radius: 6px;
+      }
+      .favorite:hover {
+        background: var(--selected);
+      }
+      .favorite span {
+        color: var(--muted);
+      }
+      .railbottom {
+        margin-top: auto;
+        padding: 20px 10px 0;
+      }
+      .profile {
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+        margin-top: 18px;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .avatar {
+        width: 29px;
+        height: 29px;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+      }
+      .theme {
+        display: flex;
+        padding: 3px;
+        background: var(--selected);
+        border-radius: 6px;
+      }
+      .theme button {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        padding: 4px;
+        font-size: 11px;
+      }
+      .theme button[aria-pressed="true"] {
+        background: var(--bg);
+        box-shadow: 0 1px 3px #00000012;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .tiny {
+        font-size: 11px;
+      }
+      .small {
+        font-size: 12px;
+      }
+      .shell {
+        min-width: 0;
+      }
+      .topbar {
+        min-height: 77px;
+        padding: 20px 32px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .toptools {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .searchbutton {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      kbd {
+        font: 10px system-ui;
+        border: 1px solid var(--line);
+        padding: 1px 4px;
+        border-radius: 3px;
+        color: var(--muted);
+      }
+      .mobilemenu {
+        display: none;
+      }
+      .sample {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .sampledot {
+        width: 6px;
+        height: 6px;
+        background: var(--amber);
+        border-radius: 50%;
+        flex: none;
+      }
+      .searchbutton svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        flex: none;
+      }
+      main {
+        padding: 28px 32px 40px;
+        max-width: 1536px;
+        margin: auto;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 22px;
+        letter-spacing: -0.6px;
+        font-weight: 650;
+        line-height: 1.45;
+      }
+      h2 {
+        font-size: 14px;
+        font-weight: 650;
+      }
+      h3 {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .homegrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+        gap: 40px;
+      }
+      .section {
+        margin-top: 30px;
+      }
+      .sectionhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .textlink {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .textlink:hover {
+        text-decoration: underline;
+      }
+      .taskgroup {
+        margin-top: 22px;
+      }
+      .grouplabel {
+        font-size: 10px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .grouplabel.urgent {
+        color: var(--muted);
+      }
+      .actionrow {
+        display: grid;
+        grid-template-columns: 21px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 9px;
+        border-radius: 6px;
+        margin: 0 -9px;
+      }
+      .actionrow.review,
+      .actionrow:hover {
+        background: var(--selected);
+      }
+      .actionrow.review:hover {
+        background: var(--line);
+      }
+      .rowmark {
+        font-size: 15px;
+        color: var(--muted);
+      }
+      .actionrow strong {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .actionrow small {
+        display: block;
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .rowend {
+        font-size: 10px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .target {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .target h2 {
+        font-size: 17px;
+        letter-spacing: -0.3px;
+      }
+      .target .subtitle {
+        font-size: 11px;
+        color: var(--muted);
+        margin: 4px 0 18px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        gap: 9px;
+        font-size: 11px;
+        margin: 16px 0;
+      }
+      .kv dt {
+        color: var(--muted);
+      }
+      .kv dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .status:before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .success {
+        color: var(--green);
+      }
+      .warning {
+        color: var(--amber);
+      }
+      .error {
+        color: var(--red);
+      }
+      .full {
+        width: 100%;
+      }
+      .secondaryaction {
+        display: block;
+        text-align: center;
+        font-size: 11px;
+        margin-top: 11px;
+        color: var(--muted);
+      }
+      .objectrow {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .objectrow:last-child {
+        border-bottom: 0;
+      }
+      .objecticon {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        flex: none;
+      }
+      .objectrow strong {
+        font-size: 11px;
+        font-weight: 550;
+        display: block;
+      }
+      .objectrow small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .objectrow .rowend {
+        margin-left: auto;
+      }
+      .activity {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .activity:last-child {
+        border: 0;
+      }
+      .activity small {
+        display: block;
+        font-size: 10px;
+        margin-top: 4px;
+        color: var(--muted);
+      }
+      .run {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .run strong {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .run small {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 3px;
+      }
+      .pageheading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 18px 0;
+      }
+      .field {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px;
+        min-width: 0;
+      }
+      .filter {
+        flex: 1;
+        max-width: 320px;
+        width: 100%;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-top: 20px;
+      }
+      .panelhead {
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .panelbody {
+        padding: 18px;
+      }
+      .tablewrap {
+        position: relative;
+        overflow: auto;
+        max-width: 100%;
+        overscroll-behavior-x: contain;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+        text-align: left;
+        white-space: nowrap;
+      }
+      caption {
+        text-align: left;
+        color: var(--muted);
+        font-size: 11px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        font-size: 10px;
+        color: var(--muted);
+        font-weight: 500;
+        background: var(--surface);
+      }
+      th,
+      td {
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody tr:last-child td {
+        border: 0;
+      }
+      td a {
+        font-weight: 550;
+      }
+      td a:hover {
+        text-decoration: underline;
+      }
+      .tabletabs {
+        display: flex;
+        gap: 20px;
+        border-bottom: 1px solid var(--line);
+        margin-top: 24px;
+      }
+      .tabletabs button {
+        border: 0;
+        border-radius: 0;
+        padding: 10px 0;
+        color: var(--muted);
+        background: transparent;
+      }
+      .tabletabs button[aria-selected="true"] {
+        color: var(--ink);
+        border-bottom: 2px solid var(--ink);
+      }
+      .contextbar {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .contextbar b {
+        font-weight: 550;
+        color: var(--ink);
+      }
+      .contextbar span {
+        color: var(--muted);
+      }
+      .editor {
+        display: flex;
+        background: var(--code);
+        padding: 20px 0;
+        min-height: 220px;
+      }
+      .linenumbers {
+        width: 46px;
+        padding: 0 12px;
+        color: var(--muted);
+        font:
+          12px/1.9 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        text-align: right;
+        user-select: none;
+        flex: none;
+      }
+      .editor textarea {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        padding: 0 16px 0 0;
+        resize: vertical;
+        min-height: 185px;
+        font:
+          12px/1.9 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        tab-size: 2;
+      }
+      .editorfooter {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--line);
+        align-items: center;
+      }
+      .sqlhint {
+        font-size: 11px;
+        color: var(--muted);
+        margin: 12px 0;
+      }
+      .resultmessage {
+        font-size: 12px;
+        padding: 15px 18px;
+      }
+      .resultmeta {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .jobdetailgrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(240px, 1fr);
+        gap: 26px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 15px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .step:last-child {
+        border: 0;
+      }
+      .step p {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .codeblock {
+        font:
+          11px/1.9 ui-monospace,
+          SFMono-Regular,
+          monospace;
+        background: var(--code);
+        padding: 16px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 0;
+      }
+      .backlink {
+        display: inline-block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 16px;
+      }
+      dialog {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0;
+        width: min(510px, calc(100% - 32px));
+        box-shadow: 0 24px 80px #0003;
+      }
+      dialog::backdrop {
+        background: #15181d55;
+        backdrop-filter: blur(2px);
+      }
+      .dialoghead {
+        padding: 18px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+      .dialoghead input {
+        flex: 1;
+        width: 100%;
+      }
+      .commandlist {
+        padding: 8px;
+        display: grid;
+        gap: 3px;
+      }
+      .commandlist a {
+        padding: 12px;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .commandlist a:hover {
+        background: var(--selected);
+      }
+      .dialogfoot {
+        padding: 9px 18px;
+        border-top: 1px solid var(--line);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 30px 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .toast {
+        position: fixed;
+        bottom: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--button);
+        color: var(--onbutton);
+        border-radius: 7px;
+        padding: 10px 18px;
+        box-shadow: 0 5px 20px #0002;
+        font-size: 12px;
+        max-width: calc(100% - 32px);
+        z-index: 10;
+      }
+      .skip {
+        position: fixed;
+        left: 240px;
+        top: -100px;
+        z-index: 20;
+        background: var(--bg);
+        padding: 12px;
+        border: 1px solid var(--line);
+      }
+      .skip:focus {
+        top: 8px;
+      }
+      @media (min-width: 1500px) {
+        main {
+          padding-top: 34px;
+        }
+        .homegrid {
+          gap: 56px;
+        }
+      }
+      @media (max-width: 1100px) {
+        .homegrid {
+          gap: 24px;
+          grid-template-columns: minmax(0, 1.2fr) minmax(270px, 1fr);
+        }
+        .topbar,
+        main {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+        .searchbutton {
+          gap: 12px;
+        }
+      }
+      @media (max-width: 850px) {
+        .app {
+          grid-template-columns: 192px minmax(0, 1fr);
+        }
+        .sidebar {
+          padding-left: 10px;
+          padding-right: 10px;
+        }
+        .homegrid,
+        .jobdetailgrid {
+          grid-template-columns: 1fr;
+        }
+        .homeright {
+          margin-top: 0;
+        }
+        .searchbutton .searchlabel {
+          display: none;
+        }
+        .searchbutton {
+          gap: 8px;
+        }
+        .homegrid {
+          gap: 30px;
+        }
+      }
+      @media (max-width: 600px) {
+        .app {
+          display: block;
+        }
+        .sidebar {
+          display: none;
+        }
+        .mobilemenu {
+          display: block;
+          border-bottom: 1px solid var(--line);
+          background: var(--rail);
+        }
+        .mobilemenu summary {
+          padding: 14px 20px;
+          font-size: 14px;
+          font-weight: 650;
+          cursor: pointer;
+          list-style: none;
+          display: flex;
+          justify-content: space-between;
+        }
+        .mobilemenu summary::-webkit-details-marker {
+          display: none;
+        }
+        .mobilemenu summary:after {
+          content: "☰";
+          font-size: 16px;
+          margin-left: 8px;
+        }
+        .mobilemenu summary > span:first-child {
+          margin-right: auto;
+        }
+        .mobilemenu[open] summary:after {
+          content: "×";
+        }
+        .mobilenav {
+          padding: 0 12px 12px;
+          display: grid;
+          gap: 2px;
+        }
+        .mobiletheme {
+          margin: 10px 8px 0;
+        }
+        .topbar {
+          min-height: 62px;
+          padding: 14px 20px;
+          gap: 8px;
+        }
+        .breadcrumb {
+          gap: 6px;
+          font-size: 12px;
+        }
+        .toptools {
+          gap: 6px;
+        }
+        .toptools > .primary {
+          font-size: 11px;
+          padding: 7px 9px;
+        }
+        .searchbutton {
+          padding: 7px 9px;
+        }
+        .searchbutton kbd {
+          display: none;
+        }
+        main {
+          padding: 23px 20px 32px;
+        }
+        h1 {
+          font-size: 20px;
+        }
+        .homegrid {
+          gap: 26px;
+        }
+        .section {
+          margin-top: 26px;
+        }
+        .actionrow {
+          gap: 7px;
+          grid-template-columns: 17px minmax(0, 1fr) auto;
+        }
+        .actionrow strong {
+          font-size: 11px;
+        }
+        .rowend {
+          font-size: 9px;
+        }
+        .target {
+          padding: 17px;
+        }
+        .pageheading {
+          align-items: flex-start;
+          margin-bottom: 18px;
+        }
+        .pageheading > button {
+          font-size: 10px;
+          white-space: nowrap;
+          padding: 7px;
+        }
+        .toolbar {
+          gap: 8px;
+        }
+        .filter {
+          max-width: none;
+        }
+        .panelhead,
+        .panelbody {
+          padding: 13px;
+        }
+        .panelhead {
+          align-items: flex-start;
+        }
+        .contextbar {
+          gap: 8px 14px;
+          padding: 11px 12px;
+        }
+        .editorfooter {
+          align-items: flex-start;
+        }
+        .editorfooter .tiny {
+          max-width: 130px;
+        }
+        .linenumbers {
+          width: 32px;
+          padding: 0 8px;
+        }
+        .field,
+        .editor textarea {
+          font-size: 16px;
+        }
+        .skip {
+          left: 20px;
+        }
+        .tabletabs {
+          gap: 16px;
+        }
+        .tabletabs button {
+          font-size: 11px;
+        }
+        .jobdetailgrid {
+          gap: 6px;
+        }
+      }
+      .pageheading > div {
+        min-width: 0;
+      }
+      .breadcrumb {
+        min-width: 0;
+      }
+      .objectrow > div,
+      .run > div {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .tablewrap {
+        scrollbar-gutter: stable;
+      }
+      .toptools {
+        flex-shrink: 0;
+      }
+      @media (max-width: 600px) {
+        .editorfooter {
+          flex-wrap: wrap;
+        }
+        .editorfooter .primary {
+          margin-left: auto;
+        }
+        .breadcrumb span {
+          overflow-wrap: anywhere;
+        }
+        .topbar {
+          padding-inline: 16px;
+        }
+      }
+      /* Database management shares the Atlas tokens and native controls. */
+      .db-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin:20px 0; }
+      .db-filters label { display:grid; gap:4px; color:var(--muted); font-size:11px; }
+      .db-filters .db-search { flex:1 1 240px; min-width:0; }
+      .db-filter-toggle { display:none; }
+      .db-filter-controls { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+      .db-filters .field { width:100%; min-height:40px; }
+      .db-filters .db-pinned { display:flex; align-items:center; min-height:40px; color:var(--ink); }
+      .db-paging { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0; }
+      .db-paging span { margin-right:auto; }
+      .db-paging button { min-height:40px; }
+      .db-paging button:disabled { cursor:default; }
+      .db-table { table-layout:fixed; min-width:690px; }
+      .db-table th, .db-table td { padding:8px 12px; }
+      .db-table th:first-child { width:260px; }
+      .db-table th:nth-child(2) { width:100px; }
+      .db-table th:nth-child(3) { width:140px; }
+      .db-table th:nth-child(4) { width:110px; }
+      .db-table th:last-child { width:80px; }
+      .db-table th[scope="row"] { color:var(--ink); background:transparent; font-size:12px; font-weight:500; white-space:normal; overflow-wrap:anywhere; }
+      .db-table th[scope="row"] small { display:block; color:var(--muted); font-size:10px; }
+      .db-table tbody tr:hover { background:var(--surface); }
+      .db-table tbody tr { cursor:pointer; }
+      .db-pin { min-height:36px; min-width:40px; padding:4px 8px; }
+      .db-pin[aria-pressed="true"] { background:var(--selected); }
+      .db-context { color:var(--muted); font-size:11px; }
+      .db-title { overflow-wrap:anywhere; }
+      .db-info { max-width:720px; }
+      .db-flow { max-width:720px; overflow-wrap:anywhere; }
+      .db-flow form, .db-flow fieldset { display:grid; gap:14px; min-width:0; }
+      .db-flow fieldset { border:1px solid var(--line); padding:14px; margin:0; }
+      .db-flow label { display:grid; gap:6px; }
+      .db-flow .field { width:100%; min-width:0; min-height:44px; }
+      .db-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:18px 0; }
+      .db-actions > * { max-width:100%; }
+      .db-actions a { padding:8px 12px; }
+      .db-steps { display:flex; flex-wrap:wrap; gap:8px 24px; padding-left:24px; margin:18px 0; }
+      .db-steps [aria-current="step"] { color:var(--ink); font-weight:650; }
+      .db-steps li { color:var(--muted); }
+      .db-flow textarea.field { resize:vertical; font:inherit; }
+      .db-p1-row { border-top:1px solid var(--line); padding:16px 0; }
+      .db-p1-row h2 { margin:0 0 12px; font-size:16px; }
+      .db-p1-row .db-actions { margin:8px 0; }
+      .db-p1-row .kv { margin:8px 0; }
+      .db-flow button, .db-flow a, .db-flow code { overflow-wrap:anywhere; white-space:normal; }
+      .db-flow .kv dd { min-width:0; }
+      .db-flow progress { width:100%; height:12px; accent-color:var(--ring); }
+      .db-flow button:disabled { opacity:.5; cursor:not-allowed; }
+      @media(max-width:600px) {
+        .db-flow input, .db-flow select, .db-flow textarea.field, .db-flow button, .db-actions button,
+        .db-actions a, .db-filters button, .db-paging button, .db-pin { font-size:16px; min-height:44px; }
+        .db-flow .kv { grid-template-columns:1fr; gap:4px; }
+        .db-flow .kv dd { margin:0 0 10px; }
+      }
+      .db-info dd { overflow-wrap:anywhere; min-width:0; }
+      .db-info details { margin-top:20px; border-top:1px solid var(--line); padding-top:14px; }
+      .db-info summary { cursor:pointer; font-weight:550; }
+      .db-info li { margin:10px 0; }
+      @media(max-width:600px) {
+        .db-filters { gap:10px; }
+        .db-filter-controls > label { flex:1 1 105px; min-width:0; }
+        .db-filter-toggle { display:inline-flex; align-items:center; gap:8px; min-height:44px; }
+        .db-filter-toggle::after { content:"⌄"; }
+        .db-filter-toggle[aria-expanded="true"]::after { content:"⌃"; }
+        .db-filter-controls { flex-basis:100%; gap:10px; }
+        .db-filters[data-open="false"] .db-filter-controls { display:none; }
+        .db-heading .db-context { display:none; }
+        .db-filters .db-search { flex-basis:100%; }
+        .db-filters .db-pinned { flex-basis:100%; }
+        .db-table th:first-child { width:160px; }
+        .db-table { min-width:590px; }
+        .db-table th, .db-table td { padding-inline:8px; }
+        .db-paging span { flex-basis:100%; }
+        .db-paging button { padding:7px 10px; }
+        .db-heading { align-items:start; flex-direction:column; }
+      }
+      .sql-context label, .sql-actions label { display: grid; gap: 5px; min-width: 0; font-size: 12px; color: var(--ink); }
+      .sql-context select { width: 100%; min-width: 0; }
+      .sql-fixed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; }
+      .sql-fixed > span { white-space: nowrap; }
+      .sql-actions { flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; }
+      @media (min-width: 601px) { .sql-actions select, .sql-actions button { height: 36px; box-sizing: border-box; } }
+      .sql-note { margin: 0; padding: 10px 16px; font-size: 12px; overflow-wrap: anywhere; }
+      .sql-note p { margin: 6px 0; }
+      .sql-note summary { cursor: pointer; padding: 8px 0; }
+      #sql-request .codeblock { white-space: pre-wrap; overflow-wrap: anywhere; }
+      #sql-next { padding-bottom: 0; }
+      @media (max-width: 600px) {
+        .sql-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 8px; }
+        .sql-context select { min-height: 44px; padding-inline: 6px; }
+        .sql-fixed { grid-column: 1 / -1; gap: 6px 12px; }
+        .sql-context select, .sql-actions select, #sample-query{ font-size: 16px; }
+        .sql-actions { align-items: stretch; }
+        .sql-actions label { flex-basis: 100%; }
+        .sql-actions button { min-height: 44px; }
+        #sql-request .kv { grid-template-columns: minmax(0, 1fr); }
+      }
+
+.worksheet-bar { display:flex; gap:6px; align-items:center; margin-bottom:12px; min-width:0; }
+#worksheet-tabs { display:flex; gap:4px; overflow-x:auto; min-width:0; flex:1; padding:3px; }
+#worksheet-tabs button { flex:none; white-space:nowrap; }
+#worksheet-tabs [aria-selected="true"] { background:var(--ink); color:var(--surface, #fff); }
+.worksheet-bar > button { flex:none; }
+#sql-history { padding-left:20px; }
+#sql-history button { text-align:left; white-space:normal; overflow-wrap:anywhere; max-width:100%; margin:4px 0; }
+.sql-result-tools, .sql-downloads { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.sql-result-tools label { display:grid; gap:4px; min-width:0; }
+.sql-downloads { flex-basis:100%; }
+[id^="worksheet-panel-"] { min-width:0; }
+#sql-restored:empty { display:none; }
+#sample-query { max-width:100%; }
+@media(max-width:600px) { .worksheet-bar button, .sql-downloads button{ min-height:44px; } .sql-context { padding:10px; gap:8px; } .sql-result-tools input { width:100%; min-width:0; } .sql-result-tools label { width:100%; } }
+/* SQL P2: result views and reviewed sample proposals. */
+.sql-view-switch, .sql-chart-controls{ display:flex; flex-wrap:wrap; align-items:end; gap:8px; }
+.sql-view-switch { flex-basis:100%; }
+.sql-view-switch [aria-pressed="true"] { background:var(--ink); color:var(--surface, #fff); }
+.sql-chart-controls label{ display:grid; gap:4px; min-width:0; flex:1 1 180px; }
+.sql-chart-controls select{ width:100%; min-width:0; max-width:100%; }
+#sql-chart { margin:0; padding:16px; min-width:0; overflow-wrap:anywhere; }
+#sql-chart figcaption { font-weight:650; }
+@media(max-width:600px) { .sql-view-switch button{ min-height:44px; } .sql-chart-controls select{ min-height:44px; font-size:16px; } }
+      .explore-controls, .explore-search { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+      .explore-controls label { flex:1 1 160px; min-width:0; font-size:12px; }
+      .explore-controls label:only-child { max-width:260px; }
+      .explore-search label { flex:1 1 180px; min-width:0; font-size:12px; }
+      .explore-search label:last-child { flex:0 1 160px; }
+      .explore-controls .field, .explore-search .field { display:block; width:100%; min-width:0; margin-top:4px; }
+      .explore-rows .objectrow > div { min-width:0; overflow-wrap:anywhere; }
+      .explore-rows .rowend { flex:none; }
+      [data-inspector-scope], [data-inspector-scope] [role="tabpanel"] { min-width:0; }
+      .inspector-panel { margin-top:20px; }
+      #inspector-tabs { max-width:100%; overflow-x:auto; flex-wrap:nowrap; padding:3px; scroll-padding-inline:3px; }
+      #inspector-tabs button { flex:none; white-space:nowrap; position:relative; border-bottom:0; min-height:44px; }
+      #inspector-tabs button[aria-selected="true"]::after { content:""; position:absolute; inset:auto 0 0; border-bottom:2px solid var(--ink); }
+      .inspector-context { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin:12px 0; overflow-wrap:anywhere; }
+      .inspector-context p { margin:0; }
+      .snapshot-controls { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+      .snapshot-controls label { display:grid; gap:4px; min-width:0; max-width:100%; }
+      .snapshot-controls select { max-width:100%; min-width:0; }
+      @media(max-width:600px) {
+        .snapshot-controls select, .snapshot-controls button { min-height:44px; font-size:16px; }
+      }
+      .table-management, .table-operations { margin-top:24px; min-width:0; overflow-wrap:anywhere; }
+      .table-management summary, .table-operations summary { cursor:pointer; padding-block:12px; }
+      .table-management form { margin-block:20px; }
+      .table-management label, .table-operations label { display:grid; gap:6px; margin-block:10px; }
+      .table-management .field, .table-operations .field { width:100%; min-width:0; max-width:460px; }
+      .table-management button, .table-operations button { min-height:44px; max-width:100%; white-space:normal; }
+      .table-management h3 { margin-top:20px; }
+      .table-operations li { margin-block:10px; }
+      @media(max-width:600px) { .table-management .field, .table-operations .field { font-size:16px; min-height:44px; } }
+      .explore-controls ~ .toolbar { flex-wrap:wrap; }
+      main:has(#explore-role) .eyebrow { overflow-wrap:anywhere; }
+      main:has(#explore-role) .codeblock { white-space:pre-wrap; overflow-wrap:anywhere; }
+      @media(max-width:600px) {
+        .explore-controls select, .explore-search .field { min-height:44px; font-size:16px; }
+        #explore-more { min-height:44px; }
+      }
+
+/* Atlas phase 1: task-first offline lifecycle. */
+.atlas-flow { max-width:1100px; min-width:0; }
+.atlas-flow h1 { margin-bottom:16px; }
+.atlas-flow h2 { margin-top:28px; font-size:18px; }
+.atlas-fields { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+.atlas-fields label { display:grid; gap:6px; flex:1 1 180px; min-width:0; font-size:13px; }
+.atlas-fields .field { width:100%; min-width:0; max-width:100%; }
+.atlas-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:16px 0; }
+.atlas-flow button, .atlas-flow .field { min-height:40px; }
+.atlas-flow section { border-top:1px solid var(--line); margin-top:24px; padding-top:4px; }
+.atlas-flow details { margin:16px 0; }
+.atlas-flow summary { cursor:pointer; padding:8px 0; }
+.atlas-flow p, .atlas-flow a, .atlas-flow code { overflow-wrap:anywhere; }
+.atlas-flow #atlas-message:empty { display:none; }
+.atlas-flow [role="status"] { border-left:3px solid var(--green); padding:10px 14px; background:var(--bg); }
+/* UX-R7: screen messages and the state explanation are plain lines in the mock-up. */
+#bears-atlas #bears-message, #compute-atlas #runtime-message { border-left:3px solid var(--green); background:none; padding:10px 14px; margin:8px 0; font-size:12px; color:var(--muted); }
+#bears-atlas #bears-message:empty { display:none; padding:0; border:0; margin:0; }
+#bears-atlas #bears-curator-reason, #bears-atlas #bears-explanation-note,
+#compute-atlas #runtime-capability, #compute-atlas #runtime-action-reason,
+#compute-atlas #compute-viewer-guidance { border-left:0; background:none; padding:0; margin:8px 0; font-size:12px; color:var(--muted); }
+#compute-atlas #runtime-chill-impact { border-left:3px solid var(--bad); background:var(--bad-soft); padding:6px 10px; font-weight:600; }
+#compute-atlas #runtime-chill-impact.neutral { border-left-color:var(--line); background:var(--selected); }
+#bears-atlas .bear-details, #compute-atlas .runtime-details { margin:16px 0; }
+#compute-atlas #compute-usage > summary, #compute-atlas #compute-auto-chill > summary, #compute-atlas #compute-diagnostics > summary { font-size:15px; font-weight:600; }
+#compute-atlas .compute-group { border:0; padding:0; margin:16px 0; }
+#compute-atlas .compute-diag-group { margin:18px 0; }
+#compute-atlas .compute-diag-group > h3 { font-size:13px; color:var(--ink-2); margin:12px 0 6px; }
+#bears-atlas .section, #compute-atlas .section { padding:4px 0 0; border-top:1px solid var(--line); margin-top:24px; }
+#bears-atlas .section > h2, #compute-atlas .section > h2 { margin:28px 0 0; font-size:18px; }
+#bears-atlas .kv, #compute-atlas .kv { grid-template-columns:84px minmax(0,1fr); gap:9px; font-size:11px; margin:16px 0; }
+#bears-atlas .kv dt, #compute-atlas .kv dt { font-weight:400; color:var(--muted); font-size:11px; }
+#bears-atlas .kv dd, #compute-atlas .kv dd { margin:0; }
+@media(max-width:600px){ #bears-atlas .kv, #compute-atlas .kv { grid-template-columns:minmax(0,1fr); gap:4px; } }
+#bears-pageheading h1, #compute-overview h1 { margin-bottom:0; }
+#bears-atlas .atlas-sql-field { display:block; width:100%; margin:16px 0; }
+#bears-atlas .atlas-sql-field > div { display:block; width:100%; }
+#bears-atlas .atlas-sql-field label { display:grid; gap:6px; width:100%; margin:0; }
+#bears-atlas .atlas-sql-field textarea { width:100%; min-height:120px; box-sizing:border-box; }
+.atlas-flow .tablewrap { margin:12px 0; }
+.atlas-flow th { white-space:nowrap; }
+.atlas-flow button:disabled { cursor:not-allowed; }
+.atlas-flow td { max-width:320px; overflow-wrap:anywhere; }
+@media(max-width:600px) { .atlas-fields { align-items:stretch; } .atlas-fields label { flex-basis:100%; } .atlas-flow button, .atlas-flow .field { min-height:44px; font-size:16px; } }
+/* UX-R4: ingestion and transformation adopt the mock-up's flat vertical flow. */
+#ingestion,#transformation{min-width:0;max-width:100%}
+.atlas-flow .panel,.atlas-flow .atlas-section{background:none;border:0;border-radius:0;box-shadow:none;padding:0;margin:0 0 24px}
+.atlas-flow .panel-body,.atlas-flow .atlas-section-body{padding:0}
+.atlas-flow .atlas-empty{display:none}
+.atlas-flow .atlas-section,.atlas-flow .atlas-publications{border-top:1px solid var(--line);margin-top:28px;padding-top:8px}
+.atlas-flow .atlas-section>h2,.atlas-flow .atlas-publications>h2,.atlas-flow #transformation-candidate>h2{margin-top:8px}
+.atlas-message-slot{min-width:0}
+.atlas-message-slot>p{margin:0}
+.atlas-message-slot p:empty,.atlas-message-slot [role=status]:empty{display:none}
+.atlas-message-slot>p[hidden]{display:none}
+.atlas-fields .atlas-field{display:grid;gap:6px;flex:1 1 180px;min-width:0;font-size:13px;align-content:end}
+.atlas-fields .atlas-field>.field,.atlas-fields .atlas-field>label+.field{width:100%;min-width:0;max-width:100%}
+#ingestion .atlas-fields label,#transformation .atlas-fields label{margin:0}
+.atlas-fields label>.field{width:100%;min-width:0;max-width:100%}
+.atlas-fields .atlas-label{font-size:13px}
+.atlas-inline-action{white-space:nowrap;align-self:end;flex:0 0 auto;max-width:100%;min-height:40px;margin:0}
+.atlas-flow #p35-ingest-form,.atlas-flow #p35-ingest-destination,.atlas-flow #p35-ingest-destination-fields{width:100%;max-width:none}
+.atlas-flow #p35-ingest>.panel-body,.atlas-flow #p35-wap>.panel-body{padding:0;max-width:none;width:100%}
+.atlas-flow .atlas-file-details{width:100%;max-width:none}
+.atlas-flow #p35-ingest-dropzone{max-width:100%;width:100%}
+.atlas-flow #p35-ingest-choose-file{width:100%;max-width:none;justify-self:stretch}
+.atlas-message-slot [role=status]{border-left:0;background:none;padding:0;margin:0 0 8px;font-size:12px;color:var(--muted)}
+.atlas-actions a[aria-current=page]{font-weight:700;text-decoration:underline;text-underline-offset:5px}
+.atlas-target-line{margin:8px 0 16px;color:var(--ink-2)}
+.atlas-target-line code{font-size:12px}
+
+.atlas-file-details>summary{font-weight:600;list-style:none}
+.atlas-file-details>summary::-webkit-details-marker{display:none}
+.atlas-flow h2{overflow-wrap:anywhere}
+.atlas-flow .kv{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:6px 16px;margin:0 0 16px}
+.atlas-flow .kv dt{font-weight:600;color:var(--ink-2)}
+.atlas-flow .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.atlas-flow .kv p{margin:0}
+.atlas-flow .tablewrap,.atlas-flow .table-wrap{max-width:100%;overflow-x:auto}
+.atlas-flow pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .atlas-flow .atlas-fields .atlas-field{flex-basis:100%}
+ .atlas-flow .kv{grid-template-columns:minmax(0,1fr);gap:4px}
+ .atlas-flow .kv dd{margin:0 0 10px}
+ .atlas-flow :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary){min-height:44px;font-size:16px}
+ .atlas-flow a[href]{display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+ .atlas-actions{gap:8px}
+ .atlas-actions a{min-height:44px}
+}
+      .atlas-admin-label { margin:14px 11px 2px; }
+
+/* ---------------------------------------------------------------------------
+   Workbench shell integration (UX-R0). The rules above are the approved
+   mock-up; these bind its structure to the Workbench's existing controls and
+   keep legacy screens on the same tokens.
+   --------------------------------------------------------------------------- */
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ring);outline-offset:4px}
+#workbench-boot{z-index:40;background:var(--bg);color:var(--ink)}
+.shell{min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:77px;padding:20px 32px;border-bottom:1px solid var(--line)}
+.breadcrumb{display:flex;align-items:center;gap:12px;min-width:0;font-weight:400;overflow:visible;text-overflow:clip;white-space:normal}
+.toptools{display:flex;gap:10px;align-items:center;flex:0 0 auto}
+#database-compute-status{min-height:0;padding:0;border:0;background:none;color:var(--amber);font-size:11px;font-weight:600;white-space:nowrap}
+#database-compute-status:hover:not(:disabled){background:none;opacity:.85}
+#database-compute-state{font-weight:600;white-space:nowrap}
+#workbench-environment{display:inline-flex;align-items:center;gap:6px}
+#workbench-command-button{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;gap:10px;font-size:12px;color:var(--muted)}
+#workbench-command-button svg{display:block;width:18px;height:18px;flex:none}
+#workbench-open-sql{border-radius:6px;padding:8px 12px;font-size:12px}
+.navlink[hidden]{display:none!important}
+.navlink .badge{margin-left:auto;background:var(--red);color:var(--bg);min-height:18px;padding:0 6px;font-size:11px}
+.navtitle{display:block}
+.favorite span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nav-workspace-context{color:var(--muted)}
+#rail-warehouse{color:var(--ink)}
+.profile{position:relative;display:block;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.profile summary{display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;border-radius:6px}
+.profile summary::-webkit-details-marker{display:none}
+.profile summary:hover{background:var(--selected)}
+.profile-text{display:grid;min-width:0;line-height:1.35}
+.profile-text strong,.profile-text span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile[open] summary{background:var(--selected)}
+.user-menu-panel{position:absolute;left:-10px;right:-10px;bottom:calc(100% + 8px);z-index:60;display:grid;gap:10px;width:auto;max-width:none;max-height:min(70vh,520px);overflow:auto;padding:12px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--bg);box-shadow:0 12px 40px #0002}
+.user-menu-panel>*+*{margin-top:0}
+#role-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#role-controls label{margin:0;font-size:11px;font-weight:500;color:var(--muted)}
+#role-selector{width:auto;min-height:32px;padding:4px 8px;flex:1 1 120px}
+#lang-switcher{display:inline-flex;gap:2px;padding:3px;border:0;border-radius:6px;background:var(--selected);flex-shrink:0}
+#lang-switcher button{min-height:28px;border:0;background:transparent;color:var(--muted);padding:4px 9px;font-size:11px;border-radius:4px;box-shadow:none}
+#lang-switcher button:hover{color:var(--ink);background:transparent}
+#lang-switcher button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 3px #00000012}
+#ai-settings-button{width:100%;justify-content:flex-start;border-color:var(--line);background:var(--bg)}
+.header-popover{position:relative;display:block}
+.icon-button{position:relative;width:36px;height:36px;min-height:36px;padding:0;border-color:var(--line);background:var(--bg)}
+.header-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--red);color:var(--bg);font:600 10px/16px var(--sans);text-align:center}
+.user-menu-panel .popover{position:static;width:auto;margin-top:8px;padding:10px;border-color:var(--line);background:var(--surface);box-shadow:none}
+.popover p{margin:0 0 8px;max-width:none;overflow-wrap:anywhere}
+.popover button{width:100%}
+.mobilemenu{display:none}
+.mobiletheme{margin-top:10px}
+.mobilenav .navlink{padding:9px 11px}
+.mobilemenu summary>span:last-child{margin-left:auto}
+.commandlist a{color:var(--ink);cursor:pointer}
+.commandlist a:focus-visible{background:var(--selected);outline-offset:-2px}
+.commandlist .command-kind{color:var(--muted);font-size:10px;white-space:nowrap}
+#command-empty{border:0;background:none}
+dialog#command{border-radius:12px;border-color:var(--line);background:var(--bg)}
+dialog#command::backdrop{background:#15181d55;backdrop-filter:blur(2px)}
+#command-search{min-width:0}
+#close-command{min-height:36px;padding:6px 10px;font-size:11px}
+#toast{background:var(--button);color:var(--onbutton)}
+
+/* Legacy screens keep their layouts but use the Atlas controls everywhere. */
+.query-footer .field{border:0;background:none;padding:0}
+main p{margin:0 0 8px}
+input:not([type=checkbox]):not([type=radio]),select,textarea{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+input[readonly],input:disabled,select:disabled,textarea:disabled{background:var(--surface);color:var(--muted)}
+label{font-weight:500}
+table td{font-family:var(--sans);font-size:12px}
+.table-wrap,#query-results,#catalog-tree{max-width:100%;overscroll-behavior-x:contain}
+.warehouse-strip .badge,.state.badge,.status-line.badge{background:var(--selected);color:var(--ink)}
+#role-indicator{background:var(--selected);color:var(--ink)}
+button.primary,a.primary{background:var(--button);border-color:var(--button);color:var(--onbutton)}
+button.primary:hover:not(:disabled),a.primary:hover{background:var(--button);border-color:var(--button);opacity:.85;color:var(--onbutton)}
+button.primary.danger,a.primary.danger{background:var(--red);border-color:var(--red);color:var(--bg)}
+.impact{background:none;border-left-color:var(--red)}
+.impact.neutral{background:none;border-left-color:var(--line)}
+
+@media(max-width:1100px){
+ .topbar,main{padding-left:24px;padding-right:24px}
+}
+@media(max-width:600px){
+ .app{display:block}
+ .sidebar{display:none}
+ .mobilemenu{display:block;border-bottom:1px solid var(--line);background:var(--rail)}
+ .mobilemenu summary{padding:14px 20px;font-size:14px;font-weight:650;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+ .mobilenav{padding:0 12px 12px;display:grid;gap:2px}
+ .mobilenav .navlink,.mobilemenu a,.commandlist a{display:flex;align-items:center;min-height:44px}
+ .mobilenav .navtitle{margin:18px 11px 6px}
+ .topbar{padding:14px 16px;min-height:62px;flex-wrap:nowrap;gap:8px;align-items:center}
+ .breadcrumb{flex:1 1 auto;min-width:0;gap:6px;font-size:12px}
+ .breadcrumb span{max-width:26vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block}
+ .toptools{gap:6px;flex-wrap:nowrap;justify-content:flex-end;flex:0 0 auto;min-width:0}
+ .toptools>.primary{font-size:11px;padding:7px 9px;white-space:nowrap}
+ .searchbutton{padding:7px 9px;gap:0;flex:none}
+ .searchbutton kbd{display:none}
+ .searchbutton .searchlabel{display:none}
+ #database-compute-status{display:none}
+ #workbench-environment{font-size:11px}
+ main{padding:23px 20px 32px}
+ .railbottom{display:none}
+ .sidebar .theme{display:none}
+ .mobilemenu .profile{display:block;margin:10px 0 0;padding:12px 4px 0;border-top:1px solid var(--line)}
+ .mobilemenu .profile summary{padding:6px 4px}
+ .mobilemenu .user-menu-panel{position:static;left:auto;right:auto;bottom:auto;width:auto;max-width:none;max-height:none;margin-top:8px;padding:10px;border:1px solid var(--line);background:var(--surface);box-shadow:none}
+ main :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary),
+ .topbar :is(button,a),.mobilemenu :is(button,a,summary),.commandlist a{min-height:44px!important}
+ main a{display:inline-flex;align-items:center;min-height:44px}
+ body{overflow-x:hidden}
+ #lang-switcher button,#role-selector,#ai-settings-button{min-height:44px}
+ .user-menu-panel,.popover{max-width:calc(100vw - 32px)}
+}
+@media(max-width:360px){
+ .topbar{padding-inline:12px;gap:4px}
+ .breadcrumb span{max-width:22vw}
+ .toptools{gap:4px}
+ #workbench-environment{font-size:10px}
+ #workbench-open-sql{padding-inline:6px}
+}
+
+/* ---------------------------------------------------------------------------
+   UX-R2 SQL worksheet rebuild. The structure and class names come from
+   sql()/worksheetTabs()/resultHTML() in the approved Atlas mock-up.
+   --------------------------------------------------------------------------- */
+#database-workspace{display:block;min-width:0}
+#database-workspace-main{display:block;background:none;border:0;border-radius:0;min-width:0}
+#database-worksheet-pane{display:flex;flex-direction:column;gap:0;padding:0;min-width:0}
+#database-worksheet-pane>.panel{margin-top:20px;margin-bottom:0;background:var(--bg)}
+#database-worksheet-pane>#sql-restored:empty{display:none}
+#sql-linenumbers{white-space:pre;line-height:1.9;overflow:hidden}
+#database-editor .editor{align-items:stretch}
+#database-editor .editor textarea{display:block}
+#database-editor .editorfooter.sql-actions{justify-content:flex-start;align-items:center}
+#database-editor .editorfooter .run-group{justify-content:flex-start;margin-left:0;flex-wrap:wrap;gap:8px}
+#database-editor .editorfooter #database-context-state{flex:1 1 220px;min-width:0;margin:0;padding:0;border:0;background:none;font-size:12px;line-height:1.45;color:var(--warn);overflow-wrap:anywhere}
+#database-editor .editorfooter #database-context-state:empty{display:none}
+#database-editor #sql-next{padding-top:8px;padding-bottom:8px;color:var(--muted)}
+#database-editor #sql-next:empty{display:none}
+.sql-fixed b{font-weight:550;color:var(--ink)}
+.sql-fixed a,.sql-fixed button{min-height:0;padding:0;border:0;background:none;color:var(--accent-ink);font:inherit;text-decoration:underline}
+.sql-fixed a:hover,.sql-fixed button:hover:not(:disabled){background:none;opacity:.8}
+#database-results .panelhead{flex-wrap:wrap;align-items:flex-start}
+#database-results #query-meta{min-width:0;overflow-wrap:anywhere;text-align:right}
+.sql-result-tools label{color:var(--ink)}
+.sql-result-tools .sql-view-switch button[aria-pressed="true"]{background:var(--ink);color:var(--surface,#fff)}
+.sql-downloads button{min-height:32px}
+#database-worksheet-pane>details.sql-note,#database-worksheet-pane>#worksheet-explorer{padding:10px 16px}
+#database-worksheet-pane>details.sql-note>summary,#database-worksheet-pane>#worksheet-explorer>summary{cursor:pointer;padding:4px 0;font-weight:550}
+#database-worksheet-pane>#worksheet-explorer{max-height:none;border-radius:0;margin:0;overflow:visible}
+#database-worksheet-pane>#worksheet-explorer #catalog-tree{max-height:320px;overflow:auto}
+#database-worksheet-pane>#worksheet-explorer .explorer-search{padding:8px 0;border-bottom:1px solid var(--line)}
+#database-worksheet-pane>#worksheet-explorer .explorer-foot{padding:8px 0 0}
+#sql-connection-actions,#sql-history-host{display:flex;flex-wrap:wrap;align-items:end;gap:10px;padding-top:4px;min-width:0}
+#sql-connection-actions button,#sql-history-host button{min-height:36px}
+#sql-history-host .history-field{display:grid;gap:4px;flex:1 1 240px;min-width:0}
+#sql-history-host select{max-width:100%;min-width:0}
+#database-worksheet-pane .copilot.sql-note{display:block}
+#database-worksheet-pane .copilot.sql-note>summary{cursor:pointer;padding:4px 0;font-weight:550}
+#database-worksheet-pane .copilot-body{padding-top:8px}
+#database-worksheet-pane #sample-sql-tools{margin-bottom:0}
+#database-worksheet-pane #sample-sql-tools label{display:block;margin-bottom:4px}
+#sql-supported p{margin:6px 0 0}
+#sql-supported summary{cursor:pointer}
+@media(max-width:600px){
+ #database-context-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sql-fixed{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
+ .sql-fixed>span{white-space:normal}
+ #database-editor .editorfooter.sql-actions{align-items:stretch}
+ #database-editor .editorfooter .run-group{width:100%;justify-content:flex-start}
+ #database-editor .editorfooter .run-group #database-context-state{flex-basis:100%}
+ .worksheet-bar{flex-wrap:nowrap;min-width:0}
+ .worksheet-bar #close-worksheet{min-width:44px}
+ #database-results #query-meta{text-align:left}
+ .sql-result-tools label{width:100%}
+ .sql-result-tools input{width:100%}
+ #database-worksheet-pane>details.sql-note,#database-worksheet-pane>#worksheet-explorer{padding-inline:12px}
+ #database-worksheet-pane>#worksheet-explorer #catalog-tree{max-height:260px}
+ #sql-connection-actions button,#sql-history-host button{min-height:44px}
+}
+html[data-data-mode=database] #warehouse .pageheading h1{font-size:22px;letter-spacing:-.6px;font-weight:650;line-height:1.45}
+@media(max-width:600px){html[data-data-mode=database] #warehouse .pageheading h1{font-size:20px}}
+#database-context-bar{padding:12px 16px}
+@media(max-width:600px){#database-context-bar{padding:10px}}
+@media(max-width:600px){.sql-fixed a,.sql-fixed button{min-height:44px;display:inline-flex;align-items:center}}
+#database-worksheet-pane #sample-sql-tools{padding:0;border-top:0;margin:18px 0 0}
+.column-type{display:block;font-size:9px;font-weight:400;margin-top:2px;color:var(--muted)}
+#worksheet-tabs{flex-wrap:nowrap}
+#worksheet-tabs button[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface,#fff);font-weight:600}
+#database-context-bar .sql-context-label{color:var(--ink);font-size:12px}
+
+/* UX-R6 jobs and audit rebuilt from the Atlas mock-up. The selectors below
+   follow the mock-up markup verbatim; scoping keeps the legacy screens intact. */
+.pageheading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px}
+.pageheading>div{min-width:0}
+.pageheading>span{flex:none;white-space:nowrap}
+.jobs-page,.audit-page{min-width:0;max-width:1100px}
+.jobs-page h1,.audit-page h1{margin-bottom:16px}
+.jobs-page .panel,.audit-page .panel{background:transparent;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:20px 0 0;padding:0}
+.jobs-page .panelhead,.audit-page .panelhead{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.jobs-page .panelbody,.audit-page .panelbody{padding:18px}
+.jobs-page .tablewrap,.audit-page .tablewrap{position:relative;overflow:auto;max-width:100%;overscroll-behavior-x:contain;scrollbar-gutter:stable;margin:12px 0}
+.jobs-page .tablewrap table,.audit-page .tablewrap table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap;font-size:12px}
+.jobs-page .tablewrap caption,.audit-page .tablewrap caption{text-align:left;color:var(--muted);font-size:11px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.jobs-page .tablewrap th,.audit-page .tablewrap th{position:static;font-size:10px;color:var(--muted);font-weight:500;background:var(--surface);white-space:nowrap}
+.jobs-page .tablewrap th,.jobs-page .tablewrap td,.audit-page .tablewrap th,.audit-page .tablewrap td{padding:12px 18px;border-bottom:1px solid var(--line)}
+.jobs-page .tablewrap td,.audit-page .tablewrap td{font-family:var(--sans);font-size:12px;vertical-align:top}
+.jobs-page .tablewrap tbody tr:last-child td,.audit-page .tablewrap tbody tr:last-child td{border-bottom:0}
+.jobs-page .tablewrap td a,.audit-page .tablewrap td a{font-weight:550}
+.jobs-page .tablewrap td a:hover,.audit-page .tablewrap td a:hover{text-decoration:underline}
+.jobs-page .sqlhint,.audit-page .sqlhint{font-size:11px;color:var(--muted);margin:12px 0}
+.jobs-page .empty,.audit-page .empty{padding:30px 18px;color:var(--muted);font-size:12px}
+.jobs-page .backlink,.audit-page .backlink{display:inline-block;color:var(--muted);font-size:11px;margin-bottom:16px}
+.jobs-page .eyebrow,.audit-page .eyebrow{font-size:10px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px}
+.jobs-page .tiny,.audit-page .tiny{font-size:11px}
+.jobdetailgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:26px}
+.jobdetailgrid>div{min-width:0}
+.step{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;padding:15px 0;border-bottom:1px solid var(--line)}
+.step:last-child{border:0}
+.step h3{overflow-wrap:anywhere}
+.step p{font-size:11px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.step .status{align-self:start;margin-top:2px}
+.step-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;font-size:12px;line-height:1}
+.step .failed{color:var(--red);font-weight:700}
+.status.failed{color:var(--red)}
+.jobs-page #db-jobs-steps-view .step{grid-template-columns:20px minmax(0,1fr) auto;gap:10px;padding:15px 0;border-top:0;border-bottom:1px solid var(--line);align-items:start}
+.jobs-page #db-jobs-steps-view .step:last-child{border-bottom:0}
+.jobs-page #db-jobs-steps-view .step p{margin-top:3px}
+.codeblock{font:11px/1.9 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:16px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;max-width:100%}
+.jobs-page .kv,.audit-page .kv{display:grid;grid-template-columns:84px minmax(0,1fr);gap:9px;font-size:11px;margin:16px 0}
+.jobs-page .kv dt,.audit-page .kv dt{color:var(--muted)}
+.jobs-page .kv dd,.audit-page .kv dd{margin:0;overflow-wrap:anywhere}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:10px;white-space:nowrap}
+.status:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.status.success{color:var(--green)}
+.status.warning{color:var(--amber)}
+.status.error{color:var(--red)}
+.target{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:18px 20px}
+.target h2{font-size:17px;letter-spacing:-.3px;overflow-wrap:anywhere}
+.target .subtitle{font-size:11px;color:var(--muted);margin:4px 0 18px}
+.target .kv{display:grid;grid-template-columns:84px minmax(0,1fr);gap:9px;font-size:11px;margin:16px 0}
+.target .kv dt{color:var(--muted)}
+.target .kv dd{margin:0;overflow-wrap:anywhere}
+.audit-page .atlas-fields{margin:16px 0}
+.jobs-page .atlas-fields label,.audit-page .atlas-fields label{margin:0}
+.jobs-page .atlas-fields .field,.audit-page .atlas-fields .field{width:100%;min-width:0;max-width:100%}
+.jobs-page .atlas-fields>.job-json{flex-basis:100%;max-width:100%}
+.jobs-edit-details{margin-top:20px;border-top:1px solid var(--line);padding-top:12px}
+.jobs-edit-details>summary{font-weight:650;cursor:pointer;padding:8px 0}
+.jobs-edit-details>.panel{margin-top:16px}
+.jobs-edit-details .atlas-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:14px 18px;align-items:start}
+.jobs-edit-details .atlas-fields>.job-json{grid-column:1/-1;flex-basis:auto}
+.jobs-edit-details .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.jobs-page #db-jobs-list-rows .objectrow>div{min-width:0;overflow-wrap:anywhere}
+.audit-page #audit-filters{border:0;margin:0 0 12px;padding:0}
+.audit-page #audit-filters>summary{font-weight:650;padding:8px 0}
+.audit-page #db-audit-advanced-filters{margin:8px 0 0}
+.audit-page #db-audit-advanced-filters>summary{font-weight:550;color:var(--ink-2);padding:8px 0}
+.audit-page #audit-applied{margin:4px 0 8px;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}
+.audit-page #db-audit-status{font-size:12px;color:var(--muted);margin:4px 0 0;border:0;background:none;padding:0}
+.audit-page #db-audit-status:empty{display:none}
+.audit-page #db-audit-detail h2{font-size:18px;margin:18px 0 10px}
+.audit-page #db-audit-detail .kv{grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:6px 16px;margin:12px 0}
+.audit-page #db-audit-detail .kv dt{font-weight:600;color:var(--ink-2)}
+.audit-page #db-audit-detail .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.audit-page #db-audit-detail .kv p{margin:0 0 6px}
+.audit-page #db-audit-detail .kv p:last-child{margin-bottom:0}
+@media(max-width:850px){
+ .jobdetailgrid{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+ .pageheading{align-items:flex-start;margin-bottom:18px;flex-wrap:wrap}
+ .jobs-page .panelhead,.jobs-page .panelbody,.audit-page .panelhead,.audit-page .panelbody{padding:13px}
+ .jobs-page .panelhead,.audit-page .panelhead{align-items:flex-start}
+ .jobdetailgrid{gap:6px}
+ .jobs-page .tablewrap,.audit-page .tablewrap{max-width:100%}
+ .jobs-edit-details .atlas-fields{grid-template-columns:minmax(0,1fr)}
+ .jobs-page :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary),.audit-page :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary){min-height:44px;font-size:16px}
+ .jobs-page a[href],.audit-page a[href]{display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+ .jobs-page .kv,.audit-page .kv,.audit-page #db-audit-detail .kv{grid-template-columns:minmax(0,1fr);gap:4px}
+ .jobs-page .kv dd,.audit-page .kv dd,.audit-page #db-audit-detail .kv dd{margin:0 0 10px}
+}
+@media(max-width:390px){
+ .jobs-page,.audit-page{max-width:100%;overflow-wrap:anywhere}
+ .jobdetailgrid{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Outside Database mode the retired screens keep their heading and the current
+   mode guidance only; the Database-backed Atlas controls are not installed. */
+html:not([data-data-mode=database]) #ingestion-atlas > :not(#ingestion-heading):not(#ingestion-mode-guidance),
+html:not([data-data-mode=database]) #transformation-atlas > :not(#transformation-heading):not(#transformation-mode-guidance),
+html:not([data-data-mode=database]) #bears-atlas > :not(#bears-pageheading):not(#bears-mode-guidance),
+html:not([data-data-mode=database]) #compute-atlas > :not(#compute-overview):not(#compute-mode-guidance),
+html:not([data-data-mode=database]) #compute-diagnostics{display:none!important}

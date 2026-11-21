@@ -191,7 +191,7 @@ route=async()=>sourceReply();await loadSource();$('explanation-copy').onclick();
 await boot();route=async()=>wrap(record());await $('copilot-explain').onclick();const durable=storage.get(dbExplanationKey);
 assert.ok(dbExplanation.record);route=async()=>sourceReply();await loadSource();
 assert.equal(dbExplanation.record,null);assert.deepEqual(dbExplanation.history,[]);assert.equal(dbExplanation.notice,'');assert.equal(storage.get(dbExplanationKey),durable);assert.ok(dbSource.origin);
-route=async(path,options)=>wrap(record({input:JSON.parse(options.body)}));await $('bear-query-run').onclick();
+route=async(path,options)=>wrap(record({input:JSON.parse(options.body)}));await $('bears-explain').onclick();
 const body=JSON.parse(posts().at(-1).options.body);assert.deepEqual(Object.keys(body).sort(),['context','language','sql']);assert.equal(body.sql,sourceReply().source.sql);assert.deepEqual(body.context,dbContext(dbCurrent()));
 ''')
 
@@ -213,7 +213,7 @@ const mutations=[()=>editDoctor('SELECT edited'),()=>{const old=$('bear-query-sq
 for(const mutate of mutations)for(const outcome of ['source','null','error']){
  editDoctor('SELECT manual');const wait=deferred(),reply=sourceReply();route=()=>wait.promise;
  const pending=loadSource();await tick();const count=sourceCalls().length;await loadSource();await dbSourceLoad();assert.equal(sourceCalls().length,count);assert.equal($('explanation-latest').disabled,true);
- assert.equal($('bear-query-run').disabled,true);await dbExplain('doctor');await dbExplain('copilot',false,'sql_plan_explanation');assert.equal(posts().length,0);
+ assert.equal($('bears-explain').disabled,true);await dbExplain('doctor');await dbExplain('copilot',false,'sql_plan_explanation');assert.equal(posts().length,0);
  mutate();const draft=$('bear-query-sql').value;dbSource.notice='newer message';
  wait.resolve(outcome==='source'?reply:outcome==='null'?{context:reply.context,source:null}:{http:500,body:{message:'SECRET'}});await pending;
  assert.equal($('bear-query-sql').value,draft);assert.equal(dbSource.notice,'newer message');assert.equal(dbSource.origin,null);assert.equal(dbSource.token,null);
@@ -278,7 +278,7 @@ setLanguage('en');await boot();const notice=$('database-bears-notice');
 for(const locale of ['en','ja']){
  setLanguage(locale);
  assert.equal(intro.textContent,t(dbExplanationInstruction));
- for(const kind of ['sre','policy']){assert.equal($('bear-tab-'+kind).disabled,false);assert.equal($('bear-'+kind+'-run').disabled,true);assert.equal($('bear-'+kind+'-run').hidden,true);}
+
  const helpers=$('bear-panel-query').descendants().filter(n=>n.textContent===t(dbExplanationHelp));assert.equal(helpers.length,1);
  assert.ok(helpers[0].textContent.includes(locale==='en'?'SQL is not executed.':'SQL は実行しません。'));
  assert.equal($('bear-query-sql').disabled,false);assert.equal(explanationCalls().length,0);
@@ -289,8 +289,8 @@ for(const locale of ['en','ja']){
         self.markup_javascript(r'''
 await dualBoot();await exploreFinance();
 const line=$('explanation-doctor-context');
-assert.equal(line.className,'status-line');assert.equal(line.parentElement,field);
-assert.ok(field.children.indexOf(line)<field.children.indexOf($('bear-query-sql')));
+assert.equal(line.className,'status-line');assert.equal(line.parentElement,$('bears-explanation-tools'));
+assert.equal($('bears-sql-field').descendants().includes(line),false);
 const before=calls.length;dbExplanationSync();assert.equal(calls.length,before);
 assert.equal(line.textContent,'sales.raw · admin · LOCAL');assert.doesNotMatch(line.textContent,/finance/);
 editDoctor('SELECT own_draft');editSQL('SELECT worksheet_draft');
@@ -316,7 +316,7 @@ for(const locale of ['en','ja']){
   const before=calls.length;dbControls();assert.equal(calls.length,before);
   assert.ok(dbReason());assert.equal(line.textContent,dbReason()+' '+t(dbExplanationContextStep));
   assert.ok(line.textContent.includes(locale==='en'?'Choose or confirm the database, schema and role in the SQL worksheet.':'SQL ワークシートでデータベース・スキーマ・ロールを選択または確認してください。'));
-  assert.equal($('bear-query-run').disabled,true);assert.equal($('copilot-explain').disabled,true);
+  assert.equal($('bears-explain').disabled,true);assert.equal($('copilot-explain').disabled,true);
   assert.doesNotMatch(line.textContent,/database_id|schema_id|generation_id|binding_revision|finance/);
  }
  Object.assign(dbCurrent(),{schema_id:'schema',binding_revision:1});dbMaximumRole='admin';dbControls();
@@ -346,30 +346,24 @@ for(const [state,en,ja] of [['SUCCEEDED','Completed','完了'],['RUNNING','Runni
 }
 ''')
 
-    def test_database_defaults_to_doctor_and_hides_legacy_target(self):
-        tab_handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
+    def test_database_shows_the_atlas_bears_page_and_hides_the_legacy_target(self):
         self.javascript(r'''
-const bearList=new Node();bearList.setAttribute('aria-orientation','vertical');
-for(const bear of ['sre','query','data','catalog','policy']){
- const tab=$('bear-tab-'+bear);tab.tagName='BUTTON';tab.dataset.bear=bear;bearList.append(tab);
- $('bears').append($('bear-panel-'+bear));
-}
-$('bears').append(bearList);
-const targetField=new Node();targetField.append($('bear-query-target'));$('bear-panel-query').append(targetField);
-eval(''' + json.dumps(tab_handlers) + r''');
-assert.equal($('bear-panel-sre').hidden,false);await boot();
-assert.equal($('bear-panel-query').hidden,false);assert.equal($('bear-tab-query')['aria-selected'],'true');
-assert.equal($('bear-panel-sre').hidden,true);assert.equal(targetField.hidden,true);
-assert.equal($('bear-tab-data').disabled,false);assert.equal($('bear-data-legacy').hidden,true);
-let handled=false;const key=name=>({key:name,preventDefault:()=>{handled=true;}});
-$('bear-tab-query').onkeydown(key('ArrowRight'));assert.equal(handled,false);
-$('bear-tab-query').onkeydown(key('ArrowDown'));assert.equal(handled,true);assert.equal(document.activeElement,$('bear-tab-data'));
-narrow=true;for(const listener of mediaListeners)listener({matches:narrow});assert.equal(bearList.getAttribute('aria-orientation'),'horizontal');
-handled=false;$('bear-tab-data').onkeydown(key('ArrowUp'));assert.equal(handled,false);
-$('bear-tab-data').onkeydown(key('ArrowLeft'));assert.equal(handled,true);assert.equal(document.activeElement,$('bear-tab-query'));
+await boot();
+assert.equal($('bears-atlas').hidden,false);
+assert.equal($('bears').descendants().filter(n=>n.tagName==='H1').length,1);
+assert.equal($('bears-heading').parentElement,$('bears-pageheading'));
+assert.equal($('bears-form').parentElement,$('bears-atlas'));
+assert.equal($('bears-sql-field').descendants().includes($('bear-query-sql')),true);
+assert.equal($('bears-toolbar').descendants().includes($('bears-explain')),true);
+assert.equal($('bears-toolbar').descendants().includes($('bears-transform')),true);
+for(const bear of ['sre','query','data','policy'])assert.equal($('bear-panel-'+bear).hidden,false,bear);assert.equal($('bear-panel-catalog').hidden,true);
+assert.equal($('bear-panel-data').hidden,false);
+assert.equal($('bear-panel-query').parentElement,$('bears-explanation-tools'));
+assert.equal($('explanation-doctor-output').parentElement,$('bears-explanation-body'));
+assert.equal($('bear-panel-sre').parentElement,$('bears-evidence-sre'));
+assert.equal($('bear-panel-policy').parentElement,$('bears-evidence-policy'));
 
-for(const bear of ['sre','policy']){assert.equal($('bear-tab-'+bear).disabled,false);assert.equal($('bear-'+bear+'-run').disabled,true);assert.equal($('bear-'+bear+'-run').hidden,true);}
-assert.equal($('bear-tab-catalog').disabled,false);
+
 ''')
 
     def test_copilot_async_202_get_preserves_editor_and_results(self):
@@ -397,10 +391,10 @@ assert.equal(dbExplanation.intents[0].source,'copilot');
 
     def test_doctor_explicit_input_and_copy_only_from_worksheet(self):
         self.javascript(r'''
-await boot();assert.equal($('bear-query-target').disabled,true);assert.equal($('bear-query-run').disabled,true);
+await boot();assert.equal($('bears-explain').disabled,true);
 editDoctor('SELECT SUM(amount) FROM raw.custom_sales');
 route=async(path,options)=>wrap(record({input:{sql:JSON.parse(options.body).sql,language:'en'}}));
-const draft=$('sql').value;await $('bear-query-run').onclick();
+const draft=$('sql').value;await $('bears-explain').onclick();
 assert.equal(JSON.parse(posts()[0].options.body).sql,'SELECT SUM(amount) FROM raw.custom_sales');
 assert.equal(dbExplanation.intents[0].source,'doctor');assert.equal($('sql').value,draft);
 $('explanation-copy').onclick();assert.equal($('bear-query-sql').value,draft);assert.equal(dbExplanation.record,null);
@@ -424,7 +418,7 @@ queryResult={columns:['keep'],rows:[[23]]};const result=JSON.stringify(queryResu
 const relations=['TABLE','VIEW'].map(kind=>({schema:'raw',table:'source_'+kind,kind,columns:[
  {name:'omitted_column_one',type:'omitted_type_one'},{name:'omitted_column_two',type:'omitted_type_two'}]}));
 route=async()=>wrap(record({id:'opaque-record-id',text:answer,input:{sql,language:locale},metadata:{captured_at:'2026-10-31T02:00:00Z',relations}}));
-await $(source==='doctor'?'bear-query-run':'copilot-explain').onclick();
+await $(source==='doctor'?'bears-explain':'copilot-explain').onclick();
 for(const id of ['copilot-result','explanation-doctor-output']){
  const node=$(id),text=visibleText(node);
  assert.equal(node.children[0].tagName,'PRE');assert.equal(node.children[0].textContent,answer);
@@ -469,7 +463,7 @@ for(const id of ['copilot-result','explanation-doctor-output'])assert.equal($(id
         self.javascript(r'''
 await boot();editDoctor('DELETE FROM raw.sales; SELECT 1');
 route=async()=>({http:400,body:{error:{code:'AI_INPUT_INVALID',message:'PRIVATE_SERVER_TEXT',details:{secret:'PRIVATE_DETAILS'}}}});
-await $('bear-query-run').onclick();const first=structuredClone(posts()[0]),intent=dbExplanationIntent();
+await $('bears-explain').onclick();const first=structuredClone(posts()[0]),intent=dbExplanationIntent();
 assert.equal(intent.id,null);assert.equal(dbExplanation.record,null);
 assert.equal(Object.isFrozen(intent.body),true);assert.equal(Object.isFrozen(intent.body.context),true);
 assert.equal(Object.isFrozen(intent.capture),true);
@@ -480,7 +474,7 @@ for(const [locale,guidance] of [['en','SQL explanation supports a single SELECT 
   assert.doesNotMatch(visibleText($(id)),/PRIVATE_|uncertain|stopped|停止/);
  }
  assert.equal($('explanation-doctor-recover').disabled,false);
- assert.equal($('bear-query-run').disabled,true);assert.equal(posts().length,1);
+ assert.equal($('bears-explain').disabled,true);assert.equal(posts().length,1);
 }
 const saved=JSON.parse(storage.get(dbExplanationKey)).at(-1);
 assert.equal(saved.key,first.options.headers['Idempotency-Key']);assert.equal(JSON.stringify(saved.body),first.options.body);
@@ -507,10 +501,10 @@ assert.doesNotMatch(visibleText($('copilot-result')),/PRIVATE_|single SELECT/);
         self.javascript(r'''
 await boot();editDoctor(' SELECT 8 -- original ');
 route=async()=>{throw Error('lost ACK with private provider details');};
-await $('bear-query-run').onclick();const first=structuredClone(posts()[0]);
+await $('bears-explain').onclick();const first=structuredClone(posts()[0]);
 assert.equal(dbExplanation.record,null);assert.match(visibleText($('copilot-result')),/uncertain/);
 assert.doesNotMatch(visibleText($('copilot-result')),/private provider/);
-assert.equal($('copilot-explain').disabled,true);assert.equal($('bear-query-run').disabled,true);
+assert.equal($('copilot-explain').disabled,true);assert.equal($('bears-explain').disabled,true);
 await $('copilot-explain').onclick();assert.equal(posts().length,1);
 route=async(path,options)=>wrap(record({input:{sql:JSON.parse(options.body).sql,language:'en'}}));
 await $('explanation-doctor-recover').onclick();
@@ -521,7 +515,7 @@ assert.equal(posts()[1].options.headers['Idempotency-Key'],first.options.headers
     def test_reload_recovery_is_explicit_and_keeps_original_intent(self):
         self.javascript(r'''
 await boot();editDoctor('SELECT 93');route=async()=>{throw Error('lost');};
-await $('bear-query-run').onclick();const original=structuredClone(posts()[0]);
+await $('bears-explain').onclick();const original=structuredClone(posts()[0]);
 dbExplanation.intents=[];dbExplanation.record=null;dbExplanation.history=[];
 $('bear-query-sql').value='';dbExplanationInstall();
 assert.equal($('bear-query-sql').value,'SELECT 93');assert.equal(posts().length,1);
@@ -545,7 +539,7 @@ localStorage.setItem=(key,value)=>{
  set(key,value);
 };
 localStorage.getItem=key=>{if(key===dbExplanationKey&&failure==='read')throw Error('read denied');return get(key);};
-await $('bear-query-run').onclick();
+await $('bears-explain').onclick();
 const original=dbExplanation.intents[0],key=original.key,body=JSON.stringify(original.body);
 assert.ok(Object.isFrozen(original.body));assert.equal(explanationCalls().length,0);
 assert.equal(dbExplanation.busy,false);assert.equal($('explanation-doctor-recover').disabled,false);
@@ -684,9 +678,9 @@ assert.equal($('copilot-result').hidden,true);assert.equal($('copilot-explain').
 await boot();editDoctor('SELECT 2');const wait=deferred(),accepted=record();route=()=>wait.promise;
 const pending=$('copilot-explain').onclick();await tick();
 for(let i=0;i<3;i++){dbControls();await dbRefreshAccess();assert.equal(dbExplanation.busy,true);
- assert.equal($('copilot-explain').disabled,true);assert.equal($('bear-query-run').disabled,true);
+ assert.equal($('copilot-explain').disabled,true);assert.equal($('bears-explain').disabled,true);
  assert.equal($('explanation-doctor-history').disabled,true);}
-await $('bear-query-run').onclick();await dbExplanationHistory();assert.equal(posts().length,1);
+await $('bears-explain').onclick();await dbExplanationHistory();assert.equal(posts().length,1);
 wait.resolve({http:202,body:wrap(accepted)});await pending;
 assert.equal(dbExplanation.busy,false);assert.equal($('explanation-doctor-recover').disabled,false);
 ''')
@@ -715,7 +709,7 @@ assert.notEqual(posts()[0].options.headers['Idempotency-Key'],posts()[1].options
 await boot();setLanguage('ja');editDoctor("SELECT '<img src=x onerror=attack()>'");
 const evil='<script>attack()</script><button id="publish">Publish</button>';
 route=async(path,options)=>wrap(record({text:evil,model:{provider:'local-openai',name:evil},input:{sql:JSON.parse(options.body).sql,language:'ja'}}));
-await $('bear-query-run').onclick();assert.equal(JSON.parse(posts()[0].options.body).language,'ja');
+await $('bears-explain').onclick();assert.equal(JSON.parse(posts()[0].options.body).language,'ja');
 for(const id of ['copilot-result','explanation-doctor-output']){
  assert.match(visibleText($(id)),/<script>attack/);assert.equal($(id).descendants().some(n=>['SCRIPT','BUTTON','IMG'].includes(n.tagName)),false);
 }
@@ -848,8 +842,8 @@ setLanguage('ja');assert.match($('database-bears-notice').textContent,/旧 Bear 
         self.javascript(r'''
 await boot(Array.from({length:13},(_,i)=>({...input(String(i)),sql:'SELECT '+i})));
 assert.equal(worksheets.length,13);assert.equal(explanationCalls().length,0);
-assert.equal($('bear-query-target').disabled,true);assert.equal($('copilot-explain').disabled,false);
-assert.equal($('bear-query-run').disabled,true);
+assert.equal($('copilot-explain').disabled,false);
+assert.equal($('bears-explain').disabled,true);
 ''')
 
     def test_context_key_order_is_not_a_wire_dependency(self):
@@ -892,15 +886,15 @@ route=async(path,options)=>{
  }
  throw Error('Unexpected automatic read');
 };
-await $('bear-query-run').onclick();const first=structuredClone(posts()[0]);
-assert.equal($('bear-query-run').disabled,false);assert.equal($('bear-query-run').textContent,'Request new explanation');
+await $('bears-explain').onclick();const first=structuredClone(posts()[0]);
+assert.equal($('bears-explain').disabled,false);
 await periodicRefresh();dbControls();assert.equal(posts().length,1);
-await $('bear-query-run').onclick();assert.equal(posts().length,2);
+await $('bears-explain').onclick();assert.equal(posts().length,2);
 assert.equal(posts()[1].options.body,first.options.body);
 assert.notEqual(posts()[1].options.headers['Idempotency-Key'],first.options.headers['Idempotency-Key']);
 assert.equal(dbExplanation.intents.length,2);assert.equal(dbExplanation.intents[0].id,'request-1');
 assert.equal(dbExplanationIntent(),dbExplanation.intents[1]);assert.equal(dbExplanation.record.id,'request-2');
-assert.equal($('bear-query-run').disabled,true);assert.equal($('sql').value,sql);
+assert.equal($('bears-explain').disabled,true);assert.equal($('sql').value,sql);
 route=async path=>{assert.ok(path.includes('/request-2?'));return wrap(dbExplanation.history[0]);};
 dbExplanation.history=[record({id:'request-2',state:'RUNNING',text:null,input:{sql:'SELECT same_sql',language:'en'}})];
 await $('explanation-doctor-recover').onclick();assert.equal(posts().length,2);assert.equal(dbExplanation.record.state,'RUNNING');
@@ -919,7 +913,7 @@ for(const state of ['QUEUED','RUNNING','UNKNOWN']){
  editSQL('SELECT '+state);const accepted=record({id:'id-'+state,state,text:null});
  route=async(path,options)=>options?.method==='POST'?{http:202,body:wrap(accepted)}:wrap(accepted);
  await $('copilot-explain').onclick();const original=structuredClone(posts().at(-1)),count=posts().length;
- for(const id of ['copilot-explain','bear-query-run']){assert.equal($(id).disabled,true);await $(id).onclick();}
+ for(const id of ['copilot-explain','bears-explain']){assert.equal($(id).disabled,true);await $(id).onclick();}
  assert.equal(posts().length,count);
  await $('explanation-copilot-recover').onclick();assert.equal(posts().length,count);
  assert.ok(explanationCalls().at(-1).path.includes('/id-'+state+'?'));

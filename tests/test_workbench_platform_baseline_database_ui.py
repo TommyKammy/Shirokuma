@@ -40,12 +40,7 @@ class PlatformBaselineDatabaseUI(unittest.TestCase):
             resources_ui.PlatformResourcesDatabaseUI.javascript(self, BASELINE + body)
 
     def navigation_javascript(self, body):
-        harness = resources_ui.compute_ui.platform_ui.observations.harness
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let activeTab=')]
-        self.javascript(r"""
-const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
-eval(""" + json.dumps(handlers) + r""");
-""" + body)
+        self.javascript(body)
 
     def test_first_mount_native_siblings_manual_auth_without_database_or_grant(self):
         self.javascript(r"""
@@ -93,7 +88,7 @@ assert.equal(dbBaseline.record,baselineSnapshot);
 
     def test_real_navigation_scopes_and_language_share_snapshot_time_without_get(self):
         self.navigation_javascript(r"""
-session.platform_admin=true;await dualBoot();$('tab-compute').click();await baselineFetch();const baselineSnapshot=dbBaseline.record,count=calls.length;
+session.platform_admin=true;await dualBoot();$('tab-compute').click();await baselineFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const baselineSnapshot=dbBaseline.record,count=calls.length;
 for(const locale of ['ja','en','ja','en']){setLanguage(locale);$('tab-bears').click();for(const kind of ['sre','policy']){$('bear-tab-'+kind).click();scope(kind);assert.equal($('observation-'+kind+'-baseline-panel').hidden,false);assert.ok(baselineText('observation-'+kind+'-baseline-').includes(baselineSnapshot.observed_at));scope(kind,'database');assert.equal($('observation-'+kind+'-baseline-panel').hidden,true);} $('tab-warehouse').click();$('tab-compute').click();assert.equal(dbBaseline.record,baselineSnapshot);assert.ok(baselineText().includes(baselineSnapshot.observed_at));assert.equal(calls.length,count);}
 await dbBaselineRefreshAuth();assert.equal(baselineCalls().length,1);assert.equal(dbBaseline.record,baselineSnapshot);
 """)

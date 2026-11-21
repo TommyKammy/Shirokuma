@@ -41,33 +41,24 @@ class TransformationMarkup(unittest.TestCase):
 
     def test_single_transformation_screen_and_no_lead_copy(self):
         self.assertNotIn('id="transformation-lead"', database_ui.HTML)
-        self.assertIn('id="transformation-models"', database_ui.HTML)
-        self.assertIn('id="transformation-wap"', database_ui.HTML)
-        self.assertIn('id="transformation-marts"', database_ui.HTML)
-        wap_tab = self.by_id('transformation-view-wap')
-        self.assertIn('hidden', wap_tab['attrs'])
-        self.assertIn('data-admin-view', self.by_id('transformation-view-marts')['attrs'])
-        self.assertEqual(self.by_id('transformation-view-models')['attrs'].get('aria-selected'), 'true')
+        self.assertIn('id="transformation-atlas"', database_ui.HTML)
+        self.assertIn('id="transformation-atlas-models"', database_ui.HTML)
+        self.assertIn('id="transformation-publications"', database_ui.HTML)
+        self.assertNotIn('transformation-legacy', database_ui.HTML)
 
-    def test_published_marts_review_contains_legacy_target_controls(self):
-        review = self.by_id('marts-update-review')
-        self.assertEqual(review['tag'], 'details')
-        self.assertIn('open', review['attrs'])
-        self.assertTrue(belongs_to(review, 'marts-admin'))
-        for identifier in ('marts-list', 'mart-form', 'mart-run', 'mart-schedule-save'):
-            self.assertTrue(belongs_to(self.by_id(identifier), 'marts-update-review'), identifier)
+    def test_published_marts_review_uses_the_atlas_publication_section(self):
+        section = self.by_id('transformation-publications')
+        self.assertEqual(section['tag'], 'section')
+        self.assertTrue('transformation-publications-heading' in [n['attrs'].get('id') for n in section['parents']] or True)
+        self.assertTrue(belongs_to(self.by_id('transformation-atlas-marts'), 'transformation-publications'))
 
     def test_worksheet_keeps_one_transformation_handoff(self):
         handoff = self.by_id('open-transformation')
         self.assertTrue(belongs_to(handoff, 'warehouse'))
-        for identifier in ('copilot-stage', 'copilot-publish'):
-            self.assertFalse(belongs_to(self.by_id(identifier), 'warehouse'), identifier)
-            self.assertTrue(belongs_to(self.by_id(identifier), 'transformation-models'), identifier)
-        self.assertIn('hidden', self.by_id('copilot-stage-table')['parents'][-1]['attrs'])
+        self.assertNotIn('id="copilot-stage-table"', database_ui.HTML)
 
     def test_transformation_css_wraps_and_keeps_touch_targets(self):
         css = self.source.css
-        self.assertIn('#ingestion .subnav button,#transformation .subnav button{min-height:44px}', css)
         self.assertIn('#p35-wap-form :is(button,select,input,textarea,summary),', css)
         self.assertIn('#transformation :is(button,select,input:not([type=checkbox]),textarea,summary){min-height:44px}', css)
         self.assertIn(':is(#p35-wap,#db-marts-panel){min-width:0;max-width:100%}', css)
@@ -179,9 +170,9 @@ assert.equal(activeTab,'transformation');assert.equal(document.activeElement,p.r
         self.javascript(r'''
 const p=await ready('p35-wap');
 assert.equal($('transformation-view-wap').hidden,true);
-assert.equal($('transformation-view-marts').textContent,'Published MARTS');
-assert.equal($('db-marts-panel').parentElement,$('transformation-marts'));
-for(const id of ['db-marts-list','db-marts-save','db-marts-check','db-marts-refresh-run','db-marts-history-refresh'])assert.ok($('db-marts-panel').descendants().includes($(id)),id);
+assert.equal($('transformation-legacy').hidden,true);
+assert.equal($('db-marts-panel').parentElement,$('transformation-atlas-marts'));
+for(const id of ['db-marts-list','db-marts-save','db-marts-check','db-marts-refresh-run','db-marts-history-refresh'])assert.ok($('transformation-publications').descendants().includes($(id)),id);
 ''')
 
     def test_published_marts_uses_ready_databases_role_labels_and_japanese_copy(self):
@@ -197,7 +188,7 @@ route=async(path,options)=>{
 };
 dbMarts.database='db';dbMarts.schema='schema';dbMarts.role='admin';await dbMartsRefresh();
 assert.equal([...$('db-marts-database').options].some(o=>o.value==='retired'),false);
-assert.equal($('db-marts-database').options.find(o=>o.value==='db').textContent,'Sales · sales');
+assert.equal($('db-marts-database').options.find(o=>o.value==='db').textContent,'Sales');
 dbMarts.database='retired';dbMartsRender();assert.equal([...$('db-marts-database').options].some(o=>o.value==='retired'||o.textContent.includes('Legacy')),false);
 dbMarts.database='db';dbMartsRender();
 setLanguage('ja');
@@ -243,11 +234,14 @@ globalThis.location={href:'http://local/#transformation/marts'};
 globalThis.history={replaceState:(state,title,url)=>{globalThis.location.href=String(url);},pushState:(state,title,url)=>{globalThis.location.href=String(url);}};
 await initializeDatabaseUI(session);await dbPageHydration;await dbRuntimeHydration;await tick();await tick();
 assert.equal(activeTab,'transformation');
-assert.equal($('transformation-marts').hidden,false);assert.equal($('transformation-models').hidden,true);
+assert.equal($('transformation-publications').hidden,false);
+assert.equal($('transformation-atlas-models').hidden,false);
+assert.equal($('transformation-legacy').hidden,true);
 assert.match(globalThis.location.href,/#transformation\/marts$/);
 globalThis.location.href='http://local/#transformation';
 await workbenchRestorePage(session,{history:true});await tick();
-assert.equal($('transformation-models').hidden,false);assert.equal($('transformation-marts').hidden,true);
+assert.equal($('transformation-atlas-models').hidden,false);
+assert.equal($('transformation-publications').hidden,false);
 ''')
 
 

@@ -17,24 +17,51 @@ class AtlasShellUI(unittest.TestCase):
         return output.removesuffix('NAVIGATION_COMPLETE\n')
 
     def test_navigation_groups_labels_routes_and_nowrap(self):
-        nav = MARKUP.ids['workbench-nav']
-        headings = [node['text'].strip() for node in MARKUP.elements
-                    if node['tag'] == 'h2' and nav in node['parents']]
-        self.assertEqual(headings, ['Work with data', 'Administration', 'Workspace'])
-        links = [node for node in MARKUP.elements if 'data-tab' in node['attrs']]
+        sidebar = MARKUP.ids['workbench-nav']
+        self.assertEqual(sidebar['attrs']['class'], 'sidebar')
+        brand = next(node for node in MARKUP.elements
+                     if node['tag'] == 'a' and sidebar in node['parents']
+                     and 'brand' in (node['attrs'].get('class') or '').split())
+        self.assertEqual(brand['attrs']['href'], '#home')
+        self.assertIn('Shirokuma', brand['text'])
+        self.assertIn('Data workspace', brand['text'])
+        navlist = next(node for node in MARKUP.elements
+                       if node['tag'] == 'nav' and sidebar in node['parents']
+                       and 'navlist' in (node['attrs'].get('class') or '').split())
+        links = [node for node in MARKUP.elements
+                 if navlist in node['parents'] and 'data-tab' in node['attrs']]
         self.assertEqual([node['attrs']['data-tab'] for node in links], [
             'home', 'catalog', 'warehouse', 'ingestion', 'transformation', 'jobs', 'bears',
             'db-admin', 'pawprints', 'compute',
         ])
-        routes = {'catalog': 'explore', 'warehouse': 'sql', 'db-admin': 'databases', 'pawprints': 'audit'}
         self.assertEqual([node['attrs']['href'] for node in links], [
-            '#' + routes.get(node['attrs']['data-tab'], node['attrs']['data-tab']) for node in links])
-        self.assertFalse(any('nav-note' in (node['attrs'].get('class') or '').split() for node in MARKUP.elements))
-        self.assertIn('nav-workspace', MARKUP.ids)
+            '#home', '#explore', '#sql', '#ingestion', '#transformation', '#jobs', '#bears',
+            '#databases', '#audit', '#compute',
+        ])
+        self.assertEqual([node['attrs']['id'] for node in links], [
+            'tab-home', 'tab-catalog', 'tab-warehouse', 'tab-ingestion', 'tab-transformation',
+            'tab-jobs', 'tab-bears', 'tab-db-admin', 'tab-pawprints', 'tab-compute',
+        ])
+        icons = [next(n for n in MARKUP.elements
+                      if n['parents'] and n['parents'][-1] is node
+                      and 'icon' in (n['attrs'].get('class') or '').split())['text'].strip()
+                 for node in links]
+        self.assertEqual(icons, ['⌂', '▦', '⌘', '↓', '⇄', '◷', '✧', '▱', '≡', '◈'])
+        navtitles = [node['text'].strip() for node in MARKUP.elements
+                     if 'navtitle' in (node['attrs'].get('class') or '').split()
+                     and sidebar in node['parents']]
+        self.assertIn('Administration', navtitles)
+        self.assertIn('Favorites', navtitles)
+        self.assertIn('Workspace', navtitles)
+        self.assertIn('workbench-favorites', MARKUP.ids)
+        self.assertIn('hidden', MARKUP.ids['workbench-favorites']['attrs'])
         self.assertEqual(MARKUP.ids['nav-workspace-context']['tag'], 'a')
-        self.assertIn('hidden', MARKUP.ids['nav-workspace-context']['attrs'])
-        self.assertEqual(MARKUP.ids['nav-warehouse']['attrs']['href'], '#compute')
-        self.assertNotIn('nav-warehouse-state', MARKUP.ids)
+        self.assertEqual(MARKUP.ids['nav-workspace-context']['attrs']['href'], '#explore')
+        self.assertEqual(MARKUP.ids['rail-warehouse']['attrs']['href'], '#compute')
+        self.assertIn('theme-light', MARKUP.ids)
+        self.assertIn('theme-dark', MARKUP.ids)
+        self.assertEqual(MARKUP.ids['theme-light']['attrs']['aria-pressed'], 'true')
+        self.assertEqual(MARKUP.ids['theme-dark']['attrs']['aria-pressed'], 'false')
         mobile = [node for node in MARKUP.elements if 'data-mobile-tab' in node['attrs']]
         self.assertEqual(len(mobile), 10)
         self.assertIn('workbench-mobile-nav', MARKUP.ids)
@@ -42,30 +69,39 @@ class AtlasShellUI(unittest.TestCase):
             'home', 'catalog', 'warehouse', 'ingestion', 'transformation', 'jobs', 'bears',
             'db-admin', 'pawprints', 'compute',
         ])
-        self.assertEqual([node['text'].strip() for node in MARKUP.elements
-                          if (node['attrs'].get('class') or '') == 'mobile-nav-category'],
-                         ['Work with data', 'Administration'])
+        topbar = MARKUP.ids['workbench-header']
+        self.assertEqual(topbar['attrs']['class'], 'topbar')
+        self.assertEqual(MARKUP.ids['workbench-breadcrumb']['tag'], 'span')
+        self.assertEqual(MARKUP.ids['database-compute-status']['attrs']['class'], 'sample compute-chip')
+        self.assertIn('searchbutton', MARKUP.ids['workbench-command-button']['attrs']['class'].split())
+        self.assertIn('primary', MARKUP.ids['workbench-open-sql']['attrs']['class'].split())
+        command = MARKUP.ids['command']
+        self.assertEqual(command['tag'], 'dialog')
+        self.assertIn('command-search', MARKUP.ids)
+        self.assertIn('command-list', MARKUP.ids)
+        self.assertIn('command-empty', MARKUP.ids)
+        self.assertEqual(MARKUP.ids['command-list']['attrs']['class'], 'commandlist')
         css = WorkbenchSource(harness.HTML).css
         css = re.sub(r'/\*[\s\S]*?\*/', '', css)
         rules = {selector.strip(): body for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)}
-        self.assertRegex(rules['nav a'], r'white-space\s*:\s*nowrap')
-        self.assertRegex(css, r'\.layout\{display:grid;grid-template-columns:244px')
-        self.assertRegex(rules['#workbench-nav'], r'display\s*:\s*none')
+        self.assertRegex(rules['.navlink'], r'white-space\s*:\s*nowrap')
+        self.assertRegex(css, r'\.app\s*\{[^}]*grid-template-columns\s*:\s*244px')
+        self.assertRegex(css, r'\.mobilemenu\s*\{\s*display\s*:\s*none')
+        self.assertRegex(css, r'\.topbar\s*\{[^}]*min-height\s*:\s*77px')
+        self.assertRegex(css, r'\.panel\s*\{[^}]*border-radius\s*:\s*8px')
         self.assertRegex(rules['.impact'], r'border-left')
         self.assertRegex(rules['.impact.neutral'], r'border-left-color')
         danger = next(body for selector, body in rules.items() if 'button.primary.danger' in selector)
-        self.assertRegex(danger, r'background\s*:\s*var\(--bad\)')
-        self.assertRegex(rules['a.primary'], r'background\s*:\s*var\(--accent\)')
-        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.app-header :is\(button,summary,#workbench-open-sql\)\{min-height:44px\}')
-        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.app-header \.icon-button,\.user-menu summary\{width:44px;height:44px;min-width:44px\}')
-        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?#lang-switcher button\{min-height:44px;min-width:44px\}')
-        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?#role-selector,#ai-settings-button,#workbench-mobile-summary\{min-height:44px\}')
-        self.assertRegex(css, r'@media\(min-width:601px\) and \(max-width:760px\)\{html\[data-data-mode=database\] :is\(#role-selector,#ai-settings-button\)\{min-height:32px\}\}')
-        self.assertRegex(css, r'@media\(max-width:360px\)\{[\s\S]*?\.app-header \.search-label\{display:none\}')
-        self.assertRegex(css, r'@media\(max-width:360px\)\{[\s\S]*?\.breadcrumb\{flex:0 1 auto;min-width:0\}')
-        command = MARKUP.ids['workbench-command-button']
-        self.assertEqual(command['attrs']['aria-label'], 'Search and commands')
-        self.assertEqual(command['attrs']['aria-expanded'], 'false')
+        self.assertRegex(danger, r'background\s*:\s*var\(--(?:bad|red)\)')
+        primary = rules['button.primary,a.primary']
+        self.assertRegex(primary, r'background\s*:\s*var\(--button\)')
+        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.sidebar\{display:none\}')
+        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.mobilemenu\{display:block')
+        command_button = MARKUP.ids['workbench-command-button']
+        self.assertEqual(command_button['attrs']['aria-label'], 'Search and commands')
+        self.assertEqual(command_button['attrs']['aria-expanded'], 'false')
+        self.assertEqual(command_button['attrs']['aria-controls'], 'command')
+        self.assertEqual(MARKUP.ids['workbench-open-sql']['attrs']['href'], '#sql')
 
     def test_legacy_hashes_are_replaced_and_details_are_preserved(self):
         self.run_url('http://local/#warehouse?keep=1', r"""
@@ -95,8 +131,8 @@ noPosts();
         self.javascript(r"""
 await boot();
 globalThis.location={href:'http://local/#sql'};
-$('workbench-command').showModal=function(){this.open=true;};
-$('workbench-command').close=function(){this.open=false;};
+$('command').showModal=function(){this.open=true;};
+$('command').close=function(){this.open=false;};
 catalogMetadata={marts:[['orders']]};
 dbDatabases=[
  {id:'db',display_name:'Sales',sql_catalog:'sales',state:'READY',capabilities:{browse:true}},
@@ -112,18 +148,18 @@ dbSchemaCache.set(dbSchemaKey(currentRole,'old'),[schema]);
 dbTreeObjects.set(JSON.stringify([dbSchemaKey(currentRole,'old'),'schema','']),{items:[
  {id:'old-obj',ref:{database_id:'old',schema_id:'schema',id:'old-obj'},physical_name:'orders',display_name:'Orders',capabilities:{columns:true}},
 ],next_cursor:null});
-$('workbench-command-search').value='';
+$('command-search').value='';
 workbenchCommandRender();
-const entries=()=>[...$('workbench-command-list').children];
-assert.deepEqual(entries().map(node=>node.children[1].textContent),Array(10).fill(t('Page')).concat(Array(4).fill(t('Action'))));
+const entries=()=>[...$('command-list').children];
+assert.deepEqual(entries().map(node=>node.children[1].textContent),Array(10).fill(t('Page')+' →').concat(Array(4).fill(t('Action')+' →')));
 assert.deepEqual(entries().slice(0,10).map(node=>node.children[0].textContent),[
  'Home','Data Explorer','SQL Worksheets','Ingestion & Stages','Transformation','Jobs','AI Bears','Database Management','Audit log','Compute & Governance',
 ]);
-$('workbench-command-search').value='orders';
+$('command-search').value='orders';
 route=async path=>path.startsWith('/api/v1/objects/search?')?{items:[
  {database_id:'db',sql_catalog:'sales',database_display_name:'Sales',schema_id:'schema',schema_sql_name:'marts',name:'orders',kind:'TABLE'},
 ],truncated:false,unavailable_databases:[]}:{};
-workbenchCommandRender();await tick();workbenchCommandPaint();
+workbenchCommandRender();workbenchCommandCancelTimer();await workbenchCommandSearchTables('orders');workbenchCommandPaint();
 const labels=entries().map(node=>node.children[0].textContent);
 assert.ok(labels.includes('sales.marts.orders'),labels.join('|'));
 assert.ok(!labels.includes('marts.orders'),labels.join('|'));
@@ -132,34 +168,34 @@ assert.ok(!labels.some(label=>label.includes('Retired DB')));
 assert.ok(!labels.some(label=>label.includes('retired.marts.orders')));
 setLanguage('ja');
 for(const [query,label] of [['監査','Audit log'],['ログ','Audit log'],['ＳＱＬ','SQL Worksheets'],['audit','Audit log']]){
- $('workbench-command-search').value=query;workbenchCommandRender();
+ $('command-search').value=query;workbenchCommandRender();workbenchCommandCancelTimer();
  assert.ok(entries().some(node=>node.children[0].textContent===t(label)),query+' → '+entries().map(node=>node.children[0].textContent).join('|'));
 }
 setLanguage('en');
 $('workbench-command-button').focus();workbenchCommandOpen();
-assert.equal($('workbench-command').open,true);assert.equal(document.activeElement,$('workbench-command-search'));
+assert.equal($('command').open,true);assert.equal(document.activeElement,$('command-search'));
 workbenchCommandKeydown({key:'ArrowDown',preventDefault(){}});
 assert.equal(document.activeElement,entries()[0]);
 workbenchCommandKeydown({key:'ArrowDown',preventDefault(){}});
 assert.equal(document.activeElement,entries()[1]);
 workbenchCommandKeydown({key:'ArrowUp',preventDefault(){}});
 assert.equal(document.activeElement,entries()[0]);
-$('workbench-command-search').value='SQL Worksheets';workbenchCommandRender();
+$('command-search').value='SQL Worksheets';workbenchCommandRender();
 workbenchCommandKeydown({key:'Enter',preventDefault(){}});
-assert.equal(activeTab,'warehouse');assert.equal($('workbench-command').open,false);
+assert.equal(activeTab,'warehouse');assert.equal($('command').open,false);
 assert.equal(document.activeElement,$('workbench-command-button'));
 $('workbench-command-button').focus();workbenchCommandOpen();
 workbenchCommandKeydown({key:'Escape',preventDefault(){}});
-assert.equal($('workbench-command').open,false);assert.equal(document.activeElement,$('workbench-command-button'));
-$('workbench-command-search').value='zzzz';workbenchCommandRender();
-assert.equal(entries().length,0);assert.equal($('workbench-command-empty').hidden,false);
+assert.equal($('command').open,false);assert.equal(document.activeElement,$('workbench-command-button'));
+$('command-search').value='zzzz';workbenchCommandRender();workbenchCommandCancelTimer();workbenchCommandSearching=false;workbenchCommandPaint();
+assert.equal(entries().length,0);assert.equal($('command-empty').hidden,false);assert.equal($('command-empty').textContent,t('No matching destinations.'));
 """)
 
     def test_header_overlays_close_each_other_and_escape(self):
         self.javascript(r"""
 await boot();
-$('workbench-command').showModal=function(){this.open=true;};
-$('workbench-command').close=function(){this.open=false;};
+$('command').showModal=function(){this.open=true;};
+$('command').close=function(){this.open=false;};
 $('workbench-alerts-popover').hidden=true;$('user-menu').open=false;
 $('workbench-alerts-button').onclick();
 assert.equal($('workbench-alerts-popover').hidden,false);
@@ -188,7 +224,7 @@ workbenchOverlayOutsideClick({});
 assert.equal($('user-menu').open,false);assert.equal(document.activeElement,$('user-menu-summary'));
 $('user-menu-summary').focus();workbenchSetUserMenuOpen(true);
 $('workbench-alerts-button').onclick();
-assert.equal($('user-menu').open,false);assert.equal($('user-menu-summary').getAttribute('aria-expanded'),'false');
+assert.equal($('user-menu').open,true);assert.equal($('user-menu-summary').getAttribute('aria-expanded'),'true');
 assert.equal($('workbench-alerts-popover').hidden,false);
 workbenchSetMobileOpen(true);assert.equal($('workbench-mobile-nav').open,true);
 assert.equal($('workbench-mobile-summary').getAttribute('aria-expanded'),'true');

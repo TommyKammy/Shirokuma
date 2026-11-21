@@ -30,17 +30,17 @@ assert.equal(posts().length,0);
 
     def test_shared_phase_does_not_gate_policy_controls(self):
         self.javascript(r"""
-await start();$('runtime-minutes').value='20';$('runtime-minutes').oninput();
-for(const phase of ['ACCEPTED','RUNNING','UNKNOWN',null]){dbRuntime.status.operation_phase=phase;dbRuntimeRender();for(const action of ['wake','chill','reconcile'])assert.equal($('runtime-'+action).disabled,['ACCEPTED','RUNNING'].includes(phase));assert.equal($('runtime-save').disabled,false);assert.equal($('runtime-reload').disabled,false);assert.equal($('runtime-minutes').disabled,false);assert.match(dbRuntimeCondition('save'),/Selectable/);}
+await start();dbRuntime.status.physical_state='active';dbRuntime.status.replicas=1;dbRuntime.status.ready_replicas=1;$('runtime-minutes').value='20';$('runtime-minutes').oninput();
+for(const phase of ['ACCEPTED','RUNNING','UNKNOWN',null]){dbRuntime.status.operation_phase=phase;dbRuntimeRender();assert.equal($('runtime-wake').disabled,true);assert.equal($('runtime-chill').disabled,['ACCEPTED','RUNNING'].includes(phase));assert.equal($('runtime-reconcile').disabled,['ACCEPTED','RUNNING'].includes(phase));assert.equal($('runtime-save').disabled,false);assert.equal($('runtime-reload').disabled,false);assert.equal($('runtime-minutes').disabled,false);assert.match(dbRuntimeCondition('save'),/Selectable/);}
 """)
 
     def test_disabled_parity_matrix_for_all_existing_controls(self):
         self.javascript(r"""
-await start();const original=structuredClone(dbRuntime.status);
+await start();const original=structuredClone(dbRuntime.status);original.physical_state='active';original.replicas=1;original.ready_replicas=1;
 for(const allowed of [true,false])for(const pending of [true,false])for(const local of [null,'ACCEPTED','RUNNING','UNKNOWN'])for(const shared of [null,'ACCEPTED','RUNNING','UNKNOWN'])for(const count of [0,1]){
  dbRuntime.status={...structuredClone(original),available_actions:allowed?original.available_actions:[],operation_phase:shared};dbRuntime.status.blockers.admissions=count;dbRuntime.pending=pending;dbRuntime.intent=null;dbRuntime.operation=local?{phase:local}:null;dbRuntime.dirty=true;dbRuntime.base=3;dbRuntime.conflict=false;$('runtime-minutes').value='20';dbRuntimeRender();
  const locked=pending||['ACCEPTED','RUNNING'].includes(local);
- for(const action of ['wake','chill','reconcile']){const disabled=!allowed||locked||action==='chill'&&count>0||['ACCEPTED','RUNNING'].includes(shared);for(const id of ['runtime-'+action,...(action==='reconcile'?[]:[action])])assert.equal($(id).disabled,disabled,id);}
+ for(const action of ['wake','chill','reconcile']){const disabled=!allowed||locked||action==='wake'||action==='chill'&&count>0||['ACCEPTED','RUNNING'].includes(shared);for(const id of ['runtime-'+action,...(action==='reconcile'?[]:[action])])assert.equal($(id).disabled,disabled,id);}
  for(const id of ['runtime-save','runtime-minutes','runtime-reload'])assert.equal($(id).disabled,!allowed||locked,id);
  assert.equal($('runtime-receipt').disabled,true);assert.equal($('runtime-receipt').hidden,true);
 }
@@ -50,16 +50,16 @@ for(const base of [null,undefined,NaN,1.5,'3']){dbRuntime.base=base;dbRuntimeRen
 
     def test_each_of_six_chill_categories_is_explained_only_for_chill(self):
         self.javascript(r"""
-await start();const zero=structuredClone(dbRuntime.status.blockers);$('runtime-minutes').value='20';$('runtime-minutes').oninput();
+await start();dbRuntime.status.physical_state='active';dbRuntime.status.replicas=1;dbRuntime.status.ready_replicas=1;const zero=structuredClone(dbRuntime.status.blockers);$('runtime-minutes').value='20';$('runtime-minutes').oninput();
 for(const [path,label] of [[['runtime_operations'],'Runtime operations'],[['admissions'],'Admitted work'],[['unknown'],'Unresolved admissions'],[['creation','requests'],'Creation requests'],[['creation','effects'],'Creation effects'],[['creation','roots'],'Creation roots']]){
- const counts=structuredClone(zero);if(path.length===2)counts.creation[path[1]]=1;else counts[path[0]]=1;if(path[0]==='unknown')counts.admissions=1;dbRuntime.status.blockers=counts;dbRuntimeRender();assert.equal($('runtime-chill').disabled,true);assert.ok($('runtime-condition-chill').textContent.includes(label));for(const id of ['runtime-wake','runtime-save','runtime-reconcile'])assert.equal($(id).disabled,false,id);
+ const counts=structuredClone(zero);if(path.length===2)counts.creation[path[1]]=1;else counts[path[0]]=1;if(path[0]==='unknown')counts.admissions=1;dbRuntime.status.blockers=counts;dbRuntimeRender();assert.equal($('runtime-chill').disabled,true);assert.ok($('runtime-condition-chill').textContent.includes(label));assert.equal($('runtime-wake').disabled,true);for(const id of ['runtime-save','runtime-reconcile'])assert.equal($(id).disabled,false,id);
 }
 """)
 
     def test_malformed_partial_and_unknown_count_invariants_only_gate_chill(self):
         self.javascript(r"""
-await start();const zero=structuredClone(dbRuntime.status.blockers);$('runtime-minutes').value='20';$('runtime-minutes').oninput();
-for(const counts of [null,{}, {...zero,extra:0},{...zero,creation:{requests:0,effects:0}},{...zero,admissions:-1},{...zero,unknown:1},{...zero,admissions:0.5},{...zero,runtime_operations:'0'}]){dbRuntime.status.blockers=counts;dbRuntimeRender();assert.equal(dbRuntimeBlockers(),null);assert.equal($('runtime-chill').disabled,true);assert.match(dbRuntimeCondition('chill'),/unavailable/);for(const id of ['runtime-wake','runtime-save','runtime-reconcile'])assert.equal($(id).disabled,false);}
+await start();dbRuntime.status.physical_state='active';dbRuntime.status.replicas=1;dbRuntime.status.ready_replicas=1;const zero=structuredClone(dbRuntime.status.blockers);$('runtime-minutes').value='20';$('runtime-minutes').oninput();
+for(const counts of [null,{}, {...zero,extra:0},{...zero,creation:{requests:0,effects:0}},{...zero,admissions:-1},{...zero,unknown:1},{...zero,admissions:0.5},{...zero,runtime_operations:'0'}]){dbRuntime.status.blockers=counts;dbRuntimeRender();assert.equal(dbRuntimeBlockers(),null);assert.equal($('runtime-chill').disabled,true);assert.match(dbRuntimeCondition('chill'),/unavailable/);assert.equal($('runtime-wake').disabled,true);for(const id of ['runtime-save','runtime-reconcile'])assert.equal($(id).disabled,false);}
 """)
 
     def test_policy_reason_priority_and_invalid_input_disables_save(self):
@@ -82,7 +82,7 @@ await start();for(const text of ['', ' ', '-1','1441','0.5','NaN','Infinity','1e
 
     def test_old_observation_qualifies_without_new_gates(self):
         self.javascript(r"""
-await start();dbRuntime.status.observed_at='2000-01-01T00:00:00Z';dbRuntime.reading=true;dbRuntime.observing=true;dbRuntime.status.operation_phase='UNKNOWN';dbRuntime.operation={phase:'UNKNOWN'};dbRuntimeRender();assert.match($('runtime-conditions-scope').textContent,/2000-01-01.*not current permission, admission, success or health assurance/);assert.match($('runtime-conditions-scope').textContent,/server rechecks/);for(const id of ['runtime-wake','runtime-chill','runtime-reconcile'])assert.equal($(id).disabled,false);assert.equal(posts().length,0);
+await start();dbRuntime.status.physical_state='active';dbRuntime.status.replicas=1;dbRuntime.status.ready_replicas=1;dbRuntime.status.observed_at='2000-01-01T00:00:00Z';dbRuntime.reading=true;dbRuntime.observing=true;dbRuntime.status.operation_phase='UNKNOWN';dbRuntime.operation={phase:'UNKNOWN'};dbRuntimeRender();assert.match($('runtime-conditions-scope').textContent,/2000-01-01.*not current permission, admission, success or health assurance/);assert.match($('runtime-conditions-scope').textContent,/server rechecks/);assert.equal($('runtime-wake').disabled,true);for(const id of ['runtime-chill','runtime-reconcile'])assert.equal($(id).disabled,false);assert.equal(posts().length,0);
 """)
 
     def test_four_physical_states_never_infer_stop_cause(self):
@@ -110,7 +110,7 @@ assert.match($('runtime-condition-receipt').textContent,/may POST/);actionRoute=
     def test_bilingual_existing_sections_descriptions_and_impact_preserved(self):
         self.javascript(r"""
 await start();const input=$('runtime-minutes');
-for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('runtime-panel').parentElement,$('compute'));for(const [action,section] of [['wake','controls'],['reconcile','controls'],['receipt','controls'],['chill','safety'],['save','policy'],['reload','policy']]){const condition=$('runtime-condition-'+action);assert.equal(condition.parentElement,$('runtime-conditions'));const ids=$('runtime-'+action).getAttribute('aria-describedby').split(' ');assert.equal(new Set(ids).size,ids.length);assert.ok(ids.includes(condition.id));}assert.match($('runtime-condition-wake').textContent,lang==='ja'?/この観測では選択できます。操作時に再確認します。/:/Selectable/);assert.ok($('runtime-conditions-scope').textContent.includes(t('Refresh status')));assert.match($('runtime-wake').title,lang==='ja'?/全 DB/:/all databases/);}
+for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('runtime-panel').parentElement,$('compute-runtime-host'));for(const [action,section] of [['wake','controls'],['reconcile','controls'],['receipt','controls'],['chill','safety'],['save','policy'],['reload','policy']]){const condition=$('runtime-condition-'+action);assert.equal(condition.parentElement,$('runtime-conditions'));const ids=$('runtime-'+action).getAttribute('aria-describedby').split(' ');assert.equal(new Set(ids).size,ids.length);assert.ok(ids.includes(condition.id));}assert.match($('runtime-condition-wake').textContent,lang==='ja'?/この観測では選択できます。操作時に再確認します。/:/Selectable/);assert.ok($('runtime-conditions-scope').textContent.includes(t('Refresh status')));assert.match($('runtime-wake').title,lang==='ja'?/全 DB/:/all databases/);}
 for(const id of ['runtime-minutes-help','runtime-policy','runtime-draft'])assert.ok(input.getAttribute('aria-describedby').split(' ').includes(id));assert.equal(posts().length,0);
 """)
 

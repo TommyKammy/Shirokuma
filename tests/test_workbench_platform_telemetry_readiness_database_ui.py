@@ -163,7 +163,7 @@ for(const kind of telemetryKinds){
 
     def test_real_sre_platform_visibility_navigation_preserves_receipts_options_no_fetch(self):
         self.navigation_javascript(r"""
-await telemetryBoot();$('tab-compute').click();await telemetryFetch();const held=dbTelemetryReadiness.compute.record,count=calls.length;
+await telemetryBoot();$('tab-compute').click();await telemetryFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const held=dbTelemetryReadiness.compute.record,count=calls.length;
 for(const locale of ['ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-telemetry-readiness').hidden,false);assert.equal($('observation-sre-database-controls').hidden,true);const options=$('observation-sre-scope').options.map(o=>o.value);assert.deepEqual(options,['database','platform']);scope('sre','database');assert.equal($('observation-sre-telemetry-readiness').hidden,true);$('bear-tab-policy').click();scope('policy');assert.equal($('observation-policy-telemetry-readiness'),null);$('tab-compute').click();assert.equal(dbTelemetryReadiness.compute.record,held);assert.equal(calls.length,count);}
 """)
 

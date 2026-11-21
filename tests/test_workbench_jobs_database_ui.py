@@ -77,8 +77,15 @@ for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();const detail=$('
  assert.ok(text.includes(t('Committed rows')));assert.ok(text.includes(t('Partially completed')));
  assert.ok(!text.includes('child-1'));assert.ok(!text.includes('private technical text'));assert.equal(detail.descendants().some(n=>n.tagName==='IMG'),false);
  assert.ok(detail.descendants().filter(n=>n.tagName==='DETAILS').every(n=>n.open===false&&n.className==='workflow-details'));
- const body=p.form.parentElement;assert.ok(body.children.indexOf(p.form)<body.children.indexOf(detail));assert.ok(body.children.indexOf(p.status)<body.children.indexOf(p.form));assert.ok(body.children.indexOf($('db-jobs-next'))<body.children.indexOf(p.form));
- assert.equal($('db-jobs-observe').parentElement.parentElement,body);assert.equal($('db-jobs-observe').disabled,false);assert.ok($('db-jobs-current').textContent.includes('daily'));assert.match($('db-jobs-context').textContent,/sales.*marts.*(admin|管理者)/i);
+ const root=$('db-jobs-panel'),detailView=$('db-jobs-detail'),listView=$('db-jobs-list-panel');
+ assert.equal(p.status.parentElement,listView);assert.equal(p.status.hidden,true);
+ assert.equal($('db-jobs-run-status').textContent,p.status.textContent);assert.equal($('db-jobs-run-status').hidden,false);
+ assert.equal(detailView.children[0],$('db-jobs-back'));
+ assert.equal(detailView.children.some(n=>['db-jobs-editor-panel','db-schedule-job-slot','db-jobs-history-panel'].includes(n.id)),false);
+ assert.equal($('db-jobs-edit-details').parentElement,listView);assert.equal($('db-jobs-edit-details').hidden,true);
+ assert.equal($('db-jobs-steps-view').parentElement.parentElement.className,'jobdetailgrid');
+ assert.equal($('db-jobs-observe').parentElement.parentElement.parentElement.id,'db-jobs-run-panel');assert.equal($('db-jobs-observe').disabled,false);
+ assert.ok($('db-jobs-current').textContent.includes('daily'));assert.match($('db-jobs-context').textContent,/sales.*marts.*(admin|管理者)/i);
 }
 assert.equal(jobPosts().length,2);
 ''')
@@ -143,7 +150,7 @@ assert.equal(jobPosts().length,count);assert.equal(help.open,false);assert.ok(!a
     def test_failure_and_authorization_reasons_remain_outside_disclosures(self):
         self.javascript(r'''
 await createJob();await dbJobsRun();const originalRoute=route;route=async()=>{throw Error('offline');};await dbJobsObserve();
-for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal(p.status.textContent,t('Run status check failed. Showing the last known status. Retry the read-only check.'));assert.equal(p.status.parentElement,p.form.parentElement);}
+for(const lang of ['ja','en']){setLanguage(lang);dbJobsRender();assert.equal(p.status.textContent,t('Run status check failed. Showing the last known status. Retry the read-only check.'));assert.equal(p.status.parentElement,$('db-jobs-list-panel'));assert.equal($('db-jobs-run-status').textContent,p.status.textContent);assert.equal($('db-jobs-run-status').hidden,false);}
 route=originalRoute;p.job.owner='someone-else';ui(p.status,'running');dbJobsRender();assert.equal(p.status.textContent,t('Job definition belongs to another owner or saved role.'));
 inventory=[];await dbRefreshAccess();assert.equal(p.run.details,null);assert.equal($('db-jobs-observe').disabled,true);assert.ok(!$('db-jobs-run-detail').descendants().some(n=>n.textContent.includes('child-1')));assert.equal(p.status.textContent,t('Job access unavailable. Refresh an authorized context.'));
 ''')

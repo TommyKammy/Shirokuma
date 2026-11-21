@@ -305,65 +305,6 @@ class WorkbenchTests(unittest.TestCase):
                 self.assertEqual(self.json_request('/api/stages/exports',{'name':'missing'})[0],404)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_export_controls_revisions_and_stale_output_responses(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){this.textContent='';},setAttribute(){},reset(){},append(){},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',mode:'append',table:'raw.orders'},schedule:null};
- editStage(entry);assert.equal($('stage-export-area').hidden,false);assert.equal($('stage-export-table').value,'raw.orders');assert.equal($('stage-export-directory').textContent,'/host/orders/exports');
- $('stage-export-format').value='jsonl';$('stage-export-format').onchange();assert.equal($('stage-export-file').value,'orders.jsonl');
- $('stage-export-table').value='iceberg.marts.results';
- let pending=$('stage-export-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1),{path:'/api/stages/export',body:{name:'orders',table:'iceberg.marts.results',format:'jsonl',file:'orders.jsonl',version:'revision-1'}});
- assert.equal($('stage-export-submit').disabled,true);let count=calls.length;
- $('stage-export-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- respond({run:{id:'export-1'}});await pending;assert.equal(stageRunId,'export-1');assert.equal($('stage-view-run').hidden,false);
- pending=$('stage-exports-refresh').onclick();assert.equal(calls.at(-1).path,'/api/stages');
- respond({stages:[entry]});await Promise.resolve();await Promise.resolve();assert.equal(calls.at(-1).path,'/api/stages/exports');
- respond({directory:'/host/orders/exports',files:[]});await pending;
- assert.equal(stageRunId,'export-1');assert.equal($('stage-exports').textContent,'No exported files.');
- // Saved edits invalidate displayed output and use the new revision on the next export.
- pending=$('stage-exports-refresh').onclick();
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new'}};
- respond({stages:[revised]});await Promise.resolve();await Promise.resolve();
- assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(selectedStage.updated_at,'revision-2');
- // Changing stage while the response is in flight must not show an old path or files.
- ++stageEpoch;editStage({...revised,name:'other',definition:{...revised.definition,name:'other',directory:'/host/other'}});
- respond({directory:'/secret/old/exports',files:[{name:'old.csv'}]});await pending;
- assert.equal($('stage-export-directory').textContent,'/host/other/exports');assert.equal($('stage-exports').textContent,'Refresh outputs to list exported files.');
- stagePending=false;$('stage-form').oninput();assert.equal($('stage-export-area').hidden,true);count=calls.length;
- $('stage-export-form').onsubmit({preventDefault(){}});$('stage-exports-refresh').onclick();assert.equal(calls.length,count);
- stageDirty=false;pending=$('stage-export-form').onsubmit({preventDefault(){}});
- currentRole='bi_viewer';resetStageUI();respond({run:{id:'late-secret'}});await pending;
- assert.equal(selectedStage,null);assert.equal(stageRunId,null);assert.equal($('stage-export-area').hidden,true);assert.equal($('stage-export-directory').textContent,'');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result=subprocess.run(['node','-e','const HANDLERS='+json.dumps(handlers)+';'+harness],capture_output=True,text=True)
-        self.assertEqual(result.returncode,0,result.stderr)
-
-    def test_stage_export_ui_has_labels_limits_and_translations(self):
-        doc=self.workbench_document()
-        self.assertIn(doc.by_id('stages-area'),doc.by_id('stage-export-area')['ancestors'])
-        for identifier in ('stage-export-table','stage-export-format','stage-export-file'):
-            self.assertTrue(any(node.get('for')==identifier for node in doc.nodes))
-        self.assertEqual(doc.by_id('stage-export-form')['tag'],'form')
-        script=doc.main_script()
-        for key in ('Manual export','Output folder','Source table (qualified name)','Export format','Output filename','Export table','Refresh outputs','Stage export','parquet export requires pyarrow','export filename already exists; choose a new filename'):
-            self.assertIn(repr(key)+':',script)
-        self.assertIn('100000 rows and 25 MiB',doc.by_id('stage-export-area')['text'])
-        self.assertIn('Existing filenames are refused.',doc.by_id('stage-export-area')['text'])
-        self.assertIn("run.id===stageExportRunId&&!liveJobStates.has(run.status)",script)
-        self.assertIn("stage_export:'Stage export'",script)
-
     def test_stage_routes_dispatch_authenticated_identity(self):
         definition = dict(name='orders', directory='/host/orders', table='raw.orders', mode='append', format='auto')
         selection = dict(name='orders', file='orders.csv', version='version-1')
@@ -497,9 +438,9 @@ eval(HANDLERS+`
     def test_calendar_schedule_controls_payloads_readback_and_async_permissions(self):
         doc = self.workbench_document()
         script = doc.main_script()
-        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function stageCurrent(', 1)[0]
+        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function jobAlertTime(', 1)[0]
         jobs = 'function jobSchedulePayload(' + script.split('function jobSchedulePayload(', 1)[1].split("$('job-parameter-example')", 1)[0]
-        for prefix in ('job-schedule', 'stage-schedule'):
+        for prefix in ('job-schedule',):
             for field in ('kind', 'minutes', 'time', 'timezone', 'date', 'day', *('weekday-' + str(day) for day in range(1, 8))):
                 self.assertTrue(any(node.get('for') == prefix + '-' + field for node in doc.nodes))
             kind = doc.by_id(prefix + '-kind')
@@ -574,252 +515,10 @@ eval(SHARED+JOBS+`
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('calendar schedule behavior complete', result.stdout)
 
-    def test_stage_ui_stays_in_ingestion_and_requires_preview(self):
-        doc = self.workbench_document()
-        area = doc.by_id('stages-area')
-        self.assertIn(doc.by_id('ingestion'), area['ancestors'])
-        self.assertIn('hidden', area)
-        self.assertEqual(doc.by_id('stage-form')['tag'], 'form')
-        self.assertEqual(doc.by_id('stage-error')['role'], 'alert')
-        self.assertEqual(doc.by_id('stage-state')['role'], 'status')
-        self.assertIn('disabled', doc.by_id('stage-import'))
-        for identifier in ('stage-name', 'stage-directory', 'stage-table', 'stage-mode', 'stage-format', 'stage-key', 'stage-file'):
-            self.assertTrue(any(node.get('for') == identifier for node in doc.nodes))
-        script = doc.main_script()
-        for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stageImportAllowed()", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
-            self.assertIn(text, script)
-
-    def test_stage_localized_display_and_contained_tables(self):
-        html = wb.INDEX.read_text()
-        doc = self.workbench_document()
-        script = doc.main_script()
-        for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '取込済みの内容はファイル名を変更しても除外します。'):
-            self.assertIn(text, script)
-        format_control = doc.by_id('stage-format')
-        automatic = next(node for node in doc.nodes if node.get('value') == 'auto' and format_control in node['ancestors'])
-        self.assertEqual(automatic['text'], 'Automatic')
-        css = WorkbenchSource(html).css
-        self.assertIn('#stages-area .table-wrap{max-width:100%;overflow:auto}', css)
-        self.assertIn('#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}', css)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_preview_invalidation_and_role_change_pending_guard(self):
-        script = self.workbench_document().main_script()
-        handlers = script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        handlers = 'let stageEntries=' + handlers
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){this.children=[];},setAttribute(){},reset(){},append(){},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};
-let currentRole='admin',activeTab='ingestion',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{throw Error('Stale response must not render a table');};
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- selectedStage={name:'orders',can_manage:true,definition:{mode:'append',table:'raw.orders'}};
- stageFiles=[{name:'orders.csv',version:'v1',available:true}];$('stage-file').value='orders.csv';
- stagePreview={name:'orders',file:'orders.csv',version:'v1'};stageControls();assert.equal($('stage-import').disabled,false);
- $('stage-form').oninput();assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stageDirty,true);
- stageDirty=false;stageControls();
- const pending=$('stage-preview-button').onclick();assert.equal(stagePending,true);assert.equal($('stage-file').disabled,true);
- currentRole='data_engineer';resetStageUI();assert.equal($('stages-area').hidden,true);assert.equal(selectedStage,null);
- respond({columns:[{name:'secret'}],sample_rows:[['secret']],row_count:1});await pending;
- assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stagePending,false);
- assert.equal(calls.length,1);assert.deepEqual(calls[0].body,{name:'orders',file:'orders.csv',version:'v1'});
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_preview_uses_current_server_settings_after_external_edit(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){},setAttribute(){},append(){}};
-const ui=(node,text,values)=>{node.textContent=text;node.values=typeof values==='function'?values():values;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='ingestion',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- selectedStage={name:'orders',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.old_target'}};
- stageFiles=[{name:'orders.csv',version:'revision-2-file-token',available:true}];$('stage-file').value='orders.csv';
- const pending=$('stage-preview-button').onclick();
- const authoritative={name:'orders',directory:'/host/new',table:'raw.new_target',mode:'replace',format:'csv'};
- respond({stage:authoritative,columns:[{name:'id',type:'bigint'}],sample_rows:[[1]],row_count:1});await pending;
- assert.deepEqual($('stage-confirmation').values,{file:'orders.csv',table:'raw.new_target',mode:'replace',count:1});
- assert.equal(selectedStage.definition.table,'raw.new_target');assert.equal($('stage-table').value,'raw.new_target');assert.equal($('stage-mode').value,'replace');
- assert.equal($('stage-append-notice').hidden,true);assert.equal($('stage-import').disabled,false);
- const importing=$('stage-import').onclick();assert.equal(calls.at(-1).path,'/api/stages/import');
- assert.deepEqual(calls.at(-1).body,{name:'orders',file:'orders.csv',version:'revision-2-file-token'});
- respond({run:{id:'run-new-settings'}});await importing;
- assert.equal(stageRunId,'run-new-settings');assert.equal(stagePreview,null);
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_schedule_stop_retry_and_stale_async_behavior(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        handlers += '\nconst jobStatuses=' + script.split('const jobStatuses=', 1)[1].split(';', 1)[0] + ';'
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){},setAttribute(){},reset(){},append(){},focus(){}};
-const uiTexts=[];const ui=(node,text)=>{uiTexts.push(text);node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.orders'},schedule:null};
- editStage(entry);assert.equal($('stage-schedule-enabled').checked,false);
- $('stage-schedule-minutes').value='7';$('stage-schedule-enabled').checked=true;
- let pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',kind:'interval',every_minutes:7,enabled:true,version:'revision-1'}});
- respond({schedule:{name:'orders',enabled:true,every_minutes:7}});await pending;
- assert.equal(selectedStage.schedule.enabled,true);assert.equal(stagePending,false);
- // Each calendar kind is saved explicitly and read back without losing the stage revision.
- for(const calendar of [
-  {kind:'daily',time:'09:45',timezone:'Asia/Tokyo',enabled:true},
-  {kind:'once',date:'2030-04-21',time:'12:00',timezone:'Europe/London',enabled:true},
-  {kind:'weekly',weekdays:[2,6],time:'16:10',timezone:'America/New_York',enabled:true},
-  {kind:'monthly',day_of_month:'last',time:'23:00',timezone:'Asia/Tokyo',enabled:true}
- ]){
-  fillScheduleFields('stage-schedule',calendar);pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
-  assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',...calendar,version:'revision-1'}});
-  respond({schedule:{name:'orders',...calendar}});await pending;
-  assert.deepEqual(schedulePayload(readScheduleFields('stage-schedule')),calendar);assert.equal(selectedStage.updated_at,'revision-1');
- }
- fillScheduleFields('stage-schedule',{kind:'interval',every_minutes:7,enabled:true});
- // A completed check is successful even when it imports no files.
- for(const [status,label] of [['success','Succeeded'],['failed','Failed'],['skipped','Skipped'],['unknown','Unknown outcome']]){
-  selectedStage.schedule.last_status=status;uiTexts.length=0;renderStageSchedule();assert.ok(uiTexts.includes(label));assert.ok(!uiTexts.includes('Already imported'));
- }
- assert.equal(stageIngestionStatus('success'),'Already imported');
- // Stopping ignores invalid interval and unsaved definition fields.
- $('stage-schedule-minutes').value='bad';$('stage-form').oninput();assert.equal($('stage-schedule-stop').disabled,false);
- pending=$('stage-schedule-stop').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',enabled:false});
- respond({schedule:{name:'orders',enabled:false,every_minutes:7}});await pending;assert.equal(selectedStage.schedule.enabled,false);
- stageDirty=false;let count=calls.length;
- await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Successful/inflight content cannot be imported even by invoking the handler directly.
- for(const status of ['success','queued','running']){stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};stageControls();assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);}
- for(const status of ['failed','unknown']){
-  stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};$('stage-retry').checked=false;stageControls();
-  assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);
-  $('stage-retry').checked=true;$('stage-retry').onchange();assert.equal($('stage-import').disabled,false);
-  $('stage-import').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',file:'a.csv',version:'v1',retry:true});
-  respond({run:{id:'retry-run'}});await new Promise(resolve=>setImmediate(resolve));count=calls.length;
-  assert.equal($('stage-retry').checked,false);assert.equal(stagePreview,null);
- }
- // Refreshing an externally edited stage updates the visible definition and its revision together.
- stageRunId='keep-history';$('stage-view-run').hidden=false;
- stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,table:'raw.new_destination',mode:'upsert',key:'id'},schedule:{enabled:false,every_minutes:9}};
- pending=fetchStageFiles(stageEpoch);respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
- assert.equal(selectedStage.updated_at,'revision-2');assert.equal(selectedStage.definition.table,'raw.new_destination');
- assert.equal($('stage-table').value,'raw.new_destination');assert.equal($('stage-mode').value,'upsert');assert.equal($('stage-key').value,'id');
- assert.equal(stagePreview,null);assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
- $('stage-schedule-enabled').checked=true;pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1).body,{name:'orders',kind:'interval',every_minutes:9,enabled:true,version:'revision-2'});
- respond({schedule:{enabled:true,every_minutes:9}});await pending;
- pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',version:'revision-2'});
- respond({run:{id:'new-scan'}});await new Promise(resolve=>setImmediate(resolve));respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
- assert.equal(stageRunId,'new-scan');assert.equal($('stage-view-run').hidden,false);
- // A late schedule response cannot restore state after role changes, even if admin returns.
- $('stage-schedule-minutes').value='5';pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({schedule:{enabled:true}});await pending;
- assert.equal(selectedStage,null);assert.equal($('stage-schedule-enabled').checked,false);assert.equal(stagePending,false);
- // Legacy imports remain inspectable and pausable but cannot bypass missing dedup records.
- editStage({...entry,legacy_history:true,schedule:{enabled:true}});stageControls();
- assert.equal($('stage-legacy-notice').hidden,false);assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
- stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};stageControls();assert.equal($('stage-import').disabled,true);
- count=calls.length;$('stage-import').onclick();await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Replace allows pausing an existing schedule but cannot scan or save an enabled schedule.
- editStage({...entry,definition:{...entry.definition,mode:'replace'},schedule:{enabled:true}});stageControls();
- assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-enabled').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
- count=calls.length;await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Scan is stage-only. A stale response after losing admin cannot show a history link.
- editStage(entry);pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1),{path:'/api/stages/scan',body:{name:'orders',version:'revision-1'}});
- currentRole='data_engineer';resetStageUI();respond({run:{id:'late-scan'}});await pending;
- assert.equal(stageRunId,null);assert.equal($('stage-view-run').hidden,true);assert.equal($('stages-area').hidden,true);
- console.log('stage behavioral checks complete');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('stage behavioral checks complete', result.stdout)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_refresh_reconciles_schedule_without_discarding_work(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],children:[],querySelectorAll(){return [];},replaceChildren(...children){this.children=children;this.textContent='';if(this===nodes['stage-file'])this.value='';},setAttribute(){},reset(){},append(...children){this.children.push(...children);},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-let respond;const calls=[];const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;const jobStatuses={success:'Succeeded'};
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',table:'raw.orders',mode:'append'},schedule:{enabled:false,every_minutes:7}};
- editStage(entry);stageFiles=[{name:'orders.csv',available:true}];$('stage-file').value='orders.csv';
- const preview={name:'orders',file:'orders.csv',version:'file-v1',ingestion_status:'new'};stagePreview=preview;
- $('stage-preview').replaceChildren('preview');$('stage-exports').replaceChildren('output-list');
- $('stage-export-table').value='raw.custom';$('stage-export-file').value='custom.csv';stageRunId='keep-history';$('stage-view-run').hidden=false;
- // A second browser can enable or pause without changing the definition revision.
- for(const enabled of [true,false]){
-  const fresh={...entry,schedule:{enabled,every_minutes:9,last_status:'success'}};
-  const pending=$('stages-refresh').onclick();respond({stages:[fresh]});await pending;
-  assert.equal(selectedStage.schedule.enabled,enabled);assert.equal($('stage-schedule-enabled').checked,enabled);
-  assert.equal($('stage-schedule-minutes').value,9);assert.equal($('stage-schedule-stop').disabled,!enabled);
-  assert.equal($('stage-schedule-state').children[0].textContent,enabled?'Enabled':'Disabled');
-  assert.equal(stagePreview,preview);assert.deepEqual($('stage-preview').children,['preview']);assert.equal($('stage-import').disabled,false);
-  assert.equal($('stage-file').value,'orders.csv');assert.deepEqual($('stage-exports').children,['output-list']);
-  assert.equal($('stage-export-table').value,'raw.custom');assert.equal($('stage-export-file').value,'custom.csv');assert.equal(stageRunId,'keep-history');
- }
- // A calendar-only edit from another tab replaces all visible schedule fields and retains the preview.
- let pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{kind:'weekly',enabled:true,time:'11:20',timezone:'Europe/London',weekdays:[2,4]}}]});await pending;
- assert.equal($('stage-schedule-kind').value,'weekly');assert.equal($('stage-schedule-time').value,'11:20');assert.equal($('stage-schedule-timezone').value,'Europe/London');
- assert.equal($('stage-schedule-weekday-2').checked,true);assert.equal($('stage-schedule-weekday-1').checked,false);assert.equal(stagePreview,preview);
- pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:false,every_minutes:9}}]});await pending;
- // Unchanged server schedule values do not overwrite an unsaved interval or checkbox.
- $('stage-schedule-minutes').value='13';$('stage-schedule-enabled').checked=true;
- pending=$('stages-refresh').onclick();respond({stages:[{...selectedStage,schedule:{...selectedStage.schedule,last_status:'skipped'}}]});await pending;
- assert.equal($('stage-schedule-minutes').value,'13');assert.equal($('stage-schedule-enabled').checked,true);assert.equal(selectedStage.schedule.enabled,false);
- // Schedule-only changes preserve dirty definition fields while updating the pause control.
- $('stage-table').value='raw.unsaved';$('stage-form').oninput();
- pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:true,every_minutes:11}}]});await pending;
- assert.equal(stageDirty,true);assert.equal($('stage-table').value,'raw.unsaved');assert.equal($('stage-schedule-stop').disabled,false);
- assert.equal($('stage-schedule-save').disabled,true);assert.equal(stageRunId,'keep-history');
- // Adopting a new directory revision invalidates all previous input/output choices, retaining run history.
- stageFiles=[{name:'old.csv'}];$('stage-file').value='old.csv';$('stage-file').replaceChildren('old-option');$('stage-file').value='old.csv';$('stage-files').replaceChildren('old-list');
- $('stage-exports').replaceChildren('old-output');stagePreview=preview;
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new',table:'raw.new'}};
- pending=refreshStageSchedule(stageEpoch);respond({stages:[revised]});await pending;
- assert.equal(selectedStage.updated_at,'revision-2');assert.equal(stageDirty,false);assert.equal($('stage-directory').value,'/host/new');
- assert.deepEqual(stageFiles,[]);assert.equal($('stage-file').value,'');assert.deepEqual($('stage-file').children,[]);assert.deepEqual($('stage-files').children,[]);
- assert.equal(stagePreview,null);assert.deepEqual($('stage-preview').children,[]);assert.deepEqual($('stage-exports').children,[]);
- assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
- // A refresh issued under an earlier admin epoch cannot restore selection after a role reset.
- pending=$('stages-refresh').onclick();currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({stages:[entry]});await pending;
- assert.equal(selectedStage,null);assert.deepEqual(stageEntries,[]);assert.equal(stagePending,false);assert.equal($('stage-schedule-enabled').checked,false);
- assert.ok(calls.every(call=>call.path==='/api/stages'));
- console.log('stage refresh behavioral checks complete');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('stage refresh behavioral checks complete', result.stdout)
-
     def test_invalid_roles_rejected_on_get_and_post(self):
         with patch.object(wb.bears_resident, 'load_ai_config') as load, \
              patch.object(wb.warehouse_resident, 'transition') as transition:
@@ -1083,10 +782,8 @@ const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,opt
 const document={documentElement:{dataset:{}}};let selectedTable=null;
 $('ai-settings').hidden=true;
 $('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>({value}));
-$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
-$('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
 const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
-let currentRole='admin',synced=[];function updateDataBearForm(){synced.push($('bear-data-action').value);}
+let currentRole='admin',stageEpoch=0;
 // Catalog cache and status invalidation have separate harnesses; isolate the role/header contract here.
 let catalogGeneration=0;function catalogMutation(){return false;}function catalogIdentity(){return currentRole;}
 function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
@@ -1097,17 +794,17 @@ function workbenchSyncMobileNav(){}
 eval(HANDLERS+`
 (async()=>{
  await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
- $('bear-data-action').value='publish';$('role-selector').value='bi_viewer';$('role-selector').onchange();
- assert.equal(document.documentElement.dataset.role,'bi_viewer');assert.equal(synced.at(-1),'generate','form follows the corrected action');
+ $('role-selector').value='bi_viewer';$('role-selector').onchange();
+ assert.equal(document.documentElement.dataset.role,'bi_viewer');
  assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
  assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
  assert.equal($('ai-settings').hidden,true);
- for(const id of ['run-dbt-build','drop-table-btn','run-ingest','ai-settings-button'])assert.equal($(id).disabled,true);
+ for(const id of ['drop-table-btn','ai-settings-button'])assert.equal($(id).disabled,true);
  await api('/api/warehouse/query',{sql:'SELECT 1'});
  assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'bi_viewer');
  assert.equal(calls.at(-1).headers['Content-Type'],'application/json');
  $('role-selector').value='data_engineer';$('role-selector').onchange();
- assert.equal($('run-ingest').disabled,false);assert.equal($('ai-settings-button').disabled,true);
+ assert.equal($('ai-settings-button').disabled,true);
  assert.equal($('query-mode').options[2].disabled,true);
  $('role-selector').value='admin';$('role-selector').onchange();
  assert.equal($('ai-settings-button').disabled,false);assert.equal($('role-indicator').hidden,true);
@@ -1117,61 +814,6 @@ eval(HANDLERS+`
 """
         result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness],
                                 capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_data_bear_completion_uses_current_action_and_role(self):
-        script = self.workbench_document().main_script()
-        dictionary = script[script.index('const i18n'):script.index('function ui(')]
-        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
-        busy = script[script.index('async function busy('):script.index('function aiStatus(')]
-        handler = script[script.index(' const show=(label,tone)=>', script.index('for(const bear of bears)')):script.index("\n}\n$('bear-data-action').onchange")]
-        role = script[script.index(" for(const option of $('bear-data-action').options)"):script.index("\n}\n$('role-selector').onchange")]
-        harness = r'''
-const assert=require('node:assert/strict');
-const databaseMode=false;
-class Element{constructor(){this.value='';this.disabled=false;this.dataset={};this.attrs={};this.parentElement={};this.labels=[{}];this.children=[];this.textContent='';}
- setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this.attrs[k];}getAttribute(k){return this.attrs[k]??null;}
- replaceChildren(...nodes){this.children=nodes;this.firstChild=nodes[0];}checkValidity(){return true;}}
-const nodes={},$=id=>nodes[id]??=new Element(),document={createElement:()=>new Element()};
-const ui=(node,key)=>{node.textContent=t(key);},pruneUIBindings=()=>{};
-const button=$('bear-data-run'),state=new Element(),tabState=new Element(),output=new Element();
-const fields=['action','request','sql','stage_table','publish','refresh','rollback','snapshot_id'];
-const bear={key:'data',fields:fields.map(key=>[key])};
-const content={querySelectorAll:()=>fields.map(key=>$('bear-data-'+key))};
-let calls=[],pending=[],currentRole='admin';
-const api=(path,payload)=>{calls.push(payload);return new Promise((resolve,reject)=>pending.push({resolve,reject}));};
-$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
-Object.defineProperty($('bear-data-action'),'selectedOptions',{get(){return this.options.filter(o=>o.value===this.value);}});
-const applyRole=()=>{const viewer=currentRole==='bi_viewer',engineer=currentRole==='data_engineer';eval(ROLE);};
-eval(HANDLER);
-for(const [key,value] of Object.entries({request:'draft',sql:'SELECT 1',stage_table:'sandbox.t',publish:'sandbox.p',refresh:'marts.f',rollback:'marts.r',snapshot_id:'9223372036854775807'}))$('bear-data-'+key).value=value;
-(async()=>{
- for(const fail of [false,true]){
-  $('bear-data-action').value='generate';updateDataBearForm();const count=calls.length;
-  const run=button.onclick();assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');
-  $('bear-data-action').value='rollback';updateDataBearForm();await button.onclick();
-  assert.equal(calls.length,count+1);assert.equal(button.disabled,true);
-  assert.deepEqual(calls.at(-1),{bear:'data',action:'generate',request:'draft',sql:'SELECT 1'});
-  fail?pending.at(-1).reject(Error('failed')):pending.at(-1).resolve({status:'ok'});await run;
-  assert.equal(button.disabled,false);assert.equal(button.getAttribute('aria-busy'),null);
-  assert.equal(button.textContent,t('Roll back to snapshot'));assert.equal($('bear-data-action').value,'rollback');
-  assert.equal($('bear-data-sql').disabled,true);assert.equal($('bear-data-sql').value,'SELECT 1');
-  const rollback=button.onclick();assert.deepEqual(calls.at(-1),{bear:'data',action:'rollback',rollback:'marts.r',snapshot_id:'9223372036854775807'});
-  pending.at(-1).resolve({status:'ok'});await rollback;
- }
- for(const role of ['bi_viewer','data_engineer']){
-  currentRole='admin';$('bear-data-action').value='rollback';applyRole();const run=button.onclick();
-  currentRole=role;applyRole();await button.onclick();assert.equal(button.disabled,true);
-  assert.equal($('bear-data-action').value,'generate');assert.equal($('bear-data-rollback').disabled,true);
-  pending.at(-1).reject(Error('old role request'));await run;
-  assert.equal(button.textContent,t('Generate SQL'));assert.equal(button.disabled,false);
-  assert.equal($('bear-data-request').disabled,false);assert.equal($('bear-data-snapshot_id').value,'9223372036854775807');
- }
-})().catch(error=>{console.error(error);process.exitCode=1;});
-'''
-        source = dictionary + helpers + busy + '\nconst HANDLER=' + json.dumps(handler) + ',ROLE=' + json.dumps(role) + ';\n' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
@@ -1247,7 +889,7 @@ const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.select().value=c.
     def test_copilot_generate_preserves_origin_and_intervening_edits(self):
         script = self.workbench_document().main_script()
         helpers = script[script.index('const worksheetKey='):script.index('function worksheetName(')]
-        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('let browserFile=null;')]
+        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('// Shared authorization epoch')]
         harness = r'''
 const assert=require('node:assert/strict'),vm=require('node:vm');
 async function check(scenario){
@@ -1290,41 +932,6 @@ async function check(scenario){
 '''
         source = 'const HELPERS=' + json.dumps(helpers) + ',HANDLERS=' + json.dumps(handlers) + ';\n' + harness
         result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_data_bear_sends_only_the_current_action_inputs(self):
-        script = self.workbench_document().main_script()
-        dictionary = script[script.index('const i18n'):script.index('function ui(')]
-        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
-        harness = r'''
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={id,value:'',disabled:false,required:false,parentElement:{hidden:false},labels:[{}]};
-const ui=(node,key)=>{node.text=t(key);};
-const values={request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t',publish:'pub_t',refresh:'ref_t',rollback:'marts.roll_t',snapshot_id:'9223372036854775807'};
-const expected={generate:{request:'revenue by nation',sql:'SELECT 1'},stage:{request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t'},
- publish:{publish:'pub_t'},refresh:{refresh:'ref_t',sql:'SELECT 1'},rollback:{rollback:'marts.roll_t',snapshot_id:'9223372036854775807'}};
-for(const [action,fields] of Object.entries(expected))assert.deepEqual(dataBearPayload(action,values),{bear:'data',action,...fields},action);
-assert.equal(typeof dataBearPayload('rollback',values).snapshot_id,'string');
-assert.deepEqual(dataBearPayload('refresh',{...values,sql:'  '}),{bear:'data',action:'refresh',refresh:'ref_t'},'empty SQL uses the saved SQL');
-for(const [action,bad,message] of [['generate',{},/description|SQL/],['stage',{request:'x'},/table name/],['publish',{stage_table:'x'},/table name/],
- ['rollback',{rollback:'marts.t',snapshot_id:'12a'},/digits only/],['rollback',{rollback:'marts.t',snapshot_id:'1e3'},/digits only/],['other',values,/Transformation action/]])
- assert.throws(()=>dataBearPayload(action,bad),message,action);
-// Visible inputs follow the action; hidden ones are disabled and keep their drafts.
-for(const key of Object.keys(values))$('bear-data-'+key).value=values[key];
-const visible=()=>Object.keys(values).filter(key=>!$('bear-data-'+key).parentElement.hidden);
-for(const [action,spec] of Object.entries(dataBearActions)){
- $('bear-data-action').value=action;updateDataBearForm();
- assert.deepEqual(visible(),Object.keys(values).filter(key=>spec.fields.includes(key)),action);
- for(const key of Object.keys(values))assert.equal($('bear-data-'+key).disabled,!spec.fields.includes(key),key);
- assert.equal($('bear-data-run').text,spec.button);assert.equal($('bear-data-help').text,t(spec.help));
- if(spec.target)assert.equal($('bear-data-'+spec.target).required,true);assert.equal($('bear-data-request').required,false);
-}
-assert.equal($('bear-data-publish').value,'pub_t','drafts survive action changes');
-language='ja';$('bear-data-action').value='rollback';updateDataBearForm();assert.equal($('bear-data-run').text,'指定スナップショットへ戻す');
-$('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-data-sql').labels[0].text,/保存済み/);
-'''
-        result = subprocess.run(['node', '-e', dictionary + ';\n' + helpers + '\n' + harness], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @patch.object(wb.bears_resident, 'load_ai_config')
@@ -1449,7 +1056,6 @@ eval('function aiStatus('+HANDLERS);
         controls = {
             'warehouse': 'query-schema result-view-table result-view-chart chart-type chart-x-col chart-y-col query-chart',
             'catalog': 'clone-table-btn export-table-format export-table-btn',
-            'compute': 'auto-chill-minutes save-auto-chill auto-chill-state',
         }
         for section, identifiers in controls.items():
             for identifier in identifiers.split():
@@ -1459,7 +1065,6 @@ eval('function aiStatus('+HANDLERS);
                              ('staging', 'staging'), ('tpch_tiny', 'tpch_tiny'), ('smoke', 'smoke')],
             'chart-type': [('bar', 'Bar Chart'), ('line', 'Line Chart')],
             'export-table-format': [('csv', 'CSV'), ('jsonl', 'JSONL'), ('parquet', 'Parquet')],
-            'auto-chill-minutes': [('0', 'Off'), ('5', '5m'), ('15', '15m'), ('30', '30m'), ('60', '60m')],
         }
         for identifier, expected in options.items():
             select = doc.by_id(identifier)
@@ -1469,8 +1074,6 @@ eval('function aiStatus('+HANDLERS);
         for identifier, text in {
             'result-view-table': 'Table View', 'result-view-chart': 'Chart View',
             'clone-table-btn': 'Clone to Sandbox', 'export-table-btn': 'Export Table',
-            'save-auto-chill': 'Apply Auto-Chill',
-            'auto-chill-state': 'Auto-Chill: Off',
         }.items():
             self.assertEqual(doc.by_id(identifier)['text'], text)
         self.assertEqual(doc.by_id('result-view-table')['aria-pressed'], 'true')
@@ -1479,8 +1082,7 @@ eval('function aiStatus('+HANDLERS);
         for identifier in ('clone-table-btn', 'export-table-btn'):
             self.assertIn('disabled', doc.by_id(identifier))
         self.assertEqual(doc.by_id('export-table-format')['aria-label'], 'Export format')
-        self.assertEqual(doc.by_id('auto-chill-state')['role'], 'status')
-        for identifier in ('query-schema', 'chart-type', 'chart-x-col', 'chart-y-col', 'auto-chill-minutes'):
+        for identifier in ('query-schema', 'chart-type', 'chart-x-col', 'chart-y-col'):
             self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
 
     def test_phase8_translations_cover_static_and_dynamic_ui(self):
@@ -1489,12 +1091,11 @@ eval('function aiStatus('+HANDLERS);
         dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
         translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
         labels = '''Schema|Table View|Chart View|Chart type|Bar Chart|Line Chart|X column|Y column|
-            Clone to Sandbox|Clone Snapshot|Export format|Export Table|Auto-Chill (idle minutes)|
-            Off|5m|15m|30m|60m|Apply Auto-Chill|Auto-Chill: Off|Auto-Chill: {minutes}m|
+            Clone to Sandbox|Clone Snapshot|Export format|Export Table|
             Result chart|
             Choose a numeric Y column to chart visible rows.|Clone audit needs review|
             Cloned {source} to {table}.|Clone failed: {error}|Exported {table} ({row_count} / {total_rows} rows) to {filename}.|
-            Export failed: {error}|Auto-Chill failed: {error}'''
+            Export failed: {error}'''
         for label in labels.split('|'):
             with self.subTest(label=label.strip()):
                 self.assertRegex(translations[label.strip()], r'[ぁ-んァ-ヶ一-龯]')
@@ -1644,7 +1245,7 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         # Desktop typography remains compact outside the narrow media query.
         self.assertIn('.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px', css)
         self.assertIn('body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans)', css)
-        for identifier in ('stage-name', 'job-name'):
+        for identifier in ('job-name',):
             with self.subTest(pattern=identifier):
                 pattern = doc.by_id(identifier)['pattern']
                 self.assertIn('[a-z0-9_\\-]', pattern)
@@ -1676,9 +1277,6 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             "api('/api/lake/export',{table:selected,format})", 'atob(result.content_base64)',
             'downloadFile(content,result.filename', 'link.download=filename',
             'row_count:result.row_count,total_rows:result.total_rows',
-            "if(data.auto_chill)updateAutoChill(data.auto_chill)",
-            "document.activeElement!==select",
-            "api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})",
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, script)
@@ -1790,33 +1388,35 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
 
     def test_snowsight_navigation_contract(self):
         doc = self.workbench_document()
-        navigation = next(n for n in doc.nodes if n['tag'] == 'nav')
-        self.assertEqual(navigation['aria-label'], 'Workbench sections')
+        navigation = doc.by_id('workbench-nav')
+        self.assertEqual(navigation['tag'], 'aside')
+        self.assertEqual(navigation['class'], 'sidebar')
+        self.assertEqual(navigation['aria-label'], 'Main navigation')
         self.assertNotIn('role', navigation)
-        headings = [n['text'] for n in doc.nodes
-                    if n['tag'] == 'h2' and navigation in n['ancestors']]
-        self.assertEqual(headings, ['Work with data', 'Administration', 'Workspace'])
+        navtitles = [n['text'].strip() for n in doc.nodes
+                     if 'navtitle' in (n.get('class') or '').split() and navigation in n['ancestors']]
+        self.assertEqual(navtitles, ['Administration', 'Favorites', 'Workspace'])
         expected = [
-            ('home', 'Home'),
-            ('catalog', 'Data Explorer'),
-            ('warehouse', 'SQL Worksheets'),
-            ('ingestion', 'Ingestion & Stages'),
-            ('transformation', 'Transformation'),
-            ('jobs', 'Jobs'),
-            ('bears', 'AI Bears'),
-            ('db-admin', 'Database Management'),
-            ('pawprints', 'Audit log'),
-            ('compute', 'Compute & Governance'),
+            ('home', 'Home', '#home'),
+            ('catalog', 'Data Explorer', '#explore'),
+            ('warehouse', 'SQL Worksheets', '#sql'),
+            ('ingestion', 'Ingestion & Stages', '#ingestion'),
+            ('transformation', 'Transformation', '#transformation'),
+            ('jobs', 'Jobs', '#jobs'),
+            ('bears', 'AI Bears', '#bears'),
+            ('db-admin', 'Database Management', '#databases'),
+            ('pawprints', 'Audit log', '#audit'),
+            ('compute', 'Compute & Governance', '#compute'),
         ]
-        routes = {'catalog': 'explore', 'warehouse': 'sql', 'db-admin': 'databases', 'pawprints': 'audit'}
         links = [n for n in doc.nodes if 'data-tab' in n]
-        self.assertEqual([(n['data-tab'], n['text']) for n in links], expected)
+        self.assertEqual([n['data-tab'] for n in links], [name for name, _, _ in expected])
         self.assertTrue(all(n['tag'] == 'a' for n in links))
-        for name, _ in expected:
+        for name, label, href in expected:
             with self.subTest(tab=name):
                 link = doc.by_id('tab-' + name)
                 section = doc.by_id(name)
-                self.assertEqual(link['href'], '#' + routes.get(name, name))
+                self.assertEqual(link['href'], href)
+                self.assertIn(label, link['text'])
                 self.assertEqual(link['aria-controls'], name)
                 self.assertNotIn('role', link)
                 self.assertNotIn('aria-selected', link)
@@ -1835,13 +1435,17 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         self.assertNotIn('hidden', entry)
         self.assertTrue(any(n['tag'] == 'header' for n in entry['ancestors']))
         self.assertIn('database-compute-state', identifiers)
-        for identifier in ('workbench-alerts-button', 'workbench-command-button', 'workbench-open-sql', 'user-menu'):
+        for identifier in ('workbench-command-button', 'workbench-open-sql', 'workbench-environment'):
             self.assertTrue(any(n.get('id') == 'workbench-header' for n in doc.by_id(identifier)['ancestors']), identifier)
+        for identifier in ('workbench-alerts-button', 'user-menu', 'role-selector', 'lang-en', 'lang-ja', 'theme-light', 'theme-dark'):
+            self.assertTrue(any(n.get('id') == 'workbench-nav' for n in doc.by_id(identifier)['ancestors']), identifier)
         open_sql = doc.by_id('workbench-open-sql')
         self.assertEqual(open_sql['tag'], 'a')
         self.assertEqual(open_sql['text'], 'Open SQL')
         self.assertIn('primary', open_sql['class'].split())
         self.assertEqual(open_sql['href'], '#sql')
+        self.assertEqual(doc.by_id('main')['tag'], 'main')
+        self.assertFalse(any('environment' in (n.get('class') or '').split() for n in doc.nodes))
         self.assertFalse(any('nav-note' in (n.get('class') or '').split() for n in doc.nodes))
 
     def test_workbench_controls_belong_to_their_workspaces(self):
@@ -1852,27 +1456,23 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                 worksheet-explorer worksheet-tree-filter worksheet-tabs add-worksheet-tab query-history
                 copilot-request copilot-generate copilot-explain open-transformation
                 result-filter export-csv export-json copy-tsv''',
-            'ingestion': '''ingest-form ingest-file ingest-table ingest-mode ingest-key run-ingest
-                ingest-state ingest-error ingest-result ingest-upload-input ingest-dropzone
-                preview-ingest ingest-preview''',
-            'transformation': '''refresh-models run-dbt-build run-dbt-test dbt-models wap-models
-                model-lineage model-sql-preview open-model-sql refresh-wap-model copilot-stage-table
-                copilot-stage copilot-publish''',
+            'ingestion': '''ingestion-heading ingestion-role-field atlas-ingestion-message ingestion-method
+                ingestion-file ingestion-stages''',
+            'transformation': '''transformation-heading transformation-role-field atlas-transformation-message
+                transformation-atlas-models transformation-publications transformation-atlas-marts
+                transformation-atlas-dbt''',
             'catalog': '''refresh-catalog catalog-error catalog-tree catalog-filter table-title
                 table-columns open-table-sql drop-table-btn table-preview table-ddl
                 table-snapshots snapshot-preview table-lineage''',
-            'bears': 'bear-cards',
-            'compute': 'compute-warehouse compute-components compute-sre-check compute-policy-check',
+            'bears': 'bears-atlas bears-heading bears-form bears-context-fields bears-target-fields bears-sql-field bears-toolbar bears-message bears-explanation bears-proposal bears-curator bears-policy',
+            'compute': 'compute-atlas compute-heading compute-runtime-host compute-usage compute-auto-chill compute-diagnostics ai-settings',
         }
         for section, identifiers in controls.items():
             for identifier in identifiers.split():
                 with self.subTest(control=identifier):
                     self.assertIn(doc.by_id(section), doc.by_id(identifier)['ancestors'])
-        upload = doc.by_id('ingest-upload-input')
-        self.assertEqual(upload['type'], 'file')
-        self.assertEqual(upload['accept'], '.csv,.tsv,.jsonl,.ndjson,.json,.parquet')
         for identifier, label in [('export-csv', 'Download CSV'), ('export-json', 'Download JSON'),
-                                  ('copy-tsv', 'Copy TSV'), ('preview-ingest', 'Preview Schema & Sample Rows')]:
+                                  ('copy-tsv', 'Copy TSV')]:
             self.assertEqual(doc.by_id(identifier)['text'], label)
 
     def test_table_inspector_contract(self):
@@ -1895,14 +1495,16 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         doc = self.workbench_document()
         switcher = doc.by_id('lang-switcher')
         self.assertEqual((switcher['role'], switcher['aria-label']), ('group', 'Language'))
-        header = next(n for n in switcher['ancestors'] if n['tag'] == 'header')
-        environment = next(n for n in doc.nodes if n.get('class') == 'environment')
+        profile = doc.by_id('user-menu')
+        self.assertIn(profile, switcher['ancestors'])
+        environment = doc.by_id('workbench-environment')
+        header = doc.by_id('workbench-header')
         self.assertIn(header, environment['ancestors'])
-        self.assertLess(doc.nodes.index(environment), doc.nodes.index(switcher))
+        self.assertIn('sample', environment['class'].split())
         for lang, label, pressed in [('en', 'EN', 'true'), ('ja', '日本語', 'false')]:
             button = doc.by_id('lang-' + lang)
             self.assertIn(switcher, button['ancestors'])
-            self.assertIn(header, button['ancestors'])
+            self.assertIn(profile, button['ancestors'])
             self.assertEqual((button['tag'], button['data-lang'], button['aria-pressed'], button['text']),
                              ('button', lang, pressed, label))
         self.assertEqual(next(n for n in doc.nodes if n['tag'] == 'html')['lang'], 'en')
@@ -1928,7 +1530,7 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             'AI Bears': 'AI Bears',
             'Data Explorer': 'データ探索',
             'Database Management': 'データベース管理',
-            'Work with data': 'データを扱う', 'Administration': '運用管理', 'Workspace': 'ワークスペース',
+            'Administration': '運用管理', 'Workspace': 'ワークスペース',
             'Open SQL': 'SQL を開く',
             'Audit Log': '監査ログ',
             'Compute & Governance': 'コンピュート & ガバナンス',

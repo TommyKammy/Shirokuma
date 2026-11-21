@@ -555,10 +555,10 @@ assert.equal(dbCreation.error,'');assert.equal(creationPosts.length,0);assert.eq
 ''')
 
     def test_history_open_waits_for_authorized_detail_before_selecting_blocked_creation(self):
-        self.javascript(r'''
-globalThis.location={href:'http://localhost/#workbench?keep=yes',origin:'http://localhost'};
+        self.javascript(SETUP + r'''
+globalThis.location={href:'http://localhost/#databases/create?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
-''' + SETUP + r'''
+dbCreation.scope=dbCreationScope();dbCreation.storageKey=dbCreationStorageKey();
 show(process({creation_id:'p54cli',sql_catalog:'p54cli',lifecycle:'READY',progress_code:'READY',next_actions:[]}));
 dbCreationRememberURL('p54cli');
 const stopped=process({creation_id:'p54stop',sql_catalog:'p54stop',lifecycle:'REGISTERED',progress_code:'BLOCKED',
@@ -605,7 +605,7 @@ assert.equal($('db-creation-withdraw').disabled,false);assert.equal($('db-creati
         import workbench_server
         import request_auth
         source = '''
-globalThis.location={href:'http://localhost/',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/#databases/create',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 const dbCreation={environment_id:'envA'};function dbCreationSave(){}
 ''' + admin.harness.function('dbCreationURL') + '\n' + admin.harness.function('dbCreationRememberURL') + '''
@@ -640,25 +640,27 @@ dbCreationRememberURL('creation');console.log(location.href);
         self.assertEqual(status,400)
         self.assertEqual(json.loads(body)['code'],'INVALID_INPUT')
 
-    def test_fragment_helpers_preserve_unrelated_route_and_hash_state(self):
+    def test_fragment_helpers_only_write_creation_state_on_the_creation_screen(self):
         self.javascript(SETUP + r'''
 let replacements=0;
 globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=String(url);}};
 for(const hash of ['','#worksheet-a','#sql','#worksheet-a?filter=one%20two','#filter=one%20two&pane=sql']){
  globalThis.location={href:'http://localhost/workbench?view=sql&locale=ja'+hash,origin:'http://localhost'};
  const original=new URL(location.href);
- dbCreationURL(null);assert.equal(new URL(location.href).hash.split('?')[0],'#databases/create');
- dbCreationRememberURL('creation');const saved=new URL(location.href);
- assert.equal(saved.pathname,original.pathname);assert.equal(saved.searchParams.get('view'),'sql');assert.equal(saved.searchParams.get('locale'),'ja');
- assert.equal(saved.searchParams.has('creation'),false);assert.equal(saved.searchParams.has('creation_environment'),false);
- assert.equal(saved.hash.split('?')[0],'#databases/create');
- assert.equal(dbCreationURL().id,'creation');assert.equal(dbCreationURL().environment,'envA');
- dbCreationURL(null);const cleared=new URL(location.href);const params=new URLSearchParams(cleared.hash.slice(cleared.hash.indexOf('?')+1));
- assert.equal(dbCreationURL().id,null);assert.equal(cleared.pathname,original.pathname);assert.equal(cleared.search,original.search);
- assert.equal(cleared.hash.split('?')[0],'#databases/create');assert.equal(params.has('creation'),false);
- if(hash.includes('filter'))assert.equal(params.get('filter'),'one two');
- if(hash.includes('pane=sql'))assert.equal(params.get('pane'),'sql');
+ dbCreationURL(null);dbCreationRememberURL('creation');
+ assert.equal(location.href,original.href);assert.equal(replacements,0);
 }
+globalThis.location={href:'http://localhost/workbench?view=sql&locale=ja#databases/create?filter=one%20two&pane=sql',origin:'http://localhost'};
+dbCreationRememberURL('creation');const saved=new URL(location.href);
+assert.equal(saved.pathname,'/workbench');assert.equal(saved.searchParams.get('view'),'sql');assert.equal(saved.searchParams.get('locale'),'ja');
+assert.equal(saved.hash.split('?')[0],'#databases/create');
+assert.equal(new URLSearchParams(saved.hash.split('?')[1]).get('filter'),'one two');
+assert.equal(new URLSearchParams(saved.hash.split('?')[1]).get('pane'),'sql');
+assert.equal(dbCreationURL().id,'creation');assert.equal(dbCreationURL().environment,'envA');
+dbCreationURL(null);const cleared=new URL(location.href),params=new URLSearchParams(cleared.hash.split('?')[1]);
+assert.equal(dbCreationURL().id,null);assert.equal(cleared.search,saved.search);
+assert.equal(cleared.hash.split('?')[0],'#databases/create');assert.equal(params.has('creation'),false);
+assert.equal(params.get('filter'),'one two');assert.equal(params.get('pane'),'sql');
 assert.equal(creationPosts.length,0);dbCreationStop();
 ''')
 
@@ -1124,7 +1126,7 @@ await dbAdminOpen();assert.equal(creationPosts.length,1);
 
     def test_url_return_is_get_only_and_preserves_existing_route(self):
         self.javascript(SETUP + r'''
-globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#worksheet-a',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#databases/create',origin:'http://localhost'};
 let replacement;globalThis.history={replaceState:(_,__,url)=>{replacement=String(url);}};
 dbCreation.scope='';dbCreation.process=null;await dbCreationLoad();
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(creationPosts.length,0);
@@ -1143,7 +1145,7 @@ assert.equal(creationPosts.length,0);assert.equal(dbAdminAllowed(),false);assert
 
     def test_schema_copy_and_explicit_new_creation_refresh_capabilities_preserve_draft(self):
         self.javascript(SETUP + r'''
-globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#worksheet-a',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#databases/create',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 dbCreationClear();await dbCreationLoad();
 show(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));
@@ -1574,10 +1576,9 @@ assert.equal(frames.slice(0,-1).some(frame=>/approval [12]\/2|two separate appro
 ''')
 
     def test_logical_root_list_public_progress_localized_and_legacy_root_mode_independent(self):
-        self.javascript(r'''
-globalThis.location={href:'http://localhost/#db-admin?keep=yes',origin:'http://localhost'};
+        self.javascript(SETUP + LOGICAL_SETUP + r'''
+globalThis.location={href:'http://localhost/#databases/create?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
-''' + SETUP + LOGICAL_SETUP + r'''
 await logicalBegin();$('sql').value='SELECT list_preserved';dbSave();
 const before=JSON.stringify({worksheets,worksheetId,jobs:{context:dbJobs.context,save:dbJobs.save,database:dbJobs.database,schema:dbJobs.schema,role:dbJobs.role,selection:dbJobs.selection,drafts:[...dbJobs.drafts]},explorer:dbExplorer});
 const pending={key:'list-key',body:'frozen-list-body',busy:false};dbCreation.pending=pending;

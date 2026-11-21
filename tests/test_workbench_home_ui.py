@@ -91,16 +91,18 @@ noPosts();
 
     def test_attention_aggregates_sql_compute_database_jobs_and_alerts(self):
         self.javascript(HOME + r"""
-await boot();dbAdmin.platform=true;
-workbenchSetComputeStatus('paused','','');
-dbRuns.set('a',{id:'query-1',state:'UNKNOWN',origin:{worksheet_id:'a',request_id:'request-1',principal:dbPrincipal,role:'admin'}});
+await boot();dbAdmin.platform=true;dbRuns.clear();
+session.platform_admin=true;
+dbRuns.set('a',{id:'query-1',state:'UNKNOWN',origin:{worksheet_id:'a',request_id:'request-1',principal:dbPrincipal,role:'admin',context:dbContext(dbCurrent())}});
 route=async path=>
  path.startsWith('/api/v1/jobs/runs')?jobsEnvelope([
   {id:'run-failed',job_name:'daily_sales_refresh',status:'failed',started_at:'2026-11-18T00:02:00Z',finished_at:'2026-11-18T00:03:00Z'},
   {id:'run-ok',job_name:'customers_sync',status:'succeeded',started_at:'2026-11-18T00:00:00Z'},
  ]):
  path.startsWith('/api/v1/alerts')?alertsEnvelope([{id:'alert-1',message:'Disk warning',job_name:'daily_sales_refresh',acknowledged_at:null}],1):{};
-inventoryRoute=async()=>({items:[{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+inventoryRoute=async()=>({items:[...structuredClone(inventory),{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+dbApplyInventory(await dbReadInventory('admin'),'admin');
+workbenchSetComputeStatus('paused','','');
 await homeOpen();
 assert.equal($('home-review-heading').textContent,t('{count} items to review today',{count:5}));
 const text=homeText('home-attention-list');
@@ -130,6 +132,7 @@ inventoryRoute=async()=>({items:[]});
 await homeOpen();
 assert.equal($('home-review-heading').textContent,t('Nothing to review today'));
 assert.equal(homeText('home-attention-list'),'');
+assert.equal($('home-attention-group').hidden,true);
 const rows=homeLinks('home-jobs-list');
 assert.equal(rows.length,3);
 assert.deepEqual(rows.map(node=>node.href),['#jobs','#jobs','#jobs']);
@@ -141,15 +144,16 @@ assert.ok(nodeText(rows[2]).includes(t('Running')),nodeText(rows[2]));
 
     def test_database_job_failure_is_neutral_and_next_load_recovers(self):
         self.javascript(HOME + r"""
-await boot();dbAdmin.platform=true;
+await boot();dbAdmin.platform=true;dbRuns.clear();
+session.platform_admin=true;
 workbenchSetComputeStatus('available','tone-ok','');
-dbRuns.clear();
 route=async path=>{
  if(path.startsWith('/api/v1/jobs/runs'))throw Error('runs down');
  if(path.startsWith('/api/v1/alerts'))return alertsEnvelope([{id:'alert-1',message:'Disk warning',acknowledged_at:null}],1);
  return {};
 };
-inventoryRoute=async()=>({items:[{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+inventoryRoute=async()=>({items:[...structuredClone(inventory),{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+dbApplyInventory(await dbReadInventory('admin'),'admin');
 await homeOpen();
 const attention=homeText('home-attention-list');
 assert.ok(attention.includes('Disk warning'));assert.ok(attention.includes(t('Sales')));
@@ -172,6 +176,7 @@ assert.equal(homeErrors('home-jobs-list').length,0);
     def test_database_job_failures_are_neutral_but_database_errors_remain_visible(self):
         self.javascript(HOME + r"""
 await boot();dbAdmin.platform=true;dbRuns.clear();
+session.platform_admin=true;
 workbenchSetComputeStatus('available','tone-ok','');
 route=async path=>{
  if(path.startsWith('/api/v1/alerts'))throw Error('alerts down');
@@ -179,6 +184,7 @@ route=async path=>{
  return {};
 };
 inventoryRoute=async()=>{throw Error('databases down');};
+dbInventories.clear();dbSchemaCache.clear();dbSchemaScope='';
 await homeOpen();
 const text=homeText('home-attention-list');
 assert.ok(text.includes(t('Could not load databases')),text);
@@ -235,7 +241,9 @@ assert.equal($('home-review-heading').textContent,t('Nothing to review today'));
 assert.equal(calls.slice(before).some(call=>call.path==='/api/v1/databases'),false);
 assert.equal(homeLinks('home-attention-list').length,0);
 dbAdmin.platform=true;
-inventoryRoute=async()=>({items:[{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+session.platform_admin=true;
+inventoryRoute=async()=>({items:[...structuredClone(inventory),{id:'db-old',display_name:'Sales',state:'RETIRING'}]});
+dbApplyInventory(await dbReadInventory('admin'),'admin');
 await homeOpen();
 assert.ok(homeText('home-attention-list').includes(t('Sales')));
 assert.equal(homeLinks('home-attention-list').filter(node=>node.href==='#databases').length,1);
@@ -314,15 +322,22 @@ assert.equal($('home-context-database').textContent,'Sales');
 assert.equal($('home-context-schema').textContent,'Mart');
 assert.equal($('home-context-warehouse').textContent,'LOCAL');
 assert.equal($('home-context-role').textContent,t('Admin'));
+assert.equal($('home-context-fields').hidden,false);
+assert.equal($('home-context-empty').hidden,true);
 assert.equal($('home-objects-section').hidden,false);
 assert.ok(homeText('home-objects-list').includes('Orders'));
 assert.equal(homeLinks('home-actions-list').map(node=>node.href).join('|'),'#explore|#sql|#ingestion');
 dbObject=null;await homeOpen();
-assert.equal($('home-objects-section').hidden,true);
+assert.equal($('home-objects-section').hidden,false);
 assert.equal(homeLinks('home-objects-list').length,0);
+assert.ok(homeText('home-objects-list').includes(t('No recent objects. Open a table in Data Explorer to see it here.')));
 dbCurrent().database_id='';dbCurrent().schema_id='';await homeOpen();
-assert.equal($('home-context-database').textContent,t('Not selected'));
-assert.equal($('home-context-schema').textContent,t('Not selected'));
+assert.equal($('home-context-fields').hidden,true);
+assert.equal($('home-context-empty').hidden,false);
+assert.ok(homeText('home-context-empty').includes(t('Choose a database and schema in Data Explorer to see the context here.')));
+assert.equal($('home-context-heading').textContent,t('No work context selected'));
+assert.ok(!['home-context-heading','home-context-empty','home-context-database','home-context-schema','home-context-warehouse','home-context-role'].map(homeText).join(' ').includes(t('Unavailable')));
+assert.ok(!['home-context-heading','home-context-empty','home-context-database','home-context-schema','home-context-warehouse','home-context-role'].map(homeText).join(' ').includes('db'));
 """)
 
     def test_compute_attention_uses_the_same_chip_state_and_omits_unsupported(self):
@@ -353,11 +368,11 @@ for(const state of ['available','unsupported']){
     def test_japanese_and_english_copy_share_the_attention_and_action_vocabulary(self):
         self.javascript(HOME + r"""
 await boot();
-dbRuns.set('a',{id:'query-1',state:'UNKNOWN',origin:{worksheet_id:'a',request_id:'request-1',principal:dbPrincipal,role:'admin'}});
+dbRuns.set('a',{id:'query-1',state:'UNKNOWN',origin:{worksheet_id:'a',request_id:'request-1',principal:dbPrincipal,role:'admin',context:dbContext(dbCurrent())}});
 workbenchSetComputeStatus('paused','','');
 route=emptySources;
 await homeOpen();setLanguage('ja');
-assert.equal($('home-review-heading').textContent,'今日の確認は 2 件です');
+assert.equal($('home-review-heading').textContent,'今日の確認は 2件です');
 assert.ok(homeText('home-attention-list').includes('照合待ち'));
 assert.ok(homeText('home-attention-list').includes('再送せずに状態を確認'));
 assert.ok(homeText('home-attention-list').includes('コンピュートが休止中'));
@@ -384,10 +399,12 @@ assert.equal($('home-review-heading').textContent,t('Nothing to review today'));
 
     def test_home_layout_and_tap_targets_are_declared_in_the_stylesheet(self):
         css = re.sub(r'/\*[\s\S]*?\*/', '', WorkbenchSource(harness.HTML).css)
-        self.assertRegex(css, r'\.homegrid\{display:grid;grid-template-columns:minmax\(0,1\.55fr\) minmax\(280px,\.9fr\)')
-        self.assertRegex(css, r'@media\(max-width:900px\)\{[\s\S]*?\.homegrid\{grid-template-columns:minmax\(0,1fr\)')
-        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.actionrow,.run,.objectrow,.secondaryaction,.home-context a\.primary\.full,.textlink,.home-source-error button\{min-height:44px\}')
-        self.assertRegex(css, r'\.actionrow\{[^}]*min-height:44px[^}]*min-width:0')
+        compact = re.sub(r'\s+', '', css)
+        self.assertRegex(compact, r'\.homegrid\{display:grid;grid-template-columns:minmax\(0,1\.55fr\)minmax\(300px,1fr\);gap:40px;\}')
+        self.assertRegex(compact, r'@media\(max-width:850px\)\{[\s\S]*?\.homegrid,\.jobdetailgrid\{grid-template-columns:1fr;\}')
+        self.assertRegex(compact, r'@media\(max-width:600px\)\{[\s\S]*?\.homegrid\{grid-template-columns:minmax\(0,1fr\)')
+        self.assertIn('.actionrow,.run,.objectrow,.target.primary.full,.secondaryaction,.textlink,.home-source-errorbutton{min-height:44px}', compact)
+        self.assertRegex(compact, r'h1\[tabindex="-1"\]:focus[^{]*\{outline:none\}')
         self.assertRegex(css, r':focus-visible\{outline:2px solid var\(--focus\)')
 
 

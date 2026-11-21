@@ -35,7 +35,7 @@ class BearsComputeAtlasUI(unittest.TestCase):
                            'ai-shared-help', 'ai-settings-button'):
             self.assertIn('id="' + identifier + '"', HTML)
         self.assertLess(HTML.index('id="compute"'), HTML.index('id="ai-settings"'))
-        self.assertGreater(HTML.index('id="ai-settings"'), HTML.index('id="compute-legacy-auto-chill"'))
+        self.assertLess(HTML.index('id="compute-diagnostics-body"'), HTML.index('id="ai-settings"'))
         self.assertIn('id="warehouse-compute-link"', HTML)
         self.assertIn('id="chill" class="small" hidden', HTML)
         self.assertIn('id="wake" class="small" hidden', HTML)
@@ -44,10 +44,6 @@ class BearsComputeAtlasUI(unittest.TestCase):
         self.assertNotIn('aria-haspopup="dialog"', button)
         self.assertIn("'compute-ai-settings'", RUNTIME_ORDER)
         self.assertIn('compute-ai-settings', self.markup_css())
-        self.assertLess(HTML.index('id="compute"'), HTML.index('id="auto-chill-minutes"'))
-        self.assertLess(HTML.index('id="auto-chill-minutes"'), HTML.index('id="ai-settings"'))
-        self.assertLess(HTML.index('id="save-auto-chill"'), HTML.index('id="ai-settings"'))
-        self.assertIn('databaseMode', source_function('martsVisible', SOURCE.sources))
         self.assertIn('databaseMode', source_function('jobsVisible', SOURCE.sources))
         timer = next(line for line in SOURCE.source.splitlines() if line.startswith('setInterval(async()=>'))
         self.assertIn('databaseMode', timer)
@@ -109,18 +105,32 @@ await boot();for(const locale of ['ja','en']){
     def test_compute_state_controls_auto_chill_ai_settings_then_diagnostics(self):
         self.compute(r"""
 await start();$('tab-compute').click();
-const top=$('compute').children.filter(n=>['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics'].includes(n.id)).map(n=>n.id);
-assert.deepEqual(top,['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics']);
+const atlas=$('compute-atlas');
+assert.equal(atlas.hidden,false);
+assert.deepEqual(atlas.children.map(n=>n.id),['compute-overview','compute-runtime-host','compute-usage','compute-auto-chill','compute-diagnostics']);
+assert.equal($('compute-heading').parentElement,$('compute-overview'));
+assert.equal($('compute-environment').parentElement,$('compute-overview'));
+assert.equal($('runtime-panel').parentElement,$('compute-runtime-host'));
 const panel=$('runtime-panel');
-assert.deepEqual(panel.children.map(n=>n.id),['runtime-heading','runtime-summary-row','runtime-controls-section','runtime-policy-section']);
+assert.equal(panel.className,'section');assert.equal(panel.getAttribute('role'),'region');
+assert.deepEqual(panel.children.map(n=>n.id),['runtime-title','runtime-facts','runtime-controls-section']);
+assert.deepEqual([...$('runtime-actions').children].map(n=>n.id),['runtime-refresh','runtime-wake','runtime-chill']);
+assert.equal($('runtime-action-reason').className,'small');
+assert.equal($('runtime-chill-confirm').tagName,'FORM');
+assert.ok($('runtime-controls-section').descendants().includes($('runtime-chill-impact')));
 assert.equal($('runtime-details').parentElement.id,'compute-diag-state');assert.equal($('runtime-blockers').parentElement,$('runtime-safety-section'));
 assert.ok($('compute').descendants().includes($('runtime-wake')));
 assert.ok($('compute').descendants().includes($('runtime-chill')));
 assert.ok($('compute').descendants().includes($('runtime-save')));
+assert.equal($('runtime-state-status').className.split(' ')[0],'status');
+assert.equal($('runtime-state-badge').hidden,true);
 
 assert.equal($('ai-settings').parentElement,$('compute-ai-settings'));
-assert.equal($('compute-ai-settings').parentElement,$('compute'));
-assert.equal($('ai-settings').hidden,false,'inline');assert.equal($('ai-settings-readonly').hidden,true,'readonly');
+assert.equal($('compute-ai-settings').parentElement,$('compute-diagnostics-body'));
+assert.equal($('ai-settings').hidden,true,'closed until requested');assert.equal($('ai-settings-readonly').hidden,true,'readonly');
+assert.equal($('compute-ai-settings').descendants().includes($('compute-ai-settings-open')),true);
+assert.equal($('compute-diagnostics').open,false);
+assert.ok($('compute-usage').descendants().includes($('compute-resource-table')));
 assert.match($('runtime-summary').textContent,/JST/);
 assert.match($('runtime-summary-detail').textContent,/Observed|observed/);
 assert.match($('runtime-conditions-scope').textContent,/JST/);
@@ -131,6 +141,7 @@ for(const id of ['observation-compute-panel','observation-history-panel','observ
     def test_chill_confirmation_shows_one_impact_line_and_red_button(self):
         self.compute(r"""
 await start();$('tab-compute').click();setLanguage('ja');
+runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();
 assert.equal($('runtime-chill').disabled,false);
 assert.match($('runtime-chill-impact').textContent,/休止すると SQL を実行できなくなります/);
 assert.match($('runtime-chill-impact').textContent,/実行中の処理はありません/);

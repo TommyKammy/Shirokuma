@@ -82,7 +82,7 @@ const fresh=async()=>{
  assert.equal(jobEntries[0].name,'fresh');assert.equal(jobSchedules[0].name,'fresh');assert.equal(jobRunCache[0].id,'fresh-run');
  assert.equal($('jobs-list').rows[0][0],'fresh');assert.equal($('job-runs').rows[0][0],'fresh-run');assert.equal($('jobs-alert-count').textContent,'{count} unacknowledged');
 };
-''' + body, 'applyRole', 'resetStageUI', 'resetJobsUI', 'editJob', 'openJob', 'selectJob',
+''' + body, 'applyRole', 'resetJobsUI', 'editJob', 'openJob', 'selectJob',
                         'clearSelectedJob', 'clearManualRun', 'updateJobRunControls', 'fillScheduleFields',
                         'renderJobSchedule', 'jobScheduleEditable', 'updateJobScheduleKind', 'jobEmpty',
                         'updateRunFilter', 'renderJobList', 'renderJobRuns', 'loadJobs', 'refreshJobRuns',
@@ -145,14 +145,14 @@ for(const context of ['role ABA','session'])for(const finish of ['success','fail
         self.javascript(r'''
 let requests=[],auto=[];
 const api=()=>new Promise((resolve,reject)=>requests.push({resolve,reject}));
-const updateAutoChill=data=>auto.push(data);
+const updateAutoChill=()=>{};
 const report=state=>({warehouse:{state},components:{},auto_chill:state});
 let a=refreshStatus(),b=refreshStatus();assert.equal(a,b);assert.equal(requests.length,1);
-requests[0].resolve(report('active'));await a;assert.equal(auto.at(-1),'active');
+requests[0].resolve(report('active'));await a;assert.equal($('warehouse-state').textContent,'Running');
 a=refreshStatus();assert.equal(requests.length,2,'settled results are not cached');
 invalidateStatus();currentRole='bi_viewer';b=refreshStatus();
 requests[2].resolve(report('chilled'));await b;requests[1].resolve(report('starting'));await a;
-assert.equal(auto.at(-1),'chilled');
+assert.equal($('warehouse-state').textContent,'Chilled');
 // Away and back to the same role still changes the context epoch.
 a=refreshStatus();invalidateStatus();currentRole='admin';invalidateStatus();currentRole='bi_viewer';
 b=refreshStatus();requests[4].resolve(report('active'));await b;
@@ -160,26 +160,25 @@ requests[3].reject(Error('old context'));await a;assert.equal($('status-error').
 // Session changes cannot reuse or render the previous session request.
 a=refreshStatus();catalogSession='new-user';b=refreshStatus();assert.equal(requests.length,7);
 requests[6].resolve(report('chilled'));await b;requests[5].resolve(report('active'));await a;
-assert.equal(auto.at(-1),'chilled');
+assert.equal($('warehouse-state').textContent,'Chilled');
 a=refreshStatus();requests[7].reject(Error('offline'));await a;assert.equal($('status-error').textContent,'offline');
 b=refreshStatus();requests[8].resolve(report('active'));await b;assert.equal($('status-error').textContent,'');
 // A mutation refresh must bypass earlier in-flight work and ignore its late response.
 a=refreshStatus();b=refreshStatus({force:true});assert.equal(requests.length,11);
 requests[10].resolve(report('chilled'));await b;requests[9].resolve(report('active'));await a;
-assert.equal(auto.at(-1),'chilled');assert.equal(statusPending,null);
+assert.equal($('warehouse-state').textContent,'Chilled');assert.equal(statusPending,null);
 ''', 'invalidateStatus', 'refreshStatus', prelude="let statusEpoch=0,statusPending=null,currentRole='admin',catalogSession='user';const workbenchScreenMessage=(id,value)=>{$(id).textContent=value;$(id).hidden=!value;};const workbenchSetComputeStatus=()=>{};")
 
     def test_warehouse_mutations_force_status(self):
         wake = next(line for line in SCRIPT.splitlines() if line.startswith("for(const action of ['chill','wake'])"))
-        auto = next(line for line in SCRIPT.splitlines() if line.startswith("$('save-auto-chill').onclick="))
-        self.javascript('const HANDLERS=' + json.dumps(wake + '\n' + auto) + r''';
+        self.javascript('const HANDLERS=' + json.dumps(wake) + r''';
 const busy=async(node,task)=>task();let calls=[];
 const invalidateStatus=()=>calls.push('invalidate'),updateAutoChill=()=>{};
 const api=async path=>{calls.push(path);return {};};
 const refreshStatus=async options=>{assert.equal(options.force,true);calls.push('status');};
 eval(HANDLERS);
-for(const id of ['wake','chill','save-auto-chill']){
- calls=[];await $(id).onclick();assert.deepEqual(calls,['invalidate',id==='save-auto-chill'?'/api/warehouse/autochill':'/api/warehouse/'+id,'status']);
+for(const id of ['wake','chill']){
+ calls=[];await $(id).onclick();assert.deepEqual(calls,['invalidate','/api/warehouse/'+id,'status']);
 }
 ''')
 
@@ -249,7 +248,6 @@ const api=path=>{
  assert.ok(['/api/warehouse/wake','/api/warehouse/chill'].includes(path));
  return new Promise(resolve=>{mutation=resolve;});
 };
-const updateAutoChill=state=>rendered.push(state);
 const report=state=>({warehouse:{state},components:{},auto_chill:state});
 const workbenchScreenMessage=()=>{},workbenchSetComputeStatus=()=>{};
 eval(HANDLER);
@@ -258,15 +256,14 @@ for(const action of ['wake','chill']){
  const state=action==='wake'?'active':'chilled',oldState=action==='wake'?'chilled':'active';
  const before=refreshStatus(),clicked=$(action).onclick();
  requests[0](report(oldState));await before;
- assert.deepEqual(rendered,[],'pre-action status cannot render during the mutation');
+
  const during=refreshStatus();
  mutation({});await settle();
  assert.equal(requests.length,3,'successful action must fetch status after mutation, bypassing in-flight work');
  requests[2](report(state));await clicked;
- assert.deepEqual(rendered,[state]);assert.equal(JSON.parse($('compute-warehouse').textContent).state,state);
+ assert.equal($('warehouse-state').textContent,state==='active'?'Running':'Chilled');
  requests[1](report(oldState));await during;
- assert.deepEqual(rendered,[state],'late status cannot overwrite post-action state');
- assert.equal(JSON.parse($('compute-warehouse').textContent).state,state);
+ assert.equal($('warehouse-state').textContent,state==='active'?'Running':'Chilled');
 }
 ''', 'invalidateStatus', 'refreshStatus', prelude="let statusEpoch=0,statusPending=null,currentRole='admin',catalogSession='user';")
 
@@ -318,35 +315,6 @@ await showJobRun('old');assert.equal(reads,1,'independent selection must ignore 
 await showJobRun('outside',undefined);assert.equal(reads,2);
 ''', 'showJobRun', prelude="let currentRole='admin',stageEpoch=0,jobDetailRequest=0,selectedRunId=null,stageExportRunId=null;")
 
-    def test_stage_save_reconciles_once_with_fresh_permissions_and_revision(self):
-        start = SCRIPT.index("$('stage-form').onsubmit=")
-        handler = SCRIPT[start:SCRIPT.index("$('stage-files-refresh')", start)]
-        self.javascript('const HANDLER=' + json.dumps(handler) + r''';
-let calls=[],updated=null,invalidations=0,cleared=0,stageEntries=[],selectedStage=null,stageFiles=[],stageDirty=false;
-const saved={name:'stage',updated_at:1,can_manage:true,owner:'alice',definition:{table:'old'}};
-const stageCurrent=epoch=>epoch===stageEpoch&&currentRole==='admin';
-const stageTask=async(label,task)=>task(stageEpoch),stageDefinition=()=>({name:'stage'});
-const invalidateStagePreview=()=>invalidations++,clearStageExports=()=>cleared++;
-const editStage=entry=>{selectedStage=entry;stageFiles=[];invalidateStagePreview();clearStageExports();};
-const renderStages=()=>{},renderStageSchedule=()=>{},fillScheduleFields=()=>{};
-const api=async(path,body)=>{calls.push({path,body});
- if(path==='/api/stages/save')return {stage:saved};
- if(path==='/api/stages')return {stages:[updated]};
- if(path==='/api/stages/files')return {files:[]};throw Error(path);
-};
-eval(HANDLER);
-const original=$('stage-form').onsubmit;
-// stageTask calls the callback synchronously up to its first await; settle drains the chain.
-updated={...saved,updated_at:2,definition:{table:'new'},owner:'bob',can_manage:false};
-original({preventDefault(){}});await settle();
-assert.deepEqual(calls.map(c=>c.path),['/api/stages/save','/api/stages']);
-assert.equal(selectedStage.owner,'bob');assert.equal(selectedStage.can_manage,false);assert.equal($('stage-table').value,'new');
-assert.ok(invalidations>=2);assert.ok(cleared>=2);
-calls=[];updated={...saved,updated_at:3,definition:{table:'latest'}};
-original({preventDefault(){}});await settle();
-assert.deepEqual(calls.map(c=>c.path),['/api/stages/save','/api/stages','/api/stages/files']);
-assert.equal(selectedStage.updated_at,3);assert.equal($('stage-table').value,'latest');
-''', 'refreshStageSchedule', 'fetchStageFiles', prelude="let currentRole='admin',stageEpoch=1;")
 
 
 HTML = Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html'
@@ -356,8 +324,8 @@ class AuditRefreshTests(unittest.TestCase):
     def test_no_browser_auto_chill_checks_and_full_script_syntax(self):
         script = WorkbenchSource(HTML.read_text()).source
         self.assertNotIn("api('/api/warehouse/autochill',{check:true})", script)
-        self.assertIn("api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})", script)
-        self.assertIn('if(data.auto_chill)updateAutoChill(data.auto_chill)', script)
+        self.assertNotIn("$('save-auto-chill').onclick", script)
+        self.assertNotIn('if(data.auto_chill)updateAutoChill(data.auto_chill)', script)
         result = subprocess.run(['node'], input='new Function(' + json.dumps(script) + ')', capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 

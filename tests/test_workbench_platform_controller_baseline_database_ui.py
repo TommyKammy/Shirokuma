@@ -160,7 +160,7 @@ dbAdminSession({...session,platform_admin:false});controllerEmpty();for(const ki
 
     def test_real_policy_navigation_no_sre_panel_preserves_receipts(self):
         self.navigation_javascript(r"""
-await controllerBoot();$('tab-compute').click();await controllerFetch();const held=dbControllerBaseline.compute.record,count=calls.length;
+await controllerBoot();$('tab-compute').click();await controllerFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const held=dbControllerBaseline.compute.record,count=calls.length;
 for(const locale of ['ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-policy').click();scope('policy');assert.equal($(controllerRoot('policy')).hidden,false);assert.equal($('observation-policy-database-controls').hidden,true);scope('policy','database');assert.equal($(controllerRoot('policy')).hidden,true);$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-controller-baseline'),null);$('tab-compute').click();assert.equal(dbControllerBaseline.compute.record,held);assert.equal(calls.length,count);}
 """)
 

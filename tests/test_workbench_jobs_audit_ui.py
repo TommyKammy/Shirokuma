@@ -74,21 +74,26 @@ assert.ok($('db-jobs-recent-runs').descendants().some(n=>String(n.textContent).i
 $('db-jobs-name').value='daily';await dbJobsSave();
 setLanguage('ja');
 const labelFor=id=>$('db-jobs-panel').descendants().find(n=>n.tagName==='LABEL'&&n.htmlFor===id);
+const labelText=node=>[node.textContent,...node.descendants().map(n=>n.textContent)].join(' ');
 assert.equal($('db-jobs-save').textContent,'ジョブを保存');
 assert.equal($('db-jobs-run').textContent,'ジョブを実行');
-assert.ok(labelFor('db-jobs-name').textContent.includes('ジョブ名'));
-assert.ok(labelFor('db-jobs-description').textContent.includes('ジョブの説明'));
+assert.ok(labelText(labelFor('db-jobs-name')).includes('ジョブ名'));
+assert.ok(labelText(labelFor('db-jobs-description')).includes('ジョブの説明'));
 for(const n of $('db-jobs-panel').descendants().filter(n=>['BUTTON','LABEL','P','H1','H2','H3'].includes(n.tagName)&&n.textContent.includes('Job')))throw Error('untranslated Job: '+n.textContent);
 const kinds=$('db-schedule-job-kind').options;
 assert.deepEqual(kinds.map(o=>o.value),['interval','daily','once','weekly','monthly']);
 assert.deepEqual(kinds.map(o=>o.textContent),['一定間隔','毎日','1回だけ','毎週','毎月']);
 $('db-jobs-steps').value=JSON.stringify([{name:'write',action:'sql',sql:'SELECT 1',mode:'read-write'}]);$('db-jobs-steps').oninput();
 assert.ok($('db-jobs-steps-list').descendants().some(n=>n.textContent.includes('読み書き')));
-const body=p.form.parentElement;
-const order=['db-jobs-steps-view','db-jobs-form','db-schedule-job-slot','db-jobs-history-title'].map(id=>body.children.indexOf($(id)));
+const detailView=$('db-jobs-detail'),edit=$('db-jobs-edit-details');
+assert.equal(detailView.children.some(n=>['db-jobs-editor-panel','db-schedule-job-slot','db-jobs-history-panel'].includes(n.id)),false);
+assert.equal(edit.parentElement,$('db-jobs-list-panel'));
+const order=['db-jobs-editor-panel','db-schedule-job-slot','db-jobs-history-panel'].map(id=>edit.children.indexOf($(id)));
 assert.equal($('db-schedule-job-slot').descendants().includes($('db-schedule-job-panel')),true);
-assert.ok(order.every(index=>index>=0),'all sections are siblings');
-assert.ok(order[0]<order[1]&&order[1]<order[2]&&order[2]<order[3],JSON.stringify(order));
+assert.ok(order.every(index=>index>=0),'edit sections live under the list details');
+assert.ok(order[0]<order[1]&&order[1]<order[2],JSON.stringify(order));
+assert.equal($('db-jobs-steps-view').parentElement.parentElement.className,'jobdetailgrid');
+assert.equal(p.form.parentElement.parentElement.id,'db-jobs-editor-panel');
 const before=calls.filter(c=>c.path.startsWith('/api/v1/jobs/runs')).length;
 currentRole='bi_viewer';dbApplyRole();await dbJobsShowList({route:false});
 assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/jobs/runs')).length,before,'viewer does not request runs');
@@ -118,9 +123,9 @@ location.href='http://local/#jobs';await workbenchHistoryRestore();
 assert.equal(dbJobs.view,'list');assert.equal($('db-jobs-detail').hidden,true);
 ''')
 
-    def test_database_job_create_steps_arguments_run_and_one_primary(self):
+    def test_database_job_create_steps_arguments_run_and_edit_form(self):
         self.javascript(JOBS_SETUP + r'''
-const visible=node=>{for(let n=node;n;n=n.parentElement)if(n.hidden)return false;return true;};
+const visible=node=>{for(let n=node;n;n=n.parentElement){if(n.hidden)return false;if(n.tagName==='DETAILS'&&!n.open&&node!==n.children[0])return false;}return true;};
 const primaries=()=>$('db-jobs-panel').descendants().filter(node=>String(node.className).split(' ').includes('primary')&&visible(node));
 await openJobs();await activate($('tab-jobs'));
 assert.equal(primaries().length,1);assert.equal(primaries()[0].id,'db-jobs-new');
@@ -131,7 +136,11 @@ $('db-jobs-steps').oninput();
 assert.equal($('db-jobs-steps-list').children.length,1);
 await dbJobsSave();
 assert.equal(dbJobs.job.id,'job-1');assert.equal(dbJobs.view,'detail');
-assert.equal(primaries().length,1);assert.equal(primaries()[0].id,'db-jobs-save');
+assert.equal(primaries().length,0);assert.equal($('db-jobs-detail').descendants().some(n=>n.id==='db-jobs-editor-panel'),false);
+dbJobsShowList();$('db-jobs-list').value='job-1';await dbJobsEdit();
+assert.equal(dbJobs.view,'list');assert.equal(dbJobs.editOpen,true);assert.equal($('db-jobs-edit-details').open,true);assert.equal($('db-jobs-detail').hidden,true);
+assert.equal($('db-jobs-edit-details').descendants().includes($('db-jobs-form')),true);
+assert.equal(primaries().some(node=>node.id==='db-jobs-save'),true);
 $('db-jobs-arguments').value=JSON.stringify({n:7});
 await dbJobsRun();
 assert.equal(p.run.id,'run-1');
@@ -151,7 +160,7 @@ assert.ok($('db-schedule-job-panel'));assert.ok($('db-schedule-job-alerts-refres
 assert.ok($('db-schedule-job-time').tagName==='INPUT');assert.ok($('db-schedule-job-timezone').tagName==='INPUT');
 assert.equal($('db-schedule-job-timezone').value,'Asia/Tokyo');
 const disabledHelp=t('Schedules start disabled. Save changes before explicitly enabling.');
-assert.equal($('db-jobs-detail').descendants().filter(n=>n.textContent===disabledHelp).length,1);
+assert.equal($('db-jobs-edit-details').descendants().filter(n=>n.textContent===disabledHelp).length,1);
 const display=dbScheduleDate('2028-10-23T00:00:00Z',{spec:{kind:'daily',timezone:'Asia/Tokyo'}},'job');
 assert.match(display,/2028-10-23 09:00:00 Asia\/Tokyo/);assert.match(display,/2028-10-23 09:00 JST/);
 assert.match(dbJobsRenderRecentRuns.toString(),/fmtJST/);
@@ -208,7 +217,7 @@ assert.equal(calls.filter(c=>c.path.startsWith('/api/v1/alerts')).length,after);
 assert.equal(workbenchAlertCount,0);assert.equal($('workbench-alert-count').hidden,true);
 ''')
 
-    def test_audit_role_state_action_default_summary_and_presets_fold(self):
+    def test_audit_role_state_action_and_applied_summary(self):
         self.javascript(audit_ui.AUDIT + r'''
 auditCapabilities=()=>({scopes:['self','database'],sources:['query','wap_publication','wap_build','wap_audit','wap_model_version'],platform_admin:false});
 await auditBoot();
@@ -223,8 +232,10 @@ assert.equal(t('WAP audits'),'データ変換の監査');
 assert.equal(t('WAP model versions'),'データ変換のモデル版');
 const sourceOption=value=>$('db-audit-source').options.find(o=>o.value===value);
 assert.equal(sourceOption('wap_publication').textContent,'データ変換の公開');
+assert.equal($('audit-filters').children[0].tagName,'SUMMARY');
+assert.equal($('audit-filters').children[0].textContent,t('Filters'));
+assert.equal($('db-audit-panel').descendants().some(n=>String(n.id||'').startsWith('db-audit-preset-')),false);
 await dbAuditSearch();
-assert.equal($('db-audit-filters-summary').textContent,t('Filters'));
 const cell=document.createElement('td');dbAuditValue(cell,'SUCCEEDED');assert.equal(cell.textContent,'完了');
 dbAuditValue(cell,'succeeded');assert.equal(cell.textContent,'成功');
 dbAuditValue(cell,'custom_state');assert.equal(cell.textContent,'custom_state');
@@ -232,10 +243,8 @@ const event=auditEvent('state',{source:'query',action:'execute',state:'SUCCEEDED
 auditList=(p,o)=>auditEnvelope(p,o,event);await dbAuditSearch();
 const rowText=auditText($('db-audit-rows'));
 assert.ok(rowText.includes('完了'));assert.ok(rowText.includes('実行'));assert.ok(rowText.includes('クエリ実行'));
-assert.equal($('db-audit-filters').descendants().includes($('db-audit-presets')),true);
-assert.equal($('db-audit-panel').descendants().includes($('db-audit-target')),false);
+assert.equal($('audit-applied').hidden,false);assert.match(auditText($('audit-applied')),/適用中.*自分の DB 記録.*1 件/);
 assert.equal($('db-audit-panel').descendants().some(n=>n.id==='db-audit-timezone-note'),false);
-assert.match(auditText($('db-audit-context')),/範囲: 自分の DB 記録/);
 ''')
 
     def test_audit_japanese_sources_jst_list_utc_detail_and_restore(self):
@@ -249,11 +258,12 @@ route=async(path,options)=>{
 await boot();
 assert.equal(selected(),'pawprints');assert.equal(dbAudit.detail.id,'event-1');
 assert.ok(location.href.endsWith('#audit/event-1'));
-assert.match($('db-audit-detail-title').textContent,/event-1/);
+assert.equal($('db-audit-detail-title').textContent,t('Audit record details'));
+assert.ok(auditText($('db-audit-detail')).includes('event-1'));
 assert.match(auditText($('db-audit-detail')),/2026-10-29 10:02:00 JST/);
 assert.match(auditText($('db-audit-detail')),/UTC 2026-10-29T01:02:00Z/);
 await dbAuditSearch();
-assert.match(auditText($('db-audit-rows')),/2026-10-29 10:02 JST/);
+assert.match(auditText($('db-audit-rows')),/2026-10-29 10:02:00 JST/);
 assert.doesNotMatch(auditText($('db-audit-rows')),/UTC/);
 const option=value=>$('db-audit-source').options.find(o=>o.value===value);
 assert.equal(option('query').textContent,t('Query executions'));
@@ -264,7 +274,8 @@ setLanguage('ja');
 assert.equal($('db-audit-title').textContent,'監査ログ');
 assert.equal(option('query').textContent,'クエリ実行');
 assert.equal(option('job_run').textContent,'ジョブ実行');
-assert.match($('db-audit-filters-summary').textContent,/絞り込み条件/);
+assert.equal($('audit-filters').children[0].textContent,'絞り込み条件');
+assert.match(auditText($('audit-applied')),/適用中.*1 件/);
 ''')
 
     def test_audit_filters_fold_at_600_and_summary_count(self):
@@ -273,16 +284,16 @@ assert.match($('db-audit-filters-summary').textContent,/絞り込み条件/);
                 self.javascript(audit_ui.AUDIT + r'''
 narrow=NARROW;
 await auditBoot();
-assert.equal($('db-audit-filters').tagName,'DETAILS');
-assert.equal($('db-audit-filters').open,!NARROW);
+assert.equal($('audit-filters').tagName,'DETAILS');
+assert.equal($('audit-filters').open,!NARROW);
 $('db-audit-from').value='2026-10-28T14:30';$('db-audit-from').oninput();
 $('db-audit-source').value='query';$('db-audit-source').oninput();
 $('db-audit-limit').value='2';$('db-audit-limit').oninput();
 await dbAuditSearch();
-assert.match($('db-audit-filters-summary').textContent,/1/);
+assert.match(auditText($('audit-applied')),/Applied:.*2026-10-28 14:30 JST.*Query executions.*1/);
 setLanguage('ja');
-assert.match($('db-audit-filters-summary').textContent,/絞り込み条件/);
-assert.match($('db-audit-filters-summary').textContent,/1 件/);
+assert.equal($('audit-filters').children[0].textContent,'絞り込み条件');
+assert.match(auditText($('audit-applied')),/適用中.*2026-10-28 14:30 JST.*クエリ実行.*1 件/);
 '''.replace('NARROW', 'true' if narrow else 'false'))
 
     def test_audit_utc_is_absent_from_list_and_present_only_in_detail(self):
@@ -291,9 +302,9 @@ await auditBoot();
 const timed=auditEvent('timed',{created_at:'2026-10-29T01:02:00Z'});
 auditList=(p,o)=>auditEnvelope(p,o,timed);auditDetail=(p,o)=>auditEnvelope(p,o,timed);
 await dbAuditSearch();
-assert.match(auditText($('db-audit-rows')),/Time JST/);
+assert.match(auditText($('db-audit-rows')),/Time \(JST\)/);
 assert.doesNotMatch(auditText($('db-audit-rows')),/Time UTC/);
-assert.match(auditText($('db-audit-rows')),/2026-10-29 10:02 JST/);
+assert.match(auditText($('db-audit-rows')),/2026-10-29 10:02:00 JST/);
 await dbAuditDetail(timed.id);
 assert.match(auditText($('db-audit-detail')),/2026-10-29 10:02:00 JST/);
 assert.match(auditText($('db-audit-detail')),/UTC 2026-10-29T01:02:00Z/);
@@ -302,7 +313,7 @@ assert.match(auditText($('db-audit-detail')),/UTC 2026-10-29T01:02:00Z/);
     def test_touch_targets_and_no_page_level_horizontal_overflow(self):
         self.assertRegex(CSS, r'@media\(max-width:600px\)\{[\s\S]*?#jobs :is\(button,select,input:not\(\[type=checkbox\]\):not\(\[type=radio\]\),textarea,summary,a\)[\s\S]*?min-height:44px')
         self.assertRegex(CSS, r'#workbench-alerts-popover button,#workbench-alerts-popover a\{min-height:44px\}')
-        self.assertIn('#db-audit-filters>summary', CSS)
+        self.assertIn('#audit-filters>summary', CSS)
         self.assertIn('#db-jobs-list-rows .objectrow', CSS)
         self.assertIn('#db-jobs-panel,#db-audit-panel{min-width:0}', CSS)
 

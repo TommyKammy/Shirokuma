@@ -33,7 +33,7 @@ await boot();assert.equal(proposalCalls().length,0);await dbExplanationPoll();as
 assert.equal($('copilot-generate').disabled,true);assert.equal($('copilot-request').disabled,false);
 request();await choose();
 for(const lang of ['ja','en']){setLanguage(lang);await dbRefreshContext();dbControls();assert.equal($('copilot-generate').disabled,false);assert.equal($('copilot-generate').getAttribute('title'),undefined);assert.equal($('copilot-request').getAttribute('title'),undefined);}
-for(const id of ['copilot-stage','copilot-publish','copilot-stage-table'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
+for(const id of ['copilot-stage','copilot-publish'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);
 assert.equal(proposalCalls().length,0);
 ''')
 
@@ -290,8 +290,8 @@ await ready();await submit(pendingProposal());assert.equal(dbProposal.origin,'cu
 
     def test_availability_copy_is_worksheet_copilot_only_after_language_role_refresh(self):
         self.javascript(r'''
-const mainDataAction=document.createElement('button');mainDataAction.id='bear-data-run';$('bears').append(mainDataAction);await ready();
-for(const locale of ['en','ja']){setLanguage(locale);await dbRefreshContext();dbControls();assert.equal($('bears-guide-copilot').textContent,t('Draft SQL in Copilot'));assert.equal($('bears-guide-copilot').disabled,false);assert.equal($('bear-data-legacy').hidden,true);assert.equal($('database-bears-notice').textContent,t('Legacy direct Bear and Copilot execution is unavailable. Shared AI settings require platform administrator authority and global Admin.'));assert.equal($('copilot-generate').disabled,false);assert.equal($('copilot-generate').getAttribute('title'),undefined);assert.equal($('copilot-request').getAttribute('title'),undefined);for(const id of ['copilot-stage','copilot-publish','bear-data-run'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();await choose();assert.equal($('copilot-generate').disabled,false);}
+await ready();
+for(const locale of ['en','ja']){setLanguage(locale);await dbRefreshContext();dbControls();assert.equal($('bears-guide-copilot').textContent,t('Draft SQL in Copilot'));assert.equal($('bears-guide-copilot').disabled,false);assert.equal($('database-bears-notice').textContent,t('Legacy direct Bear and Copilot execution is unavailable. Shared AI settings require platform administrator authority and global Admin.'));assert.equal($('copilot-generate').disabled,false);assert.equal($('copilot-generate').getAttribute('title'),undefined);assert.equal($('copilot-request').getAttribute('title'),undefined);for(const id of ['copilot-stage','copilot-publish'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);currentRole='bi_viewer';dbControls();currentRole='admin';dbControls();await choose();assert.equal($('copilot-generate').disabled,false);}
 ''')
 
     def test_durable_authority_failure_codes_close_original_after_restored_authority(self):

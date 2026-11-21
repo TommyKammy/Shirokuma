@@ -22,14 +22,21 @@ class ExplorerLayoutUI(unittest.TestCase):
     def test_sql_actions_stay_with_title_and_management_is_grouped_apart(self):
         self.javascript(r'''
 await explorerReady();
-const toolbar=$('open-table-sql').parentElement;
-for(const id of ['insert-table-sql','use-explorer-schema','refresh-table-details'])assert.equal($(id).parentElement,toolbar,id);
+const heading=$('table-title').parentElement.parentElement;
+assert.equal(heading.className,'pageheading');assert.equal($('open-table-sql').parentElement,heading.children[1]);
+const secondary=$('insert-table-sql').parentElement;
+for(const id of ['use-explorer-schema','explore-use-sql','refresh-table-details'])assert.equal($(id).parentElement,secondary,id);
+assert.notEqual(secondary,heading.children[1]);
 for(const id of ['clone-table-btn','export-table-format','export-table-btn'])assert.equal($(id).parentElement.parentElement,$('db-manage-copy'),id);
-assert.equal($('drop-table-btn').parentElement.parentElement,$('db-manage-remove'));assert.notEqual($('drop-table-btn').parentElement,toolbar);
+assert.equal($('drop-table-btn').parentElement.parentElement,$('db-manage-remove'));assert.notEqual($('drop-table-btn').parentElement,secondary);
 assert.equal($('db-manage-remove').className,'db-manage-group db-manage-danger');
-const children=$('database-details').children,at=id=>children.indexOf($(id));
-assert.ok(at('db-table-manage')>at('inspect-columns'));assert.ok(at('db-table-manage')>at('inspect-preview'));
+const detail=$('explore-detail'),at=id=>detail.children.indexOf($(id));
+assert.ok(at('inspect-columns')>=0);assert.ok(at('inspect-preview')>=0);
+const root=$('database-details').children;
+assert.ok(root.indexOf($('explore-management'))>root.indexOf($('explore-detail')));
+assert.ok(root.indexOf($('table-operations'))>root.indexOf($('explore-management')));
 assert.equal($('db-table-manage').tagName,'DETAILS');assert.equal($('db-table-manage').open,false);
+assert.equal($('db-table-manage').parentElement,$('explore-management'));
 for(const id of ['p35-table-export','db-clone-panel','db-drop-panel'])assert.equal($(id).parentElement,$('db-table-manage'));
 for(const id of ['db-clone-panel','db-drop-panel']){assert.equal($(id).tagName,'DETAILS');assert.equal($(id).open,false);}
 assert.equal($('explorer-open-lineage').hidden,true);assert.equal(typeof $('explorer-open-lineage').onclick,'function');
@@ -50,7 +57,7 @@ setLanguage('ja');assert.equal($('db-table-manage-title').textContent,'テーブ
 setLanguage('en');dbObject=stable('orders');dbExplorerControls();assert.equal($('db-manage-remove-reason').textContent,'');
 $('table-title').textContent='orders';$('table-title').dataset.object='true';
 dbClearExplorer();assert.equal(dbObject,null);assert.equal($('db-table-manage').hidden,true);
-const schema=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);assert.equal($('table-title').textContent,schema.display_name);assert.equal($('table-title').dataset.object,'cleared');dbExplorer.schemas=[];dbExplorerControls();assert.equal($('table-title').textContent,dbDatabases.find(d=>d.id===dbExplorer.database_id).display_name);dbShowMetadataOverview('database');assert.equal($('table-title').dataset.object,'');
+const schema=dbExplorer.schemas.find(s=>s.id===dbExplorer.schema_id);assert.equal($('table-title').textContent,schema.display_name);assert.equal($('table-title').dataset.object,'cleared');dbExplorer.schemas=[];dbExplorerControls();assert.equal($('table-title').textContent,dbDatabases.find(d=>d.id===dbExplorer.database_id).display_name);dbExploreShowList();assert.notEqual($('table-title').dataset.object,'true');
 dbObject=stable('orders');dbExplorer.invalid=true;dbExplorerControls();
 assert.ok(dbExplorerReason());assert.equal($('db-manage-copy-reason').textContent,'');assert.equal($('db-manage-remove-reason').textContent,'');
 ''')
@@ -103,13 +110,13 @@ class ComputeLayoutUI(unittest.TestCase):
     def test_state_usage_and_diagnostics_order_and_current_role_gate(self):
         self.javascript(r'''
 await start();
-const top=$('compute').children.filter(n=>['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics'].includes(n.id)).map(n=>n.id);
-assert.deepEqual(top,['compute-overview','runtime-panel','compute-ai-settings','compute-usage','compute-diagnostics']);
-assert.equal($('runtime-panel').parentElement,$('compute'));
+const atlas=$('compute-atlas');
+assert.deepEqual(atlas.children.map(n=>n.id),['compute-overview','compute-runtime-host','compute-usage','compute-auto-chill','compute-diagnostics']);
+assert.equal($('runtime-panel').parentElement,$('compute-runtime-host'));
 for(const [id,group] of [['observation-resources-panel','compute-usage-list'],['observation-usage-panel','compute-usage-list'],['observation-capacity-panel','compute-usage-list'],['observation-activity-panel','compute-diag-history'],['observation-compute-panel','compute-diag-runtime'],['observation-history-panel','compute-diag-runtime'],['observation-baseline-panel','compute-diag-policy'],['observation-pod-baseline-panel','compute-diag-policy'],['observation-recent-failures-panel','compute-diag-logs']])assert.equal($(id).parentElement,$(group),id);
 assert.equal(dbAdminAllowed(),true);assert.equal($('compute-diagnostics').hidden,false);assert.equal($('compute-usage-list').hidden,false);assert.equal($('compute-usage-note').hidden,true);
 assert.equal($('runtime-capability').hidden,true);assert.equal($('runtime-authority').hidden,true);
-const before=$('compute').children.slice();for(let i=0;i<3;i++){dbRuntimeInstall();dbComputeLayout();dbRuntimeRender();}assert.deepEqual($('compute').children,before);
+const before=atlas.children.slice();for(let i=0;i<3;i++){dbRuntimeInstall();dbComputeLayout();dbRuntimeRender();}assert.deepEqual(atlas.children,before);
 assert.equal($('compute').descendants().filter(n=>n.id==='compute-diagnostics').length,1);
 currentRole='bi_viewer';dbApplyRole();dbRuntimeRender();
 assert.equal(dbAdminAllowed(),false);assert.equal(dbAdmin.platform,true);
@@ -148,6 +155,7 @@ setLanguage('ja');assert.match(read()[3],/休止中とはみなさないでく�
     def test_chill_reason_is_shown_beside_controls_only_while_blocked(self):
         self.javascript(r'''
 await start();assert.equal(dbAdminAllowed(),true);
+runtime.physical_state='active';runtime.replicas=1;runtime.ready_replicas=1;await refreshStatus();
 dbRuntime.status.blockers.admissions=1;dbRuntimeRender();assert.equal($('runtime-chill').disabled,true);assert.equal($('runtime-condition-chill').hidden,false);assert.match($('runtime-condition-chill').textContent,/Admitted work: 1/);
 dbRuntime.status.blockers.admissions=0;dbRuntime.status.blockers.unknown=0;dbRuntimeRender();
 assert.equal($('runtime-chill').disabled,!dbRuntimeAllowed('chill'));assert.equal($('runtime-condition-chill').hidden,!$('runtime-chill').disabled);

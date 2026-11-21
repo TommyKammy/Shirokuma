@@ -197,7 +197,7 @@ for(const kind of recentKinds){const output=$(recentID(kind)+'output');assert.eq
 
     def test_real_sre_platform_visibility_navigation_preserves_receipts_options_no_fetch(self):
         self.navigation_javascript(r"""
-await recentBoot();$('tab-compute').click();await recentFetch();const held=dbRecentFailures.compute.record,count=calls.length;
+await recentBoot();$('tab-compute').click();await recentFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const held=dbRecentFailures.compute.record,count=calls.length;
 for(const locale of ['ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-recent-failures').hidden,false);assert.equal($('observation-sre-database-controls').hidden,true);const options=$('observation-sre-scope').options.map(o=>o.value);assert.deepEqual(options,['database','platform']);scope('sre','database');assert.equal($('observation-sre-recent-failures').hidden,true);$('bear-tab-policy').click();scope('policy');assert.equal($('observation-policy-recent-failures'),null);$('tab-compute').click();assert.equal(dbRecentFailures.compute.record,held);assert.equal(calls.length,count);}
 """)
 

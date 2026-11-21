@@ -119,7 +119,7 @@ assert.equal(JSON.stringify(i18n.ja),globalJA);
 
     def test_real_navigation_sre_only_shared_capture_no_auto_get(self):
         self.navigation_javascript(r"""
-session.platform_admin=true;await dualBoot();$('tab-compute').click();await controllerFetch();const saved=dbFoundationControllers.record,count=calls.length;
+session.platform_admin=true;await dualBoot();$('tab-compute').click();await controllerFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const saved=dbFoundationControllers.record,count=calls.length;
 for(const locale of ['ja','en','ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-foundation-controllers-panel').hidden,false);assert.ok(controllerText(controllerIDs[0]).includes(saved.observed_at));scope('sre','database');assert.equal($('observation-sre-foundation-controllers-panel').hidden,true);$('bear-tab-policy').click();scope('policy');assert.equal($('observation-policy-foundation-controllers-panel'),null);$('tab-warehouse').click();$('tab-compute').click();assert.equal(dbFoundationControllers.record,saved);assert.equal(calls.length,count);}
 await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length,1);assert.equal(dbFoundationControllers.record,saved);
 """)

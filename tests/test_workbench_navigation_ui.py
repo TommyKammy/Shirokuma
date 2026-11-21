@@ -36,8 +36,8 @@ class Markup(HTMLParser):
 
 MARKUP = Markup()
 MARKUP.feed(harness.HTML)
-SHELL_IDS = ['workbench-header', 'workbench-nav', 'workbench-main']
-BOOT_MARKUP = {key: node['attrs'] for key, node in MARKUP.ids.items() if key.startswith('workbench-')}
+SHELL_IDS = ['workbench-header', 'workbench-nav', 'main']
+BOOT_MARKUP = {key: node['attrs'] for key, node in MARKUP.ids.items() if key.startswith('workbench-') or key == 'main'}
 
 
 URL_SETUP = r"""
@@ -86,15 +86,18 @@ class NavigationUI(unittest.TestCase):
         css = re.sub(r'/\*[\s\S]*?\*/', '', css)
         rules = {selector.strip(): body for selector, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css)}
         self.assertRegex(rules['[data-workbench-shell][inert]'], r'visibility\s*:\s*hidden')
-        for key, tag in zip(SHELL_IDS, ['header', 'nav', 'main']):
+        for key, tag in zip(SHELL_IDS, ['header', 'aside', 'main']):
             node = MARKUP.ids[key]
             self.assertEqual(node['tag'], tag)
             self.assertIn('inert', node['attrs'])
             self.assertIn('data-workbench-shell', node['attrs'])
         nav = MARKUP.ids['workbench-nav']
-        self.assertEqual(nav['tag'], 'nav')
-        self.assertEqual(nav['attrs']['aria-label'], 'Workbench sections')
+        self.assertEqual(nav['tag'], 'aside')
+        self.assertEqual(nav['attrs']['aria-label'], 'Main navigation')
+        self.assertEqual(nav['attrs']['class'], 'sidebar')
         self.assertNotIn('role', nav['attrs'])
+        self.assertEqual(MARKUP.ids['main']['tag'], 'main')
+        self.assertEqual(MARKUP.ids['workbench-header']['attrs']['class'], 'topbar')
         for key in ['tab-warehouse', 'database-compute-status', 'role-selector', 'ai-settings-button', 'workbench-command-button', 'warehouse', 'jobs', 'catalog']:
             self.assertTrue(any(parent['attrs'].get('id') in SHELL_IDS for parent in MARKUP.ids[key]['parents']), key)
         for key in ['quick-wake', 'quick-chill', 'quick-warehouse-state', 'quick-status-error', 'legacy-header-warehouse']:
@@ -123,6 +126,19 @@ class NavigationUI(unittest.TestCase):
         self.assertEqual(retry['attrs']['type'], 'button')
         self.assertNotIn('tabindex', retry['attrs'])
         self.assertIn('hidden', retry['attrs'])
+        self.assertRegex(css, r'\.app\s*\{[^}]*grid-template-columns\s*:\s*244px')
+        self.assertRegex(css, r'\.sidebar\s*\{[^}]*background\s*:\s*var\(--rail\)')
+        self.assertRegex(css, r'\.topbar\s*\{[^}]*min-height\s*:\s*77px')
+        self.assertRegex(css, r'\.panel\s*\{[^}]*border-radius\s*:\s*8px')
+        self.assertRegex(rules['.impact'], r'border-left')
+        self.assertRegex(rules['.impact.neutral'], r'border-left-color')
+        danger = next(body for selector, body in rules.items() if 'button.primary.danger' in selector)
+        self.assertRegex(danger, r'background\s*:\s*var\(--(?:bad|red)\)')
+        primary = rules['button.primary,a.primary']
+        self.assertRegex(primary, r'background\s*:\s*var\(--button\)')
+        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.sidebar\{display:none\}')
+        self.assertRegex(css, r'@media\(max-width:600px\)\{[\s\S]*?\.mobilemenu\{display:block')
+        self.assertRegex(css, r'\.navlist\s*\{[^}]*display\s*:\s*grid')
 
     def test_held_production_reads_release_only_requested_shell(self):
         for page, final in [('jobs', 'jobs'), ('catalog', 'catalog'), ('warehouse', 'warehouse'), ('db-admin', 'home')]:
@@ -316,16 +332,17 @@ assert.equal($('workbench-boot').hidden,true);assert.deepEqual(released,['jobs',
     def test_database_jobs_and_audit_have_localized_h1_and_titles(self):
         self.run_url('http://local/#jobs', r"""
 await boot();
-const h1s=id=>$(id).descendants().filter(node=>node.tagName==='H1');
-assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),['Jobs']);
-const headingLevels=$('db-jobs-panel').descendants().filter(node=>/^H[1-6]$/.test(node.tagName)).map(node=>Number(node.tagName.slice(1)));
+const visible=node=>{for(let current=node;current;current=current.parentElement)if(current.hidden)return false;return true;};
+const h1s=(id,visibleOnly=false)=>$(id).descendants().filter(node=>node.tagName==='H1'&&(!visibleOnly||visible(node)));
+assert.deepEqual(h1s('db-jobs-panel',true).map(node=>node.textContent),['Jobs']);
+const headingLevels=$('db-jobs-panel').descendants().filter(node=>visible(node)&&/^H[1-6]$/.test(node.tagName)).map(node=>Number(node.tagName.slice(1)));
 assert.deepEqual(headingLevels.slice(0,2),[1,2]);for(let i=1;i<headingLevels.length;i++)assert.ok(headingLevels[i]<=headingLevels[i-1]+1);
 assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),['Audit log']);
 assert.equal(document.title,'Jobs · Shirokuma Workbench');
 await activate($('tab-pawprints'));
 assert.equal(document.title,'Audit log · Shirokuma Workbench');
 setLanguage('ja');
-assert.deepEqual(h1s('db-jobs-panel').map(node=>node.textContent),[t('Jobs')]);
+assert.equal($('db-jobs-title').textContent,t('Jobs'));
 assert.notEqual(t('Jobs'),'Jobs');
 assert.deepEqual(h1s('db-audit-panel').map(node=>node.textContent),[t('Audit log')]);
 assert.equal(document.title,t('Audit log')+' · Shirokuma Workbench');

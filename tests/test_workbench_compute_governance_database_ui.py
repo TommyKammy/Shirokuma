@@ -48,7 +48,7 @@ assert.equal($('observation-compute-panel'),null);session.platform_admin=true;in
 dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';
 dbRuntimeInstall();const panel=$('observation-compute-panel'),output=$('observation-compute-output'),auth=$('observation-compute-auth'),fetchButton=$('observation-compute-platform-fetch');
 assert.ok(panel);assert.equal(panel.parentElement,$('compute-diag-runtime'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-compute-title');
-assert.ok($('compute').children.indexOf($('compute-diagnostics'))>$('compute').children.indexOf($('runtime-panel')));
+assert.ok($('compute-atlas').children.indexOf($('compute-diagnostics'))>$('compute-atlas').children.indexOf($('compute-runtime-host')));
 assert.equal(calls.length,0);assert.equal(dbAdmin.platform,false);assert.equal(fetchButton.disabled,true);assert.equal(auth.disabled,false);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbPlatformComputeInstall();dbPlatformSync();}assert.equal($('observation-compute-panel'),panel);assert.equal($('observation-compute-output'),output);assert.equal($('compute').descendants().filter(n=>n.id==='observation-compute-panel').length,1);assert.equal(calls.length,0);
 await auth.onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);assert.equal(calls[0].options,undefined);assert.equal(dbAdmin.platform,true);assert.equal(fetchButton.disabled,false);
@@ -67,7 +67,7 @@ session.platform_admin=true;session.maximum_role='admin';currentRole='bi_viewer'
 
     def test_real_three_surface_navigation_language_and_reference_viewer_share_one_cache(self):
         self.navigation_javascript(r"""
-session.platform_admin=true;await dualBoot();await readyObservation('sre','bi_viewer','finance','finance-marts');await readyObservation('policy','bi_viewer');await fetchObservation('sre');await fetchObservation('policy');
+session.platform_admin=true;await dualBoot();dbCurrent().database_id='finance';dbCurrent().schema_id='finance-marts';dbCurrent().selected_role='bi_viewer';await dbRefreshContext();await dbReselect();await readyObservation('sre','bi_viewer','finance','finance-marts');await readyObservation('policy','bi_viewer','finance','finance-marts');await fetchObservation('sre');await fetchObservation('policy');
 const sre=dbObservations.sre.record,policy=dbObservations.policy.record,sc=dbObservations.sre.context,pc=dbObservations.policy.context;
 editSQL('SELECT kept SQL');editDoctor('SELECT kept Doctor');$('copilot-request').value='kept Copilot';$('p35-wap-sql').value='SELECT kept WAP';const held=[dbExplanation.intents,dbCurator.intents,dbProposal.intents];
 $('tab-compute').click();assert.equal(activeTab,'compute');assert.equal(platformCalls().length,0);await computeFetch();const saved=dbPlatform.record;
@@ -153,7 +153,7 @@ await platformBoot();const observerStart=calls.length,wake=$('runtime-wake').onc
 await $('observation-compute-auth').onclick();await computeFetch();assert.deepEqual(calls.slice(observerStart).map(c=>c.path),['/api/session','/api/v1/bears/platform-observations']);assert.equal(calls.slice(observerStart).some(c=>c.options?.method==='POST'),false);
 assert.equal($('runtime-wake').onclick,wake);assert.equal($('runtime-chill').onclick,chill);assert.equal($('runtime-save').onclick,save);assert.equal($('runtime-receipt').onclick,receipt);assert.equal($('runtime-refresh').onclick,refresh);
 const prior=platformCalls().length,count=calls.length;await $('runtime-refresh').onclick();assert.ok(calls.slice(count).some(c=>c.path===BASE));assert.equal(platformCalls().length,prior);assert.ok(calls.slice(count).every(c=>c.path==='/api/session'||c.path===BASE));
-for(const id of ['compute-sre-check','compute-policy-check']){assert.equal($(id).disabled,true);assert.equal($(id).hidden,true);}
+
 """)
 
     def test_runtime_receipt_dirty_cas_conflict_focus_drafts_and_real_unknown_intents_are_unchanged(self):
@@ -174,7 +174,7 @@ assert.equal(otherState(),before);assert.equal(runtimeState(),runtimeBefore);ass
     def test_native_region_wrapping_and_precise_compute_notice_bilingual(self):
         self.javascript(r"""
 await platformBoot();narrow=true;const panel=$('observation-compute-panel');assert.equal(panel.className,'panel');assert.equal(panel.children[0].className,'panel-head');assert.equal(panel.children[1].className,'panel-body');assert.equal(panel.children[1].children[0].className,'toolbar');assert.equal($('observation-compute-output').className,'table-wrap');assert.equal(panel.descendants().filter(n=>n.className==='panel').length,0);assert.equal(panel.descendants().filter(n=>['INPUT','TEXTAREA','SELECT'].includes(n.tagName)).length,0);assert.equal(panel.descendants().filter(n=>n.tagName==='BUTTON').length,2);
-for(const locale of ['ja','en']){setLanguage(locale);dbControls();const key='P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.';assert.equal($('database-compute-notice').textContent,t(key));assert.equal($('compute-sre-check').title,t(key));assert.equal($('compute-policy-check').title,t(key));assert.equal($('observation-compute-title').textContent,t('Platform observations (P-only, read-only)'));if(locale==='ja')assert.notEqual(t(key),key);}
+for(const locale of ['ja','en']){setLanguage(locale);dbControls();const key='P-only read-only Platform observations are available. Legacy workload checks, policy audits and other Bear actions remain unavailable.';assert.equal($('database-compute-notice').textContent,t(key));assert.equal($('observation-compute-title').textContent,t('Platform observations (P-only, read-only)'));if(locale==='ja')assert.notEqual(t(key),key);}
 """)
     def test_maximum_length_times_and_safe_integer_counts_remain_complete_in_both_languages(self):
         self.javascript(r"""

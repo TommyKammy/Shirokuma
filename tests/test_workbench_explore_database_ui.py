@@ -60,7 +60,7 @@ assert.equal(dbExplore.items.length,1,JSON.stringify(dbExplore));
 assert.equal($('explore-results').children.length,1);
 assert.match($('explore-results').children[0].children[1].children[0].textContent,/Refund/);
 assert.equal($('explore-status').textContent,t('{database} / {schema} · {shown} of {total} objects',
- {database:'sales',schema:'marts',shown:1,total:1}));
+ {database:'Sales',schema:'Mart',shown:1,total:1}));
 const paths=calls.filter(c=>c.path.includes('/api/v1/schemas/schema/objects?')).slice(-2).map(c=>new URLSearchParams(c.path.split('?')[1]).get('q'));
 assert.deepEqual(paths,['a','b']);
 ''')
@@ -128,8 +128,10 @@ await dbDescribe(object,'columns');await tick();await tick();
 assert.ok($('table-ddl').textContent.includes('CREATE TABLE sales.marts.orders'));
 assert.equal(inspectorTabs.some(tab=>tab.dataset.inspect==='ddl'),false);
 assert.equal($('inspect-tab-columns').textContent,'Schema');
-assert.equal($('inspect-ddl').hidden,true);assert.ok($('inspect-columns').children.includes($('table-ddl')));
+assert.ok($('inspect-columns').children.includes($('table-ddl')));
 assert.equal($('table-ddl-heading').hidden,false);
+assert.equal($('inspect-columns').children.includes($('table-ddl-heading')),true);
+assert.equal($('inspect-snapshots').children.includes($('snapshot-preview')),true);
 ''')
 
     def test_search_input_is_debounced_and_unavailable_is_cleared(self):
@@ -162,27 +164,27 @@ await activate($('tab-catalog'));await dbExploreOpenSearchItem(item);await tick(
 assert.equal(dbObject.id,'orders');assert.match(globalThis.location.href,/#explore\/sales\.marts\.orders$/);
 ''')
 
-    def test_detail_area_is_hidden_until_schema_or_object_is_selected(self):
+    def test_detail_page_is_hidden_in_list_and_shown_for_an_object(self):
         self.javascript(r'''
 await boot([{...input(),database_id:'',schema_id:''}]);
-assert.equal($('database-details').dataset.detailEmpty,'true');
-assert.equal($('explore-page').hidden,false);
+assert.equal($('explore-page').hidden,false);assert.equal($('explore-detail').hidden,true);
 Object.assign(dbExplorer,{database_id:'db',schema_id:'',binding_revision:1,generation_id:'gen',grant_revision:4,
  invalid:false,schemas:structuredClone(schemas),schemaScope:''});
 dbExplorerControls();
-assert.equal($('database-details').dataset.detailEmpty,'true');
+assert.equal($('explore-page').hidden,false);assert.equal($('explore-detail').hidden,true);
 dbExplorer.schema_id='schema';dbExplorer.schemaScope=dbSchemaKey(currentRole,'db');dbExplorerControls();
-assert.equal($('database-details').dataset.detailEmpty,'false');
+assert.equal($('explore-page').hidden,false);assert.equal($('explore-detail').hidden,true);
 dbObject=stable('orders');dbExplorerControls();
-assert.equal($('database-details').dataset.detailEmpty,'false');
+assert.equal($('explore-page').hidden,true);assert.equal($('explore-detail').hidden,false);
 dbObject=null;dbExplorerControls();
-assert.equal($('database-details').dataset.detailEmpty,'false');
+assert.equal($('explore-page').hidden,false);assert.equal($('explore-detail').hidden,true);
 ''')
 
-    def test_empty_detail_css_hides_every_non_explore_child(self):
+    def test_explore_css_has_no_old_detail_empty_two_pane_rule(self):
         css = re.sub(r'/\*[\s\S]*?\*/', '', WorkbenchSource(database_ui.HTML).css)
-        self.assertIn('#database-details[data-detail-empty=true] > :not(#explore-page):not(#explore-back)', css)
-        self.assertRegex(css, r'#database-details\[data-detail-empty=true\][^{]+\{[^}]*display:none\s*!important')
+        self.assertNotIn('data-detail-empty', css)
+        self.assertIn('#database-workspace[data-pane=details]{grid-template-columns:minmax(0,1fr)}', css)
+        self.assertIn('#database-workspace[data-pane=details]>.explorer{display:none}', css)
 
     def test_role_select_matches_role_selector_labels_in_both_languages(self):
         self.javascript(r'''
@@ -201,7 +203,7 @@ assert.deepEqual(options().map(option=>option.value),['bi_viewer','data_engineer
 assert.deepEqual(options().map(option=>option.textContent),['BI Viewer','Data Engineer']);
 setLanguage('ja');
 assert.deepEqual(options().map(option=>option.textContent),['閲覧者','データ作成者']);
-assert.equal($('explore-role').parentElement.children[0].textContent,'参照ロール');
+assert.equal($('explore-role').parentElement.textContent,'参照ロール');
 ''')
 
     def test_non_ready_databases_are_absent_from_explorer_worksheet_and_palette(self):
@@ -220,18 +222,21 @@ dbInventories.set(role,{items:[ready,retiring],request:1,version:0});
 dbControls();
 assert.ok([...$('query-database').options].some(option=>option.value==='ready'));
 assert.ok(![...$('query-database').options].some(option=>option.value==='retiring'));
-$('workbench-command-search').value='Retiring';
+$('command-search').value='Retiring';
 assert.deepEqual(workbenchCommandEntries().filter(entry=>entry.kind==='Database'),[]);
 dbExplorer.database_id='retiring';dbExplorer.schema_id='';dbExplorerControls();
 assert.equal($('catalog-database').value,'');
 assert.ok(![...$('catalog-database').options].some(option=>option.value==='retiring'));
 dbCurrent().database_id='retiring';dbControls();
-assert.equal($('query-database').value,'');
-assert.ok(![...$('query-database').options].some(option=>option.value==='retiring'));
+assert.equal($('query-database').value,'retiring');
+const retained=[...$('query-database').options].find(option=>option.value==='retiring');
+assert.equal(retained.disabled,true);assert.equal(retained.textContent,'Retiring');
+assert.ok(![...$('query-database').options].some(option=>option.textContent.includes('retiring')));
+assert.match($('sql-next').textContent,/context is unavailable/);
 $('explore-search').value='x';
 const before=calls.length;await dbExploreLoad();
 assert.equal(calls.length,before);
-assert.equal($('explore-status').textContent,t('Selected context is unavailable for this role. Choose another context.'));
+assert.equal($('explore-status').textContent,t('This context is not available. Choose another database and schema.'));
 dbDatabases=[retiring];dbExplorerControls();
 assert.equal(treeActions('select-database').length,0);
 assert.equal($('catalog-tree').textContent,t('No databases available.'));
