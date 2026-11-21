@@ -13,7 +13,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -130,6 +130,25 @@ jobs:
           tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/kyverno-bin" kyverno
           chmod 0755 "${RUNNER_TEMP}/kyverno-bin/kyverno"
           echo "${RUNNER_TEMP}/kyverno-bin" >> "${GITHUB_PATH}"
+
+      - name: Set up verified uv and the DataOps environment
+        env:
+          UV_VERSION: 0.9.28
+          UV_ARCHIVE_SHA256: 66ad1822dd9cf96694b95c24f25bc05cff417a65351464da01682a91796d1f2b
+        run: |
+          set -euo pipefail
+          archive="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${archive}" \
+            -o "${RUNNER_TEMP}/${archive}"
+          echo "${UV_ARCHIVE_SHA256}  ${RUNNER_TEMP}/${archive}" \
+            | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/uv-bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/uv-bin" \
+            --strip-components=1 uv-x86_64-unknown-linux-gnu/uv
+          chmod 0755 "${RUNNER_TEMP}/uv-bin/uv"
+          "${RUNNER_TEMP}/uv-bin/uv" sync --frozen --python 3.12 \
+            --project tools/local_experiment/dataops
 
       - name: Run repo-owned checks
         run: make verify

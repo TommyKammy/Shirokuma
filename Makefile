@@ -82,7 +82,7 @@ test-resident-core:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_ingest_execution_recovery.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_job_routes.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_security.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_inventory.py'
+	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_inventory.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_generation_gitops.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_database_generation.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_admin.py'
@@ -272,6 +272,7 @@ verify-cosign:
 
 verify-security:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trivyignore.py'
+	@$(PYTHON) -m unittest discover -v -s tests -p 'test_supply_chain_secret_scan.py'
 	@$(PYTHON) scripts/verify_trivyignore.py
 	@$(PYTHON) scripts/verify_supply_chain.py scan-secrets --repo .
 
