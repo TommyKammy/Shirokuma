@@ -21,6 +21,88 @@ import warehouse_admission as admission
 STEPS = ('publish_snapshot', 'apply_secrets', 'reconcile_storage', 'reconcile_polaris', 'reconcile_trino')
 _ALL_STEPS = STEPS + ('verify',)
 
+# ADR-0039: the only delivery files a template-only redelivery may change.
+# Extending this set requires an ADR review and matching test updates.
+TEMPLATE_ONLY_DELIVERY_PATHS = (
+    'deploy/local-experiment/trino/deployment.yaml',
+    'deploy/local-experiment/trino/opa/guard.rego',
+)
+_ACTIVE_OPERATION_STATES = ('AWAITING_APPLY', 'PREPARING', 'DRAINING', 'APPLYING', 'UNKNOWN')
+
+
+def template_only_manifest_change(prior, manifest):
+    """True only when a manifest differs solely in ADR-0039 template delivery files.
+
+    The comparison is intentionally manifest-level: the operation payload and
+    generation_plans store manifests without the ToFu bundle. Tenant identities
+    (databases, bindings, schemas, grants, Secret references) and every public
+    identity file digest must be byte-identical; only the audited template files
+    and the profile fingerprint may differ.
+    """
+    if type(prior) is not dict or type(manifest) is not dict:
+        return False
+    if prior.get('generation_id') != manifest.get('generation_id') or prior.get('version') != manifest.get('version'):
+        return False
+    prior_spec, spec = prior.get('spec'), manifest.get('spec')
+    if type(prior_spec) is not dict or type(spec) is not dict:
+        return False
+    if ({key: value for key, value in prior_spec.items() if key != 'profile'} !=
+            {key: value for key, value in spec.items() if key != 'profile'}):
+        return False
+    if prior_spec.get('profile', {}).get('id') != spec.get('profile', {}).get('id'):
+        return False
+    if prior.get('child_files') != manifest.get('child_files'):
+        return False
+    prior_digests, digests = prior.get('file_digests'), manifest.get('file_digests')
+    if type(prior_digests) is not dict or type(digests) is not dict or set(prior_digests) != set(digests):
+        return False
+    changed = {path for path in digests if prior_digests[path] != digests[path]}
+    return bool(changed) and changed <= set(TEMPLATE_ONLY_DELIVERY_PATHS)
+
+
+def _redelivery_allowed(db, generation_id, prior, manifest):
+    """ADR-0039 admission: APPLIED generation, no active operation, template-only diff."""
+    if not template_only_manifest_change(prior, manifest):
+        return False
+    generation = db.execute('SELECT state FROM warehouse_config_generations WHERE id=?', (generation_id,)).fetchone()
+    if generation is None or generation['state'] != 'APPLIED':
+        return False
+    marks = ','.join('?' * len(_ACTIVE_OPERATION_STATES))
+    return db.execute(f'''SELECT 1 FROM operation_requests r JOIN operations o ON o.id=r.operation_id
+        WHERE r.generation_id=? AND o.state IN ({marks}) LIMIT 1''',
+        (generation_id, *_ACTIVE_OPERATION_STATES)).fetchone() is None
+
+
+def template_change_permitted(db, generation_id, manifest):
+    """ADR-0039 pre-check for operator handoff callers; _create_plan revalidates.
+
+    The active-operation gate is intentionally omitted here: a retry of an
+    already admitted plan must pass the private predecessor check, while
+    _create_plan still rejects any new redelivery with an active operation.
+    """
+    saved = db.execute('SELECT manifest FROM generation_plans WHERE generation_id=?', (generation_id,)).fetchone()
+    if saved is None:
+        return False
+    generation = db.execute('SELECT state FROM warehouse_config_generations WHERE id=?', (generation_id,)).fetchone()
+    if generation is None or generation['state'] != 'APPLIED':
+        return False
+    prior = json.loads(saved['manifest'])
+    return prior == manifest or template_only_manifest_change(prior, manifest)
+
+
+def _record_redelivery(db, generation_id, saved, manifest, observations):
+    """Append both deliveries to history, then move the head. History is never updated."""
+    recorded_at = admission._now()
+    for delivery_digest, stored, secrets in (
+            (saved['delivery_digest'], saved['manifest'], saved['secret_observations']),
+            (manifest['delivery_digest'], _json(manifest), _json(observations))):
+        db.execute('''INSERT OR IGNORE INTO generation_plan_history
+            (generation_id,delivery_digest,manifest,secret_observations,recorded_at)
+            VALUES (?,?,?,?,?)''', (generation_id, delivery_digest, stored, secrets, recorded_at))
+    db.execute('''UPDATE generation_plans SET manifest=?,delivery_digest=?,secret_observations=?
+                  WHERE generation_id=?''',
+               (_json(manifest), manifest['delivery_digest'], _json(observations), generation_id))
+
 
 class OperationError(RuntimeError):
     def __init__(self, code, status=409):
@@ -278,16 +360,18 @@ def _check_registry(db, spec):
 def _view(db, operation_id, actor, is_admin=False):
     if type(is_admin) is not bool:
         raise OperationError('INVALID_ADMIN_FLAG', 400)
-    row = db.execute('''SELECT o.id,o.actor,o.action,o.state,r.revision,r.generation_id,
-                       g.manifest,g.delivery_digest,r.secret_observations,r.phase,r.predecessor_id
-                       FROM operations o JOIN operation_requests r ON r.operation_id=o.id
-                       JOIN generation_plans g ON g.generation_id=r.generation_id WHERE o.id=?''',
+    row = db.execute('''SELECT o.id,o.actor,o.action,o.state,r.revision,r.generation_id,r.payload,
+                       r.secret_observations,r.phase,r.predecessor_id
+                       FROM operations o JOIN operation_requests r ON r.operation_id=o.id WHERE o.id=?''',
                      (operation_id,)).fetchone()
     if row is None or row['actor'] != actor and not is_admin:
         raise OperationError('OPERATION_NOT_FOUND', 404)
     result = dict(row)
-    for key in ('manifest', 'secret_observations'):
-        result[key] = json.loads(result[key])
+    payload = json.loads(result.pop('payload'))
+    # ADR-0039: bind the view to the operation's own delivery, not the generation head.
+    result['manifest'] = payload['manifest']
+    result['delivery_digest'] = payload['manifest']['delivery_digest']
+    result['secret_observations'] = json.loads(result['secret_observations'])
     result['warehouse_id'] = result['manifest']['spec']['warehouse_id']
     rows = {row['step']: dict(row) for row in db.execute(
         'SELECT step,state,evidence_ref,updated_at FROM operation_steps WHERE operation_id=?', (operation_id,))}
@@ -345,16 +429,21 @@ def inspect_actions(operation_id, *, actor, is_admin=False):
             'SELECT * FROM warehouse_action_requests WHERE operation_id=? ORDER BY created_at,id', (operation_id,)))
 
 
-def validate_prepared_handoff(prior, manifest):
+def validate_prepared_handoff(prior, manifest, *, allow_template_change=False):
     """Permit a fresh full plan to reseal revisions, grants and Secret references.
 
     The already prepared physical databases and their four namespace identities
     cannot change beneath the closed reservation or issued principal credentials.
+    ADR-0039 additionally permits the template fingerprint to differ, but only
+    when the caller has already validated a template-only redelivery.
     """
     if prior['phase'] != 'bootstrap' or prior['state'] != 'PREPARED':
         raise OperationError('INVALID_PREPARED_PREDECESSOR')
     def physical(spec):
-        return dict(warehouse_id=spec['warehouse_id'], profile=spec['profile'], databases={
+        profile = dict(spec['profile'])
+        if allow_template_change:
+            profile.pop('template_fingerprint', None)
+        return dict(warehouse_id=spec['warehouse_id'], profile=profile, databases={
             key: dict(sql_catalog=value['sql_catalog'], binding={
                 field: setting for field, setting in value['binding'].items() if field != 'desired_revision'},
                 schemas=sorted(({field: schema[field] for field in ('id', 'sql_name', 'purpose')}
@@ -364,10 +453,17 @@ def validate_prepared_handoff(prior, manifest):
         raise OperationError('PREPARED_PHYSICAL_CHANGE_REQUIRES_RECOVERY')
 
 
-def _prepared_reservation(db, prior, manifest, actor, *, operation_id=None):
+def _prepared_reservation(db, prior, manifest, actor, *, operation_id=None, allow_template_change=False,
+                          applied_redelivery=False):
     """Validate a prepared reservation without transferring its closed gate."""
-    validate_prepared_handoff(prior, manifest)
+    validate_prepared_handoff(prior, manifest, allow_template_change=allow_template_change)
     control = admission.control(db, prior['warehouse_id'])
+    if applied_redelivery:
+        # An APPLIED generation has no closed reservation to transfer; the
+        # predecessor only proves the physical databases and Secret identities.
+        if control['state'] != 'OPEN':
+            raise OperationError('INVALID_PREPARED_PREDECESSOR')
+        return control
     if operation_id is not None and control['operation_id'] == operation_id:
         return control
     if control['state'] not in ('APPLYING', 'UNKNOWN'):
@@ -389,7 +485,7 @@ def _prepared_reservation(db, prior, manifest, actor, *, operation_id=None):
         if (owner['phase'] != 'full' or owner['predecessor_id'] != prior['id']
                 or attempt is not None or not (undispatched or verified_stale)):
             raise OperationError('INVALID_PREPARED_PREDECESSOR')
-        validate_prepared_handoff(prior, owner['manifest'])
+        validate_prepared_handoff(prior, owner['manifest'], allow_template_change=allow_template_change)
     return control
 
 
@@ -427,19 +523,27 @@ def _create_plan(actor, route, idempotency_key, bundle, secret_observations, *, 
                 WHERE EXISTS (SELECT 1 FROM databases WHERE upper(state) IN ('REGISTERED','PREPARING')) LIMIT 1''').fetchone()
         if phase == 'full' and predecessor_id is None and (created_unprepared or imported_unprepared):
             raise OperationError('PREPARED_PREDECESSOR_REQUIRED')
+        saved = db.execute('SELECT * FROM generation_plans WHERE generation_id=?', (generation_id,)).fetchone()
+        redelivery = False
+        if saved:
+            same_delivery = (saved['manifest'] == _json(manifest)
+                             and saved['delivery_digest'] == manifest['delivery_digest'])
+            if not same_delivery:
+                redelivery = _redelivery_allowed(db, generation_id, json.loads(saved['manifest']), manifest)
+        elif dm.get_generation(db, generation_id) is not None:
+            raise OperationError('GENERATION_CONFLICT')
         if predecessor_id is not None:
             prior = _view(db, predecessor_id, actor)
-            _prepared_reservation(db, prior, manifest, actor)
+            _prepared_reservation(db, prior, manifest, actor, allow_template_change=redelivery,
+                                  applied_redelivery=redelivery)
             if phase != 'full':
                 raise OperationError('INVALID_PREPARED_PREDECESSOR')
-        saved = db.execute('SELECT * FROM generation_plans WHERE generation_id=?', (generation_id,)).fetchone()
-        if saved:
-            if (saved['manifest'] != _json(manifest)
-                    or saved['delivery_digest'] != manifest['delivery_digest']):
-                raise OperationError('GENERATION_CONFLICT')
-        else:
-            if dm.get_generation(db, generation_id) is not None:
-                raise OperationError('GENERATION_CONFLICT')
+        if saved and not redelivery and (saved['manifest'] != _json(manifest)
+                                         or saved['delivery_digest'] != manifest['delivery_digest']):
+            raise OperationError('GENERATION_CONFLICT')
+        if redelivery:
+            _record_redelivery(db, generation_id, saved, manifest, observations)
+        elif not saved:
             dm.record_generation(db, dm.WarehouseConfigGeneration(generation_id, spec['warehouse_id'], generation_id,
                 tuple((key, value['binding']['desired_revision']) for key, value in sorted(spec['databases'].items())),
                 tuple((g['principal_id'], g['database_id'], g['revision']) for g in spec['grant_revisions']),
@@ -451,9 +555,9 @@ def _create_plan(actor, route, idempotency_key, bundle, secret_observations, *, 
                             'AWAITING_APPLY', (), generation_id, (), (('created_at', admission._now()),)))
         db.execute('''INSERT INTO operation_requests
                       (operation_id,actor,route,idempotency_key,payload,revision,generation_id,initial_database_states,
-                       phase,predecessor_id,secret_observations)
-                      VALUES (?,?,?,?,?,1,?,?,?,?,?)''', (operation_id, actor, route, idempotency_key, payload,
-                      generation_id, '{}', phase, predecessor_id, _json(observations)))
+                       phase,predecessor_id,secret_observations,redelivery)
+                      VALUES (?,?,?,?,?,1,?,?,?,?,?,?)''', (operation_id, actor, route, idempotency_key, payload,
+                      generation_id, '{}', phase, predecessor_id, _json(observations), 1 if redelivery else 0))
         for step in _ALL_STEPS:
             db.execute('INSERT INTO operation_steps VALUES (?,?,\'PENDING\',NULL,?)', (operation_id, step, admission._now()))
         return _view(db, operation_id, actor)
@@ -643,6 +747,7 @@ def _apply(operation_id, *, actor, expected_revision, delivery_digest, authorize
     with control_store.connect() as db:
         request = db.execute('SELECT * FROM operation_requests WHERE operation_id=?', (operation_id,)).fetchone()
         after = json.loads(request['secret_after']) if request['secret_after'] else None
+        redelivery = bool(request['redelivery'])
         secret_step = db.execute("SELECT state FROM operation_steps WHERE operation_id=? AND step='apply_secrets'", (operation_id,)).fetchone()[0]
         _check_registry(db, plan['manifest']['spec'])
     capture_after = after is None and secret_step == 'SUCCEEDED'
@@ -659,10 +764,14 @@ def _apply(operation_id, *, actor, expected_revision, delivery_digest, authorize
         predecessor = plan['predecessor_id']
         if predecessor is not None:
             prior = _view(db, predecessor, actor)
-            _prepared_reservation(db, prior, plan['manifest'], actor, operation_id=operation_id)
-            previous = db.execute('SELECT initial_database_states FROM operation_requests WHERE operation_id=?', (predecessor,)).fetchone()
-            db.execute('UPDATE operation_requests SET mutation_started=1,initial_database_states=? WHERE operation_id=?',
-                       (previous['initial_database_states'], operation_id))
+            _prepared_reservation(db, prior, plan['manifest'], actor, operation_id=operation_id,
+                                  allow_template_change=redelivery, applied_redelivery=redelivery)
+            if not redelivery:
+                # A bootstrap reservation carries the pre-bootstrap states. An
+                # APPLIED redelivery captures its own current READY states below.
+                previous = db.execute('SELECT initial_database_states FROM operation_requests WHERE operation_id=?', (predecessor,)).fetchone()
+                db.execute('UPDATE operation_requests SET mutation_started=1,initial_database_states=? WHERE operation_id=?',
+                           (previous['initial_database_states'], operation_id))
         if (predecessor is None and state['operation_id'] not in (None, operation_id)
                 or state['operation_id'] is None and state['state'] != 'OPEN'):
             raise OperationError('WAREHOUSE_OPERATION_CONFLICT')

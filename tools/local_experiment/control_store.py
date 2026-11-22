@@ -5,7 +5,7 @@ from pathlib import Path
 import sqlite3
 
 
-VERSION = 25
+VERSION = 26
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -634,6 +634,21 @@ def _migrate(connection):
         if 'team' not in columns:
             connection.execute('ALTER TABLE databases ADD COLUMN team TEXT')
         connection.execute('PRAGMA user_version=25')
+    if _version(connection) == 25:
+        # ADR-0039: keep every delivery of a generation. generation_plans stays
+        # the current head for existing readers; this table is append-only.
+        connection.execute('''CREATE TABLE IF NOT EXISTS generation_plan_history (
+            generation_id TEXT NOT NULL REFERENCES warehouse_config_generations(id),
+            delivery_digest TEXT NOT NULL, manifest TEXT NOT NULL, secret_observations TEXT NOT NULL,
+            recorded_at TEXT NOT NULL, PRIMARY KEY (generation_id, delivery_digest))''')
+        connection.execute('''INSERT OR IGNORE INTO generation_plan_history
+            SELECT generation_id,delivery_digest,manifest,secret_observations,
+                   strftime('%Y-%m-%dT%H:%M:%fZ','now') FROM generation_plans''')
+        columns = {row['name'] for row in connection.execute('PRAGMA table_info(operation_requests)')}
+        if 'redelivery' not in columns:
+            connection.execute('''ALTER TABLE operation_requests ADD COLUMN redelivery INTEGER NOT NULL DEFAULT 0
+                CHECK(redelivery IN (0,1))''')
+        connection.execute('PRAGMA user_version=26')
 
 
 def _migrate_admission_closures(db):

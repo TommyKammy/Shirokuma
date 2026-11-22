@@ -403,7 +403,7 @@ class ControlStoreTests(unittest.TestCase):
                     'databases', 'catalog_bindings', 'schemas', 'grants', 'object_bindings',
                     'warehouse_config_generations', 'operations', 'query_records', 'admission_records',
                     'query_execution_contexts', 'warehouse_controls', 'warehouse_admissions',
-                    'generation_plans', 'operation_requests', 'operation_steps', 'warehouse_action_requests',
+                    'generation_plans', 'generation_plan_history', 'operation_requests', 'operation_steps', 'warehouse_action_requests',
                     'database_create_requests', 'registry_register_requests',
                     'dataops_operations', 'dataops_queries', 'dataops_owned_objects', 'dataops_target_claims',
                     'wap_models', 'wap_model_versions', 'wap_builds', 'wap_audits', 'wap_publications', 'export_artifacts',

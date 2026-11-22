@@ -1209,6 +1209,97 @@ print(r['state'])
                 self.assertEqual(self.calls[calls_before:], ['reconcile_polaris', 'reconcile_trino'])
                 self.assertNotIn(b'do-not-persist-private-error-body', (self.directory/'jobs.sqlite3').read_bytes())
 
+    def old_delivery(self, mutate=None):
+        old = copy.deepcopy(self.bundle['manifest'])
+        old['spec']['profile']['template_fingerprint'] = 'f' * 64
+        old['file_digests']['deploy/local-experiment/trino/deployment.yaml'] = 'e' * 64
+        old['delivery_digest'] = 'd' * 64
+        if mutate is not None:
+            mutate(old)
+        return old
+
+    def applied_full(self):
+        prepared = self.bootstrap()
+        self.observations[0]['resource_version'] = '2'
+        full = operations.create_plan('admin', '/warehouse/configuration', 'full', self.bundle,
+                                      self.observations, phase='full', predecessor_id=prepared['id'])
+        self.assertEqual(self.apply(full)['state'], 'APPLIED')
+        return prepared, full
+
+    def install_delivery(self, old, *, state='APPLIED', operation_state=None, full=None, prepared=None):
+        with store.connect() as db:
+            db.execute('UPDATE generation_plans SET manifest=?,delivery_digest=? WHERE generation_id=?',
+                       (json.dumps(old, sort_keys=True), old['delivery_digest'], old['generation_id']))
+            db.execute('UPDATE warehouse_config_generations SET state=? WHERE id=?', (state, old['generation_id']))
+            if operation_state is not None:
+                db.execute('UPDATE operations SET state=? WHERE id=?', (operation_state, full['id']))
+            for operation in (prepared, full):
+                if operation is None:
+                    continue
+                payload = json.loads(db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',
+                                                (operation['id'],)).fetchone()[0])
+                payload['manifest'] = old
+                db.execute('UPDATE operation_requests SET payload=? WHERE operation_id=?',
+                           (json.dumps(payload, sort_keys=True), operation['id']))
+
+    def test_template_only_redelivery_is_accepted_and_keeps_operation_delivery(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        redelivery = operations.create_plan('admin', '/warehouse/configuration', 'redelivery', self.bundle,
+                                            self.observations, phase='full', predecessor_id=prepared['id'])
+        self.assertEqual(redelivery['delivery_digest'], self.bundle['manifest']['delivery_digest'])
+        self.assertEqual(operations.inspect(full['id'], actor='admin')['delivery_digest'], old['delivery_digest'])
+        with store.connect() as db:
+            self.assertEqual(db.execute('SELECT delivery_digest FROM generation_plans WHERE generation_id=?',
+                                        (full['generation_id'],)).fetchone()[0],
+                             self.bundle['manifest']['delivery_digest'])
+            history = {row[0] for row in db.execute(
+                'SELECT delivery_digest FROM generation_plan_history WHERE generation_id=?', (full['generation_id'],))}
+            self.assertEqual(history, {old['delivery_digest'], self.bundle['manifest']['delivery_digest']})
+            self.assertEqual(db.execute('SELECT redelivery FROM operation_requests WHERE operation_id=?',
+                                        (redelivery['id'],)).fetchone()[0], 1)
+            self.assertTrue(operations.template_change_permitted(
+                db, full['generation_id'], self.bundle['manifest']))
+        applied = self.apply(redelivery)
+        self.assertEqual(applied['state'], 'APPLIED')
+        self.assertEqual(operations.inspect(full['id'], actor='admin')['delivery_digest'], old['delivery_digest'])
+
+    def test_template_only_redelivery_rejects_scope_drift(self):
+        prepared, full = self.applied_full()
+        base = self.old_delivery()
+
+        def other_file(old):
+            old['file_digests']['deploy/gitops/dev/deployment.yaml'] = 'a' * 64
+
+        def secret_ref(old):
+            old['spec']['databases']['opaque_0']['secret_refs']['jwt']['name'] = 'changed-jwt-v1'
+
+        for label, old, state, operation_state in (
+                ('other-file', self.old_delivery(other_file), 'APPLIED', None),
+                ('secret-ref', self.old_delivery(secret_ref), 'APPLIED', None),
+                ('not-applied', base, 'PLANNED', None),
+                ('active', base, 'APPLIED', 'APPLYING')):
+            with self.subTest(label=label):
+                self.install_delivery(old, state=state, operation_state=operation_state, full=full)
+                with self.assertRaises(operations.OperationError):
+                    operations.create_plan('admin', '/warehouse/configuration', 'reject-'+label, self.bundle,
+                                           self.observations, phase='full')
+        added = self.old_delivery()
+        added['spec']['databases']['opaque_2'] = copy.deepcopy(added['spec']['databases']['opaque_1'])
+        self.assertFalse(operations.template_only_manifest_change(base, added))
+
+    def test_prepared_handoff_allows_only_validated_template_change(self):
+        old = self.old_delivery()
+        prior = dict(phase='bootstrap', state='PREPARED', manifest=old)
+        with self.assertRaises(operations.OperationError):
+            operations.validate_prepared_handoff(prior, self.bundle['manifest'])
+        operations.validate_prepared_handoff(prior, self.bundle['manifest'], allow_template_change=True)
+        changed = copy.deepcopy(self.bundle['manifest'])
+        changed['spec']['databases']['opaque_0']['binding']['polaris_catalog'] = 'db_changed'
+        with self.assertRaises(operations.OperationError):
+            operations.validate_prepared_handoff(prior, changed, allow_template_change=True)
+
     def test_import_is_stdlib_only_and_python39_syntax(self):
         script = ('import sys\n'
                   'class NoYaml:\n def find_spec(self,fullname,*args):\n'

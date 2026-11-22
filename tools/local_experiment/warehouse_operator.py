@@ -1302,7 +1302,10 @@ class Operator:
         """Validate prior private credentials against their own frozen public ledger."""
         import warehouse_operations as core
         prior = core.inspect(self.predecessor_id, actor=plan['actor'])
-        core.validate_prepared_handoff(prior, plan['manifest'])
+        with core.control_store.connect() as db:
+            allow_template_change = core.template_change_permitted(
+                db, self.binding['generation_id'], plan['manifest'])
+        core.validate_prepared_handoff(prior, plan['manifest'], allow_template_change=allow_template_change)
         previous = json.loads(private_file(core.control_store.root().resolve() /
             'warehouse-operator-receipts' / (prior['id']+'.json')))
         return validate_bootstrap_receipt(previous, prior)
@@ -1514,10 +1517,9 @@ class Operator:
             db.execute('PRAGMA query_only=ON')
             try:
                 row = db.execute('''SELECT o.id,o.actor,r.actor AS request_actor,
-                    r.generation_id,g.delivery_digest,g.manifest,r.phase,r.predecessor_id,
+                    r.generation_id,r.payload,r.phase,r.predecessor_id,
                     r.secret_after,s.state,s.evidence_ref
                     FROM operations o JOIN operation_requests r ON r.operation_id=o.id
-                    JOIN generation_plans g ON g.generation_id=r.generation_id
                     JOIN operation_steps s ON s.operation_id=o.id AND s.step='apply_secrets'
                     WHERE o.id=?''', (plan['id'],)).fetchone()
             except sqlite3.OperationalError as error:
@@ -1527,6 +1529,11 @@ class Operator:
                     return None
                 raise
             saved = dict(row) if row is not None else None
+            if saved is not None:
+                # ADR-0039: an operation keeps its own delivery after a redelivery.
+                payload = json.loads(saved.pop('payload'))
+                saved['manifest'] = json.dumps(payload['manifest'], sort_keys=True)
+                saved['delivery_digest'] = payload['manifest']['delivery_digest']
         finally:
             db.close()
         # Ordinary/legacy receipts still use their initial identities. Only the
