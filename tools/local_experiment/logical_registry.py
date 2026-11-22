@@ -113,6 +113,29 @@ def put_foundation(db, values, expected_revision=None):
     return _put(db, 'logical_foundations', FOUNDATION, ('environment_id', 'warehouse_id'), value, expected_revision)
 
 
+def update_foundation_verification(db, environment_id, warehouse_id, verification_ref, *,
+                                   expected_revision, expected_verification_ref):
+    """Advance only the current proof pointer; the foundation revision is immutable.
+
+    put_foundation() cannot be used here because its revision column is the
+    foundation revision consumed by every logical binding.
+    """
+    _transaction(db)
+    if not _text(verification_ref) or not _text(expected_verification_ref):
+        raise ValueError('Invalid logical proof reference')
+    value = get_foundation(db, environment_id, warehouse_id)
+    if (value is None or value['status'] != 'READY' or value['revision'] != expected_revision
+            or value['verification_ref'] != expected_verification_ref):
+        raise ValueError('Stale logical revision')
+    _verified_foundation(db, dict(value, verification_ref=verification_ref))
+    updated = db.execute('''UPDATE logical_foundations SET verification_ref=?
+        WHERE environment_id=? AND warehouse_id=? AND revision=? AND verification_ref=?''',
+        (verification_ref, environment_id, warehouse_id, expected_revision, expected_verification_ref))
+    if updated.rowcount != 1:
+        raise ValueError('Stale logical revision')
+    return get_foundation(db, environment_id, warehouse_id)
+
+
 def get_binding(db, database_id):
     return _one(db, 'SELECT * FROM logical_bindings WHERE database_id=?', (database_id,))
 

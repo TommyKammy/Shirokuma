@@ -187,6 +187,37 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
                 else:
                     db.execute('UPDATE logical_foundations SET config_ref=?',(self.cfg['provider_config_file'],))
 
+    def test_superseding_verification_receipt_requires_original_link(self):
+        import control_store
+        import logical_foundation
+        from warehouse_operations import OperationError
+        new_path = str(Path(self.temp.name) / 'verification-new.json')
+        logical_foundation.save_private(new_path, json.dumps(dict(self.saved,
+            supersedes=self.proof_path, result=dict(self.expected, spi_sha256='c' * 64,
+                hashes={key: 'd' * 64 for key in self.expected['hashes']}))))
+        with control_store.connect() as db:
+            db.execute('UPDATE logical_foundations SET verification_ref=?', (new_path,))
+        # Published runtime hashes may differ from the bootstrap receipt.
+        self.assertEqual(w._logical_foundation()['warehouse_id'], 'LOCAL')
+        bad_path = str(Path(self.temp.name) / 'verification-bad.json')
+        logical_foundation.save_private(bad_path, json.dumps(dict(self.saved,
+            supersedes='/tmp/other', result=dict(self.expected, spi_sha256='c' * 64))))
+        with control_store.connect() as db:
+            db.execute('UPDATE logical_foundations SET verification_ref=?', (bad_path,))
+        with self.assertRaises(OperationError) as caught:
+            w._logical_foundation()
+        self.assertEqual(caught.exception.code, 'FOUNDATION_NOT_READY')
+        bad_pin_path = str(Path(self.temp.name) / 'verification-bad-pin.json')
+        logical_foundation.save_private(bad_pin_path, json.dumps(dict(self.saved,
+            supersedes=self.proof_path,
+            result=dict(self.expected, spi_sha256='c' * 64,
+                        incarnation=dict(self.expected['incarnation'], namespace='other')))))
+        with control_store.connect() as db:
+            db.execute('UPDATE logical_foundations SET verification_ref=?', (bad_pin_path,))
+        with self.assertRaises(OperationError) as caught:
+            w._logical_foundation()
+        self.assertEqual(caught.exception.code, 'FOUNDATION_NOT_READY')
+
     def test_transitions_restore_exact_replicas_observe_both_and_preserve_registry(self):
         import control_store
         for workers in (0,1):

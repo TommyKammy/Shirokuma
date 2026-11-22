@@ -1474,3 +1474,137 @@ class StartupBindingTests(LogicalFixture):
             with logical.transaction() as db:
                 db.execute('UPDATE logical_foundations SET '+field+'=?', (original[field],))
         self.assertEqual(self.foundation(), original)
+
+
+class FoundationVerificationRefreshTests(LogicalFixture):
+    def test_cli_requires_explicit_stopped_confirmation(self):
+        self.assertEqual(logical.main(['refresh-verification']), 2)
+
+    def foundation(self):
+        with control_store.connect() as db:
+            return dict(logical._foundation(db))
+
+    def foundation_settings(self):
+        return dict(prefix='logical', kube=dict(node_uids={'node': 'uid'}),
+                    foundation_id='foundation-real', revision=1,
+                    environment_id='test-environment', warehouse_id='LOCAL')
+
+    def refresh(self, observed):
+        with patch.object(self.provider, 'probe', return_value=observed), \
+                patch('logical_foundation.load', return_value=self.foundation_settings()):
+            return logical.refresh_foundation_verification()
+
+    def generation_refs(self):
+        with control_store.connect() as db:
+            return db.execute('SELECT configuration_refs FROM warehouse_config_generations WHERE id=?',
+                              ('foundation-real',)).fetchone()[0]
+
+    def test_spi_only_refresh_creates_superseding_receipt_without_history_rewrite(self):
+        before = self.foundation()
+        refs_before = self.generation_refs()
+        old_path = Path(before['verification_ref'])
+        old_bytes = old_path.read_bytes()
+        result = self.refresh(dict(self.provider.probe(), spi_sha256='c' * 64))
+        after = self.foundation()
+        self.assertTrue(result['changed'])
+        self.assertNotEqual(after['verification_ref'], before['verification_ref'])
+        self.assertEqual(result['previous_verification_ref'], before['verification_ref'])
+        self.assertEqual(after['revision'], before['revision'])
+        self.assertEqual(old_path.read_bytes(), old_bytes)
+        saved = json.loads(Path(after['verification_ref']).read_text())
+        self.assertEqual(saved['supersedes'], before['verification_ref'])
+        self.assertEqual(saved['result']['spi_sha256'], 'c' * 64)
+        self.assertEqual(Path(after['verification_ref']).stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.generation_refs(), refs_before)
+
+    def test_second_identical_refresh_is_noop_through_supersede(self):
+        self.refresh(dict(self.provider.probe(), spi_sha256='c' * 64))
+        before = self.foundation()
+        result = self.refresh(dict(self.provider.probe(), spi_sha256='c' * 64))
+        self.assertFalse(result['changed'])
+        self.assertEqual(self.foundation(), before)
+
+    def test_identical_probe_is_noop(self):
+        before = self.foundation()
+        result = self.refresh(self.provider.probe())
+        self.assertFalse(result['changed'])
+        self.assertEqual(self.foundation(), before)
+
+    def test_pod_uid_and_tunnel_change_with_same_trino_image_is_noop(self):
+        saved = self.image_probe(spi='b' * 64, compute=['trino-1'],
+                                 images={'trino-1': 'trino', 'seaweed-1': 'seaweed'})
+        saved['incarnation']['tunnels'] = {'x': {'child_pid': 1}}
+        observed = self.image_probe(spi='b' * 64, compute=['trino-2'],
+                                    images={'trino-2': 'trino', 'seaweed-2': 'seaweed'})
+        observed['incarnation']['tunnels'] = {'x': {'child_pid': 2}}
+        self.assertFalse(logical._foundation_probe_diff(
+            saved, observed, self.foundation_settings()))
+
+    def test_trino_image_change_without_spi_change_is_refreshed(self):
+        saved = self.image_probe(spi='b' * 64, compute=['trino-1'],
+                                 images={'trino-1': 'trino-old', 'seaweed-1': 'seaweed'})
+        observed = self.image_probe(spi='b' * 64, compute=['trino-2'],
+                                    images={'trino-2': 'trino-new', 'seaweed-2': 'seaweed'})
+        self.assertTrue(logical._foundation_probe_diff(
+            saved, observed, self.foundation_settings()))
+
+    def test_stable_pin_change_is_rejected(self):
+        before = self.foundation()
+        observed = self.provider.probe()
+        observed['incarnation'] = dict(observed['incarnation'], namespace='other')
+        with self.assertRaises(OperationError) as caught:
+            self.refresh(observed)
+        self.assertEqual(caught.exception.code, 'FOUNDATION_BINDING_MISMATCH')
+        self.assertEqual(self.foundation(), before)
+
+    def test_published_runtime_hashes_do_not_block_spi_refresh(self):
+        # Database publications legitimately rewrite runtime files after bootstrap.
+        before = self.foundation()
+        observed = dict(self.provider.probe(), spi_sha256='c' * 64)
+        observed['hashes'] = {key: 'd' * 64 for key in observed['hashes']}
+        result = self.refresh(observed)
+        self.assertTrue(result['changed'])
+        saved = json.loads(Path(self.foundation()['verification_ref']).read_text())
+        self.assertEqual(saved['supersedes'], before['verification_ref'])
+        self.assertEqual(saved['result']['hashes'], observed['hashes'])
+
+    def test_runtime_hash_change_alone_is_noop(self):
+        before = self.foundation()
+        observed = self.provider.probe()
+        observed['hashes'] = dict(observed['hashes'], **{'target.password.db': 'd' * 64})
+        self.assertFalse(self.refresh(observed)['changed'])
+        self.assertEqual(self.foundation(), before)
+
+    def test_generation_or_revision_mismatch_is_rejected(self):
+        before = self.foundation()
+        for field, value in (('foundation_id', 'other'), ('revision', 2)):
+            with self.subTest(field=field):
+                observed = self.provider.probe()
+                observed[field] = value
+                with self.assertRaises(OperationError) as caught:
+                    self.refresh(observed)
+                self.assertEqual(caught.exception.code, 'FOUNDATION_NOT_READY')
+        self.assertEqual(self.foundation(), before)
+
+    def image_probe(self, *, spi, compute, images):
+        value = self.provider.probe()
+        value['spi_sha256'] = spi
+        value['incarnation'] = dict(value['incarnation'], compute=compute, images=images)
+        return value
+
+    def test_trino_image_and_pod_uid_change_with_spi_change_is_allowed(self):
+        saved = self.image_probe(spi='b' * 64, compute=['trino-1'],
+                                 images={'trino-1': 'trino-old', 'seaweed-1': 'seaweed'})
+        observed = self.image_probe(spi='c' * 64, compute=['trino-2'],
+                                    images={'trino-2': 'trino-new', 'seaweed-2': 'seaweed'})
+        self.assertTrue(logical._foundation_probe_diff(
+            saved, observed, self.foundation_settings()))
+
+    def test_non_trino_image_change_is_rejected(self):
+        saved = self.image_probe(spi='b' * 64, compute=['trino-1'],
+                                 images={'trino-1': 'trino-old', 'seaweed-1': 'seaweed'})
+        observed = self.image_probe(spi='c' * 64, compute=['trino-2'],
+                                    images={'trino-2': 'trino-new', 'seaweed-2': 'seaweed-new'})
+        with self.assertRaises(OperationError) as caught:
+            logical._foundation_probe_diff(saved, observed, self.foundation_settings())
+        self.assertEqual(caught.exception.code, 'FOUNDATION_BINDING_MISMATCH')

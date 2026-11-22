@@ -6,6 +6,7 @@ the authority; files retain irreversible responses before the next effect.
 from contextlib import contextmanager
 from collections import OrderedDict
 from datetime import date, datetime
+import argparse
 import base64
 import binascii
 import fcntl
@@ -16,7 +17,9 @@ import os
 from pathlib import Path
 import re
 import secrets
+import sys
 import threading
+import time
 import uuid
 
 import catalog_admin
@@ -146,6 +149,32 @@ def lifetime(*, register=False, refresh_interval=2):
             _provider, _config, _executor_id, _verifier_cache = previous
     finally:
         provider.close()
+
+
+@contextmanager
+def refresh_lifetime():
+    """Explicit operator lifetime for a receipt refresh; never used by HTTP startup."""
+    import logical_foundation
+    from logical_provider import Provider
+    global _provider, _config, _executor_id
+    value = runtime_profile.logical_config()
+    foundation = logical_foundation.load(value['provider_config_file'])
+    if any(foundation[key] != value[name] for key, name in (
+            ('environment_id', 'environment_id'), ('warehouse_id', 'warehouse_id'),
+            ('foundation_id', 'foundation_generation_id'), ('revision', 'foundation_revision'))):
+        raise OperationError('FOUNDATION_NOT_READY', 503)
+    previous = _provider, _config, _executor_id
+    provider = Provider(foundation)
+    _provider, _config, _executor_id = provider, value, value['executor_id']
+    try:
+        with admission.lifecycle_gate(exclusive=True, deadline=time.monotonic() + 5):
+            provider.open()
+            yield provider
+    except admission.GateTimeout:
+        raise OperationError('FOUNDATION_BUSY', 409) from None
+    finally:
+        provider.close()
+        _provider, _config, _executor_id = previous
 
 
 @contextmanager
@@ -323,6 +352,127 @@ def _registered_probe(registered):
     return _validate_probe(saved.get('result'))
 
 
+def _pvc_names(foundation):
+    return ('trino-runtime', 'trino-catalogs',
+            foundation['prefix'] + '-seaweed-data', foundation['prefix'] + '-postgres-data')
+
+
+def _stable_pins(incarnation, foundation):
+    from logical_provider import stable_pins
+    return stable_pins(incarnation, _pvc_names(foundation))
+
+
+def _probe_result_valid(result, generation_id, revision, node_uids=None):
+    """Validate one immutable probe result without a live provider."""
+    readiness = result.get('readiness') if isinstance(result, dict) else None
+    if (type(result) is not dict or result.get('ready') is not True
+            or type(result.get('incarnation')) is not dict or not result['incarnation']
+            or type(readiness) is not dict
+            or any(readiness.get(key) is not True for key in
+                ('storage', 'polaris', 'trino', 'runtime_files', 'spi'))
+            or result.get('foundation_id') != generation_id
+            or type(result.get('revision')) is not int or result['revision'] != revision
+            or type(result.get('spi_sha256')) is not str
+            or re.fullmatch('[0-9a-f]{64}', result['spi_sha256']) is None):
+        return False
+    if node_uids is not None and result['incarnation'].get('node') != node_uids:
+        return False
+    hashes = result.get('hashes')
+    if type(hashes) is not dict:
+        return False
+    try:
+        _validate_hashes({key: value for key, value in hashes.items()
+                          if isinstance(key, str) and key.startswith('target.')})
+    except ValueError:
+        return False
+    return True
+
+
+def _non_compute_images(incarnation):
+    images = incarnation.get('images', {})
+    compute = incarnation.get('compute', [])
+    if not isinstance(images, dict) or not isinstance(compute, list):
+        return None
+    owned = set(compute)
+    return {value for key, value in images.items() if key not in owned}
+
+
+def _trino_images(incarnation):
+    images = incarnation.get('images', {})
+    compute = incarnation.get('compute', [])
+    if not isinstance(images, dict) or not isinstance(compute, list):
+        return None
+    return {images[key] for key in compute if key in images}
+
+
+def _foundation_probe_diff(saved, observed, foundation):
+    """Return whether only the SPI digest changed; reject material drift."""
+    c = config()
+    if not _probe_result_valid(saved, c['foundation_generation_id'], c['foundation_revision']):
+        raise OperationError('FOUNDATION_NOT_READY', 503)
+    if not _probe_result_valid(observed, c['foundation_generation_id'], c['foundation_revision']):
+        raise OperationError('FOUNDATION_NOT_READY', 503)
+    # Runtime file hashes follow each database publication, which verifies them
+    # against its own expected_hashes; bind_registered never pins them either.
+    if (saved['readiness'] != observed['readiness']
+            or saved['incarnation'].get('node') != observed['incarnation'].get('node')):
+        raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+    saved_pins = _stable_pins(saved['incarnation'], foundation)
+    observed_pins = _stable_pins(observed['incarnation'], foundation)
+    if (saved_pins != observed_pins
+            or _non_compute_images(saved['incarnation']) != _non_compute_images(observed['incarnation'])):
+        raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+    allowed = {'compute', 'images', 'tunnels'}
+    for key in set(saved['incarnation']) ^ set(observed['incarnation']):
+        if key not in allowed and key not in saved_pins and key != 'node':
+            raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+    for key in set(saved['incarnation']) & set(observed['incarnation']):
+        if key in allowed or key in saved_pins or key == 'node':
+            continue
+        if saved['incarnation'][key] != observed['incarnation'][key]:
+            raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+    return (saved['spi_sha256'] != observed['spi_sha256']
+            or _trino_images(saved['incarnation']) != _trino_images(observed['incarnation']))
+
+
+def foundation_verification_matches(registered, generation, foundation, *, node_uids=None):
+    """Read-only fence: current ref is the recorded ref or its superseding probe.
+
+    configuration_refs remains the immutable generation provenance. A refreshed
+    receipt must name the recorded ref in supersedes and preserve every bound pin.
+    """
+    try:
+        refs = json.loads(generation['configuration_refs'])
+        if (not isinstance(refs, list) or len(refs) != 2 or refs[0] != registered['config_ref']
+                or not isinstance(refs[1], str) or not refs[1]):
+            return False
+        current_ref = registered['verification_ref']
+        if not isinstance(current_ref, str) or not current_ref:
+            return False
+        if current_ref == refs[1]:
+            return True
+        base = runtime_profile.private_json(refs[1])
+        current = runtime_profile.private_json(current_ref)
+        generation_id, revision = registered['generation_id'], registered['revision']
+        if (type(base) is not dict or base.get('kind') != 'foundation_probe'
+                or base.get('generation_id') != generation_id or base.get('revision') != revision
+                or type(current) is not dict or current.get('kind') != 'foundation_probe'
+                or current.get('generation_id') != generation_id or current.get('revision') != revision
+                or current.get('supersedes') != refs[1]):
+            return False
+        base_result, current_result = base.get('result'), current.get('result')
+        if (not _probe_result_valid(base_result, generation_id, revision, node_uids)
+                or not _probe_result_valid(current_result, generation_id, revision, node_uids)):
+            return False
+        pvc_names = ('trino-runtime', 'trino-catalogs', foundation['prefix'] + '-seaweed-data',
+                     foundation['prefix'] + '-postgres-data')
+        from logical_provider import stable_pins
+        return (stable_pins(base_result['incarnation'], pvc_names) ==
+                stable_pins(current_result['incarnation'], pvc_names))
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
 @contextmanager
 def _provider_use():
     # Acquire outside SQLite transactions. Dispatch holds lifecycle/root first;
@@ -473,6 +623,60 @@ def register_foundation():
         return registry.put_foundation(db, dict(environment_id=c['environment_id'], warehouse_id=c['warehouse_id'],
             generation_id=c['foundation_generation_id'], revision=c['foundation_revision'], status='READY',
             config_ref=c['provider_config_file'], verification_ref=proof))
+
+
+def refresh_foundation_verification():
+    """Explicitly advance the current foundation probe after an image/SPI update.
+
+    configuration_refs and the generation row are immutable provenance and are
+    never rewritten; the new receipt names the recorded receipt in supersedes.
+    """
+    c = config()
+    with control_store.connect() as db:
+        registered = dict(_foundation(db))
+        generation = db.execute('SELECT * FROM warehouse_config_generations WHERE id=?',
+                                (registered['generation_id'],)).fetchone()
+    import logical_foundation
+    try:
+        foundation = logical_foundation.load(c['provider_config_file'])
+        saved = _registered_probe(registered)
+    except Exception:
+        raise OperationError('FOUNDATION_NOT_READY', 503) from None
+    if not foundation_verification_matches(registered, generation, foundation):
+        raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+    observed = _probe()
+    changed = _foundation_probe_diff(saved, observed, foundation)
+    if not changed:
+        return {'changed': False, 'generation_id': c['foundation_generation_id'],
+                'revision': c['foundation_revision'],
+                'verification_ref': registered['verification_ref']}
+    with transaction() as db:
+        row = _foundation(db)
+        if row['verification_ref'] != registered['verification_ref']:
+            raise OperationError('FOUNDATION_NOT_READY', 409)
+        generation = db.execute('SELECT * FROM warehouse_config_generations WHERE id=?',
+                                (row['generation_id'],)).fetchone()
+        try:
+            refs = json.loads(generation['configuration_refs']) if generation else None
+        except (TypeError, ValueError):
+            refs = None
+        if (not isinstance(refs, list) or len(refs) != 2 or refs[0] != row['config_ref']
+                or not isinstance(refs[1], str) or not refs[1]
+                or not foundation_verification_matches(row, generation, foundation)):
+            raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
+        proof = _receipt(dict(kind='foundation_probe', generation_id=c['foundation_generation_id'],
+                              revision=c['foundation_revision'], supersedes=refs[1], result=observed))
+        try:
+            updated = registry.update_foundation_verification(
+                db, c['environment_id'], c['warehouse_id'], proof,
+                expected_revision=row['revision'],
+                expected_verification_ref=row['verification_ref'])
+        except ValueError:
+            raise OperationError('FOUNDATION_NOT_READY', 409) from None
+    return {'changed': True, 'generation_id': c['foundation_generation_id'],
+            'revision': c['foundation_revision'],
+            'previous_verification_ref': row['verification_ref'],
+            'verification_ref': updated['verification_ref']}
 
 
 def _root(db, root_id, actor=None):
@@ -1557,3 +1761,34 @@ def check_environment(headers):
         raise OperationError('INVALID_REQUEST', 400)
     if values[0] != config()['environment_id']:
         raise OperationError('ENVIRONMENT_MISMATCH', 409)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='Explicit logical foundation operator')
+    sub = parser.add_subparsers(dest='action', required=True)
+    refresh = sub.add_parser('refresh-verification',
+        help='create a superseding foundation probe receipt after an image/SPI update')
+    refresh.add_argument('--confirm-workbench-stopped', action='store_true')
+    args = parser.parse_args(argv)
+    if not args.confirm_workbench_stopped:
+        print('Stop Workbench and the 8080 endpoint, then pass --confirm-workbench-stopped',
+              file=sys.stderr)
+        return 2
+    try:
+        if not runtime_profile.configure_process():
+            print('SHIROKUMA_RUNTIME_PROFILE is required', file=sys.stderr)
+            return 2
+        with refresh_lifetime():
+            result = refresh_foundation_verification()
+    except OperationError as error:
+        print(json.dumps({'error': error.code, 'status': error.status}), file=sys.stderr)
+        return 1
+    except Exception as error:
+        print(json.dumps({'error': getattr(error, 'code', 'REFRESH_FAILED')}), file=sys.stderr)
+        return 1
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
