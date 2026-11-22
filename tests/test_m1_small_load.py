@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
+import database_creations as creations
 import m1_small_load as load
 
 
@@ -64,6 +65,8 @@ class FakeClient:
             if route == load.CREATIONS + '/capabilities':
                 return dict(available=True, creation_mode='logical_v1', environment_id='local-test')
             if route == load.CREATIONS:
+                # The real request contract, so a payload the server rejects fails here too.
+                creations._intent(kwargs['body'])
                 self.created = True
                 self.name = kwargs['body']['sql_catalog']
                 return dict(creation_id='creation', request_id='create-request', accepted_revision=1)

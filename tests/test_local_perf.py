@@ -188,6 +188,14 @@ class ResultTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.compare(x, y)
 
+    def test_signed_zero_matches_in_ordered_and_unordered_comparison(self):
+        a = self.result([[0.0], [1.5]], ("double",))
+        b = self.result([[1.5], [-0.0]], ("double",))
+        self.assertTrue(self.compare(a, b))
+        self.assertTrue(self.compare(self.result([[0.0]], ("double",)), self.result([[-0.0]], ("double",)), ordered=True))
+        with self.assertRaises(ValueError):
+            self.compare(a, self.result([[1.5], [1e-300]], ("double",)))
+
     def test_types_decimal_exponents_dates_timestamp_precision(self):
         kinds = ("bigint", "decimal(38,8)", "date", "timestamp(6) with time zone", "varchar", "boolean")
         a = self.result([[2**62, Decimal("12345678901234567890.12340000"), dt.date(2026, 1, 1),

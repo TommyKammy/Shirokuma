@@ -195,6 +195,11 @@ def exact_key(row):
     return dumps([None if v is not None and v[0] == "f" else v for v in row])
 
 
+def multiset_value(row):
+    """Row text for unordered matching; -0.0 and 0.0 are the same number."""
+    return dumps([["f", "0.0"] if v is not None and v[0] == "f" and float(v[1]) == 0 else v for v in row])
+
+
 def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=None, check=lambda: None):
     """Full values, duplicates and footer verified; SQLite cache limited to 8 MiB.
 
@@ -249,7 +254,7 @@ def compare(left, right, *, ordered=False, abs_tol=0.0, rel_tol=0.0, scratch=Non
                 for name, stream in (("a", a), ("b", b)):
                     n = 0
                     for n, row in enumerate(stream, 1):
-                        db.execute("INSERT INTO " + name + "(id,k,v) VALUES(?,?,?)", (n, exact_key(row), dumps(row)))
+                        db.execute("INSERT INTO " + name + "(id,k,v) VALUES(?,?,?)", (n, exact_key(row), multiset_value(row)))
                         if n % 256 == 0:
                             db.commit()
                             check()

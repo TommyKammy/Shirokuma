@@ -241,6 +241,15 @@ class VerifierCacheTests(unittest.TestCase):
 
 
 class LogicalCreationTests(LogicalFixture):
+    def test_team_is_saved_and_projected(self):
+        ack, _ = logical.create(self.alice, 'admin', dict(sql_catalog='research', team='  Data Team  '), 'team')
+        detail = self.detail(ack)
+        self.assertEqual(detail['team'], 'Data Team')
+        self.assertEqual(logical.listing(self.alice, 'admin')['creations'][0]['team'], 'Data Team')
+        with control_store.connect() as db:
+            self.assertEqual(db.execute('SELECT team FROM databases WHERE id=?',
+                (detail['database_id'],)).fetchone()[0], 'Data Team')
+
     def test_warm_publication_still_reads_current_credentials(self):
         cache = logical._VerifierCache('foundation-real', 1)
         derive, read = hashlib.pbkdf2_hmac, runtime_profile.private_json
