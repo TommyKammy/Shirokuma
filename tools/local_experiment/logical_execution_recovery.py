@@ -27,7 +27,7 @@ import runtime_profile
 import warehouse_lifecycle
 from query_context import QueryError
 from execution_recovery import (DockerAdapter, QueryRecovery, _require, _json,
-                                _labels, _time, _nano, MANAGED_LABELS)
+                                _labels, _time, _nano, MANAGED_LABELS, TRINO_LAUNCHER)
 
 
 class LogicalQueryRecovery(QueryRecovery):
@@ -285,12 +285,23 @@ class LogicalDockerAdapter(DockerAdapter):
                  'RECOVERY_UNFENCED_BACKEND')
         trino = [c for c in pod['spec']['containers'] if c['name'] == 'trino']
         statuses = [s for s in pod['status']['containerStatuses'] if s['name'] == 'trino']
-        launcher = ['/usr/lib/trino/bin/run-trino']
+        launcher = list(TRINO_LAUNCHER)
         _require(len(trino) == len(statuses) == 1 and statuses[0]['containerID'] == 'docker://' + cid and
-                 trino[0].get('command') == launcher and not trino[0].get('args') and not trino[0].get('envFrom') and
-                 row.get('Path') == launcher[0] and not row.get('Args') and
-                 row['Config'].get('Entrypoint') == launcher and not row['Config'].get('Cmd') and
+                 not trino[0].get('envFrom') and
                  row['State']['Running'] is True and row['HostConfig']['RestartPolicy']['Name'] == 'no',
+                 'RECOVERY_UNFENCED_BACKEND')
+        # Trino 484 has two equally strict startup shapes. The secure overlay sets
+        # `command`, so Kubernetes writes it to Docker Entrypoint. A Deployment
+        # that relies on the image CMD leaves Entrypoint empty and Docker Cmd
+        # equals the launcher argv. Accept only a matching pair of Pod spec and
+        # Docker config; a mixed or partial shape stays fail-closed.
+        explicit_spec = trino[0].get('command') == launcher and not trino[0].get('args')
+        default_spec = not trino[0].get('command') and not trino[0].get('args')
+        explicit_docker = (row.get('Path') == launcher[0] and row.get('Args') == launcher[1:] and
+                           row['Config'].get('Entrypoint') == launcher and not row['Config'].get('Cmd'))
+        default_docker = (row.get('Path') == launcher[0] and row.get('Args') == launcher[1:] and
+                          not row['Config'].get('Entrypoint') and row['Config'].get('Cmd') == launcher)
+        _require((explicit_spec and explicit_docker) or (default_spec and default_docker),
                  'RECOVERY_UNFENCED_BACKEND')
         _require(re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}', trino[0]['image']) and
                  statuses[0]['imageID'].endswith(trino[0]['image'].split('@')[1]), 'RECOVERY_IMAGE_CHANGED')
@@ -385,8 +396,8 @@ class LogicalDockerAdapter(DockerAdapter):
                          sum('java' in p and 'io.trino.server.TrinoServer' in p
                              for p in process.splitlines()[1:]) == 1, 'RECOVERY_SCOPE_CHANGED')
             else:
-                if ('io.trino.server.' in process or 'run-trino' in process or
-                        row.get('Path') == '/usr/lib/trino/bin/run-trino' or
+                if ('io.trino.server.' in process or TRINO_LAUNCHER[0] in process or
+                        row.get('Path') == TRINO_LAUNCHER[0] or
                         ('java' in process and (row['Image'] in images or 'trino' in row['Config'].get('Image', '').lower()))):
                     self._foreign_standalone(row, process, members)
 

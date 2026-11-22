@@ -37,6 +37,9 @@ HISTORICAL = 'HISTORICAL_STOP_FENCE'
 PARENT_CLOSURE = 'TERMINAL_PARENT_ABANDONED'
 MANAGED_LABELS = ('io.kubernetes.pod.uid', 'io.kubernetes.pod.namespace',
                   'io.kubernetes.pod.name', 'io.kubernetes.container.name')
+# Trino 484 removed the run-trino wrapper. The image CMD and the Kubernetes
+# command (when set) are the same argv, so one constant serves both forms.
+TRINO_LAUNCHER = ('/usr/lib/trino/bin/launcher', 'run', '--etc-dir', '/etc/trino')
 
 
 def _labels(row):
@@ -564,7 +567,7 @@ class DockerAdapter:
             expected = next(e for e in expected_containers if e['name'] == c['name'])
             _require(all(c.get(k) == expected.get(k) for k in ('image', 'command', 'args')))
         _require(pod['metadata'].get('annotations', {}).get('shirokuma.dev/database-generation') == generation)
-        _require(trino.get('command') == ['/usr/lib/trino/bin/run-trino'] and not trino.get('args'))
+        _require(tuple(trino.get('command') or ()) == TRINO_LAUNCHER and not trino.get('args'))
         _require(trino['image'] == deployment['spec']['template']['spec']['containers'][0]['image'])
         statuses = [c for c in pod['status']['containerStatuses'] if c['name'] == 'trino']
         _require(len(statuses) == 1 and statuses[0]['containerID'].startswith('docker://'))
@@ -629,7 +632,7 @@ class DockerAdapter:
             _require(other['Image'] != inspected['Image'])
             if managed:
                 process = self._run('docker', 'top', other['Id'], '-eo', 'pid,comm,args')
-                _require('io.trino.server.' not in process and 'run-trino' not in process)
+                _require('io.trino.server.' not in process and TRINO_LAUNCHER[0] not in process)
         started = inspected['State']['StartedAt']
         if not replacement:
             _require(_time(started) <= min(_time(q['created_at']) for q in
@@ -733,11 +736,11 @@ class DockerAdapter:
         selector = deployment['spec']['selector']['matchLabels']
         deployments = self._kube('deployments')['items']
         coordinators = [d for d in deployments if any('trino' in c.get('image', '').lower() or
-            'run-trino' in ' '.join(c.get('command', [])) for c in d['spec']['template']['spec']['containers'])]
+            TRINO_LAUNCHER[0] in ' '.join(c.get('command', [])) for c in d['spec']['template']['spec']['containers'])]
         _require(len(coordinators) == 1 and coordinators[0]['metadata']['uid'] == deployment['metadata']['uid'])
         pods = self._kube('pods', '--all-namespaces')['items']
         qualified = [p for p in pods if p['metadata']['namespace'] == self.namespace and
-                     any('trino' in c.get('image', '').lower() or 'run-trino' in ' '.join(c.get('command', []))
+                     any('trino' in c.get('image', '').lower() or TRINO_LAUNCHER[0] in ' '.join(c.get('command', []))
                          for c in p['spec']['containers'])]
         _require(len(qualified) == 1 and not qualified[0]['metadata'].get('deletionTimestamp'))
         pod = qualified[0]
@@ -773,7 +776,7 @@ class DockerAdapter:
                          sum('java' in p for p in processes) == 1)
             else:
                 _require(row['Image'] != current['Image'] and
-                         not any('io.trino.server.' in p or 'run-trino' in p for p in processes))
+                         not any('io.trino.server.' in p or TRINO_LAUNCHER[0] in p for p in processes))
         return dict(scope, role='replacement', started_at=current['State']['StartedAt'],
                     service_uid=service['metadata']['uid'], service_selector=selector,
                     qualified_backend_census=sorted([dict(container_id=row['Id'], image=row['Image'], labels=_labels(row))

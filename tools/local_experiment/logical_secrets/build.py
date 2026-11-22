@@ -10,21 +10,24 @@ import subprocess
 import tempfile
 import zipfile
 
-IMAGE = 'trinodb/trino:483@sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36'
+IMAGE = 'trinodb/trino:484@sha256:62dc5ad850a11fc95637b0e7aa9da46031145093cb0456cd099c3519298f268c'
 CONTEXT = 'colima-mac-studio-solo'
 SOURCE = Path(__file__).resolve().parent / 'src'
 SERVICE = 'META-INF/services/io.airlift.spi.secrets.SecretsPlugin'
 PLUGIN = 'org.shirokuma.logical.secrets.FileSecretsPlugin'
-SPI = 'file:/usr/lib/trino/lib/io.airlift_secrets-spi-439.jar'
+SPI = 'file:/usr/lib/trino/lib/io.airlift_secrets-spi-451.jar'
 # Constant container command: public paths/arguments are never shell fragments.
+# grep is absent from the Trino 484 hardened base, so use a shell case for the
+# javac check and the pinned airlift 451 secrets SPI jar.
 SCRIPT = r"""set -eu
-javac -version 2>&1 | grep '^javac 25'
-test -f /usr/lib/trino/lib/io.airlift_secrets-spi-439.jar
+version="$(javac -version 2>&1)"
+case "$version" in "javac 25"*) : ;; *) echo "unexpected javac: $version" >&2; exit 1 ;; esac
+test -f /usr/lib/trino/lib/io.airlift_secrets-spi-451.jar
 mkdir /out/classes
-javac --release 25 -cp /usr/lib/trino/lib/io.airlift_secrets-spi-439.jar -d /out/classes /src/main/java/org/shirokuma/logical/secrets/*.java
+javac --release 25 -cp /usr/lib/trino/lib/io.airlift_secrets-spi-451.jar -d /out/classes /src/main/java/org/shirokuma/logical/secrets/*.java
 mkdir -p /out/classes/META-INF/services
 cp /src/main/resources/META-INF/services/io.airlift.spi.secrets.SecretsPlugin /out/classes/META-INF/services/
-printf 'Manifest-Version: 1.0\nClass-Path: file:/usr/lib/trino/lib/io.airlift_secrets-spi-439.jar\n\n' > /out/manifest.mf
+printf 'Manifest-Version: 1.0\nClass-Path: file:/usr/lib/trino/lib/io.airlift_secrets-spi-451.jar\n\n' > /out/manifest.mf
 jar --create --file /out/logical-secrets.jar --manifest /out/manifest.mf -C /out/classes .
 """
 

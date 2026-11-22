@@ -454,7 +454,7 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
                 statement = kwargs['data'].decode()
                 statements.append(statement)
                 if statement == PROBE_SQL and statements.count(PROBE_SQL) == 1:
-                    return 200,b'{"data":[["logical_provisioner","483",true,1]]}'  # Deployments Ready, worker not yet registered.
+                    return 200,b'{"data":[["logical_provisioner","484",true,1]]}'  # Deployments Ready, worker not yet registered.
             return harness.http(method,url,**kwargs)
         actual._http_transport = http
         full_probe = actual.probe
@@ -479,7 +479,7 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
         self.assertTrue(all(argv[-1] == 'read' for argv,_ in harness.commands if 'exec' in argv))
         def still_unready(method,url,**kwargs):
             if url.endswith('/v1/statement') and kwargs['data'].decode() == PROBE_SQL:
-                return 200,b'{"data":[["logical_provisioner","483",true,1]]}'
+                return 200,b'{"data":[["logical_provisioner","484",true,1]]}'
             return harness.http(method,url,**kwargs)
         actual._http_transport = still_unready
         self.elapsed = 0.0

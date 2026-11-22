@@ -162,12 +162,12 @@ class Harness:
         if url.endswith('/oauth/tokens'):
             return 200, b'{"access_token":"private-token"}'
         if url.endswith('/v1/info'):
-            return 200, b'{"starting":false,"nodeVersion":{"version":"483"}}'
+            return 200, b'{"starting":false,"nodeVersion":{"version":"484"}}'
         if url.endswith('/v1/statement') and method == 'POST':
             statement = kwargs['data'].decode()
             if statement == PROBE_SQL:
-                rows = [['logical_provisioner', '483', True, 1]] + (
-                    [['logical_provisioner', '483', False, self.c['trino']['workers']]]
+                rows = [['logical_provisioner', '484', True, 1]] + (
+                    [['logical_provisioner', '484', False, self.c['trino']['workers']]]
                     if self.c['trino']['workers'] else [])
                 return 200, json.dumps({'data': rows}).encode()
         if url.endswith('/principals') and method == 'POST':
@@ -1333,10 +1333,10 @@ class ProviderTests(unittest.TestCase):
 
     def test_live_health_sql_and_service_failures_are_false_without_retry(self):
         self.bind()
-        failures = [(PROBE_SQL, [['admin', '483', True, 1]]),
+        failures = [(PROBE_SQL, [['admin', '484', True, 1]]),
             (PROBE_SQL, [['logical_provisioner', '482', True, 1]]),
-            (PROBE_SQL, [['logical_provisioner', '483', True, 2]]),
-            (PROBE_SQL, [['logical_provisioner', '483', 1, 1]])]
+            (PROBE_SQL, [['logical_provisioner', '484', True, 2]]),
+            (PROBE_SQL, [['logical_provisioner', '484', 1, 1]])]
         for statement, rows in failures:
             def http(method, url, **kwargs):
                 if url.endswith('/v1/statement') and kwargs['data'].decode() == statement:
@@ -1997,8 +1997,8 @@ class ProviderTests(unittest.TestCase):
                         if url.endswith('/v1/statement'):
                             calls.append((method, kwargs))
                             if kwargs['data'].decode() == PROBE_SQL:
-                                rows = [['logical_provisioner', '483', True, 1]] + (
-                                    [['logical_provisioner', '483', False, workers]] if workers else [])
+                                rows = [['logical_provisioner', '484', True, 1]] + (
+                                    [['logical_provisioner', '484', False, workers]] if workers else [])
                                 return 200, json.dumps({'data': rows[::-1] if reverse else rows}).encode()
                         return harness.http(method, url, **kwargs)
                     with p.Provider(self.c, command=harness.command, http=http,
@@ -2032,11 +2032,11 @@ class ProviderTests(unittest.TestCase):
     def test_probe_sql_identity_and_version_are_strict(self):
         self.open(effects=False)
         invalid = [[], ['logical_provisioner'], [['logical_provisioner']],
-            [['logical_provisioner', '483']], [['logical_provisioner', '483', True]],
-            [['logical_provisioner', '483', True, 1, 'extra']],
-            [{'user': 'logical_provisioner', 'version': '483', 'coordinator': True, 'active_nodes': 1}],
+            [['logical_provisioner', '484']], [['logical_provisioner', '484', True]],
+            [['logical_provisioner', '484', True, 1, 'extra']],
+            [{'user': 'logical_provisioner', 'version': '484', 'coordinator': True, 'active_nodes': 1}],
             [None]]
-        invalid += [[[user, '483', True, 1]] for user in ('admin', 'actual_user', '', None, True, 1)]
+        invalid += [[[user, '484', True, 1]] for user in ('admin', 'actual_user', '', None, True, 1)]
         invalid += [[['logical_provisioner', version, True, 1]]
             for version in ('482', '483.0', '', 483, 483.0, True, None)]
         for rows in invalid:
@@ -2056,7 +2056,7 @@ class ProviderTests(unittest.TestCase):
     def test_probe_sql_rejects_bad_second_row_identity_and_version(self):
         self.c['trino']['workers'] = 1
         harness = Harness(self.c)
-        invalid = [[user, '483', False, 1] for user in ('admin', 'actual_user', '', None, True, 1)]
+        invalid = [[user, '484', False, 1] for user in ('admin', 'actual_user', '', None, True, 1)]
         invalid += [['logical_provisioner', version, False, 1]
             for version in ('482', '483.0', '', 483, 483.0, True, None)]
         for second in invalid:
@@ -2064,7 +2064,7 @@ class ProviderTests(unittest.TestCase):
             def http(method, url, **kwargs):
                 if url.endswith('/v1/statement'):
                     calls.append(kwargs['data'].decode())
-                    return 200, json.dumps({'data': [['logical_provisioner', '483', True, 1], second]}).encode()
+                    return 200, json.dumps({'data': [['logical_provisioner', '484', True, 1], second]}).encode()
                 return harness.http(method, url, **kwargs)
             with self.subTest(second=second), p.Provider(self.c, command=harness.command,
                     http=http, sdk=harness.sdk, popen=harness.popen) as provider:
@@ -2076,7 +2076,7 @@ class ProviderTests(unittest.TestCase):
 
     def test_sql_health_rejects_nonlist_and_malformed_rows_in_either_position(self):
         identity = {'username': 'logical_provisioner'}
-        valid = ['logical_provisioner', '483', True, 1]
+        valid = ['logical_provisioner', '484', True, 1]
         invalid = [None, True, {}, 'logical_provisioner', tuple(valid), [], valid[:1],
             valid[:2], valid[:3], valid + ['extra']]
         with patch.object(self.provider, '_provisioner', return_value=identity):
@@ -2101,7 +2101,7 @@ class ProviderTests(unittest.TestCase):
             invalid += [[[True, 1], [False, count]] for count in (True, False, 1.0, '1', None, -1)]
             invalid += [[[True, 1], [False, 1]]] if workers == 0 else [[[True, 1]]]
             for compute_rows in invalid:
-                rows = [['logical_provisioner', '483', *row] if type(row) is list else row
+                rows = [['logical_provisioner', '484', *row] if type(row) is list else row
                     for row in compute_rows]
                 calls = []
                 def http(method, url, **kwargs):

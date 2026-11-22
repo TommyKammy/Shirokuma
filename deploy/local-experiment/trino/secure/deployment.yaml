@@ -16,7 +16,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: trino
-          command: [/usr/lib/trino/bin/run-trino]
+          command: [/usr/lib/trino/bin/launcher, run, --etc-dir, /etc/trino]
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

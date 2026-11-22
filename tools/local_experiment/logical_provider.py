@@ -34,6 +34,7 @@ else:
     import logical_foundation as foundation
 
 SCHEMAS = ('raw', 'staging', 'marts', 'sandbox')
+TRINO_VERSION = '484'
 MANAGEMENT = '/api/management/v1'
 PUBLISHER = ['java', '-cp', '/opt/logical-secrets/logical-secrets.jar', 'org.shirokuma.logical.secrets.FixedPublisher']
 TARGETS = {'credentials': 'credentials.properties', 'password_db': 'password.db', 'rules_json': 'rules.json', 'guard_rego': 'guard.rego'}
@@ -1657,7 +1658,7 @@ class Provider:
     def _trino_health(self):
         info = self._request('trino-local', 'GET', '/v1/info')
         _require(info.get('starting') is False, 'FOUNDATION_COMPUTE_NOT_READY')
-        _require(info.get('nodeVersion', {}).get('version') == '483', 'FOUNDATION_IMAGE_MISMATCH')
+        _require(info.get('nodeVersion', {}).get('version') == TRINO_VERSION, 'FOUNDATION_IMAGE_MISMATCH')
 
     def _sql_health(self):
         identity = self._provisioner()
@@ -1667,7 +1668,7 @@ class Provider:
         for row in rows:
             _require(type(row) is list and len(row) == 4 and
                 type(row[0]) is str and row[0] == identity['username'] and
-                type(row[1]) is str and row[1] == '483', 'FOUNDATION_SQL_IDENTITY_MISMATCH')
+                type(row[1]) is str and row[1] == TRINO_VERSION, 'FOUNDATION_SQL_IDENTITY_MISMATCH')
             _require(type(row[2]) is bool and type(row[3]) is int and row[3] > 0 and
                 row[2] not in registered, 'FOUNDATION_SQL_COMPUTE_MISMATCH')
             registered[row[2]] = row[3]

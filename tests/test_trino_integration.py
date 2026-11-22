@@ -38,10 +38,11 @@ class TrinoIntegrationTests(unittest.TestCase):
     def test_official_supply_and_preserved_security_mounts(self):
         overlay = (SECURE / 'kustomization.yaml').read_text()
         self.assertIn('newName: docker.io/trinodb/trino\n'
-                      '    digest: sha256:aa18e61b2e7776ab8641ba8baaa8687d0430894e88c639e61010cc46a994ab36', overlay)
+                      '    digest: sha256:62dc5ad850a11fc95637b0e7aa9da46031145093cb0456cd099c3519298f268c', overlay)
         patch = (SECURE / 'deployment.yaml').read_text()
         base = (TRINO / 'deployment.yaml').read_text()
-        self.assertIn('command: [/usr/lib/trino/bin/run-trino]', patch)
+        self.assertIn('command: [/usr/lib/trino/bin/launcher, run, --etc-dir, /etc/trino]', patch)
+        self.assertNotIn('run-trino', base + patch)
         self.assertNotIn('/opt/trino', base + patch)
         for setting in ['imagePullPolicy: Never', 'runAsUser: 10000',
                         'runAsGroup: 10000', 'fsGroup: 10000',

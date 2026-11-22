@@ -219,6 +219,7 @@ class FoundationTests(unittest.TestCase):
         self.assertEqual(opa['args'][-1], '/etc/trino-private-secrets')
         self.assertTrue(next(v for v in opa['volumeMounts'] if v['name'] == 'runtime')['readOnly'])
         config = next(d['data'] for d in public if d['kind'] == 'ConfigMap' and d['metadata']['name'] == 'owned-trino-config')
+        self.assertIn('node.id=${ENV:HOSTNAME}', config['node.properties'])
         self.assertIn('catalog.management=dynamic', config['config.properties'])
         self.assertIn('catalog.store=file', config['config.properties'])
         self.assertIn('file.refresh-period=1s\n', config['password-authenticator.properties'])
@@ -603,6 +604,8 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertEqual(json.loads((target/'rules.json').read_text()), f.bootstrap_rules())
         self.assertEqual(c['kube']['node_uids'], {'lab-node': 'captured-real-node-uid'})
         self.assertTrue(c['images']['polaris_admin'].startswith('docker.io/apache/polaris-admin-tool@sha256:'))
+        self.assertEqual(c['images']['trino'],
+                         'docker.io/trinodb/trino@sha256:62dc5ad850a11fc95637b0e7aa9da46031145093cb0456cd099c3519298f268c')
         for path in target.iterdir():
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
         self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o700)
@@ -1025,10 +1028,11 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertEqual(json.dumps(validated), json.dumps(expected))
         self.assertNotIn('coordinator', validated['trino'])
         baseline = f.render(self.c)
-        # Recorded from the pre-coordinator renderer using this existing fixture.
+        # Recorded from the pre-coordinator renderer using this existing fixture;
+        # refreshed once for the Trino 484 node.id=${ENV:HOSTNAME} property.
         serialized = json.dumps(baseline, sort_keys=True).replace(str(self.root), '<PRIVATE_DIR>')
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '99958ca50a90f257e871661857371e7ca13de33aaf59b8ce115ea5f8ea1bf742')
+                         '72f1727a4d08d5f698ab6a33eec602669169aaa40d1a06da6a35b591cc3cafb1')
         self.assertNotIn('shirokuma.dev/coordinator-resources', serialized)
         self.c['trino']['coordinator'] = self.coordinator_profile()
         explicit = f.render(self.c)

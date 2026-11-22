@@ -57,8 +57,10 @@ class GenerationTests(unittest.TestCase):
 
     def test_released_v1_bytes_and_delivery_digest_are_unchanged(self):
         bundle = generation.render(spec(), ROOT)
+        # Re-rendered once for the Trino 484 launcher command and image pin; the
+        # assertion still freezes the exact delivered bytes.
         self.assertEqual(bundle['manifest']['delivery_digest'],
-            '81823860e598f80119cf6f2c2ddc27921d2fc303629997da00c7eda3d7594afe')
+            '64e74937826eec6041ac5aa624b8ac39085857d9abc7943ea6b19a3d4c2f0b51')
         for path, digest in {
             'identity-public.json': 'dde2813b89d4cffbd91b1efa07c7594b96416544d7e59151f0698e9d3e8f8198',
             'deploy/local-experiment/trino/rules.json': '07f55b898a1c6d602201d574474cb41ee8ad8c54590addf2eade29cbaf6fb80d',
