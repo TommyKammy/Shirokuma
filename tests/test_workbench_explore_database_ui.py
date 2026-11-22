@@ -65,6 +65,26 @@ const paths=calls.filter(c=>c.path.includes('/api/v1/schemas/schema/objects?')).
 assert.deepEqual(paths,['a','b']);
 ''')
 
+    def test_show_more_follows_the_schema_cursor_and_appends(self):
+        self.javascript(r'''
+await boot();
+Object.assign(dbExplorer,{database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',grant_revision:4,invalid:false,schemas:structuredClone(schemas),schemaScope:dbSchemaKey(currentRole,'db')});
+dbExplorerControls();
+const page=(start,count)=>Array.from({length:count},(_,i)=>stable('t'+(start+i)));
+objectsRoute=async path=>{const cursor=new URLSearchParams(path.split('?')[1]).get('cursor');
+ return cursor===null?{items:page(0,20),total:45,next_cursor:'c1'}:cursor==='c1'?{items:page(20,20),total:45,next_cursor:'c2'}:{items:page(40,5),total:45,next_cursor:null};};
+$('explore-search').value='t';await dbExploreLoad();
+assert.equal(dbExplore.items.length,20);assert.equal($('explore-more').hidden,false);
+for(const expected of [40,45]){dbExploreMore();await tick();await tick();assert.equal(dbExplore.items.length,expected);}
+assert.equal($('explore-more').hidden,true);assert.equal($('explore-truncated').hidden,true);
+assert.deepEqual(dbExplore.items.map(item=>item.id),page(0,45).map(item=>item.id));
+const requests=calls.filter(c=>c.path.includes('/api/v1/schemas/schema/objects?')).slice(-3).map(c=>new URLSearchParams(c.path.split('?')[1]));
+assert.deepEqual(requests.map(r=>r.get('cursor')),[null,'c1','c2']);
+assert.deepEqual(requests.map(r=>r.get('limit')),['20','20','20']);
+$('explore-search').value='u';await dbExploreLoad();
+assert.equal(new URLSearchParams(calls.at(-1).path.split('?')[1]).get('cursor'),null);
+''')
+
     def test_deep_link_resolves_object_and_failure_returns_to_the_list(self):
         self.javascript(r'''
 await boot();

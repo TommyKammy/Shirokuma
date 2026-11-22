@@ -535,6 +535,9 @@ def object_detail(principal, selected_role, object_id, *, detail, snapshot_id=No
     elif detail == 'snapshots':
         result['snapshots'] = [dict(snapshot_id=str(s['snapshot-id']), parent_id=str(s['parent-snapshot-id']) if s.get('parent-snapshot-id') is not None else None,
             timestamp_ms=str(s['timestamp-ms']), summary=s.get('summary', {})) for s in metadata.get('snapshots', [])]
+        # A rollback keeps newer snapshots in history, so recency is not currency.
+        current = metadata.get('current-snapshot-id')
+        result['current_snapshot_id'] = str(current) if current is not None and current != -1 else None
     else:
         if snapshot_id is not None and (obj.kind != 'TABLE' or snapshot_id not in {str(s['snapshot-id']) for s in metadata.get('snapshots', [])}):
             missing()

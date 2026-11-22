@@ -336,6 +336,23 @@ assert.equal(step.children[1].children[0].textContent,'check');assert.equal(step
 assert.equal(step.children[2].textContent,t('No status'));
 ''')
 
+    def test_ingest_target_reference_is_resolved_to_an_output_table(self):
+        # db_jobs returns the ingest target as a ResourceRef, not a name.
+        self.javascript(JOBS_SETUP + CONTEXT + r'''
+const target={database_id:'db',schema_id:'schema',object_id:'obj-1',incarnation:2};
+const ingest=structuredClone(run);ingest.steps=[{name:'load',action:'ingest',status:'succeeded',summary:{committed_rows:7,target}}];
+const base=route;let objectReads=0;
+route=async(path,options)=>{if(path.startsWith('/api/v1/objects/obj-1?')){objectReads++;
+ return {object:{id:'obj-1',physical_name:'sales.items',ref:{...target,binding_revision:1,generation_id:'gen'}},ref:{...target}};}
+ return base(path,options);};
+savedJobs=[structuredClone(job)];jobRuns=[ingest];await openJobs();
+await dbJobsSelectRun(structuredClone(ingest));await tick();await tick();
+assert.equal($('db-jobs-output-name').textContent,'sales.marts.sales.items');
+assert.equal($('db-jobs-output-link').hidden,false);
+assert.equal($('db-jobs-output-link').getAttribute('href'),'#explore/sales.marts.sales%2Eitems');
+dbJobsRender();await tick();assert.equal(objectReads,1);
+''')
+
     def test_step_icons_use_one_small_neutral_class_and_mark(self):
         self.assertIn('.step-icon{display:inline-flex', COMPACT_CSS)
         self.javascript(JOBS_SETUP + r'''

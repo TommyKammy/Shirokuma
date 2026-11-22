@@ -2502,7 +2502,7 @@ function dbInvalidateReceipt(role,account=false){
 }
 let dbAuthorizationVersion=0;
 const dbExplorer={database_id:'',schema_id:'',binding_revision:null,generation_id:null,grant_revision:null,schemas:[],schemaScope:'',invalid:false};
-const dbExplore={installed:false,request:0,timer:null,items:[],mode:'',query:'',kind:'',truncated:false,unavailable:[],error:'',loading:false,status:'',statusKey:'',statusValues:{},notice:'',renderSignature:'',database:null,schema:null,limit:20,total:0,snapshot:'',columnCount:null,columnObject:''};
+const dbExplore={installed:false,request:0,timer:null,items:[],mode:'',query:'',kind:'',truncated:false,unavailable:[],error:'',loading:false,status:'',statusKey:'',statusValues:{},notice:'',renderSignature:'',database:null,schema:null,limit:20,cursor:null,total:0,snapshot:'',columnCount:null,columnObject:''};
 let dbExplorerRequest=0,dbWorksheetListRequest=0,dbWorksheetObjects=[],dbExplorerSeedPending=false;
 let dbPrincipal='',dbMaximumRole='admin',dbEpoch=0,dbInventoryVersion=0,dbRefreshRequest=0,dbListRequest=0,dbDatabases=[],dbSchemas=[],dbSchemaScope='',dbObjects=[],dbObject=null,dbObjectEpoch=0,dbHistory=[],dbHistoryRequest=0,dbHistoryScope='',dbContextFailure=null;
 Object.assign(i18n.ja,{
@@ -7414,8 +7414,9 @@ function dbExploreInstall(inspector,explorerTools){
 }
 function dbExploreMore(){
  if(dbExplore.loading)return;
- dbExplore.limit=Math.min(dbExplore.mode==='search'?50:100,dbExplore.limit+20);
- if(dbExplore.mode==='search')void dbExploreLoadAll();else void dbExploreLoad();
+ if(dbExplore.mode==='search'){dbExplore.limit=Math.min(50,dbExplore.limit+20);void dbExploreLoadAll();}
+ // Schema lists page by cursor; the first page is never requested again.
+ else if(dbExplore.cursor)void dbExploreLoad({more:true});
 }
 function dbExploreSnapshotPreview(value){
  const object=dbObject;if(!object||value==null||value==='')return;
@@ -7516,7 +7517,7 @@ function dbExplorePaint(){
  ui($('explore-status'),status,values);
  ui($('explore-notice'),e.notice);$('explore-notice').hidden=!e.notice;
  ui($('explore-unavailable'),'{count} databases could not be loaded',{count:e.unavailable.length});$('explore-unavailable').hidden=!e.unavailable.length;
- ui($('explore-truncated'),'Showing the top {limit} results. Narrow the search.',{limit:e.limit});$('explore-truncated').hidden=!e.truncated;
+ ui($('explore-truncated'),'Showing the top {limit} results. Narrow the search.',{limit:e.mode==='schema'?e.items.length:e.limit});$('explore-truncated').hidden=!e.truncated;
  const empty=!e.loading&&!e.error&&e.mode!=='idle'&&!e.items.length&&!!(e.database&&e.schema||e.mode==='search');
  ui($('explore-empty'),'No matching objects. Change the search term or type.');$('explore-empty').hidden=!empty;
  const more=$('explore-more');if(more){more.hidden=!e.truncated||e.loading;more.textContent=t('Show more');}
@@ -7552,13 +7553,15 @@ function dbExplorePaint(){
  }
  dbExplorePaintDetail();
 }
-async function dbExploreLoad(){
+async function dbExploreLoad(options){
  if(!$('explore-page'))return;
  const role=currentRole,query=($('explore-search')?.value||'').trim(),kindValue=$('explore-kind')?.value||'';
+ const cursor=options?.more===true&&dbExplore.mode==='schema'&&query===dbExplore.query&&kindValue===dbExplore.kind?dbExplore.cursor:null;
+ const previous=cursor?dbExplore.items:[];
  const kind=kindValue==='TABLE'||kindValue==='VIEW'?kindValue:null;
  const request=++dbExplore.request,identity=dbIdentity();
  dbExplore.query=query;dbExplore.kind=kindValue;dbExplore.loading=true;dbExplore.error='';dbExplore.renderSignature='';dbExplore.statusKey='';dbExplore.statusValues={};
- dbExplore.items=[];dbExplore.truncated=false;dbExplore.unavailable=[];
+ dbExplore.items=previous;dbExplore.cursor=null;dbExplore.truncated=false;dbExplore.unavailable=[];
  dbExplorePaint();
  const current=()=>request===dbExplore.request&&identity===dbIdentity()&&role===currentRole;
  try{
@@ -7583,12 +7586,12 @@ async function dbExploreLoad(){
    dbExplore.statusKey='This context is not available. Choose another database and schema.';dbExplore.statusValues={};
    dbExplore.loading=false;dbExplorePaint();return;
   }
-  const params=new URLSearchParams({q:query,limit:String(dbExplore.limit)});if(kind)params.set('kind',kind);
+  const params=new URLSearchParams({q:query,limit:'20'});if(kind)params.set('kind',kind);if(cursor)params.set('cursor',cursor);
   const data=await dbAPI('/api/v1/schemas/'+encodeURIComponent(schema.id)+'/objects?'+params,role);
   if(!current())return;
-  dbExplore.mode='schema';dbExplore.items=Array.isArray(data.items)?data.items:[];
+  dbExplore.mode='schema';dbExplore.items=[...previous,...(Array.isArray(data.items)?data.items:[])];
   dbExplore.total=data.total??dbExplore.items.length;
-  dbExplore.truncated=!!data.next_cursor;dbExplore.unavailable=[];dbExplore.database=database;dbExplore.schema=schema;
+  dbExplore.cursor=typeof data.next_cursor==='string'&&data.next_cursor?data.next_cursor:null;dbExplore.truncated=!!dbExplore.cursor;dbExplore.unavailable=[];dbExplore.database=database;dbExplore.schema=schema;
   dbExplore.loading=false;dbExplore.error='';dbExplore.statusKey='';dbExplore.statusValues={};dbExplore.renderSignature='';dbExplorePaint();
  }catch(error){
   if(!current()||error.code==='AUTH_READ_STALE')return;
@@ -11126,7 +11129,9 @@ async function dataopsPublishImpact(p,build,audit,current){
    const reply=await dbAPI('/api/v1/objects/'+encodeURIComponent(objectID)+'?detail=snapshots',p.role);
    if(!current())return null;
    const snapshots=Array.isArray(reply?.snapshots)?reply.snapshots:[];
-   const latest=[...snapshots].sort((a,b)=>Number(b.timestamp_ms)-Number(a.timestamp_ms))[0];
+   // Only the catalog's current snapshot holds the published rows.
+   const currentID=typeof reply?.current_snapshot_id==='string'?reply.current_snapshot_id:null;
+   const latest=currentID?snapshots.find(item=>item.snapshot_id===currentID):null;
    const summary=latest?.summary||{};
    const raw=summary['total-records']??summary['total_records']??summary['record-count']??summary['record_count']??summary['total-rows']??summary['total_rows'];
    const value=typeof raw==='string'&&/^\d+$/.test(raw)?Number(raw):Number.isSafeInteger(raw)&&raw>=0?raw:null;
@@ -12710,9 +12715,35 @@ function dbJobsActiveRun(job=dbJobs.job){
  if(p.run&&p.run.job_id===job.id&&!p.run.purged)return p.run.details||p.run;
  return (p.history||[]).find(run=>run.job_id===job.id)||null;
 }
+// Ingest receipts name their target only by ResourceRef; look the name up once
+// through the authorized object detail, then repaint.
+const dbJobsTargetNames=new Map();
+function dbJobsTargetName(ref,role){
+ const key=[role,ref.object_id,ref.incarnation].join(':');
+ if(dbJobsTargetNames.has(key))return dbJobsTargetNames.get(key);
+ dbJobsTargetNames.set(key,null);
+ void dbAPI('/api/v1/objects/'+encodeURIComponent(ref.object_id)+'?detail=columns',role).then(reply=>{
+  const object=reply?.object,current=object?.ref||reply?.ref;
+  if(current?.object_id!==ref.object_id||current?.incarnation!==ref.incarnation||typeof object.physical_name!=='string')return;
+  dbJobsTargetNames.set(key,object.physical_name);
+  if(dbJobs.installed)dbJobsRender();
+ }).catch(()=>{});
+ return null;
+}
+function dbJobsRefOutput(ref,run){
+ if(!ref||typeof ref!=='object'||typeof ref.object_id!=='string'||!Number.isInteger(ref.incarnation))return null;
+ const context=run?.context||{};
+ const database=ref.database_id===context.database_id?context.sql_catalog:dbDatabases.find(item=>item.id===ref.database_id)?.sql_catalog;
+ const schema=ref.schema_id===context.schema_id?context.sql_schema:(dbJobs.schemas||[]).find(item=>item.id===ref.schema_id)?.sql_name;
+ if(!database||!schema)return null;
+ const name=dbJobsTargetName(ref,run?.selected_role||dbJobs.role);
+ if(!name)return null;
+ return {name:[database,schema,name].join('.'),href:'#explore/'+dbExplorePath({sql_catalog:database},{sql_name:schema},{physical_name:name})};
+}
 function dbJobsRunOutput(run){
  for(const step of run?.steps||[]){
   const summary=step?.summary;if(!summary||typeof summary!=='object')continue;
+  const fromRef=dbJobsRefOutput(summary.target,run);if(fromRef)return fromRef;
   for(const key of ['target_name','table','destination_name','target']){
    const value=summary[key];
    if(typeof value!=='string'||!value.trim()||value.split('.').length<3)continue;

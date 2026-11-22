@@ -119,8 +119,13 @@ route=original;
 
     def test_publish_impact_existing_new_and_unknown_rows(self):
         cases = [
-            ('existing', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{ref:{object_id:'object-1'}}:path.includes('/api/v1/objects/object-1')?{snapshots:[{timestamp_ms:'2',summary:{'total-records':'12'}}]}:original(path,options);",
+            ('existing', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{ref:{object_id:'object-1'}}:path.includes('/api/v1/objects/object-1')?{current_snapshot_id:'1',snapshots:[{snapshot_id:'1',timestamp_ms:'2',summary:{'total-records':'12'}}]}:original(path,options);",
              r'Replace 12 published rows with 3 rows\.', 'Replace and publish', True, True),
+            # After a rollback the newer snapshot stays in history but is not current.
+            ('rolled back', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{ref:{object_id:'object-1'}}:path.includes('/api/v1/objects/object-1')?{current_snapshot_id:'1',snapshots:[{snapshot_id:'1',timestamp_ms:'1',summary:{'total-records':'12'}},{snapshot_id:'2',timestamp_ms:'2',summary:{'total-records':'99'}}]}:original(path,options);",
+             r'Replace 12 published rows with 3 rows\.', 'Replace and publish', True, True),
+            ('no current snapshot', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{ref:{object_id:'object-1'}}:path.includes('/api/v1/objects/object-1')?{current_snapshot_id:null,snapshots:[{snapshot_id:'2',timestamp_ms:'2',summary:{'total-records':'99'}}]}:original(path,options);",
+             r'The published row count is unavailable\.', 'Replace and publish', True, True),
             ('new', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{http:404,body:{code:'NOT_FOUND'}}:original(path,options);",
              r'Create a new MARTS table with 3 rows\.', 'Publish to MARTS', False, False),
             ('unknown', "route=async(path,options)=>path.startsWith('/api/v1/objects/resolve')?{ref:{object_id:'object-2'}}:path.includes('/api/v1/objects/object-2')?{snapshots:[{timestamp_ms:'2',summary:{}}]}:original(path,options);",

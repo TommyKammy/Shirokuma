@@ -159,7 +159,8 @@ class DatabaseInventoryTests(unittest.TestCase):
         return {'table-uuid': identity, 'current-schema-id': 2, 'schemas': [{'schema-id': 2, 'fields': [
             dict(name='id', type='long', required=True), dict(name='note', type='string', required=False)]}],
             'snapshots': [{'snapshot-id': 9223372036854775806, 'parent-snapshot-id': 9223372036854775805,
-                'timestamp-ms': 1792300000000, 'summary': {'operation': 'append'}}]}
+                'timestamp-ms': 1792300000000, 'summary': {'operation': 'append'}}],
+            'current-snapshot-id': 9223372036854775806}
 
     @contextmanager
     def api(self, database, binding):
@@ -369,12 +370,25 @@ class DatabaseInventoryTests(unittest.TestCase):
         columns = report['columns']
         self.assertEqual(columns[0], dict(name='id', type='long', nullable=False))
         report = inventory.object_detail(self.principal, 'data_engineer', obj['id'], detail='snapshots')
-        self.assertEqual(set(report), {'object', 'ref', 'detail', 'snapshots'})
+        self.assertEqual(set(report), {'object', 'ref', 'detail', 'snapshots', 'current_snapshot_id'})
+        self.assertEqual(report['current_snapshot_id'], '9223372036854775806')
         self.assertEqual(report['detail'], 'snapshots')
         snapshots = report['snapshots']
         self.assertEqual(snapshots[0]['snapshot_id'], '9223372036854775806')
         self.assertEqual(snapshots[0]['parent_id'], '9223372036854775805')
         self.assertIsInstance(snapshots[0]['timestamp_ms'], str)
+
+    def test_snapshot_detail_reports_the_catalog_current_snapshot_after_rollback(self):
+        obj = self.list(kind='TABLE')['items'][0]
+        metadata = self.objects['TABLE'][obj['physical_name']]
+        metadata['snapshots'].append({'snapshot-id': 9223372036854775807, 'parent-snapshot-id': 9223372036854775806,
+            'timestamp-ms': 1792300009999, 'summary': {'operation': 'overwrite'}})
+        report = inventory.object_detail(self.principal, 'data_engineer', obj['id'], detail='snapshots')
+        self.assertEqual(report['current_snapshot_id'], '9223372036854775806')
+        for missing in (None, -1):
+            metadata['current-snapshot-id'] = missing
+            report = inventory.object_detail(self.principal, 'data_engineer', obj['id'], detail='snapshots')
+            self.assertIsNone(report['current_snapshot_id'])
 
     def test_public_refs_keep_authorized_binding_snapshot_after_metadata_read(self):
         with control_store.connect() as db:
