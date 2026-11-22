@@ -384,6 +384,7 @@ def status(size):
 
 def _logical_foundation(db=None):
     """Fence shared compute against committed foundation and applied provenance."""
+    import logical_creations
     import logical_foundation
     import runtime_profile
     from warehouse_operations import OperationError
@@ -408,7 +409,8 @@ def _logical_foundation(db=None):
         if (not generation or generation['state'] != 'APPLIED'
                 or generation['warehouse_id'] != cfg['warehouse_id']
                 or generation['apply_id'] != 'foundation:' + row['generation_id']
-                or json.loads(generation['configuration_refs']) != [row['config_ref'], row['verification_ref']]):
+                or not logical_creations.foundation_verification_matches(
+                    row, generation, foundation, node_uids=foundation['kube']['node_uids'])):
             raise ValueError()
         control = db.execute('SELECT * FROM warehouse_controls WHERE warehouse_id=?',
                              (cfg['warehouse_id'],)).fetchone()

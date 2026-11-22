@@ -83,6 +83,17 @@ def _require(ok, code='PROVIDER_INPUT_INVALID'):
         raise Rejected(code)
 
 
+def stable_pins(incarnation, pvc_names):
+    """Return the immutable namespace/PVC/service/deployment/configmap/PV pins."""
+    _require(isinstance(incarnation, dict), 'FOUNDATION_BINDING_INVALID')
+    pins = {key: value for key, value in incarnation.items() if isinstance(key, str) and
+        (key == 'namespace' or key in pvc_names or
+         key.startswith(('namespace/', 'service/', 'deployment/', 'pvc/', 'pv/', 'configmap/')))}
+    _require(all(isinstance(value, str) and bool(value.strip()) for value in pins.values()),
+        'FOUNDATION_BINDING_INVALID')
+    return pins
+
+
 def _command(argv, *, input=None):
     return subprocess.run(argv, input=input, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
 
@@ -784,13 +795,7 @@ class Provider:
             self._config['prefix']+'-postgres-data')
 
     def _stable_pins(self, incarnation):
-        _require(isinstance(incarnation, dict), 'FOUNDATION_BINDING_INVALID')
-        pins = {key: value for key, value in incarnation.items() if isinstance(key, str) and
-            (key == 'namespace' or key in self._pvc_names() or
-             key.startswith(('namespace/', 'service/', 'deployment/', 'pvc/', 'pv/', 'configmap/')))}
-        _require(all(isinstance(value, str) and bool(value.strip()) for value in pins.values()),
-            'FOUNDATION_BINDING_INVALID')
-        return pins
+        return stable_pins(incarnation, self._pvc_names())
 
     def _registered_pins(self, actual, expected_probe):
         _require(isinstance(expected_probe, dict) and expected_probe.get('ready') is True, 'FOUNDATION_BINDING_INVALID')

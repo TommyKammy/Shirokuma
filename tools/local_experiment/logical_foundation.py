@@ -702,6 +702,9 @@ def main(argv=None):
             save_private(Path(c['private_dir']) / 'render-public.yaml', yaml.safe_dump_all(public))
             save_private(Path(c['private_dir']) / 'render-secrets.yaml', yaml.safe_dump_all(private))
         print('FOUNDATION_DOCUMENTS_READY')
+        if action == 'apply':
+            print('NEXT: stop Workbench and the 8080 endpoint, then run:')
+            print('  python3 tools/local_experiment/logical_creations.py refresh-verification --confirm-workbench-stopped')
         return 0
     except Exception:
         print('FOUNDATION_OPERATION_FAILED')
