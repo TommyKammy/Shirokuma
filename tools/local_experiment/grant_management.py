@@ -2,6 +2,7 @@
 
 No connection or backend is opened at import time. Epoch tombstones survive deletes.
 """
+import copy
 import hashlib
 import json
 import uuid
@@ -131,6 +132,16 @@ def _sha256(value):
     return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
 
 
+def _without_template_manifest(manifest, template_paths):
+    value = copy.deepcopy(manifest)
+    value['spec']['profile'].pop('template_fingerprint', None)
+    value.pop('profile_fingerprint', None)
+    value.pop('delivery_digest', None)
+    for path in template_paths:
+        value['file_digests'].pop(path, None)
+    return value
+
+
 def _verified_snapshot(db, generation_id):
     """Canonical full-apply provenance; no registry equality or admission side effects."""
     import database_generation
@@ -140,11 +151,21 @@ def _verified_snapshot(db, generation_id):
     if row is None or plan is None or row['state'] != 'APPLIED' or row['apply_id'] != generation_id:
         raise ValueError('Unverified generation')
     manifest = json.loads(plan['manifest'])
-    bundle = database_generation.render(manifest['spec'])
-    spec = manifest['spec']
-    if (bundle['manifest'] != manifest or manifest['generation_id'] != generation_id
-            or spec['generation_id'] != generation_id or spec['warehouse_id'] != row['warehouse_id']
-            or manifest['delivery_digest'] != plan['delivery_digest']
+    spec = manifest.get('spec') if isinstance(manifest, dict) else None
+    if (type(spec) is not dict or type(spec.get('profile')) is not dict
+            or type(spec.get('version')) is not int
+            or type(manifest.get('file_digests')) is not dict):
+        raise ValueError('Invalid generation identity')
+    current_spec = copy.deepcopy(spec)
+    current_spec['profile']['template_fingerprint'] = database_generation.profile_fingerprint(
+        version=current_spec['version'])
+    bundle = database_generation.render(current_spec)
+    if (set(manifest['file_digests']) != set(bundle['manifest']['file_digests'])
+            or _without_template_manifest(manifest, core.TEMPLATE_ONLY_DELIVERY_PATHS) !=
+               _without_template_manifest(bundle['manifest'], core.TEMPLATE_ONLY_DELIVERY_PATHS)
+            or manifest.get('generation_id') != generation_id
+            or spec.get('generation_id') != generation_id or spec.get('warehouse_id') != row['warehouse_id']
+            or manifest.get('delivery_digest') != plan['delivery_digest']
             or json.loads(row['database_revisions']) != [[k, v['binding']['desired_revision']] for k,v in sorted(spec['databases'].items())]
             or json.loads(row['grant_revisions']) != [[g['principal_id'],g['database_id'],g['revision']] for g in spec['grant_revisions']]
             or json.loads(row['configuration_refs']) != sorted(bundle['files'])):

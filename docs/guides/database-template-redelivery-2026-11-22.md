@@ -159,22 +159,22 @@ rtk proxy env SHIROKUMA_STATE_DIR="$SHIROKUMA_STATE_DIR" $CATALOG reconcile \
 ```
 
 After a successful `apply`, the receipt is under
-`$SHIROKUMA_STATE_DIR/warehouse-operator-receipts/<operation-id>.json`. For an
-independent read-only verification:
-
-```sh
-rtk proxy env SHIROKUMA_STATE_DIR="$SHIROKUMA_STATE_DIR" $CATALOG reconcile \
-  --config /absolute/private/operator/redelivery.json \
-  --operation-id <operation-id> --step verify --verify-readonly \
-  --expected-revision <revision> --delivery-digest <delivery-digest> \
-  --receipt-digest "$(rtk proxy shasum -a 256 "$SHIROKUMA_STATE_DIR/warehouse-operator-receipts/<operation-id>.json" | cut -d' ' -f1)"
-```
+`$SHIROKUMA_STATE_DIR/warehouse-operator-receipts/<operation-id>.json`.
+`--verify-readonly` only recovers an `UNKNOWN` operation without a predecessor,
+so it does not apply after a successful redelivery; use the checks in section 5.
 
 ## 5. Verify
 
 ```sh
 rtk proxy kubectl --context colima-mac-studio-solo -n shirokuma-dev \
   rollout status deployment/trino-local --timeout=10m
+# operation state and delivery identity (APPLIED)
+rtk proxy env SHIROKUMA_STATE_DIR="$SHIROKUMA_STATE_DIR" $CATALOG inspect-operation \
+  --operation-id <operation-id> --auth-headers /absolute/private/operator/auth/headers.json
+# Trino Deployment image/command
+rtk proxy kubectl --context colima-mac-studio-solo -n shirokuma-dev \
+  get deployment/trino-local \
+  -o jsonpath='{.spec.template.spec.containers[0].image}{" "}{.spec.template.spec.containers[0].command}{"\n"}'
 # /v1/info: nodeVersion.version=484, starting=false
 # authenticated 127.0.0.1 port-forward: SELECT version(), current_timezone();
 # SHOW CATALOGS returns the 13 tenant catalogs; one light SELECT; OPA sidecar Ready.

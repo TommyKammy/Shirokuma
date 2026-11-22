@@ -262,6 +262,45 @@ class ApplyAndMigrationTests(unittest.TestCase):
             self.assertEqual([tuple(r) for r in db.execute("SELECT * FROM grant_audit WHERE principal_id='unrelated'")], audits)
             self.assertEqual(grants.inspect(db, canceled['id'], 'admin')['state'], 'CANCELED')
 
+    def test_redelivery_admission_keeps_canceled_grants_across_template_drift(self):
+        import copy
+        import database_generation as generation
+        f = self.fixture
+        self.assertEqual(f.apply(f.plan())['state'], 'APPLIED')
+        admin = auth.AuthenticatedPrincipal('admin', 'admin', True)
+        grants.mutate(admin, 'admin', 'opaque_0',
+            dict(principal_id='new', maximum_role='bi_viewer', expected_revision=0), 'new-pending')
+        canceled = grants.mutate(admin, 'admin', 'opaque_0',
+            dict(principal_id='new', maximum_role='revoked', expected_revision=1), 'new-cancel')
+        self.assertEqual(canceled['state'], 'CANCELED')
+
+        def render(spec, root=None):
+            if spec['profile']['template_fingerprint'] != 'new-template':
+                raise ValueError('template drift')
+            result = copy.deepcopy(f.bundle)
+            result['manifest']['spec']['profile']['template_fingerprint'] = 'new-template'
+            result['manifest']['profile_fingerprint'] = 'new-template'
+            result['manifest']['file_digests']['deploy/local-experiment/trino/deployment.yaml'] = 'e' * 64
+            return result
+
+        with patch.object(generation, 'profile_fingerprint', return_value='new-template'), \
+                patch.object(generation, 'render', side_effect=render):
+            with store.connect() as db:
+                operations._check_registry(db, f.bundle['manifest']['spec'])
+
+    def test_head_non_template_digest_change_is_rejected(self):
+        f = self.fixture
+        applied = f.apply(f.plan())
+        with store.connect() as db:
+            row = db.execute('SELECT manifest FROM generation_plans WHERE generation_id=?',
+                             (applied['generation_id'],)).fetchone()
+            manifest = json.loads(row[0])
+            manifest['file_digests']['deploy/local-experiment/trino/service.yaml'] = 'e' * 64
+            db.execute('UPDATE generation_plans SET manifest=? WHERE generation_id=?',
+                       (json.dumps(manifest), applied['generation_id']))
+            with self.assertRaises(ValueError):
+                grants._verified_snapshot(db, applied['generation_id'])
+
     def test_redelivery_keeps_historical_provenance_and_cancellation(self):
         f = self.fixture
         prepared, full = f.applied_full()
