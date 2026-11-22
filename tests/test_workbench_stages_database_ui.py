@@ -194,7 +194,7 @@ scanRows[1].status='unknown';scanRows[1].items[0].status='unknown';scanRows[1].i
 
     def test_scan_refresh_inspect_preserves_editor_focus_draft_revision_and_tabs(self):
         self.javascript(r'''
-await scanStage();await dbStagesScanStart();assert.match($('db-stages-context').textContent,/Stage context \(Stage access verified\).*Role admin/);assert.match($('db-stages-current').textContent,/Loaded Stage/);
+await scanStage();await dbStagesScanStart();assert.match($('db-stages-context').textContent,/Stage context \(Stage access verified\).*Role Admin/);assert.match($('db-stages-current').textContent,/Loaded Stage/);
 const field=$('db-stages-options'),stage=p.stage;field.value='{"atomic_append":true,"encoding":"utf-8"}';field.oninput();field.focus();field.setSelectionRange(3,9);const draft=field.value,rev=p.stage.revision;
 await dbStagesScans();await dbStagesScanInspect(p.scans[0]);await dbStagesScanObserve();await dbStagesRefresh();
 assert.equal(p.stage,stage);assert.equal(p.stage.revision,rev);assert.equal(field.value,draft);assert.equal(document.activeElement,field);assert.equal(field.selectionStart,3);assert.equal(field.selectionEnd,9);assert.equal(worksheets.length,2);assert.equal(dbCurrent().sql,'SELECT 1');assert.equal(dbExplorer.database_id,'db');
@@ -329,7 +329,7 @@ receipt.publication_state='partial';await dbStagesReceipt();assert.equal($('db-s
 await createStage();const save=$('db-stages-save'),status=$('db-stages-status'),setBinding=uiBindings.set.bind(uiBindings);uiBindings.delete(status);
 Object.defineProperty(status,'textContent',{configurable:true,get(){return this.children[0]?.textContent||'';},set(value){this.children[0].textContent=value;}});
 uiBindings.set=function(node,binding){if(node===status){for(const child of node.children)child.isConnected=false;node.children=[{nodeType:3,textContent:'',isConnected:true,descendants:()=>[]}];return setBinding(node.children[0],binding);}return setBinding(node,binding);};
-ui(status,'Stage request failed. Draft retained.');setLanguage('ja');assert.equal(save.textContent,'Stage を保存');assert.equal($('db-stages-mode').options.find(o=>o.value==='create').textContent,'新規作成');assert.equal(status.textContent,'Stage 要求が失敗しました。下書きは保持されています。');dbStagesRender();await periodicRefresh();assert.equal(status.textContent,'Stage 要求が失敗しました。下書きは保持されています。');setLanguage('en');assert.equal(status.textContent,'Stage request failed. Draft retained.');
+ui(status,'Stage request failed. Draft retained.');setLanguage('ja');assert.equal(save.textContent,'ステージを保存');assert.match($('db-stages-context').textContent,/ステージの接続先（利用可能）.*ロール 管理者/);assert.equal($('db-stages-mode').options.find(o=>o.value==='create').textContent,'新規作成');assert.equal(status.textContent,'ステージ要求が失敗しました。下書きは保持されています。');assert.deepEqual($('db-stages-mode').options.map(o=>o.value),['create','append','replace','upsert']);assert.deepEqual($('db-stages-mode').options.map(o=>o.textContent),['新規作成','追加','全件置換','キーで更新・追加']);assert.equal($('db-stages-role').options.find(o=>o.value==='admin').textContent,'管理者');assert.equal($('db-stages-database').options.find(o=>o.value==='db').textContent,'Sales');dbStagesRender();await periodicRefresh();assert.equal(status.textContent,'ステージ要求が失敗しました。下書きは保持されています。');setLanguage('en');assert.equal(status.textContent,'Stage request failed. Draft retained.');assert.equal($('db-stages-mode').options.find(o=>o.value==='create').textContent,'Create new');assert.equal($('db-stages-role').options.find(o=>o.value==='admin').textContent,'Admin');
 session.platform_admin=true;await dbRefreshAccess();dbAdmin.databases=[{id:'db',sql_catalog:'sales',display_name:'Sales',description:'',state:'READY',revision:1,schemas:[],binding:{}}];dbAdmin.database='db';dbAdminRenderDetail();const role=$('db-admin-grant-role');assert.deepEqual(role.options.map(o=>o.value),['bi_viewer','data_engineer','admin']);setLanguage('ja');assert.equal(role.options.at(-1).textContent,'管理者');assert.match($('db-admin-grant-admin-help').textContent,/既存の全体ロール上限 admin/);
 ''')
 
@@ -497,7 +497,7 @@ for(const key of ['target','export-source']){const node=$('db-stages-'+key);asse
 
     def test_stage_navigation_tracks_ready_admin_database_capability_and_header(self):
         self.javascript(r'''
-delete inventory[0].capabilities.stage_admin;await boot();const tab=$('ingestion-view-stages');assert.equal(tab.disabled,true);assert.equal(p.started,false);
+delete inventory[0].capabilities.stage_admin;await boot();const tab=$('ingestion-tab-stages');assert.equal(tab.disabled,true);assert.equal(p.started,false);
 inventory[0].capabilities.stage_admin=false;await dbRefreshAccess();assert.equal(tab.disabled,true);
 inventory[0].capabilities.stage_admin=true;inventory[0].state='REGISTERED';await dbRefreshAccess();assert.equal(tab.disabled,true);
 inventory[0].state='READY';inventory[0].allowed_roles=['data_engineer'];await dbRefreshAccess();assert.equal(tab.disabled,true);

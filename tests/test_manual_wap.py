@@ -29,6 +29,7 @@ from query_context import QueryError
 import sqlglot
 from sqlglot import exp
 import test_dataops_service as boundary_tests
+from fixture_lifecycle import setup_fixture
 
 
 class ManualWapTests(unittest.TestCase):
@@ -83,9 +84,7 @@ class ManualWapTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM wap_model_versions').fetchone()[0], 0)
 
     def setUp(self):
-        self.b = boundary_tests.DataOpsTests()
-        self.b.setUp()
-        self.addCleanup(self.b.doCleanups)
+        self.b = setup_fixture(self, boundary_tests.DataOpsTests())
         self.principal, self.context = self.b.principal, self.b.context()
         self.owner = self.b.fixture.principal('owner')
         self.admin = self.b.context(principal=self.owner, role='admin')

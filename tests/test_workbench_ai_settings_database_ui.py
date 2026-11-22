@@ -26,7 +26,7 @@ class AISettingsDatabaseUI(unittest.TestCase):
         self.javascript(r"""
 await settingsBoot();worksheets=[];worksheetId='';inventory=[];schemas=[];calls.length=0;dbControls();
 assert.equal($('ai-settings-button').disabled,false);await settingsOpen();
-assert.equal($('ai-settings').open,true);assert.equal($('ai-model').value,'test-model');assert.equal($('ai-key').value,'');
+assert.equal($('ai-settings').hidden,false);assert.equal($('ai-model').value,'test-model');assert.equal($('ai-key').value,'');
 assert.deepEqual(calls.map(c=>c.path),['/api/session','/api/v1/bears/ai-config','/api/session']);
 assert.deepEqual(settingsCalls()[0].options,{headers:{'X-Shirokuma-Role':'admin'}});
 assert.equal($('ai-test').disabled,false);settingsEdit('ai-key','new-secret');await settingsSave();
@@ -62,9 +62,9 @@ for(const action of [settingsTest,settingsSave]){
 
     def test_non_p_db_admin_false_like_p_and_lower_header_or_ceiling_denied(self):
         self.javascript(r"""
-await settingsBoot();for(const flag of [false,'true',1,null]){session.platform_admin=flag;dbAdminSession(session);dbControls();await settingsOpen();assert.equal($('ai-settings-button').disabled,true);assert.ok(!$('ai-settings').open);}
-session.platform_admin=true;dbAdminSession(session);for(const role of ['bi_viewer','data_engineer']){currentRole=role;dbControls();await settingsOpen();assert.equal($('ai-settings-button').disabled,true);}
-currentRole='admin';dbUpdateMaximumRole('data_engineer');await settingsOpen();assert.equal($('ai-settings-button').disabled,true);assert.equal(settingsCalls().length,0);
+await settingsBoot();for(const flag of [false,'true',1,null]){session.platform_admin=flag;dbAdminSession(session);dbControls();calls.length=0;await settingsOpen();assert.equal($('ai-settings-button').disabled,false);assert.equal($('ai-settings').hidden,true);assert.equal($('ai-settings-readonly').hidden,false);assert.equal(settingsCalls().length,0);}
+session.platform_admin=true;dbAdminSession(session);for(const role of ['bi_viewer','data_engineer']){currentRole=role;dbControls();calls.length=0;await settingsOpen();assert.equal($('ai-settings').hidden,true);assert.equal($('ai-settings-readonly').hidden,false);assert.equal(settingsCalls().length,0);}
+currentRole='admin';dbUpdateMaximumRole('data_engineer');calls.length=0;await settingsOpen();assert.equal($('ai-settings').hidden,true);assert.equal($('ai-settings-readonly').hidden,false);assert.equal(settingsCalls().length,0);
 """)
 
     def test_concurrent_save_test_blocked_edits_invalidate_labels_and_keep_secret(self):
@@ -78,7 +78,7 @@ settingsEdit('ai-model','edited');delayed.resolve({status:'connected',latency_ms
 await settingsBoot();for(const kind of ['get','test','save'])for(const lose of ['close','role']){
 route=async()=>configReply();if(kind!=='get')await settingsOpen();const delayed=deferred();route=()=>delayed.promise;
 const pending=kind==='get'?settingsOpen():kind==='test'?settingsTest():settingsSave();await tick();
-if(lose==='role'){currentRole='bi_viewer';dbControls();assert.equal($('ai-settings').open,false);assert.equal($('ai-key').value,'');currentRole='admin';dbControls();}else settingsClose();
+if(lose==='role'){currentRole='bi_viewer';dbControls();assert.equal($('ai-settings').hidden,true);assert.equal($('ai-key').value,'');currentRole='admin';dbControls();}else settingsClose();
 route=async()=>({...configReply(),model:'fresh'});await settingsOpen();settingsEdit('ai-key','fresh-secret');const count=settingsCalls().length;
 delayed.resolve(kind==='test'?{status:'connected',latency_ms:99}:{...configReply(),model:'stale',api_key:'SECRET'});await pending;
 assert.equal($('ai-model').value,'fresh');assert.equal($('ai-key').value,'fresh-secret');assert.equal($('ai-config-status').textContent,t('Settings changed; test again.'));assert.equal(settingsCalls().length,count);assert.equal($('ai-save').disabled,false);settingsClose();}
@@ -92,7 +92,7 @@ if(loss==='account'){session.platform_admin=false;await settingsTest();}
 else if(loss==='identity'){dbPrincipal=JSON.stringify(['other',true]);dbControls();}
 else if(loss==='maximum')dbUpdateMaximumRole('bi_viewer');else if(loss==='header'){currentRole='data_engineer';dbControls();}
 else{route=async()=>({http:Number(loss),body:{error:'SECRET'}});await settingsTest();}
-assert.equal($('ai-settings').open,false);assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');assert.equal($('ai-config-status').hidden,true);assert.equal($('ai-save').disabled,true);
+assert.equal($('ai-settings').hidden,true);assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');assert.equal($('ai-config-status').hidden,true);assert.equal($('ai-save').disabled,true);
 }
 """)
 
@@ -100,7 +100,7 @@ assert.equal($('ai-settings').open,false);assert.equal($('ai-key').value,'');ass
         self.javascript(r"""
 await settingsBoot();for(const stage of ['headers','body']){
 const delayed=deferred();sessionRoute=()=>stage==='headers'?delayed.promise:{http:200,body:delayed.promise};const pending=settingsOpen();await tick();settingsClose();sessionRoute=null;await settingsOpen();const model=$('ai-model').value;
-delayed.resolve(stage==='headers'?{http:403,body:{error:'SECRET'}}:{...session,platform_admin:false});await pending;assert.equal(dbAdmin.platform,true);assert.equal($('ai-settings').open,true);assert.equal($('ai-model').value,model);assert.equal($('ai-save').disabled,false);settingsClose();}
+delayed.resolve(stage==='headers'?{http:403,body:{error:'SECRET'}}:{...session,platform_admin:false});await pending;assert.equal(dbAdmin.platform,true);assert.equal($('ai-settings').hidden,false);assert.equal($('ai-model').value,model);assert.equal($('ai-save').disabled,false);settingsClose();}
 """)
 
     def test_native_close_ignores_late_api_body_denial_and_rejection_for_all_actions(self):
@@ -109,11 +109,11 @@ await settingsBoot();for(const kind of ['get','test','save'])for(const outcome o
  route=async()=>configReply();if(kind!=='get')await settingsOpen();
  const delayed=deferred();route=()=>outcome==='body'?{http:200,body:delayed.promise}:delayed.promise;
  const pending=kind==='get'?settingsOpen():kind==='test'?settingsTest():settingsSave();await tick();
- $('ai-settings').close();assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');
+ settingsClose();assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');
  route=async()=>({...configReply(),model:'fresh'});await settingsOpen();settingsEdit('ai-key','fresh-secret');
  if(outcome==='rejection')delayed.reject(Error('SECRET failure'));
  else delayed.resolve(outcome==='denial'?{http:403,body:{error:'SECRET'}}:{...configReply(),model:'stale',status:'connected',latency_ms:99});
- await pending;assert.equal(dbAdmin.platform,true);assert.equal($('ai-settings').open,true);
+ await pending;assert.equal(dbAdmin.platform,true);assert.equal($('ai-settings').hidden,false);
  assert.equal($('ai-model').value,'fresh');assert.equal($('ai-key').value,'fresh-secret');
  assert.equal($('ai-config-status').textContent,t('Settings changed; test again.'));assert.equal($('ai-save').disabled,false);settingsClose();
 }
@@ -126,7 +126,7 @@ await settingsBoot();for(const kind of ['get','test','save'])for(const loss of [
  const delayed=deferred();route=()=>delayed.promise;
  const pending=kind==='get'?settingsOpen():kind==='test'?settingsTest():settingsSave();await tick();
  sessionRoute=async()=>({...session,...loss});delayed.resolve(kind==='test'?{status:'connected',latency_ms:99}:configReply());await pending;
- assert.equal(dbAdmin.platform,false);assert.equal($('ai-settings').open,false);assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');assert.equal($('ai-config-status').hidden,true);assert.equal($('ai-save').disabled,true);
+ assert.equal(dbAdmin.platform,false);assert.equal($('ai-settings').hidden,true);assert.equal($('ai-key').value,'');assert.equal($('ai-model').value,'');assert.equal($('ai-config-status').hidden,true);assert.equal($('ai-save').disabled,true);
 }
 """)
 

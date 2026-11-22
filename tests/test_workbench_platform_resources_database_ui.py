@@ -49,7 +49,7 @@ class PlatformResourcesDatabaseUI(unittest.TestCase):
 assert.equal($('observation-resources-panel'),null);session.platform_admin=true;inventory=[];schemas=[];worksheets=[];worksheetId='';
 dbPrincipal=JSON.stringify([session.username,session.authenticated]);dbMaximumRole='admin';dbRuntimeInstall();
 const panel=$('observation-resources-panel');assert.equal(panel.parentElement,$('compute-usage-list'));assert.equal(panel.role,'region');assert.equal(panel['aria-labelledby'],'observation-resources-title');
-assert.equal($('compute-usage-list').children.indexOf(panel),0);assert.ok($('compute').children.indexOf($('compute-usage'))>$('compute').children.indexOf($('runtime-panel')));
+assert.equal($('compute-usage-list').children.indexOf(panel),0);assert.ok($('compute-atlas').children.indexOf($('compute-usage'))>$('compute-atlas').children.indexOf($('compute-runtime-host')));assert.ok($('compute-runtime-host').descendants().includes($('runtime-panel')));
 assert.equal(calls.length,0);assert.equal($('observation-resources-fetch').disabled,true);assert.equal($('observation-resources-auth').disabled,false);
 for(let i=0;i<3;i++){dbRuntimeInstall();dbResourcesInstall();dbPlatformSync();}assert.equal($('observation-resources-panel'),panel);assert.equal($('compute').descendants().filter(n=>n.id===panel.id).length,1);
 await $('observation-resources-auth').onclick();assert.deepEqual(calls.map(c=>c.path),['/api/session']);assert.equal(calls[0].options,undefined);
@@ -142,9 +142,66 @@ if(kind==='resource')await resourceFetch(denied);else{sessionRoute=()=>denied;aw
 
     def test_stale_auth_response_and_body_cannot_downgrade_or_restore(self):
         self.navigation_javascript(r"""
-await resourceBoot();$('tab-compute').click();for(const bodyStage of [false,true])for(const denied of [false,true]){
+await resourceBoot();dbAISettings.autoOpened=true;$('tab-compute').click();for(const bodyStage of [false,true])for(const denied of [false,true]){
 const old=deferred();sessionRoute=()=>bodyStage?{http:200,body:old.promise}:old.promise;const pending=dbResourcesRefreshAuth();await tick();$('tab-warehouse').click();$('tab-compute').click();sessionRoute=null;await dbResourcesRefreshAuth();await resourceFetch();const saved=dbResources.record;
 old.resolve(denied?{http:403,body:{platform_admin:false}}:{...session,authenticated:false,platform_admin:false,maximum_role:'bi_viewer'});await pending;assert.equal(dbResources.record,saved);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');}
+""")
+
+    def test_stale_fetch_and_auth_finally_preserve_newer_pending_token(self):
+        self.javascript(r"""
+await resourceBoot();
+for(const action of ['fetch','auth'])for(const transition of ['navigation','principal','platform'])for(const mode of ['fetch-success','fetch-error','fetch-401','fetch-403','body-success','body-error','body-500']){
+ await resourceFetch();const saved=dbResources.record,hold=deferred();let parsed=0;const auth=action==='auth';
+ const reply=()=>auth?{...session}:resourceReply();
+ const oldRoute=mode.startsWith('body-')?async()=>auth?{http:mode==='body-500'?500:200,get body(){parsed++;return hold.promise;}}:{http:mode==='body-500'?500:200,get rawBody(){parsed++;return hold.promise;}}:()=>hold.promise;
+ if(auth)sessionRoute=oldRoute;else route=oldRoute;
+ const button=$('observation-resources-'+action),old=button.onclick();await tick();if(mode.startsWith('body-'))assert.equal(parsed,1);
+ if(transition==='principal'){
+  const owner=dbPrincipal;dbPrincipal=JSON.stringify(['other',true]);dbAdminSession({...session,username:'other'});dbControls();dbPrincipal=owner;dbAdminSession(session);dbControls();
+ }else if(transition==='platform'){dbAdminSession({...session,platform_admin:false});dbAdminSession(session);dbControls();}
+ else{const tab=activeTab;activeTab=tab==='warehouse'?'compute':'warehouse';dbControls();activeTab=tab;dbControls();}
+ assert.equal(dbResources.busy,null);const expected=dbResources.record;assert.equal(expected,transition==='navigation'?saved:null);
+ const newer=deferred();if(auth)sessionRoute=()=>newer.promise;else route=()=>newer.promise;
+ const pending=button.onclick();await tick();const token=dbResources.busy,notice=dbResources.notice,count=calls.length;
+ assert.ok(token);assert.equal($('observation-resources-auth').disabled,true);assert.equal($('observation-resources-fetch').disabled,true);
+ if(mode.endsWith('error'))hold.reject(Error('stale secret'));
+ else if(mode==='fetch-401'||mode==='fetch-403')hold.resolve({http:Number(mode.slice(-3)),get body(){parsed++;throw Error('must not parse');}});
+ else hold.resolve(mode.startsWith('body-')&&!auth?JSON.stringify(reply()):reply());
+ await old;assert.equal(dbResources.busy,token,action+":"+mode+": old settled");assert.equal(dbResources.record,expected);assert.equal(dbResources.notice,notice);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');
+ if(mode.startsWith('fetch-'))assert.equal(parsed,0);
+ assert.equal($('observation-resources-auth').disabled,true);assert.equal($('observation-resources-fetch').disabled,true);
+ await $('observation-resources-auth').onclick();await $('observation-resources-fetch').onclick();assert.equal(calls.length,count);
+ const value=reply();if(!auth)value.resources.deployments[0].containers[0].limits.cpu='7';newer.resolve(value);await pending;
+ assert.equal(dbResources.busy,null);assert.equal($('observation-resources-fetch').disabled,false);
+ if(auth){assert.equal(dbResources.record,expected);assert.equal(dbResources.notice,'Resource authority verified. Select Fetch resource settings.');}
+ else assert.equal(dbResources.record.resources.deployments[0].containers[0].limits.cpu,'7');sessionRoute=null;
+}
+""")
+
+    def test_session_failure_policy_and_authority_changing_success_notice(self):
+        self.javascript(r"""
+await resourceBoot();await computeFetch();
+for(const failure of ['network','malformed','500','revoked']){
+ sessionRoute=null;dbAdminSession(session);await computeFetch();await resourceFetch();const saved=dbResources.record,peer=dbPlatform.record,version=dbAuthorizationVersion;
+ sessionRoute=async()=>{if(failure==='network')throw Error('secret');if(failure==='malformed')return {malformed:true};return failure==='500'?{http:500,body:{...session}}:{...session,platform_admin:false};};
+ await $('observation-resources-auth').onclick();
+ if(['network','malformed'].includes(failure)){
+  assert.equal(dbResources.record,saved);assert.equal(dbPlatform.record,peer);assert.equal(dbAdmin.platform,true);assert.equal(dbAuthorizationVersion,version);assert.equal(dbResources.notice,'Resource settings unavailable. Explicitly refresh authority or fetch again.');
+ }else{assert.equal(dbResources.record,null);assert.equal(dbPlatform.record,null);assert.equal(dbAdmin.platform,false);assert.equal(dbResources.notice,'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.');}
+ assert.equal(dbResources.busy,null);
+}
+""")
+
+    def test_inflight_locale_only_change_keeps_resource_request(self):
+        self.javascript(r"""
+await resourceBoot();
+for(const action of ['fetch','auth']){
+ const hold=deferred();if(action==='auth')sessionRoute=()=>hold.promise;else route=()=>hold.promise;
+ const pending=$('observation-resources-'+action).onclick();await tick();const token=dbResources.busy;
+ setLanguage('ja');assert.equal(dbResources.busy,token);setLanguage('en');assert.equal(dbResources.busy,token);
+ const tab=activeTab,bearScope=dbObservations.sre.scope;scope('sre',bearScope==='platform'?'database':'platform');assert.equal(activeTab,tab);assert.equal(dbResources.busy,token);scope('sre',bearScope);assert.equal(activeTab,tab);assert.equal(dbResources.busy,token);
+ hold.resolve(action==='auth'?{...session}:resourceReply());await pending;assert.ok(dbResources.record);assert.equal(dbResources.busy,null);sessionRoute=null;
+}
 """)
 
     def test_same_authority_preserves_four_drafts_unknown_runtime_receipts_and_audit_filters(self):
@@ -152,7 +209,7 @@ old.resolve(denied?{http:403,body:{platform_admin:false}}:{...session,authentica
 const nativeAppend=Node.prototype.append;Node.prototype.append=function(...items){return nativeAppend.apply(this,items.map(n=>typeof n==='string'?Object.assign(new Node('text'),{textContent:n}):n));};
 session.platform_admin=true;await boot();request('proposal');await choose();await submit(pendingProposal({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbProposalHeld().length,1);
 await curatorContext();objects=[curatorObject()];await dbCuratorLoad();change('object','0');await curatorSubmit(curatorPending({state:'UNKNOWN',inference_state:'UNKNOWN'}));assert.equal(dbCuratorHeld().length,1);
-route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
+route=async()=>wrap(record({state:'UNKNOWN',text:null,inference_state:'UNKNOWN'}));await $('copilot-explain').onclick();workbenchSetComputeStatus('available','tone-ok');route=async()=>envelope(dbRuns.get(worksheetId),{state:'UNKNOWN'});await dbRunQuery();
 const wap=dataopsPanels.get('p35-wap');schemas[0].capabilities.wap_models=true;route=async path=>({context:JSON.parse(new URL(path,'http://fixture').searchParams.get('context')),items:[]});await dataopsRefresh(wap);route=async()=>{throw Error('lost ACK');};await dataopsSubmit(wap,'/api/v1/wap/build',{model_id:'existing-model',version:1},{});
 editSQL('SELECT kept SQL');editDoctor('SELECT kept Doctor');request('kept Copilot');$('p35-wap-sql').value='SELECT kept WAP';wap.sources[0].alias.value='kept';
 await readyObservation('sre');await readyObservation('policy');await fetchObservation('sre');await fetchObservation('policy');const sre=dbObservations.sre.record,policy=dbObservations.policy.record;

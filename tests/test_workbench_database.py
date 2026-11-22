@@ -59,6 +59,45 @@ class WorkbenchDatabaseTests(unittest.TestCase):
         self.assertFalse(session['platform_admin'])
         self.assertNotIn('password', json.dumps(session))
 
+    def test_chart_asset_bytes_headers_and_no_explicit_role(self):
+        for name, mime in (('result_chart.js', 'application/javascript; charset=utf-8'),
+                           ('base_i18n.js', 'application/javascript; charset=utf-8'),
+                           ('saved_lineage.js', 'application/javascript; charset=utf-8'),
+                           ('result_export.js', 'application/javascript; charset=utf-8'),
+                           ('workbench.css', 'text/css; charset=utf-8')):
+            path, asset = '/assets/' + name, wb.INDEX.with_name(name)
+            for role in (None, 'admin', 'data_engineer', 'bi_viewer'):
+                with self.subTest(path=path, role=role):
+                    handler = object.__new__(wb.WorkbenchHandler)
+                    handler.path = path
+                    handler.headers = Message()
+                    if role:
+                        handler.headers['X-Shirokuma-Role'] = role
+                    handler.wfile = io.BytesIO()
+                    statuses, headers = [], {}
+                    handler.send_response = statuses.append
+                    handler.send_header = lambda key, value: headers.update({key: value})
+                    with patch('http.server.BaseHTTPRequestHandler.end_headers'):
+                        handler.do_GET()
+                    self.assertEqual(statuses, [200])
+                    self.assertEqual(headers['Content-Type'], mime)
+                    self.assertEqual(headers['Cache-Control'], 'no-store')
+                    self.assertEqual(int(headers['Content-Length']), len(handler.wfile.getvalue()))
+                    self.assertEqual(handler.wfile.getvalue(), asset.read_bytes())
+
+    def test_chart_asset_rejects_query_body_and_unknown_paths(self):
+        for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/workbench.css'):
+            with self.subTest(path=path):
+                for suffix in ('?x=1', '?role=admin', '?x=1&x=2'):
+                    self.assertEqual(self.request(path + suffix, roles=())[0], 400)
+                self.assertEqual(self.request(path, body={}, roles=())[0], 400)
+                self.assertEqual(self.request(path, roles=(),
+                    headers=[('Transfer-Encoding', 'chunked')])[0], 400)
+                self.assertEqual(self.request(path + '/extra', roles=())[0], 404)
+        for path in ('/assets/unknown.js', '/assets/unknown.css', '/assets/../index.html',
+                     '/assets/%2e%2e/index.html'):
+            self.assertEqual(self.request(path, roles=())[0], 404)
+
     def test_display_patch_contract_origin_headers_duplicate_json_and_auth(self):
         import display_management
         admin = request_auth.AuthenticatedPrincipal('admin', 'admin', True)
@@ -212,6 +251,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
     def test_inventory_routes_and_query_pages(self):
         routes = [('/api/v1/databases', 'list_databases'), ('/api/v1/databases/d/schemas', 'list_schemas'),
                   ('/api/v1/schemas/s/objects?kind=TABLE&q=a&limit=2', 'list_objects'),
+                  ('/api/v1/objects/search?q=a&limit=2', 'search_objects'),
                   ('/api/v1/objects/resolve?database_id=d&schema_id=s&name=a', 'resolve_object'),
                   ('/api/v1/objects/o?detail=columns', 'object_detail')]
         for path, function in routes:

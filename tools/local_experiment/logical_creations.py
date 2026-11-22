@@ -561,7 +561,8 @@ def create(principal, role, payload, key):
             root_id+'/CREATE/1', _json(dict(sql_catalog=intent['sql_catalog'], creation_mode='logical_v1')))
         dbid = registered['database_id']
         metadata = display_management._mutate(principal, role, 'database', dbid,
-            dict(expected_revision=1, display_name=intent['display_name'], description=intent['description']),
+            dict(expected_revision=1, display_name=intent['display_name'], description=intent['description'],
+                 team=intent['team']),
             root_id+'/METADATA/1', connection=db)
         grants = {}
         for grant in intent['initial_grants']:
@@ -1503,8 +1504,8 @@ def _summary(db, root, principal):
     grants = [dict(r) for r in db.execute('''SELECT g.principal_id,g.maximum_role,e.maximum_role AS effective_role,
         g.revision,e.epoch FROM grants g JOIN effective_grants e USING(principal_id,database_id) WHERE g.database_id=?''', (root['database_id'],))]
     return dict(creation_id=root['id'], database_id=root['database_id'], sql_catalog=database['sql_catalog'],
-        display_name=database['display_name'], description=database['description'], requester_id=root['actor'],
-        revision=root['revision'], lifecycle=database['state'].upper(), initial_grants=grants, plans=[],
+        display_name=database['display_name'], description=database['description'], team=database['team'],
+        requester_id=root['actor'], revision=root['revision'], lifecycle=database['state'].upper(), initial_grants=grants, plans=[],
         blocker={'UNKNOWN':'RECONCILIATION_REQUIRED','BLOCKED':'CREATION_FAILED','STOPPED':'PRINCIPAL_STOPPED'}.get(state),
         progress_code=state, next_actions=actions if principal.principal_id == root['actor'] else [],
         access_source='platform_admin', creation_mode='logical_v1', foundation_id=root['enrollment_id'],

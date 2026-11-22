@@ -18,7 +18,7 @@ import test_workbench_admin_ui as admin
 SETUP = admin.SETUP + r'''
 const C='/api/v1/admin/database-creations';
 const process=(extra={})=>({creation_id:'creation',database_id:'db',requester_id:'owner',revision:3,
- sql_catalog:'sales',display_name:'売上 <script> 🐻',description:'literal <img>',initial_grants:[],
+ sql_catalog:'sales',display_name:'売上 <script> 🐻',description:'literal <img>',team:'Data Team',initial_grants:[],
  lifecycle:'REGISTERED',progress_code:'PLAN_REVIEW_REQUIRED',plans:[],next_actions:['plans','reconcile'],access_source:'platform_admin',...extra});
 const plan=(phase='bootstrap',state='AWAITING_APPLY',purpose='APPLY')=>({plan_id:phase+'-plan',operation_id:phase+'-op',phase,purpose,state,
  generation_id:phase+'-generation',sequence:1,operation_revision:2,delivery_digest:'digest-'+phase,recovery_digest:purpose==='VERIFY_RECOVERY'?'recovery':null,
@@ -38,7 +38,7 @@ adminRoute=async(path,options)=>{
 };
 dbCreation.capability=null;await dbCreationLoad();
 const edit=(id,value)=>{$(id).value=value;$(id).oninput();};
-const begin=()=>{dbCreation.process=null;dbCreationRender();edit('db-creation-sql_catalog','new_sales');edit('db-creation-display_name','名前 <script> 🐻');edit('db-creation-description','説明 <img>');};
+const begin=()=>{dbCreation.process=null;dbCreationRender();edit('db-creation-sql_catalog','new_sales');edit('db-creation-team','Data Team');edit('db-creation-display_name','名前 <script> 🐻');edit('db-creation-description','説明 <img>');};
 // Install a successful detail snapshot for tests that exercise the renderer directly.
 const show=p=>{creation=p;dbCreation.process=structuredClone(p);dbCreation.checkedID=p.creation_id;dbCreation.readFailed=false;dbCreationRender();};
 const historyPicker=()=>$('db-creation-history-picker');
@@ -88,11 +88,12 @@ assert.equal(creationPosts.length,1);
 
     def test_name_form_required_optional_help_and_primary_controls_preserve_payload(self):
         self.javascript(SETUP + r'''
-dbCreation.process=null;dbCreation.stage=0;dbCreation.draft={sql_catalog:'',display_name:'',description:'',initial_grants:[]};dbCreationRender();
+dbCreation.process=null;dbCreation.stage=0;dbCreation.draft={sql_catalog:'',display_name:'',description:'',team:'',initial_grants:[]};dbCreationRender();
 for(const locale of ['en','ja']){
  setLanguage(locale);dbCreationRender();
  for(const [key,label,help] of [
   ['sql_catalog','SQL catalog name (required)','Required. Example: analytics. Start with a lowercase letter, then use lowercase letters, digits or underscores (up to 31 characters).'],
+  ['team','Team (required)','Required. 1 to 64 characters. Existing teams are suggestions.'],
   ['display_name','Display name (optional)','Optional. If empty, the SQL catalog name is used.'],
   ['description','Description (optional)','Optional. Add a short description of this database.']]){
   const field=$('db-creation-'+key),hint=$('db-creation-'+key+'-help');
@@ -101,7 +102,7 @@ for(const locale of ['en','ja']){
  }
  assert.match($('db-creation-sql_catalog-help').textContent,/analytics/);assert.match($('db-creation-sql_catalog-help').textContent,/31/);
  assert.equal($('db-creation-next').className,'primary');
- edit('db-creation-sql_catalog','analytics');await $('db-creation-next').onclick();
+ edit('db-creation-sql_catalog','analytics');edit('db-creation-team','Data Team');await $('db-creation-next').onclick();
  assert.equal($('db-creation-next').className,'primary');
  await $('db-creation-next').onclick();assert.equal($('db-creation-submit').className,'primary');
  assert.equal(dbCreation.draft.display_name,'');assert.equal(dbCreation.draft.description,'');assert.deepEqual(dbCreation.draft.initial_grants,[]);
@@ -109,7 +110,7 @@ for(const locale of ['en','ja']){
  await $('db-creation-back').onclick();await $('db-creation-back').onclick();
 }
 await $('db-creation-next').onclick();await $('db-creation-next').onclick();await $('db-creation-submit').onclick();
-assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'analytics',display_name:'analytics',description:'',initial_grants:[]});
+assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'analytics',display_name:'analytics',description:'',team:'Data Team',initial_grants:[]});
 ''')
 
     def test_summary_distinguishes_ready_retired_current_and_future_maintenance(self):
@@ -184,12 +185,9 @@ for(const locale of ['en','ja']){
  assert.equal(steps.children[0].getAttribute('aria-current'),'step');
  assert.equal(steps.children[3].textContent,t('Foundation setup (approval 1/2)'));
  assert.equal(steps.children[4].textContent,t('SQL connection setup (approval 2/2)'));
- const text=contents($('db-creation-form'));assert.ok(text.includes(t(dbCreationGuidance)));
- assert.match(text,locale==='ja'?/数分.*LOCAL 全体/:/several minutes.*all of LOCAL/);
- assert.equal($('db-creation-next-action').textContent,t('Enter a name, then choose who can use the database.'));
+ assert.equal($('db-creation-form').descendants().some(node=>node.id==='db-creation-next-action'),false);
  await $('db-creation-next').onclick();assert.equal($('db-creation-journey').children[0].children[1].getAttribute('aria-current'),'step');
  await $('db-creation-next').onclick();assert.equal($('db-creation-journey').children[0].children[2].getAttribute('aria-current'),'step');
- assert.ok(contents($('db-creation-form')).includes(t(dbCreationGuidance)));
  await $('db-creation-back').onclick();await $('db-creation-back').onclick();
 }
 assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
@@ -557,10 +555,10 @@ assert.equal(dbCreation.error,'');assert.equal(creationPosts.length,0);assert.eq
 ''')
 
     def test_history_open_waits_for_authorized_detail_before_selecting_blocked_creation(self):
-        self.javascript(r'''
-globalThis.location={href:'http://localhost/#workbench?keep=yes',origin:'http://localhost'};
+        self.javascript(SETUP + r'''
+globalThis.location={href:'http://localhost/#databases/create?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
-''' + SETUP + r'''
+dbCreation.scope=dbCreationScope();dbCreation.storageKey=dbCreationStorageKey();
 show(process({creation_id:'p54cli',sql_catalog:'p54cli',lifecycle:'READY',progress_code:'READY',next_actions:[]}));
 dbCreationRememberURL('p54cli');
 const stopped=process({creation_id:'p54stop',sql_catalog:'p54stop',lifecycle:'REGISTERED',progress_code:'BLOCKED',
@@ -588,7 +586,8 @@ const assertSelected=()=>{
  assert.ok(controls.includes('db-creation-withdraw'));assert.ok(controls.includes('db-creation-reconcile'));
  for(const id of ['db-creation-sql','db-creation-bootstrap','db-creation-full','db-creation-replan','db-creation-approve'])assert.equal(controls.includes(id),false);
  const url=new URL(location.href),params=new URLSearchParams(url.hash.split('?')[1]);
- assert.equal(params.get('creation'),'p54stop');assert.equal(params.get('creation_environment'),'envA');assert.equal(params.get('keep'),'yes');
+ assert.equal(url.hash.split('?')[0],'#databases/create');
+ assert.equal(params.get('creation'),'p54stop');assert.equal(params.get('creation_environment'),'envA');
  assert.equal(url.search,'');assert.equal(JSON.stringify(worksheets),sheets);assert.equal(worksheetId,worksheet);
  assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
  assert.equal(calls.some(c=>c.path.startsWith('/api/v1/queries')&&c.options?.method==='POST'),false);
@@ -606,16 +605,16 @@ assert.equal($('db-creation-withdraw').disabled,false);assert.equal($('db-creati
         import workbench_server
         import request_auth
         source = '''
-globalThis.location={href:'http://localhost/',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/#databases/create',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 const dbCreation={environment_id:'envA'};function dbCreationSave(){}
 ''' + admin.harness.function('dbCreationURL') + '\n' + admin.harness.function('dbCreationRememberURL') + '''
 dbCreationRememberURL('creation');console.log(location.href);
 '''
-        result = subprocess.run(['node','-e',source],capture_output=True,text=True)
+        result = subprocess.run(['node', '-'], input=source,capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
         generated = result.stdout.strip()
-        self.assertEqual(generated,'http://localhost/#creation=creation&creation_environment=envA')
+        self.assertEqual(generated,'http://localhost/#databases/create?creation=creation&creation_environment=envA')
         # urllib, like a browser, strips the fragment from the HTTP selector.
         selector = Request(generated).selector
         self.assertEqual(selector,'/')
@@ -641,22 +640,27 @@ dbCreationRememberURL('creation');console.log(location.href);
         self.assertEqual(status,400)
         self.assertEqual(json.loads(body)['code'],'INVALID_INPUT')
 
-    def test_fragment_helpers_preserve_unrelated_route_and_hash_state(self):
+    def test_fragment_helpers_only_write_creation_state_on_the_creation_screen(self):
         self.javascript(SETUP + r'''
 let replacements=0;
 globalThis.history={replaceState:(_,__,url)=>{replacements++;location.href=String(url);}};
 for(const hash of ['','#worksheet-a','#sql','#worksheet-a?filter=one%20two','#filter=one%20two&pane=sql']){
  globalThis.location={href:'http://localhost/workbench?view=sql&locale=ja'+hash,origin:'http://localhost'};
- const before=replacements;dbCreationURL(null);assert.equal(replacements,before);
- const original=new URL(location.href);dbCreationRememberURL('creation');const saved=new URL(location.href);
- assert.equal(saved.pathname,original.pathname);assert.equal(saved.searchParams.get('view'),'sql');assert.equal(saved.searchParams.get('locale'),'ja');
- assert.equal(saved.searchParams.has('creation'),false);assert.equal(saved.searchParams.has('creation_environment'),false);
- assert.equal(dbCreationURL().id,'creation');assert.equal(dbCreationURL().environment,'envA');
- dbCreationURL(null);const cleared=new URL(location.href);
- assert.equal(dbCreationURL().id,null);assert.equal(cleared.pathname,original.pathname);assert.equal(cleared.search,original.search);
- if(!hash.includes('='))assert.equal(cleared.hash,hash);
- else{const params=new URLSearchParams(cleared.hash.slice(cleared.hash.includes('?')?cleared.hash.indexOf('?')+1:1));assert.equal(params.get('filter'),'one two');assert.equal(params.has('creation'),false);if(hash.startsWith('#worksheet-a'))assert.ok(cleared.hash.startsWith('#worksheet-a?'));else assert.equal(params.get('pane'),'sql');}
+ const original=new URL(location.href);
+ dbCreationURL(null);dbCreationRememberURL('creation');
+ assert.equal(location.href,original.href);assert.equal(replacements,0);
 }
+globalThis.location={href:'http://localhost/workbench?view=sql&locale=ja#databases/create?filter=one%20two&pane=sql',origin:'http://localhost'};
+dbCreationRememberURL('creation');const saved=new URL(location.href);
+assert.equal(saved.pathname,'/workbench');assert.equal(saved.searchParams.get('view'),'sql');assert.equal(saved.searchParams.get('locale'),'ja');
+assert.equal(saved.hash.split('?')[0],'#databases/create');
+assert.equal(new URLSearchParams(saved.hash.split('?')[1]).get('filter'),'one two');
+assert.equal(new URLSearchParams(saved.hash.split('?')[1]).get('pane'),'sql');
+assert.equal(dbCreationURL().id,'creation');assert.equal(dbCreationURL().environment,'envA');
+dbCreationURL(null);const cleared=new URL(location.href),params=new URLSearchParams(cleared.hash.split('?')[1]);
+assert.equal(dbCreationURL().id,null);assert.equal(cleared.search,saved.search);
+assert.equal(cleared.hash.split('?')[0],'#databases/create');assert.equal(params.has('creation'),false);
+assert.equal(params.get('filter'),'one two');assert.equal(params.get('pane'),'sql');
 assert.equal(creationPosts.length,0);dbCreationStop();
 ''')
 
@@ -668,14 +672,14 @@ globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 for(let reload=0;reload<2;reload++){
  dbCreationClear();activeTab='warehouse';const before=calls.length;
  await initializeDatabaseUI(session);await tick();
- assert.equal(activeTab,'db-admin');assert.equal($('db-admin').hidden,false);assert.equal($('tab-db-admin').getAttribute('aria-selected'),'true');
+ assert.equal(activeTab,'db-admin');assert.equal($('db-admin').hidden,false);assert.equal($('tab-db-admin').getAttribute('aria-current'),'page');
  assert.equal(dbCreation.process.creation_id,'creation');assert.equal(dbCreation.environment_id,'envA');assert.match(contents($('db-creation-process')),/sales/);
  assert.equal(calls.slice(before).filter(c=>c.path==='/api/v1/admin/databases').length,1);
  assert.equal(calls.slice(before).some(c=>c.path===C+'/creation'),true);
  assert.equal(calls.slice(before).every(c=>!c.options?.method||c.options.method==='GET'),true);
  assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.equal($('sql').value,'SELECT 保存したドラフト');assert.equal(currentRole,role);assert.equal(language,'ja');
  assert.equal(new URL(location.href).searchParams.get('view'),'sql');assert.equal(new URL(location.href).searchParams.has('creation'),false);
- assert.equal(new URL(location.href).hash,'#db-admin?creation=creation&creation_environment=envA');
+ assert.equal(new URL(location.href).hash,'#databases/create?creation=creation&creation_environment=envA');
 }
 assert.equal(creationPosts.length,0);dbCreationStop();
 ''')
@@ -702,7 +706,7 @@ assert.equal($('db-admin').getAttribute('aria-busy'),'true');
 held.resolve(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));await initializing;await dbPageHydration;
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(initialized,true);
 await $('db-creation-sql').onclick();assert.equal(activeTab,'warehouse');
-assert.equal(location.href,'http://localhost/workbench?view=sql#warehouse?panel=details');
+assert.equal(location.href,'http://localhost/workbench?view=sql#sql?panel=details');
 const afterSql=replacements;
 $('tab-ingestion').onclick();await tick();assert.equal(activeTab,'ingestion');
 assert.equal(replacements,afterSql+1);
@@ -724,7 +728,7 @@ const ingest=$('tab-ingestion');ingest.disabled=true;
 const before=replacements;ingest.onclick();
 assert.equal(activeTab,'db-admin');assert.equal(replacements,before);
 currentRole='data_engineer';dbAdminGate();
-assert.equal(activeTab,'warehouse');assert.equal(location.href,'http://localhost/workbench#warehouse');assert.equal(replacements,before+1);
+assert.equal(activeTab,'warehouse');assert.equal(location.href,'http://localhost/workbench#sql');assert.equal(replacements,before+1);
 currentRole='admin';dbAdminGate();location.href=link;await activate($('tab-db-admin'));
 const held=deferred(),old=adminRoute;let detailStarted=false;
 adminRoute=(path,options)=>{
@@ -754,7 +758,7 @@ assert.equal(calls.slice(before).some(c=>c.path===C+'/creation'),false);assert.e
 assert.equal(calls.slice(before).every(c=>!c.options?.method||c.options.method==='GET'),true);dbCreationStop();
 ''')
 
-    def test_initial_creation_url_nonadmin_or_invalid_id_stays_in_worksheet(self):
+    def test_initial_creation_url_nonadmin_or_invalid_id_stays_on_default_home(self):
         for session_change, creation_id in [
             ('session.platform_admin=false', 'creation'),
             ("session.maximum_role='data_engineer';currentRole='data_engineer'", 'creation'),
@@ -766,7 +770,7 @@ assert.equal(calls.slice(before).every(c=>!c.options?.method||c.options.method==
 $('sql').value='SELECT untouched';dbSave();setLanguage('ja');const beforeWorksheets=structuredClone(worksheets);
 globalThis.location={href:'http://localhost/workbench#creation=''' + creation_id + r'''&creation_environment=envA',origin:'http://localhost'};
 dbCreationClear();activeTab='warehouse';''' + session_change + r''';const before=calls.length;
-await initializeDatabaseUI(session);await tick();assert.equal(activeTab,'warehouse');
+await initializeDatabaseUI(session);await tick();assert.equal(activeTab,'home');
 assert.equal(calls.slice(before).some(c=>c.path.startsWith(C)),false);assert.equal(creationPosts.length,0);
 assert.deepEqual(worksheets,beforeWorksheets);assert.equal($('sql').value,'SELECT untouched');assert.equal(language,'ja');
 ''')
@@ -776,7 +780,7 @@ assert.deepEqual(worksheets,beforeWorksheets);assert.equal($('sql').value,'SELEC
 globalThis.location={href:'http://localhost/workbench?view=sql#worksheet-a',origin:'http://localhost'};
 dbCreationClear();activeTab='warehouse';$('sql').value='SELECT untouched';dbSave();
 const original=structuredClone(worksheets),before=calls.length;await initializeDatabaseUI(session);
-assert.equal(activeTab,'warehouse');assert.deepEqual(worksheets,original);assert.equal($('sql').value,'SELECT untouched');
+assert.equal(activeTab,'home');assert.deepEqual(worksheets,original);assert.equal($('sql').value,'SELECT untouched');
 assert.equal(calls.slice(before).some(c=>c.path.startsWith(C)),false);assert.equal(writeCalls().length,0);
 ''')
 
@@ -789,7 +793,7 @@ await $('db-creation-back').onclick();await $('db-creation-back').onclick();
 assert.equal($('db-creation-sql_catalog').value,'new_sales');
 await $('db-creation-next').onclick();await $('db-creation-next').onclick();await $('db-creation-submit').onclick();
 assert.equal(creationPosts.length,1);const call=creationPosts[0];assert.equal(call.path,C);
-assert.deepEqual(JSON.parse(call.options.body),{sql_catalog:'new_sales',display_name:'名前 <script> 🐻',description:'説明 <img>',initial_grants:[]});
+assert.deepEqual(JSON.parse(call.options.body),{sql_catalog:'new_sales',display_name:'名前 <script> 🐻',description:'説明 <img>',team:'Data Team',initial_grants:[]});
 assert.equal(call.options.headers['X-Shirokuma-Role'],'admin');assert.ok(call.options.headers['Idempotency-Key']);
 assert.equal(dbCreation.process.lifecycle,'REGISTERED');
 ''')
@@ -1122,13 +1126,13 @@ await dbAdminOpen();assert.equal(creationPosts.length,1);
 
     def test_url_return_is_get_only_and_preserves_existing_route(self):
         self.javascript(SETUP + r'''
-globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#worksheet-a',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#databases/create',origin:'http://localhost'};
 let replacement;globalThis.history={replaceState:(_,__,url)=>{replacement=String(url);}};
 dbCreation.scope='';dbCreation.process=null;await dbCreationLoad();
 assert.equal(dbCreation.process.creation_id,'creation');assert.equal(creationPosts.length,0);
 assert.equal(new URL(replacement).searchParams.get('view'),'sql');assert.equal(new URL(replacement).searchParams.has('creation'),false);
 assert.equal(new URL(replacement).searchParams.has('creation_environment'),false);
-assert.equal(new URL(replacement).hash,'#worksheet-a?creation=creation&creation_environment=envA');
+assert.equal(new URL(replacement).hash,'#databases/create?creation=creation&creation_environment=envA');
 ''')
 
     def test_session_preflight_denies_mutation_after_current_admin_loss(self):
@@ -1141,7 +1145,7 @@ assert.equal(creationPosts.length,0);assert.equal(dbAdminAllowed(),false);assert
 
     def test_schema_copy_and_explicit_new_creation_refresh_capabilities_preserve_draft(self):
         self.javascript(SETUP + r'''
-globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#worksheet-a',origin:'http://localhost'};
+globalThis.location={href:'http://localhost/workbench?view=sql&creation=creation&creation_environment=envA#databases/create',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
 dbCreationClear();await dbCreationLoad();
 show(process({lifecycle:'READY',progress_code:'READY',next_actions:[]}));
@@ -1155,7 +1159,7 @@ assert.equal($('db-creation-new').textContent,'New creation');
 setLanguage('ja');dbCreationRender();assert.equal($('db-creation-new').textContent,'新しく作成');
 setLanguage('en');dbCreationRender();await $('db-creation-new').onclick();
 assert.equal(dbCreation.process,null);assert.equal(new URL(location.href).searchParams.has('creation'),false);
-assert.equal(new URL(location.href).searchParams.get('view'),'sql');assert.equal(new URL(location.href).hash,'#worksheet-a');
+assert.equal(new URL(location.href).searchParams.get('view'),'sql');assert.equal(new URL(location.href).hash,'#databases/create');
 assert.equal($('db-creation-sql_catalog').value,'unfinished_draft');assert.equal(dbCreation.capability.available,true);
 assert.equal(calls.filter(c=>c.path===C+'/capabilities').length>before,true);assert.equal(creationPosts.length,0);
 show(process());const oldNew=$('db-creation-new').onclick;creationRoute=async()=>{throw Error('lost');};
@@ -1455,12 +1459,13 @@ const saved=JSON.parse(storage.get(keyA)).pending;assert.equal(saved.binding.env
 
 
 LOGICAL_SETUP = r'''
+runtimeStrict=true;
 capability={...capability,creation_mode:'logical_v1',warehouse_state:'ACTIVE',foundation_id:'private-foundation',foundation_revision:7};
 const logical=(extra={})=>process({creation_mode:'logical_v1',foundation_id:'private-foundation',foundation_revision:7,
  binding_revision:2,policy_revision:4,progress_code:'CREATING',plans:[],next_actions:['withdraw'],...extra});
 const visibleIDs=()=>$('db-creation').descendants().map(n=>n.id);
 const noLegacy=()=>assert.doesNotMatch(contents($('db-creation')),/approval [12]\/2|two separate approvals|warehouse maintenance|all of LOCAL|bootstrap|full verification|承認 [12]\/2|個別.*承認|LOCAL 全体|private-foundation|foundation_revision|policy_revision/i);
-const logicalBegin=async()=>{dbCreation.process=null;dbCreation.stage=0;await dbCreationLoad();begin();};
+const logicalBegin=async()=>{dbCreation.process=null;dbCreation.stage=0;await dbCreationLoad();begin();dbCreation.stage=2;dbCreationRender();};
 '''
 
 
@@ -1504,7 +1509,7 @@ assert.deepEqual(dbCreation.list,[ready,previous]);assert.equal(dbCreation.proce
 assert.equal(document.getElementById('db-creation-loading'),null);
 assert.equal($('db-creation-sql_catalog').value,'retained_new_name');
 assert.equal($('db-creation-principal').options.some(option=>option.value==='bob'),true);
-assert.ok(document.getElementById('db-creation-submit'));
+assert.ok(document.getElementById('db-creation-next'));
 assert.equal(dbCreation.pending,null);assert.equal(dbCreation.readFailed,false);assert.equal(dbCreation.error,'');
 assert.equal(creationPosts.length,0);assert.equal(writeCalls().length,0);
 '''
@@ -1552,7 +1557,7 @@ for(const locale of ['en','ja']){
  const reading=dbCreationLoad();await tick();dbCreationRender();assertWaiting();
  held.resolve(structuredClone(capability));await reading;noLegacy();preserve();
  assert.equal(visibleIDs().includes('db-creation-submit'),true);assert.equal(visibleIDs().includes('db-creation-next'),false);
- assert.equal($('db-creation-sql_catalog').value,'retained_name');
+ assert.equal(dbCreation.draft.sql_catalog,'retained_name');
  for(const mode of ['future_v2',null,'']){
   adminRoute=originalRoute;capability.creation_mode=mode;await dbCreationLoad();assertWaiting();
   assert.equal($('db-creation-loading').textContent,t('The database creation service is unavailable. Try refreshing its status.'));
@@ -1565,16 +1570,15 @@ for(const locale of ['en','ja']){
 // Only a successful response with no mode opts into the old backend wizard.
 setLanguage('en');delete capability.creation_mode;await dbCreationLoad();preserve();
 assert.equal($('db-creation-journey').descendants().filter(n=>n.tagName==='LI').length,6);
-assert.match(contents($('db-creation')),/several minutes|two separate approvals/);
+assert.ok($('db-creation-submit'));
 assert.equal(visibleIDs().includes('db-creation-submit'),true);
 assert.equal(frames.slice(0,-1).some(frame=>/approval [12]\/2|two separate approvals|LOCAL 全体/.test(frame)),false);
 ''')
 
     def test_logical_root_list_public_progress_localized_and_legacy_root_mode_independent(self):
-        self.javascript(r'''
-globalThis.location={href:'http://localhost/#db-admin?keep=yes',origin:'http://localhost'};
+        self.javascript(SETUP + LOGICAL_SETUP + r'''
+globalThis.location={href:'http://localhost/#databases/create?keep=yes',origin:'http://localhost'};
 globalThis.history={replaceState:(_,__,url)=>{location.href=String(url);}};
-''' + SETUP + LOGICAL_SETUP + r'''
 await logicalBegin();$('sql').value='SELECT list_preserved';dbSave();
 const before=JSON.stringify({worksheets,worksheetId,jobs:{context:dbJobs.context,save:dbJobs.save,database:dbJobs.database,schema:dbJobs.schema,role:dbJobs.role,selection:dbJobs.selection,drafts:[...dbJobs.drafts]},explorer:dbExplorer});
 const pending={key:'list-key',body:'frozen-list-body',busy:false};dbCreation.pending=pending;
@@ -1612,19 +1616,20 @@ for(const locale of ['en','ja']){
  setLanguage(locale);
  for(const [state,label] of [['active','Active'],['chilled','Stopped'],['starting','Transitioning'],['unavailable','Unavailable'],[undefined,'Unavailable']]){
   route=async()=>({status:'healthy',creation_mode:'logical_v1',warehouse:{state}});await refreshStatus();
-  assert.equal($('warehouse-state').textContent,t(label));assert.equal($('quick-warehouse-state').textContent,t(label));
-  assert.equal($('quick-status-error').className,label==='Unavailable'?'error':'muted');
-  if(state==='chilled')assert.equal($('quick-status-error').textContent,t('Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.'));
-  for(const id of ['wake','chill','quick-wake','quick-chill'])assert.equal($(id).disabled,true);
+  assert.equal($('warehouse-state').textContent,t(label));
+  assert.equal($('database-compute-state').textContent,'LOCAL · '+t({active:'Available',chilled:'Paused',starting:'Switching'}[state]||'Unknown'));
+  if(state==='chilled')assert.equal($('database-compute-status').title,t('Wake shared LOCAL in Compute before creating a database or running SQL.'));
+  for(const id of ['wake','chill'])assert.equal($(id).disabled,true);
  }
  route=async()=>{throw Error('/private/secret');};await refreshStatus();
  assert.equal($('warehouse-state').textContent,t('Unavailable'));assert.doesNotMatch($('status-error').textContent,/private|secret/);
- assert.equal($('quick-status-error').className,'error');
+ assert.equal($('database-compute-state').textContent,'LOCAL · '+t('Unknown'));
+ assert.equal($('database-compute-status').title,t('Shared warehouse status is unavailable. Refresh to check again.'));
 }
 assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.equal($('sql').value,'SELECT preserved');assert.equal(writeCalls().length,priorWrites);
 assert.equal(calls.some(c=>c.path.includes('/warehouse/wake')||c.path.includes('/warehouse/chill')),false);
 route=async()=>({status:'healthy'});await refreshStatus();assert.equal($('warehouse-state').textContent,t('Ready'));
-assert.equal($('quick-warehouse-state').textContent,t('Database mode supports LOCAL only.'));
+assert.equal($('database-compute-state').textContent,'LOCAL · '+t('Unknown'));
 ''')
 
     def test_logical_capability_state_fences_creation_and_refreshes_without_context_changes(self):
@@ -1639,7 +1644,7 @@ for(const locale of ['en','ja']){
   assert.equal(dbCreationCanMutate('',{}),state==='ACTIVE');
   assert.ok($('db-creation-warehouse-state').textContent.startsWith(t(label)+':'));
   assert.doesNotMatch($('db-creation-warehouse-state').textContent,/raw secret/);
-  if(state==='STOPPED')assert.ok($('db-creation-warehouse-state').textContent.includes(t('Authorized SQL starts shared LOCAL automatically. Database creation requires a platform operator to Wake LOCAL in Compute.')));
+  if(state==='STOPPED')assert.ok($('db-creation-warehouse-state').textContent.includes(t('Wake shared LOCAL in Compute before creating a database or running SQL.')));
  }
 }
 assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.equal(creationPosts.length,0);
@@ -1649,42 +1654,51 @@ assert.deepEqual(worksheets,original);assert.equal(worksheetId,selected);assert.
 
     def test_one_form_localized_access_one_create_and_no_implicit_self_grant(self):
         self.javascript(SETUP + LOGICAL_SETUP + r'''
-await logicalBegin();
+await logicalBegin();dbCreation.stage=0;dbCreationRender();
 for(const locale of ['en','ja']){
  setLanguage(locale);dbCreationRender();noLegacy();
- for(const id of ['sql_catalog','display_name','description','principal','role']){
+ for(const id of ['sql_catalog','team','display_name','description','principal','role']){
   const field=$('db-creation-'+id);assert.ok(visibleIDs().includes(field.id));
   assert.equal(field.parentElement.children.find(n=>n.tagName==='LABEL').htmlFor,field.id);
  }
- assert.equal($('db-creation-submit').textContent,t('Create database'));assert.equal($('db-creation-submit').className,'primary');
- assert.equal(visibleIDs().some(id=>['db-creation-next','db-creation-back','db-creation-approve'].includes(id)),false);
+ assert.equal($('db-creation-next').textContent,t('Review creation'));assert.equal($('db-creation-next').className,'primary');
+ assert.equal(visibleIDs().includes('db-creation-submit'),false);
+ assert.equal(visibleIDs().some(id=>id==='db-creation-approve'),false);
  assert.deepEqual(dbCreation.draft.initial_grants,[]);
 }
 $('db-creation-principal').value='alice';$('db-creation-principal').onchange();$('db-creation-role').value='data_engineer';await $('db-creation-add').onclick();
-assert.equal(creationPosts.length,0);creation=logical();
+assert.equal(creationPosts.length,0);await $('db-creation-next').onclick();
+assert.equal(dbCreation.stage,2);assert.match(contents($('db-creation-form')),/Data Team/);
+creation=logical();
 creationRoute=async()=>({creation_id:'creation',request_id:'ack',accepted_revision:3,action:'CREATE',phase:null});
 await $('db-creation-submit').onclick();
 assert.equal(creationPosts.length,1);assert.equal(creationPosts[0].path,C);
-assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'new_sales',display_name:'名前 <script> 🐻',description:'説明 <img>',initial_grants:[{principal_id:'alice',maximum_role:'data_engineer'}]});
+assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'new_sales',display_name:'名前 <script> 🐻',description:'説明 <img>',team:'Data Team',initial_grants:[{principal_id:'alice',maximum_role:'data_engineer'}]});
 assert.equal(dbCreation.process.progress_code,'CREATING');noLegacy();
 assert.equal(visibleIDs().some(id=>/bootstrap|full|approve|review/.test(id)),false);
 ''')
 
     def test_validation_focus_errors_and_no_grants_by_default(self):
         self.javascript(SETUP + LOGICAL_SETUP + r'''
-await logicalBegin();
+await logicalBegin();dbCreation.stage=0;dbCreationRender();
 for(const name of ['', 'system','Bad-name','a'.repeat(32)]){
- edit('db-creation-sql_catalog',name);await $('db-creation-submit').onclick();
+ edit('db-creation-sql_catalog',name);await $('db-creation-next').onclick();
  assert.equal(creationPosts.length,0);assert.equal(document.activeElement,$('db-creation-sql_catalog'));
  assert.equal($('db-creation-sql_catalog').getAttribute('aria-invalid'),'true');assert.equal($('db-creation-status').getAttribute('role'),'alert');
 }
 edit('db-creation-sql_catalog','analytics');assert.equal($('db-creation-sql_catalog').getAttribute('aria-invalid'),'false');
+edit('db-creation-team','');await $('db-creation-next').onclick();assert.equal(creationPosts.length,0);assert.equal(document.activeElement,$('db-creation-team'));
+edit('db-creation-team','🐻'.repeat(65));await $('db-creation-next').onclick();assert.equal(creationPosts.length,0);assert.equal(document.activeElement,$('db-creation-team'));
+edit('db-creation-team','bad\u0001');await $('db-creation-next').onclick();assert.equal(creationPosts.length,0);assert.equal(document.activeElement,$('db-creation-team'));
+edit('db-creation-team','Data Team');
 for(const [field,value] of [['display_name','🐻'.repeat(129)],['description','x'.repeat(2049)],['description','bad\u0001']]){
- edit('db-creation-'+field,value);await $('db-creation-submit').onclick();assert.equal(creationPosts.length,0);
+ edit('db-creation-'+field,value);await $('db-creation-next').onclick();assert.equal(creationPosts.length,0);
  assert.equal(document.activeElement,$('db-creation-'+field));edit('db-creation-'+field,'');
 }
-edit('db-creation-display_name','');edit('db-creation-description','');creation=logical();await $('db-creation-submit').onclick();
-assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'analytics',display_name:'analytics',description:'',initial_grants:[]});
+edit('db-creation-display_name','');edit('db-creation-description','');assert.equal(dbCreation.draft.team,'Data Team');
+await $('db-creation-next').onclick();assert.equal(dbCreation.stage,2);
+creation=logical();await $('db-creation-submit').onclick();
+assert.deepEqual(JSON.parse(creationPosts[0].options.body),{sql_catalog:'analytics',display_name:'analytics',description:'',team:'Data Team',initial_grants:[]});
 ''')
 
     def test_logical_states_only_offered_reconcile_resume_stop_and_legacy_root_mode(self):

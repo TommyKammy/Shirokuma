@@ -876,7 +876,9 @@ class PlanTests(unittest.TestCase):
         real_capture = plan.Capture
         def capture(*args):
             result = real_capture(*args)
-            result.deadline = time.monotonic() + .04
+            # Leave time to dispatch on a slow runner; the trickling stream
+            # still cannot finish before this deadline.
+            result.deadline = time.monotonic() + .5
             return result
         self.transport.side_effect = self.real_transport
         with patch.object(qs.http.client, 'HTTPConnection', return_value=connection), \

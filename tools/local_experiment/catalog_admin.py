@@ -47,7 +47,7 @@ def register_spec(principal, role, public_spec, idempotency_key):
             if db.execute('SELECT 1 FROM '+table+' LIMIT 1').fetchone():
                 raise operations.OperationError('REGISTER_SPEC_REQUIRES_EMPTY_REGISTRY')
         for key, value in spec['databases'].items():
-            db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                 (key, value['sql_catalog'], value['sql_catalog'], '', 'user', 'registered', value['database_revision']))
             binding = value['binding']
             dm.create_binding(db, key, **{field: setting for field, setting in binding.items() if field != 'desired_revision'})
@@ -225,6 +225,12 @@ def inspect_operation(principal, role, operation_id):
                 raise PermissionError('Current platform administrator required')
             recovery = db.execute('SELECT * FROM execution_recovery_requests WHERE operation_id=?', (operation_id,)).fetchone()
             intent = json.loads(recovery['intent'])
+            if recovery['route'] == 'recover-ingest':
+                import ingest_execution_recovery as ingest_recovery
+                return dict(operation_id=operation_id, actor=recovery['actor'], phase=recovery['phase'],
+                    revision=recovery['revision'], ingest_operation_id=intent['graph']['operation']['id'],
+                    intent_digest=ingest_recovery.IngestRecovery.digest(dict(recovery)), outcome='UNKNOWN',
+                    execution_closure=ingest_recovery.CLOSURE if recovery['phase'] in ('CLOSED','OPEN') else '')
             if recovery['route'] == execution_recovery.QueryRecovery.route:
                 return dict(operation_id=operation_id, actor=recovery['actor'], phase=recovery['phase'],
                     revision=recovery['revision'], query_id=intent['graph']['queries'][0]['id'],
@@ -317,6 +323,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
     for name in ('plan', 'apply', 'reconcile', 'inspect'):
+        recovery = commands.add_parser('recover-ingest-' + name)
+        recovery.add_argument('--config', required=True, type=Path)
+        if name == 'plan':
+            recovery.add_argument('--ingest-operation-id', required=True)
+            recovery.add_argument('--idempotency-key', required=True)
+        else:
+            recovery.add_argument('--operation-id', required=True)
+        if name in ('apply', 'reconcile'):
+            recovery.add_argument('--expected-revision', required=True, type=int)
+            recovery.add_argument('--expected-intent-digest', required=True)
+    for name in ('plan', 'apply', 'reconcile', 'inspect'):
         recovery = commands.add_parser('recover-dbt-audit-' + name)
         recovery.add_argument('--config', required=True, type=Path)
         if name == 'plan':
@@ -404,7 +421,7 @@ def main(argv=None):
                 or not args.verify_readonly and any(supplied)):
             parser.error('read-only verify requires --step verify and all revision/digest flags together')
     try:
-        if args.command.startswith(('recover-job-', 'recover-query-', 'recover-dbt-audit-')):
+        if args.command.startswith(('recover-job-', 'recover-query-', 'recover-dbt-audit-', 'recover-ingest-')):
             import execution_recovery
             print(json.dumps(execution_recovery.run(args), sort_keys=True))
             return 0

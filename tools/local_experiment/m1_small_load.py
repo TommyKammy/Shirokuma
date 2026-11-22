@@ -65,6 +65,7 @@ def parser():
     result = argparse.ArgumentParser(description=__doc__)
     result.add_argument('--api-url', type=origin, default='http://127.0.0.1:8888')
     result.add_argument('--database', default='m1_' + uuid.uuid4().hex[:20])
+    result.add_argument('--team', default='m1-small-load', help='owning team recorded on the created database')
     result.add_argument('--rows', type=bounded_int(10000), default=1000)
     result.add_argument('--rounds', type=bounded_int(5), default=2)
     result.add_argument('--output-dir', required=True, type=Path)
@@ -242,7 +243,7 @@ class Runner:
         else:
             raise Failure('DATABASE_ALREADY_EXISTS')
         ack = self.post(CREATIONS, dict(sql_catalog=self.args.database, display_name=self.args.database,
-            description='Bounded pre-M1 small-load acceptance', initial_grants=[
+            description='Bounded pre-M1 small-load acceptance', team=self.args.team, initial_grants=[
                 dict(principal_id=self.client.principal, maximum_role='admin')]))
         require(ack.get('creation_id'), 'INVALID_CREATION_ACK')
         detail = self.poll(lambda: self.get(CREATIONS + '/by-name/' + quote(self.args.database, safe='')),

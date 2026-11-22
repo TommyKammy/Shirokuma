@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 import test_workbench_database_ui as harness
+from workbench_source import WorkbenchSource
 
 SETUP = r"""
 const p=dbDbt;
@@ -305,10 +306,7 @@ for(const hash of ['#catalog?keep=yes','#transformation?dbt_db=db','#transformat
 route=async(path,options)=>{if(/\/runs\//.test(path))throw Error('source run unavailable');return baseRoute(path,options);};
 location.href='http://local/#transformation?keep=yes&dbt_db=db&dbt_publication=published-1';
 assert.equal(dbDbtURL().plan,null);assert.equal(dbDbtURL().run,null);
-selectView($('transformation-view-wap'));
-assert.equal($('transformation-wap').hidden,false);
 const start=calls.length;await startup();assert.deepEqual(activated,['tab-transformation']);
-assert.equal($('transformation-models').hidden,false);assert.equal($('transformation-wap').hidden,true);
 assert.equal(p.standalone.id,publication.id);assert.equal(p.standalone.state,'PUBLISHED');assert.equal(p.plan.id,publication.plan_id);assert.equal(p.run,null);
 const reads=calls.slice(start);assert.ok(reads.some(c=>c.path.includes('/publications/published-1?')));assert.ok(reads.some(c=>c.path.includes('/plans/plan-1?')));assert.equal(reads.some(c=>/\/runs\//.test(c.path)),false);assert.equal(posts().length,before);
 assert.match(text(dbDbtNode('publications')),/Published.*published-snapshot/);assert.doesNotMatch(text(dbDbtNode('publications')),/Review publication|Audit and publish/);
@@ -1553,7 +1551,7 @@ assert.equal(p.plan.state,'TERMINAL');assert.equal(dbDbtNode('build').disabled,'
 assert.equal(dbDbtCanBuild(),'TERMINAL'==='READY');
 const detail=text(dbDbtNode('compatibility')),reason=dbDbtNode('reason').textContent;
 if('TERMINAL'==='READY'){
- assert.match(detail,'LANGUAGE'==='ja'?/対応済み: SQL \/ WAP/:/Supported: SQL \/ WAP/);
+ assert.match(detail,'LANGUAGE'==='ja'?/対応済み: SQL \/ データ変換/:/Supported: SQL \/ Transformation/);
  assert.match(detail,'LANGUAGE'==='ja'?/保存プランと下記の適用テーブル形式/:/Build candidates and test using the saved plan/);
 }else{
  assert.match(detail,'LANGUAGE'==='ja'?/停止中: 未対応の設定/:/Blocked: unsupported settings/);
@@ -1587,7 +1585,7 @@ await compile();assert.equal(dbDbtCanBuild(),true);
 for(const lang of ['ja','en']){
  setLanguage(lang);
  const detail=text(dbDbtNode('compatibility'));
- assert.match(detail,/SQL \/ WAP/);assert.match(detail,/COUNT\(\*\)/);
+ assert.match(detail,/SQL \/ (?:データ変換|Transformation)/);assert.match(detail,/COUNT\(\*\)/);
  assert.match(detail,lang==='ja'?/UI／API／CLI は互換性のある保存済み1モデル/:/UI\/API\/CLI supports native TABLE execution for one compatible saved model/);
  assert.match(text(dbDbtNode('models')),lang==='ja'?/適用テーブル形式/:/Applied table format/);
  assert.match(text(dbDbtNode('models')),/PARQUET/);
@@ -1710,8 +1708,9 @@ await dbDbtObserve('plan',plan.id);assert.match(text(dbDbtNode('compatibility'))
 inventory[0].generation_id='changed';await dbDbtRefreshAuthorization();assert.equal(p.plan,null);assert.equal(dbDbtNode('plan-detail').children.length,0);
 assert.equal(posts().length,1);
 """)
-        self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', harness.HTML)
-        self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}', css)
+        self.assertIn('#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}', css)
 
     def test_native_saved_history_detail_localization_and_publication_block(self):
         self.javascript(r"""
@@ -1750,9 +1749,10 @@ assert.equal(dbDbtNode('compile').textContent,'プロジェクトをコンパイ
 setLanguage('en');assert.match(text(dbDbtNode('run-detail')),/Tests passed, awaiting publication/);assert.equal(dbDbtNode('compile').textContent,'Compile project');
 assert.equal(dbDbtNode('role').tagName,'SELECT');assert.equal(dbDbtNode('models').className,'table-wrap');assert.equal(dbDbtNode('panel').getAttribute('aria-labelledby'),'db-dbt-title');
 """)
-        self.assertIn('@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}', harness.HTML)
-        self.assertIn('#db-dbt-panel{min-width:0;max-width:100%}', harness.HTML)
-        self.assertIn('overflow-wrap:anywhere', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}', css)
+        self.assertIn('#db-dbt-panel{min-width:0;max-width:100%}', css)
+        self.assertIn('overflow-wrap:anywhere', css)
         dbt = harness.DATABASE.split('// Database dbt:')[1].split('// Database schedules')[0]
         self.assertNotIn('innerHTML', dbt)
         self.assertNotIn('/api/dbt', dbt)

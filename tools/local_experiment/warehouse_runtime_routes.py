@@ -281,8 +281,8 @@ def dispatch(handler, method):
                 raise OperationError('NOT_FOUND', 404)
             handler.respond(result)
         elif method == 'POST' and path in [BASE + '/' + a for a in ('wake','chill','reconcile','auto-chill')]:
-            import workbench_server
-            if handler.headers.get('Origin') and not workbench_server.request_origin_allowed(handler.headers):
+            import http_origin
+            if handler.headers.get('Origin') and not http_origin.request_origin_allowed(handler.headers):
                 raise PermissionError('invalid origin')
             lengths = handler.headers.get_all('Content-Length', [])
             if len(lengths) != 1 or not re.fullmatch('[0-9]{1,4}', lengths[0]) or not 0 < int(lengths[0]) <= 4096:

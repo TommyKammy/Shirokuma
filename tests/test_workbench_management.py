@@ -343,7 +343,7 @@ assert 'database_generation' not in sys.modules
         with tempfile.TemporaryDirectory(dir=self.state_directory.name) as temp, patch.dict(os.environ, SHIROKUMA_STATE_DIR=temp):
             with control_store.connect() as db:
                 for key, value in bundle['manifest']['spec']['databases'].items():
-                    db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+                    db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                                (key, value['sql_catalog'], key, '', 'user', 'READY', 1))
                     dm.create_binding(db, key, **{k: v for k, v in value['binding'].items() if k != 'desired_revision'})
                     for schema in value['schemas']:

@@ -10,7 +10,13 @@ CURATOR = r'''
 const curatorCalls=()=>calls.filter(c=>c.path.startsWith(dbCuratorEndpoint));
 const curatorPosts=()=>curatorCalls().filter(c=>c.path===dbCuratorEndpoint&&c.options?.method==='POST');
 const curatorObject=(i=0,extra={})=>({id:'20000000-0000-4000-8000-'+String(i).padStart(12,'0'),physical_name:'注文 <img> '+i,kind:i%2?'VIEW':'TABLE',ref:{database_id:'db',schema_id:'schema',object_id:'20000000-0000-4000-8000-'+String(i).padStart(12,'0'),incarnation:1,binding_revision:1,generation_id:'gen'},capabilities:{resolve:true,columns:true},...extra});
-const change=(name,value)=>{$('curator-'+name).value=value;return $('curator-'+name).onchange();};
+const change=(name,value)=>{
+ if(name==='object'){dbCurator.source=dbCurator.objects[Number(value)]||null;return dbCuratorChanged();}
+ dbCurator[name]=value;dbCurator.shared=false;
+ if(name==='role'){dbCurator.databases=[];dbCurator.schemas=[];dbCurator.database='';dbCurator.schema='';}
+ if(name==='database'){dbCurator.schemas=[];dbCurator.schema='';}
+ return dbCuratorChanged(true);
+};
 async function curatorContext(role='admin'){
  if(dbCurator.role!==role)change('role',role);
  await dbCuratorRefresh();change('database','db');await dbCuratorRefresh();change('schema','schema');await dbCuratorRefresh();assert.equal(dbCuratorAllowed(),true);
@@ -48,14 +54,14 @@ await curatorContext();objects=[curatorObject()];await dbCuratorLoad();change('o
 await boot();editSQL('SELECT worksheet keep');editDoctor('SELECT doctor keep');$('copilot-request').value='keep draft';queryResult={rows:[[7]],columns:['keep']};
 const stages=[
  [async()=>{},'Refresh context to load Databases for the selected role.','選択したロールの Database を読み込むには、コンテキストを更新してください。'],
- [async()=>{await $('curator-refresh').onclick();},'Choose a Database, then refresh context to load its schemas.','Database を選び、コンテキストを更新してスキーマを読み込んでください。'],
+ [async()=>{await dbCuratorRefresh();},'Choose a Database, then refresh context to load its schemas.','Database を選び、コンテキストを更新してスキーマを読み込んでください。'],
  [async()=>{change('database','db');},'Refresh context to load schemas for the selected Database.','選択した Database のスキーマを読み込むには、コンテキストを更新してください。'],
- [async()=>{await $('curator-refresh').onclick();},'Choose a primary schema, then refresh context to verify it.','主スキーマを選び、コンテキストを更新して確認してください。'],
+ [async()=>{await dbCuratorRefresh();},'Choose a primary schema, then refresh context to verify it.','主スキーマを選び、コンテキストを更新して確認してください。'],
  [async()=>{change('schema','schema');},'Refresh context to verify the selected primary schema.','選択した主スキーマを確認するには、コンテキストを更新してください。'],
- [async()=>{await $('curator-refresh').onclick();},'Load source objects, then choose one TABLE or VIEW and explicitly request a proposal.','参照元を読み込み、TABLE または VIEW を1件選んでから、案の作成を明示的に要求してください。'],
- [async()=>{objects=[curatorObject()];await $('curator-load').onclick();},'Choose one TABLE or VIEW, then explicitly request a proposal.','TABLE または VIEW を1件選び、案の作成を明示的に要求してください。'],
+ [async()=>{await dbCuratorRefresh();},'Load source objects, then choose one TABLE or VIEW and explicitly request a proposal.','参照元を読み込み、TABLE または VIEW を1件選んでから、案の作成を明示的に要求してください。'],
+ [async()=>{objects=[curatorObject()];await dbCuratorLoad();},'Choose one TABLE or VIEW, then explicitly request a proposal.','TABLE または VIEW を1件選び、案の作成を明示的に要求してください。'],
  [async()=>{change('object','0');},'Select Explain and draft descriptions to explicitly request a proposal for the chosen source.','選択した参照元の案を明示的に要求するには、「説明と説明文案を作成」を選んでください。'],
- [async()=>{route=async()=>{throw Error('lost');};await $('curator-create').onclick();},'Curator outcome unknown. Recover the original request explicitly.','Curator の結果は不明です。元の要求を明示的に復旧してください。']
+ [async()=>{route=async()=>{throw Error('lost');};await dbCuratorSubmit();},'Curator outcome unknown. Recover the original request explicitly.','Curator の結果は不明です。元の要求を明示的に復旧してください。']
 ];
 const snapshot=()=>JSON.stringify({curator:dbCurator,storage:[...storage],calls,worksheets:worksheets.map(dbInput),worksheetId,sql:$('sql').value,doctor:$('bear-query-sql').value,draft:$('copilot-request').value,result:queryResult,explorer:dbExplorer,history:dbHistory,explanation:dbExplanation,proposal:dbProposal,wap:[...dataopsPanels].map(([key,p])=>[key,p.context,p.model,p.sources,p.op])},(_,value)=>value instanceof Node?{id:value.id,value:value.value,textContent:value.textContent,disabled:value.disabled}:value);
 for(const [setup,en,ja] of stages){
@@ -110,17 +116,17 @@ await boot();await curatorContext();const good=curatorObject();objects=[good,...
 {
 await boot();await curatorContext();
 objectsRoute=async()=>({items:[curatorObject(),curatorObject(1)],next_cursor:'page2'});
-await $('curator-load').onclick();change('object','0');await curatorSubmit();const historical=dbCurator.record;
+await dbCuratorLoad();change('object','0');await curatorSubmit();const historical=dbCurator.record;
 route=async()=>({context:dbCurator.context,explanations:[historical]});await $('curator-history').onclick();
 await curatorSubmit(curatorRecord({id:crypto.randomUUID()}));
 assert.equal(dbCurator.objects.length,2);assert.ok(dbCurator.source.ref);assert.ok(dbCurator.context);assert.equal(dbCurator.history.length,1);
-assert.ok(visibleText($('curator-output')).includes('仮の説明'));assert.ok(visibleText($('curator-object')).includes('注文'));assert.ok(visibleText($('curator-saved')).includes('注文'));
+assert.ok(visibleText($('curator-output')).includes('仮の説明'));assert.ok(visibleText($('curator-saved')).includes('注文'));
 const receipts=dbCurator.intents.slice(),stored=storage.get(dbCuratorKey),posts=curatorPosts().length,proofs=receipts.map(i=>dbCurator.proofs.get(i));
 objectsRoute=async(path,options)=>{assert.equal(new URL(path,'http://local').searchParams.get('cursor'),'page2');assert.equal(options.method,undefined);return {http:status,body:{code:status===404?'NOT_FOUND':'DB_ACCESS_REVOKED',message:'secret denied'}};};
-await $('curator-more').onclick();
+await dbCuratorLoad(true);
 assert.equal(dbCurator.context,null);assert.equal(dbCurator.inventoryAuth,'');assert.deepEqual(dbCurator.objects,[]);assert.equal(dbCurator.cursor,null);assert.equal(dbCurator.source,null);assert.equal(dbCurator.record,null);assert.equal(dbCurator.origin,null);assert.deepEqual(dbCurator.history,[]);
-for(const id of ['curator-object','curator-output','curator-saved'])assert.doesNotMatch(visibleText($(id)),/注文|仮の説明|secret denied|20000000/);
-assert.equal($('curator-object').disabled,true);assert.equal($('curator-create').disabled,true);assert.equal($('curator-more').hidden,true);assert.equal(dbCuratorAllowed(),false);
+for(const id of ['curator-output','curator-saved'])assert.doesNotMatch(visibleText($(id)),/注文|仮の説明|secret denied|20000000/);
+assert.equal(dbCurator.source,null);assert.equal(dbCurator.createDisabled,true);assert.equal(dbCurator.cursor,null);assert.equal(dbCuratorAllowed(),false);
 assert.equal(storage.get(dbCuratorKey),stored);assert.equal(curatorPosts().length,posts);receipts.forEach((i,index)=>{assert.equal(dbCurator.intents[index],i);assert.equal(dbCurator.proofs.get(i),proofs[index]);});
 }
 ''')
@@ -132,17 +138,17 @@ assert.equal(storage.get(dbCuratorKey),stored);assert.equal(curatorPosts().lengt
                     self.javascript('const status=' + str(status) + ',changed=' + repr(changed) + ';\n' + r'''
 {
 await boot();await curatorContext();objectsRoute=async()=>({items:[curatorObject(),curatorObject(1)],next_cursor:'page2'});
-await $('curator-load').onclick();change('object','0');await curatorSubmit();
-const wait=deferred();objectsRoute=async()=>wait.promise;const more=$('curator-more').onclick();await tick();
+await dbCuratorLoad();change('object','0');await curatorSubmit();
+const wait=deferred();objectsRoute=async()=>wait.promise;const more=dbCuratorLoad(true);await tick();
 if(changed==='context'){
- await curatorContext('data_engineer');objectsRoute=async()=>({items:[curatorObject(),curatorObject(1)],next_cursor:'newer-page'});await $('curator-load').onclick();
+ await curatorContext('data_engineer');objectsRoute=async()=>({items:[curatorObject(),curatorObject(1)],next_cursor:'newer-page'});await dbCuratorLoad();
 }
-change('object','1');route=async()=>wrap(curatorPending({id:crypto.randomUUID()}));await $('curator-create').onclick();
+change('object','1');route=async()=>wrap(curatorPending({id:crypto.randomUUID()}));await dbCuratorSubmit();
 const context=dbCurator.context,source=dbCurator.source,record=dbCurator.record,objects=dbCurator.objects,cursor=dbCurator.cursor,auth=dbCurator.inventoryAuth,receipt=storage.get(dbCuratorKey),held=dbCuratorHeld().slice(),text=visibleText($('curator-output'));
 assert.equal(record.state,'RUNNING');assert.equal(held.length,1);
 wait.resolve({http:status,body:{code:status===404?'NOT_FOUND':'DB_ACCESS_REVOKED'}});await more;
 assert.equal(dbCurator.context,context);assert.equal(dbCurator.source,source);assert.equal(dbCurator.record,record);assert.equal(dbCurator.objects,objects);assert.equal(dbCurator.cursor,cursor);assert.equal(dbCurator.inventoryAuth,auth);assert.equal(dbCuratorAllowed(),true);
-assert.equal(visibleText($('curator-output')),text);assert.equal(storage.get(dbCuratorKey),receipt);assert.deepEqual(dbCuratorHeld(),held);assert.equal($('curator-object').value,'1');
+assert.equal(visibleText($('curator-output')),text);assert.equal(storage.get(dbCuratorKey),receipt);assert.deepEqual(dbCuratorHeld(),held);assert.equal(dbCurator.source,dbCurator.objects[1]);
 }
 ''')
 
@@ -165,7 +171,7 @@ await curatorReady();const original=localStorage.setItem;localStorage.setItem=(k
     def test_safe_literal_names_types_normalized_partial_proposal_and_bilingual(self):
         self.javascript(r'''
 await curatorReady();await curatorSubmit();const r=dbCurator.record;assert.deepEqual(r.proposal.columns.map(c=>c.name),['合計','詳細']);
-for(const locale of ['ja','en']){setLanguage(locale);const node=$('curator-output'),text=visibleText(node);assert.equal(node.children[0].textContent,t('Curator current frozen source'));assert.ok(node.children[1].textContent.includes(r.metadata.relation.table));assert.equal(node.children[2].textContent,r.proposal.summary);assert.ok(text.includes(r.metadata.relation.table));assert.ok(text.includes('decimal(12,2)'));assert.ok(text.includes('{"type":"list","element":"string"}'));assert.ok(text.includes(t('Proposed columns: {count} (partial, maximum 8)',{count:2})));assert.ok(text.includes('local-model'));assert.ok(text.includes(r.metadata.captured_at));assert.ok(text.includes('sales.marts · admin · LOCAL'));assert.ok(text.includes(t('Curator current frozen source')));assert.equal(node.querySelector('img'),undefined);assert.doesNotMatch(text,/object_id|binding_revision/);assert.equal($('curator-create').textContent,t('Explain and draft descriptions'));}
+for(const locale of ['ja','en']){setLanguage(locale);const node=$('curator-output'),text=visibleText(node);assert.equal(node.children[0].textContent,t('Curator current frozen source'));assert.ok(node.children[1].textContent.includes(r.metadata.relation.table));assert.equal(node.children[2].textContent,r.proposal.summary);assert.ok(text.includes(r.metadata.relation.table));assert.ok(text.includes('decimal(12,2)'));assert.ok(text.includes('{"type":"list","element":"string"}'));assert.ok(text.includes(t('Proposed columns: {count} (partial, maximum 8)',{count:2})));assert.ok(text.includes('local-model'));assert.ok(text.includes(r.metadata.captured_at));assert.ok(text.includes('sales.marts · admin · LOCAL'));assert.ok(text.includes(t('Curator current frozen source')));assert.equal(node.querySelector('img'),undefined);assert.doesNotMatch(text,/object_id|binding_revision/);assert.equal($('bears-curator-propose').textContent,t('Propose a description'));}
 ''')
 
     def test_strict_record_and_proposal_rejections(self):
@@ -214,7 +220,7 @@ route=async(path,options)=>{assert.equal(path,dbCuratorEndpoint);assert.equal(op
 await curatorReady();route=async()=>{throw Error('lost');};await dbCuratorSubmit();const base=structuredClone(dbCurator.intents[0]);
 const intents=Array.from({length:51},(_,index)=>({...structuredClone(base),key:'30000000-0000-4000-8000-'+String(index).padStart(12,'0'),id:'40000000-0000-4000-8000-'+String(index).padStart(12,'0')}));storage.set(dbCuratorKey,JSON.stringify(intents));dbCuratorInstall();await curatorContext();objects=[curatorObject(),curatorObject(1)];await dbCuratorLoad();change('object','1');const source=dbCurator.source;
 const records=intents.slice(1).map(i=>curatorRecord({id:i.id},i));route=async()=>({context:dbCurator.context,explanations:records});await dbCuratorHistory();assert.equal(dbCuratorHeld().length,1);assert.equal(dbCuratorHeld()[0].id,intents[0].id);
-route=async()=>wrap(records[0]);await dbCuratorHistory(0);assert.equal(dbCurator.source,source);assert.equal($('curator-object').value,'1');assert.ok(visibleText($('curator-output')).includes(t('Curator historical frozen source; current selection kept')));
+route=async()=>wrap(records[0]);await dbCuratorHistory(0);assert.equal(dbCurator.source,source);assert.ok(visibleText($('curator-output')).includes(t('Curator historical frozen source; current selection kept')));
 route=async(path,options)=>{assert.ok(path.includes(intents[0].id));assert.equal(options.method,undefined);return wrap(curatorRecord({id:intents[0].id},intents[0]));};await dbCuratorSubmit('recover');assert.equal(dbCuratorHeld().length,0);assert.equal(curatorPosts().length,1);
 ''')
 
@@ -245,7 +251,7 @@ assert.equal(curatorPosts().length,0);assert.equal(storage.get(dbCuratorKey),sto
     def test_cancel_only_own_record_and_pending_model_remains_held(self):
         self.javascript(r'''
 await curatorReady();await curatorSubmit(curatorPending());const holds=dbExplanation.intents.slice(),other=dbProposal.intents.slice();
-route=async(path,options)=>{assert.ok(path.endsWith('/cancel'));assert.deepEqual(JSON.parse(options.body),{context:dbCurator.context});return wrap(curatorPending({state:'CANCELED',cancel_requested:true}));};await dbCuratorCancel();assert.equal(dbCuratorHeld().length,1);assert.equal($('curator-create').disabled,true);assert.deepEqual(dbExplanation.intents,holds);assert.deepEqual(dbProposal.intents,other);
+route=async(path,options)=>{assert.ok(path.endsWith('/cancel'));assert.deepEqual(JSON.parse(options.body),{context:dbCurator.context});return wrap(curatorPending({state:'CANCELED',cancel_requested:true}));};await dbCuratorCancel();assert.equal(dbCuratorHeld().length,1);assert.equal(dbCurator.createDisabled,true);assert.deepEqual(dbExplanation.intents,holds);assert.deepEqual(dbProposal.intents,other);
 route=async()=>wrap(curatorPending({state:'CANCELED',inference_state:'CANCELED',cancel_requested:true}));await dbCuratorSubmit('recover');assert.equal(dbCuratorHeld().length,0);
 dbCurator.intents=[];dbCurator.record=dataopsFreeze(curatorPending());const count=curatorCalls().length;await dbCuratorCancel();assert.equal(curatorCalls().length,count);
 ''')
@@ -267,7 +273,7 @@ await curatorReady();await curatorSubmit();assert.equal(dbCuratorHeld().length,0
 for(const id of ['bear-sre-run','bear-data-run','bear-policy-run','bear-catalog-action','bear-catalog-table']){const n=document.createElement('button');n.id=id;$('bears').append(n);}
 await curatorReady();editSQL('SELECT worksheet keep');editDoctor('SELECT doctor keep');$('copilot-request').value='keep request';$('copilot-request').dispatchEvent(new Event('input'));queryResult={rows:[[7]],columns:['keep']};const result=queryResult,before=JSON.stringify(dbInput(dbCurrent())),explorer=JSON.stringify(dbExplorer),history=JSON.stringify(dbHistory),wap=[...dataopsPanels].map(([key,p])=>[key,p.context,p.model,p.sources,p.op]);
 await curatorSubmit();assert.equal(queryResult,result);assert.equal($('sql').value,'SELECT worksheet keep');assert.equal($('bear-query-sql').value,'SELECT doctor keep');assert.equal($('copilot-request').value,'keep request');assert.equal(JSON.stringify(dbInput(dbCurrent())),before);assert.equal(JSON.stringify(dbExplorer),explorer);assert.equal(JSON.stringify(dbHistory),history);assert.deepEqual([...dataopsPanels].map(([key,p])=>[key,p.context,p.model,p.sources,p.op]),wap);assert.equal(calls.filter(c=>c.options?.method==='POST'&&!c.path.startsWith(dbCuratorEndpoint)).length,0);assert.equal(dbExplanation.record,null);assert.equal(dbProposal.record,null);
-for(const id of ['bear-sre-run','bear-data-run','bear-policy-run','bear-catalog-action','bear-catalog-table','ai-settings-button'])assert.equal($(id).disabled,true,id);assert.equal($('bear-tab-catalog').disabled,false);
+for(const id of ['bear-sre-run','bear-data-run','bear-policy-run','bear-catalog-action','bear-catalog-table'])assert.equal($(id).disabled,true,id);assert.equal($('ai-settings-button').disabled,false);assert.equal($('bear-tab-catalog').disabled,false);
 ''')
 
     def test_old_finally_cannot_clear_newer_busy_recovery(self):
@@ -295,9 +301,9 @@ await curatorReady();await curatorSubmit(curatorPending());const bad=curatorReco
     def test_first_boot_genuinely_absent_panel_and_repeat_install(self):
         self.javascript(r'''
 assert.equal($('curator-panel'),null);
-await boot();const parent=$('bear-panel-catalog'),panel=$('curator-panel');
+await boot();const parent=$('bears-curator-body'),panel=$('curator-panel');
 assert.ok(panel);assert.equal(panel.parentElement,parent);assert.equal(panel.dataset.installed,'true');
-for(const id of ['curator-role','curator-object','curator-create','curator-recover','curator-output'])assert.ok(panel.descendants().includes($(id)));
+for(const id of ['curator-recover','curator-output'])assert.ok(panel.descendants().includes($(id)));
 assert.equal($('curator-output')['aria-live'],'polite');
 dbCuratorInstall();dbCuratorInstall();
 assert.equal($('curator-panel'),panel);assert.equal(parent.children.filter(n=>n.id==='curator-panel').length,1);
@@ -331,7 +337,7 @@ await curatorReady();
 for(const state of ['SUCCEEDED','FAILED','CANCELED']){
  route=async()=>wrap(state==='SUCCEEDED'?curatorRecord({id:crypto.randomUUID()}):curatorPending({id:crypto.randomUUID(),state,inference_state:state,error_code:state==='FAILED'?'AI_OUTPUT_INVALID':null,cancel_requested:state==='CANCELED'}));
  await dbCuratorSubmit();assert.equal(dbCuratorHeld().length,0);
- change('object',dbCurator.source.kind==='TABLE'?'1':'0');assert.equal(dbCuratorHeld().length,0);assert.equal($('curator-create').disabled,false);
+ change('object',dbCurator.source.kind==='TABLE'?'1':'0');assert.equal(dbCuratorHeld().length,0);assert.equal(dbCurator.createDisabled,false);
 }
 route=async()=>wrap(curatorPending({id:crypto.randomUUID()}));await dbCuratorSubmit();const count=curatorPosts().length;change('object','1');await dbCuratorSubmit();assert.equal(curatorPosts().length,count);assert.equal(dbCuratorHeld().length,1);
 dbCuratorInstall();await curatorContext();assert.ok(dbCuratorHeld().length>0);await dbCuratorSubmit();assert.equal(curatorPosts().length,count);
@@ -346,7 +352,7 @@ for(const [status,code] of [[400,'AI_INPUT_INVALID'],[409,'AI_METADATA_CHANGED']
   const i=dbCurator.intents.at(-1),saved=JSON.parse(storage.get(dbCuratorKey)).at(-1);
   assert.doesNotMatch(visibleText($('curator-output')),/secret diagnostic|secret correlation/);assert.doesNotMatch(storage.get(dbCuratorKey),/secret diagnostic|secret correlation|rejection/);assert.equal(i.id,null);assert.equal(dbCuratorHeld().length,0);assert.deepEqual(saved.body,i.body);assert.equal(saved.key,i.key);
   assert.ok(visibleText($('curator-output')).includes(t('Curator request rejected before acceptance. Review the source and refresh metadata before creating a new request.')));
-  change('object',$('curator-object').value==='0'?'1':'0');assert.equal($('curator-create').disabled,false);
+  change('object',dbCurator.objects.indexOf(dbCurator.source)===0?'1':'0');assert.equal(dbCurator.createDisabled,false);
  }
 }
 const count=curatorPosts().length,original=curatorPosts()[0];dbCuratorInstall();await curatorContext();assert.equal(dbCuratorHeld().length,4);await dbCuratorSubmit();assert.equal(curatorPosts().length,count);
@@ -425,7 +431,7 @@ for(const state of ['QUEUED','RUNNING']){
  dbCurator.intents=[];dbCuratorPersist();await curatorSubmit(curatorPending({state,inference_state:state==='QUEUED'?'NOT_STARTED':'RUNNING'}));
  const i=dbCurator.intents[0],other=dbCuratorFreeze({...structuredClone(i),key:crypto.randomUUID(),id:crypto.randomUUID()});dbCurator.intents.push(other);dbCuratorPersist();
  const succeeded=curatorRecord({},i);route=async()=>wrap(succeeded);await dbCuratorCancel();
- assert.equal(dbCurator.record.state,'SUCCEEDED');assert.equal(dbCurator.record.cancel_requested,false);assert.equal(dbCurator.record.proposal.summary,succeeded.proposal.summary);assert.deepEqual(dbCuratorHeld(),[other]);assert.equal($('curator-create').disabled,true);
+ assert.equal(dbCurator.record.state,'SUCCEEDED');assert.equal(dbCurator.record.cancel_requested,false);assert.equal(dbCurator.record.proposal.summary,succeeded.proposal.summary);assert.deepEqual(dbCuratorHeld(),[other]);assert.equal(dbCurator.createDisabled,true);
 }
 ''')
 

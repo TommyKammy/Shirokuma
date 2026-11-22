@@ -1,7 +1,9 @@
 """Execute saved-lineage actions in the mounted Database workspace."""
+from workbench_source import WorkbenchSource
 from html.parser import HTMLParser
 import json
 import re
+import subprocess
 import unittest
 import test_workbench_database_ui as database_ui
 from test_workbench_dataops_ui import SETUP as DATAOPS_SETUP
@@ -37,7 +39,7 @@ SETUP = DATAOPS_SETUP + 'const catalogMarkup=' + json.dumps(catalog_markup.root)
 // Mount the original markup before initializeDatabaseUI moves its Inspector.
 function mountCatalog(spec){
  const attrs=spec.attrs;
- const node=attrs['data-inspect']?inspectorTabs.find(b=>b.dataset.inspect===attrs['data-inspect']):attrs.id?$(attrs.id):document.createElement(spec.tag);
+ const node=attrs['data-inspect']?(inspectorTabs.find(b=>b.dataset.inspect===attrs['data-inspect'])||document.createElement('button')):attrs.id?$(attrs.id):document.createElement(spec.tag);
  node.tagName=spec.tag.toUpperCase();
  for(const [key,value] of Object.entries(attrs)){
   if(key==='class')node.className=value;
@@ -66,6 +68,39 @@ async function lineageReady(){
 class LineageUI(unittest.TestCase):
     def javascript(self, body):
         database_ui.DatabaseUI.javascript(self, SETUP + '\n' + body)
+
+    def test_factory_load_and_construction_have_no_io_and_private_state(self):
+        asset = WorkbenchSource().asset_sources['/assets/saved_lineage.js']
+        harness = "const asset=" + json.dumps(asset) + r""";
+const assert=require('node:assert/strict'),vm=require('node:vm');
+const unexpected=()=>{throw Error('unexpected ambient IO');};
+const context=vm.createContext({fetch:unexpected,document:new Proxy({},{get:unexpected}),localStorage:new Proxy({},{get:unexpected})});
+vm.runInContext(asset,context);
+assert.equal(typeof context.createSavedLineagePanel,'function');
+assert.equal(context.dbLineage,undefined);
+const create=new Function(asset+'\nreturn createSavedLineagePanel;')();
+let role='bi_viewer',reads=0;
+const panel=create({
+ explorer:{canOpen:()=>false},
+ authority:{get role(){reads++;return role;}},
+ request:new Proxy({},{get:unexpected}),
+ view:{databaseMode:false,$:()=>null}
+});
+assert.equal(reads,0);
+assert.equal(panel.result,null);assert.equal(panel.busy,null);
+assert.ok(Object.isFrozen(panel));
+assert.equal(Object.getOwnPropertyDescriptor(panel,'result').set,undefined);
+assert.equal(Object.getOwnPropertyDescriptor(panel,'busy').set,undefined);
+assert.equal(Reflect.set(panel,'result',{forged:true}),false);
+assert.equal(Reflect.set(panel,'busy',{}),false);
+assert.equal(panel.revision,undefined);assert.equal(panel.scope,undefined);assert.equal(panel.notice,undefined);
+assert.equal(panel.reason(),'Lineage requires data_engineer or admin.');
+role='admin';assert.equal(panel.reason(),'Select a readable TABLE or VIEW in Explorer.');
+panel.invalidate();assert.equal(panel.result,null);assert.equal(panel.busy,null);
+role='bi_viewer';panel.refresh().then(()=>assert.equal(panel.result,null)).catch(error=>{console.error(error);process.exitCode=1;});
+"""
+        result = subprocess.run(['node', '-'], input=harness, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_same_focus_get_only_categories_versions_locale_and_drafts(self):
         self.javascript(r'''
@@ -101,7 +136,7 @@ assert.equal($('catalog').hidden,true);
 assert.equal(action.hidden,true);const ancestors=[];for(let node=action.parentElement;node;node=node.parentElement){ancestors.push(node.id);assert.equal(node.hidden,false,'hidden ancestor '+node.id);assert.notEqual(node.style?.display,'none');}
 assert.ok(ancestors.includes('database-details'));assert.ok(ancestors.includes('warehouse'));assert.ok(!ancestors.includes('catalog'));
 const tab=inspectorTabs.find(b=>b.dataset.inspect==='lineage');
- dbObject={...stable('orders'),kind};dbExplorerControls();setLanguage(locale);
+ dbObject={...stable('orders'),kind,capabilities:{...stable('orders').capabilities,columns:true}};dbExplorerControls();setLanguage(locale);
  await dbSelectInspector(inspectorTabs.find(b=>b.dataset.inspect==='columns'));
  assert.equal(activeInspector,'columns');assert.equal($('inspect-lineage').hidden,true);
  const before=calls.length,count=submissions.length;
@@ -122,7 +157,7 @@ const deniedCount=submissions.length;await action.onclick();assert.equal(submiss
 ''')
 
     def test_database_lineage_wraps_root_direct_children_and_long_text(self):
-        css = database_ui.HTML.split('</style>', 1)[0]
+        css = WorkbenchSource(database_ui.HTML).css
         root = re.search(r'html\[data-data-mode="database"\] #table-lineage\{([^}]+)\}', css)[1]
         children = re.search(r'html\[data-data-mode="database"\] #table-lineage>\*\{([^}]+)\}', css)[1]
         self.assertIn('grid-template-columns:minmax(0,1fr)', root)
@@ -278,5 +313,5 @@ assert.equal(calls.length,before);assert.equal(submissions.length,1);
 await lineageReady();dbObject={...dbObject,kind:'VIEW'};dbExplorerControls();assert.equal(inspectorTabs.find(b=>b.dataset.inspect==='lineage').disabled,false);
 route=async()=>({...lineageReply(),focus:{label:'sales.raw.orders',kind:'VIEW',ref:ref('orders'),view_version:2},confirmed:[],declared:[],coverage:{scope:'visible_saved_records',limit:200,limited:true,empty_reason:'no_visible_saved_evidence'}});
 await dbLineageRefresh();assert.ok(lineageText('table-lineage').includes(t('No visible saved evidence for this object.')));assert.ok(lineageText('table-lineage').includes(t('VIEW version')+' 2'));
-currentRole='bi_viewer';dbLineageControls();const last=inspectorTabs.find(b=>b.dataset.inspect==='snapshots');let prevented=false;last.onkeydown({key:'ArrowRight',preventDefault(){prevented=true;}});assert.ok(prevented);assert.notEqual(document.activeElement.dataset.inspect,'lineage');
+currentRole='bi_viewer';dbLineageControls();const last=inspectorTabs.filter(b=>!b.disabled).at(-1);let prevented=false;last.onkeydown({key:'ArrowRight',preventDefault(){prevented=true;}});assert.ok(prevented);assert.notEqual(document.activeElement.dataset.inspect,'lineage');
 ''')

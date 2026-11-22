@@ -29,6 +29,7 @@ with tempfile.TemporaryDirectory() as _bootstrap:
         import warehouse_resident as wr
         import logical_registry as lr
         import workbench_server as wb
+from fixture_lifecycle import setup_fixture
 from query_context import QueryError
 
 
@@ -364,8 +365,7 @@ class LogicalSourceTests(unittest.TestCase):
     def test_retired_identity_and_changed_username_never_fallback(self):
         import test_logical_registry as fixtures
         fixture = fixtures.LogicalRegistryTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        setup_fixture(self, fixture)
         fixture.setup_ready()
         fixture.db.execute("UPDATE warehouse_config_generations SET database_revisions='[]',grant_revisions='[]',configuration_refs='[]'")
         fixture.grant()

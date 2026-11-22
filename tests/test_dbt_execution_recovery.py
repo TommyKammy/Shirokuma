@@ -145,6 +145,23 @@ class DbtRecoveryTests(unittest.TestCase):
         with control_store.connect() as db:
             db.execute(sql, args)
 
+    def test_unrelated_stage_cleanup_closure_exempts_unknown_query(self):
+        with control_store.connect() as db:
+            q = dict(self.original['queries'][0], id='historical-cleanup-query')
+            a = dict(self.original['admissions'][2], id='historical-cleanup-admission',
+                     subject_id=q['id'], parent_id=None, execution_closure='FENCED_STAGE_CLEANUP')
+            self.assertEqual((q['state'], a['state']), ('UNKNOWN', 'UNKNOWN'))
+            for table, row in (('query_records', q), ('warehouse_admissions', a)):
+                db.execute('INSERT INTO ' + table + ' (' + ','.join(row) + ') VALUES (' +
+                           ','.join('?' for _ in row) + ')', tuple(row.values()))
+        self.assertEqual(self.plan()['phase'], 'PLANNED')
+        # An UNKNOWN query without a closure-bearing admission still blocks.
+        with control_store.connect() as db:
+            db.execute('DELETE FROM warehouse_admissions WHERE id=?', (a['id'],))
+        with self.assertRaises(QueryError) as caught:
+            self.plan(key='unclosed-historical-query')
+        self.assertEqual(caught.exception.code, 'UNRELATED_UNRESOLVED_WORK')
+
     def test_unknown_outcomes_preserved_and_physical_parents_close(self):
         # A previous independently fenced UNKNOWN is historical, not a blocker.
         with control_store.connect() as db:

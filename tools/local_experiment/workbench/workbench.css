@@ -1,0 +1,2571 @@
+/* Shirokuma Atlas design foundation. Tokens follow the approved mock-up
+   (docs/design/assets/ui_mockups/shirokuma-atlas.html); legacy aliases below
+   keep screens that are not rebuilt yet on the same palette and type scale. */
+:root{color-scheme:light;
+--bg:#fff;--rail:#fafafb;--surface:#fafafb;
+--line:#e4e6ea;--ink:#1a1d21;--muted:#5c6470;--selected:#eff0f2;
+--button:#202226;--onbutton:#fff;--green:#39744e;--amber:#96611c;--red:#b94c42;
+--code:#f7f8fa;--ring:#4976b2;
+--surface-2:var(--selected);--surface-3:#e9ebee;--ink-2:#3c424b;--line-strong:#d3d7dd;
+--accent:var(--button);--accent-hover:#000;--accent-ink:var(--ink);--accent-soft:var(--selected);--on-accent:var(--onbutton);
+--ok:var(--green);--ok-soft:#eef6f0;--warn:var(--amber);--warn-soft:#fbf4e7;--bad:var(--red);--bad-soft:#fbeeec;
+--focus:var(--ring);--radius:6px;--radius-lg:8px;
+--sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;
+--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+--chevron:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M3 1.5 6.5 5 3 8.5' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+--icon-database:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'%3E%3Cellipse cx='8' cy='4' rx='5.5' ry='2'/%3E%3Cpath d='M2.5 4v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4M2.5 8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2'/%3E%3C/svg%3E");
+--icon-folder:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5' stroke-linejoin='round'%3E%3Cpath d='M1.8 4.2c0-.6.5-1 1-1h3.4l1.5 1.6h5.5c.6 0 1 .4 1 1v6.4c0 .6-.4 1-1 1H2.8c-.5 0-1-.4-1-1z'/%3E%3C/svg%3E");
+--icon-table:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Crect x='2' y='2.5' width='12' height='11' rx='1.5'/%3E%3Cpath d='M2 6.5h12M2 10h12M6.5 6.5v7'/%3E%3C/svg%3E");
+--icon-view:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.4'%3E%3Cpath d='M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z'/%3E%3Ccircle cx='8' cy='8' r='2'/%3E%3C/svg%3E")}
+:root[data-theme=dark]{color-scheme:dark;
+--bg:#17191c;--rail:#1c1e22;--surface:#202328;
+--line:#34383f;--ink:#e8eaed;--muted:#a1a8b3;--selected:#2e3238;
+--button:#eceef0;--onbutton:#1a1d21;--green:#8fcea4;--amber:#e6b770;--red:#ec9c94;
+--code:#1c1f24;--ring:#91baff;
+--surface-2:var(--selected);--surface-3:#3a3e45;--ink-2:#c6cbd2;--line-strong:#454a52;
+--accent:var(--button);--accent-hover:#fff;--accent-ink:var(--ink);--accent-soft:var(--selected);--on-accent:var(--onbutton);
+--ok:var(--green);--ok-soft:#24352a;--warn:var(--amber);--warn-soft:#3a2f1e;--bad:var(--red);--bad-soft:#3d2422;
+--focus:var(--ring)}
+
+/* Base */
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans);-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+h1{font-size:20px;line-height:1.3;font-weight:650;letter-spacing:-.01em;margin:0}
+h2{font-size:14px;line-height:1.4;font-weight:650;margin:0}
+h3{font-size:13px;line-height:1.4;font-weight:650;margin:0}
+p{margin:0 0 8px;max-width:84ch}
+code,pre{font-family:var(--mono)}
+code{font-size:12px;overflow-wrap:anywhere}
+.muted,small{color:var(--muted)}small{font-size:12px}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+/* Route changes move focus to a heading with tabindex="-1". That focus is a
+   screen-reader starting point, not a keyboard target, so it draws no frame.
+   Keyboard-focusable controls keep the visible outline above. */
+h1[tabindex="-1"]:focus,h2[tabindex="-1"]:focus,h3[tabindex="-1"]:focus,h4[tabindex="-1"]:focus,h5[tabindex="-1"]:focus,h6[tabindex="-1"]:focus{outline:none}
+.visually-hidden{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Keep the existing grid in place while authentication and route restoration run. */
+[data-workbench-shell][inert]{visibility:hidden}
+#workbench-boot{position:fixed;inset:0;background:var(--bg);display:grid;place-content:center;gap:12px;padding:24px;color:var(--ink)}
+#workbench-boot p{color:var(--muted)}
+[data-boot-lang]{display:none}
+:root:lang(en) [data-boot-lang=en],:root:lang(ja) [data-boot-lang=ja]{display:inline}
+
+/* Buttons: default (secondary), primary (commit), run (execute now), stop (pause automation), danger (destructive). */
+button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 12px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);color:var(--ink);font-weight:550;line-height:1.25;cursor:pointer;white-space:nowrap;max-width:100%}
+button:hover:not(:disabled){background:var(--surface-2);border-color:var(--muted)}
+button:disabled{cursor:not-allowed;opacity:.5}
+button[aria-busy=true]{cursor:progress;opacity:.85}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+button.primary:hover:not(:disabled){background:var(--accent-hover);border-color:var(--accent-hover)}
+a.primary{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:30px;padding:4px 12px;border:1px solid var(--accent);border-radius:var(--radius);background:var(--accent);color:var(--on-accent);font-weight:550;line-height:1.25;text-decoration:none;white-space:nowrap}
+a.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover);color:var(--on-accent)}
+button.run{color:var(--accent-ink);border-color:var(--accent)}button.run.primary{color:var(--on-accent)}
+button.run::before{content:"";flex:none;border-left:7px solid currentColor;border-top:4.5px solid transparent;border-bottom:4.5px solid transparent}
+/* The Atlas run label already carries the play glyph; keep one symbol on the SQL run button. */
+button#run-query.run::before{content:none}
+button.stop::before{content:"";flex:none;width:8px;height:8px;border-radius:1px;background:currentColor}
+button.stop,button.danger{color:var(--bad)}
+button.stop:hover:not(:disabled),button.danger:hover:not(:disabled){background:var(--bad-soft);border-color:var(--bad)}
+button.primary.danger,a.primary.danger{background:var(--bad);border-color:var(--bad);color:var(--on-accent)}
+button.primary.danger:hover:not(:disabled){background:color-mix(in oklch,var(--bad) 88%,var(--ink));border-color:color-mix(in oklch,var(--bad) 88%,var(--ink))}
+.impact{margin:8px 0;padding:6px 10px;border-left:3px solid var(--bad);background:var(--bad-soft);overflow-wrap:anywhere}
+.impact.neutral{border-left-color:var(--line);background:var(--surface-2)}
+/* Ingestion and saved stages (UX-A4): one primary action per step, impact before commit. */
+#db-stages-panel,#p35-ingest-form,#db-stages-form{min-width:0}
+#p35-ingest-file-details>summary,#db-stages-panel details>summary{cursor:pointer;font-weight:600;color:var(--ink-2);padding:4px 0}
+#p35-ingest-destination-heading{margin:14px 0 2px}
+#p35-ingest-impact,#db-stages-impact{max-width:100%;overflow-wrap:anywhere}
+#p35-ingest-selected-file{overflow-wrap:anywhere}
+#db-stages-roots{max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){
+ #p35-ingest-form :is(button,select,input,textarea,summary),
+ #db-stages-panel :is(button,select,input,textarea,summary),
+ #p35-wap-form :is(button,select,input,textarea,summary),
+ #db-marts-panel :is(button,select,input,textarea,summary),
+ #transformation :is(button,select,input:not([type=checkbox]),textarea,summary){min-height:44px}
+ #p35-ingest-form .job-fields,
+ #db-stages-panel .job-fields{grid-template-columns:minmax(0,1fr)}
+ #p35-ingest-form .toolbar,
+ #db-stages-panel .toolbar,
+ #p35-wap-form .toolbar,
+ #db-marts-panel .toolbar{flex-wrap:wrap}
+}
+button.quiet{border-color:transparent;background:transparent}
+button.small,td button{min-height:26px;padding:2px 8px;font-size:12px}
+button[aria-busy=true]::before{display:none}
+.spinner{display:inline-block;flex:none;width:12px;height:12px;border:2px solid var(--line-strong);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Forms */
+input,select,textarea{width:100%;min-width:0;min-height:30px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface)}
+input[type=checkbox]{width:16px;height:16px;min-height:0;margin:0;accent-color:var(--accent)}
+input[type=file]{padding:4px}
+input::placeholder,textarea::placeholder{color:var(--muted);opacity:1}
+input:disabled,select:disabled,textarea:disabled,input[readonly]{background:var(--surface-2);color:var(--muted)}
+input:user-invalid,select:user-invalid,textarea:user-invalid{border-color:var(--bad)}
+textarea{resize:vertical;font-family:var(--mono);font-size:12.5px;line-height:1.6}
+label{display:block;margin:12px 0 4px;font-size:12px;font-weight:600;color:var(--ink-2)}
+form small,.help{display:block;margin:4px 0 0;font-size:12px;color:var(--muted)}
+.job-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;min-width:0}
+.job-fields>*{min-width:0}
+#db-jobs-panel .job-json{grid-column:1/-1}
+#db-jobs-panel textarea{width:100%;min-height:7rem}
+#db-jobs-panel h2,#db-jobs-panel h3{margin-bottom:10px}
+#db-jobs-history>div{border-top:1px solid var(--line);padding:12px 0}
+.job-enable-label{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:13px;font-weight:500;color:var(--ink)}
+fieldset{border:0;padding:0;margin:0;min-width:0}
+legend{font-size:12px;font-weight:600;color:var(--ink-2);padding:0}
+.form-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:14px}
+#db-admin-content{max-width:1100px;min-width:0;overflow-wrap:anywhere}
+#db-admin-select{width:100%;max-width:100%}
+#db-admin-content>details{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+#db-admin-schemas{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
+#db-admin-retirement,#db-jobs-run-detail,#db-jobs-history{min-width:0;overflow-wrap:anywhere}
+#db-admin-retirement button,#db-jobs-retry{white-space:normal}
+.retirement-table{max-width:100%;max-height:18rem;overflow:auto}
+.retirement-table table{min-width:26rem}
+.retirement-table th,.retirement-table td{white-space:normal;overflow-wrap:anywhere}
+.retirement-review:not([hidden]){display:flex;align-items:flex-start;gap:8px;margin:12px 0}
+#db-admin-content .retirement-review input{width:auto;flex:none;margin-top:4px}
+#db-admin-content pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* Status: text always states the condition; colour and the glyph reinforce it. */
+.badge,.pill{display:inline-flex;align-items:center;gap:5px;min-height:20px;padding:1px 8px;border-radius:999px;background:var(--surface-3);color:var(--ink-2);font:600 12px/1.3 var(--sans);white-space:nowrap;max-width:100%}
+.badge:empty{display:none}
+.good,.tone-ok{background:var(--ok-soft);color:var(--ok)}
+.bad,.tone-bad{background:var(--bad-soft);color:var(--bad)}
+.tone-warn{background:var(--warn-soft);color:var(--warn)}
+.tone-run{background:var(--accent-soft);color:var(--accent-ink)}
+:is(.badge,.pill):is(.good,.tone-ok)::before{content:"✓"}
+:is(.badge,.pill):is(.bad,.tone-bad)::before{content:"✕"}
+:is(.badge,.pill).tone-warn::before{content:"!";font-weight:800}
+:is(.badge,.pill).tone-run::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite}
+td.tone-ok,td.tone-bad,td.tone-warn,td.tone-run{background:none;font-family:var(--sans);font-weight:600}
+@keyframes pulse{50%{opacity:.3}}
+.status-line{display:inline-flex;align-items:center;gap:6px;margin:0;color:var(--muted);font-size:12px;background:none;overflow-wrap:anywhere}
+.status-line:empty{display:none}
+.status-line[class*=tone-]{background:none;font-weight:600}
+.status-line[class*=tone-]::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:currentColor}
+.status-line.tone-run::before{animation:pulse 1.4s ease-in-out infinite}
+.status-line.tone-ok{color:var(--ok)}.status-line.tone-bad{color:var(--bad)}.status-line.tone-warn{color:var(--warn)}.status-line.tone-run{color:var(--accent-ink)}
+.error,.callout{display:block;margin:8px 0;padding:8px 12px;border:1px solid var(--line);border-left:3px solid var(--muted);border-radius:var(--radius);background:var(--surface-2);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
+.error{border-color:color-mix(in oklch,var(--bad) 30%,var(--line));border-left-color:var(--bad);background:var(--bad-soft)}
+.error::before{content:"✕  ";color:var(--bad);font-weight:700}
+.error:empty,.callout:empty{display:none}
+.callout.warn{border-left-color:var(--warn);background:var(--warn-soft)}
+.callout.info{border-left-color:var(--accent);background:var(--accent-soft)}
+.empty{padding:24px 16px;text-align:center;color:var(--muted)}
+.state{margin:8px 0 0;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}
+.state:empty{display:none}
+
+/* Application shell layout comes from the Atlas foundation appended below. */
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px 24px;flex-wrap:wrap;margin-bottom:14px}
+.page-title p{margin:3px 0 0;color:var(--muted)}
+.page-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* Surfaces */
+.panel{min-width:0;margin-bottom:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;min-height:46px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.panel-head>div:first-child{min-width:0}
+.panel-head small{display:block;font-size:12px}
+.panel-body{padding:14px}
+.section{min-width:0;padding:14px;border-top:1px solid var(--line)}
+.section:first-child{border-top:0}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.section-head h3{font-size:13px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.toolbar label{margin:0}
+.toolbar select,.toolbar input{width:auto}
+#p35-ingest-recovery,#p35-wap-recovery{min-width:0;max-width:100%;flex-wrap:wrap}
+#p35-ingest-recovery>*,#p35-wap-recovery>*{min-width:0;max-width:100%}
+#p35-ingest-recovery select,#p35-wap-recovery select{min-width:0;max-width:100%}
+#p35-ingest-recovery .help,#p35-wap-recovery .help{flex-basis:100%;overflow-wrap:anywhere;white-space:normal}
+.detail-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);border-top:1px solid var(--line)}
+.detail-grid>*{min-width:0}
+.detail-grid>*+*{border-left:1px solid var(--line)}
+.detail-grid .section:first-child{border-top:0}
+.detail-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.detail-title h2{overflow-wrap:anywhere}
+.kv{display:flex;flex-wrap:wrap;gap:4px 16px;margin:0;font-size:12px;color:var(--ink-2)}
+.kv>span{overflow-wrap:anywhere}
+
+/* Tables */
+.table-wrap{overflow:auto;max-width:100%}
+table{width:100%;border-collapse:separate;border-spacing:0;text-align:left;white-space:nowrap;font-size:12.5px}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{position:sticky;top:0;z-index:1;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:600}
+td{font-family:var(--mono);font-size:12px}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:var(--surface-2)}
+td.null{color:var(--muted);font-style:italic}
+td button+button{margin-left:6px}
+.list table{white-space:normal}
+.list th{white-space:nowrap}
+.list td{font-family:var(--sans);font-size:12.5px;overflow-wrap:break-word}
+.list td:first-child{overflow-wrap:anywhere;min-width:160px}
+.list td:first-child{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)}
+.list tr[aria-current=true] td{background:var(--accent-soft)}
+.list td .badge+.badge{display:flex;width:max-content;margin-top:4px}
+.list td small,.list td .badge+time{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
+.list:not(:has(table,.empty)){padding:14px;color:var(--muted)}
+.details-cell{white-space:normal;min-width:240px;max-width:440px;overflow-wrap:anywhere}
+pre{margin:0;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:360px;background:var(--surface-2);border-radius:var(--radius);font:12px/1.6 var(--mono)}
+details>summary{cursor:pointer;font-weight:600}
+details>summary::marker{color:var(--muted)}
+
+/* SQL worksheets */
+.sql-layout{display:grid;grid-template-columns:232px minmax(0,1fr);gap:14px;align-items:start}
+.explorer{position:sticky;top:64px;max-height:calc(100vh - 80px);overflow:auto;margin:0;padding:10px}
+.explorer>summary{padding:2px 2px 6px;font-size:13px}
+.explorer label{margin-top:4px}
+.explorer-hint{margin:0 0 8px}
+#worksheet-tree,#catalog-tree{margin-top:8px}
+#worksheet-tree details,#catalog-tree details{padding:2px 0}
+#worksheet-tree summary,#catalog-tree summary{padding:3px 2px;font-size:12px;color:var(--ink-2)}
+.table-link{display:block;width:100%;min-height:24px;margin:0;padding:2px 8px 2px 18px;border:0;border-radius:4px;background:transparent;font:12px/1.5 var(--mono);text-align:left;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+.table-link:hover:not(:disabled){background:var(--surface-2)}
+.warehouse-strip{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;font-size:12px}
+.warehouse-strip details{position:relative}
+.warehouse-strip details>summary{font-weight:500;color:var(--ink-2)}
+.components{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.components .badge{font-family:var(--mono);font-weight:500}
+.editor-panel{overflow:hidden}
+.editor-tabs{display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--surface-2);border-bottom:1px solid var(--line);border-radius:var(--radius-lg) var(--radius-lg) 0 0;flex-wrap:wrap}
+#worksheet-tabs{display:flex;gap:2px;flex:1 1 220px;min-width:0;padding-bottom:14px;overflow-x:auto;overflow-y:hidden}
+#worksheet-tabs button{min-height:28px;padding:3px 10px;border-color:transparent;background:transparent;color:var(--ink-2);font-weight:500}
+#worksheet-tabs button[aria-selected=true]{background:var(--surface);border-color:var(--line);color:var(--ink);font-weight:600}
+.worksheet-closers{display:flex;align-items:center;gap:6px;flex:none;flex-wrap:wrap;min-width:0;padding-bottom:14px}
+.worksheet-closers label{margin:0;font-size:12px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+#worksheet-close-select{width:auto;max-width:100%;min-height:28px;padding:2px 6px;font-size:12px}
+#worksheet-close-action{min-height:28px;padding:2px 8px}
+#add-worksheet-tab{min-height:28px;padding:2px 8px}
+.history-field{display:flex;align-items:center;gap:6px;max-width:340px;min-width:0}
+.history-field label{margin:0;white-space:nowrap;font-weight:500}
+#query-history{min-height:28px;padding:2px 6px}
+.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px;line-height:1.65;tab-size:2}
+.editor:focus-visible{outline-offset:-2px}
+.query-footer{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap;padding:8px 10px;background:var(--surface-2);border-top:1px solid var(--line)}
+.query-footer .toolbar{gap:6px 12px}
+.query-footer label{margin:0;font-weight:500;color:var(--muted)}
+.query-footer select{min-height:28px;padding:2px 6px}
+.query-footer .field{display:inline-flex;align-items:center;gap:6px}
+#max-rows{width:84px;min-height:28px}
+.run-group{display:inline-flex;align-items:center;gap:10px;margin-left:auto}
+kbd{font:11px var(--mono);color:var(--muted);padding:1px 5px;border:1px solid var(--line-strong);border-radius:4px;background:var(--surface)}
+.copilot{border-top:1px solid var(--line)}
+.copilot>summary{padding:8px 12px;font-size:12.5px;color:var(--ink-2)}
+.copilot-body{padding:0 12px 12px}
+.copilot-body label{margin-top:0}
+.copilot .toolbar{margin-top:8px}
+#database-bears-workflows,#database-copilot-workflows{min-width:0;max-width:100%;flex-wrap:wrap}
+#database-bears-workflows>*,#database-copilot-workflows>*{min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal}
+#database-bears-workflows>.help,#database-copilot-workflows>.help{flex-basis:100%}
+#copilot-result{margin-top:8px}
+#proposal-panel{margin-top:12px} #proposal-panel p{max-width:75ch;overflow-wrap:anywhere}
+#proposal-sources{padding-left:20px} #proposal-sources li{margin:4px 0;overflow-wrap:anywhere} #proposal-sources button{margin-left:8px}
+#proposal-panel select{max-width:100%}
+.results-tools{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:8px 14px;border-bottom:1px solid var(--line)}
+.results-tools label{margin:0;font-weight:500;color:var(--muted)}
+.results-tools input[type=search]{width:220px}
+.results-tools select{width:auto;min-height:28px;padding:2px 6px}
+.segmented{display:inline-flex;padding:2px;gap:2px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.segmented button{min-height:24px;padding:2px 10px;border:0;background:transparent;font-size:12px;color:var(--ink-2)}
+.segmented button[aria-pressed=true]{background:var(--surface);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+#query-results{max-height:max(300px,calc(100vh - 300px))}
+#query-results th button{min-height:0;padding:0;border:0;background:transparent;font:inherit;color:inherit;width:100%;justify-content:flex-start}
+.result-sort-indicator{display:inline-block;min-width:1ch;margin-left:4px;color:var(--accent-ink)}
+#query-results:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+#query-error{margin:10px 14px}
+#query-chart{overflow:auto;padding:14px}
+#query-chart svg{display:block;width:100%;min-width:480px;height:auto;color:var(--ink)}
+.chart-mark{fill:var(--accent)}.chart-line{fill:none;stroke:var(--accent);stroke-width:2}.chart-axis{stroke:var(--line);stroke-width:1}.chart-label{fill:currentColor;font:12px var(--sans)}
+
+/* Ingestion */
+#p35-ingest{container:manual-ingest / inline-size}
+#p35-ingest>.panel-body{max-width:56rem;min-width:0}
+#p35-ingest-form{display:grid;gap:16px;min-width:0}
+#p35-ingest-form .job-fields{grid-template-columns:minmax(0,1fr);align-items:end;gap:14px}
+#p35-ingest :is(label,p,button,summary){white-space:normal;overflow-wrap:anywhere}
+#p35-ingest label{margin:0 0 6px}
+#p35-ingest-form :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0;box-sizing:border-box}
+#p35-ingest :is(button,select){max-width:100%}
+#p35-ingest-dropzone{display:grid;justify-items:start;gap:12px;width:100%;max-width:28rem;box-sizing:border-box;padding:12px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface-2)}
+#p35-ingest-dropzone:focus-within{border-color:var(--focus)}
+#p35-ingest-file-status{margin:0}
+#p35-ingest .workflow-details{margin:0;min-width:0}
+#p35-ingest .workflow-details>.job-fields{margin-top:14px}
+#p35-ingest .toolbar{flex-wrap:wrap;gap:12px}
+#p35-ingest-sample{min-width:0;overflow-x:auto}
+#p35-ingest-sample:empty{display:none}
+#p35-ingest-recovery{margin-top:16px}
+#p35-ingest-recovery-notice:empty{display:none}
+#p35-ingest-recovery .toolbar{align-items:end;margin-top:12px}
+#p35-ingest-recovery .toolbar>*{min-width:0;max-width:100%}
+@container manual-ingest (min-width:34rem){
+ #p35-ingest-form .job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #p35-ingest-keys-field{grid-column:1/-1}
+}
+@container manual-ingest (min-width:51rem){
+ #p35-ingest-form #p35-ingest-context-controls{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+}
+
+/* Schedules (jobs, stages, refresh targets share one layout) */
+.schedule-status{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;margin:6px 0 4px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2);font-size:12px;color:var(--ink-2)}
+.schedule-status p{margin:0}
+.schedule-status>button{margin-left:auto}
+.schedule-daily{display:contents}
+.schedule-weekdays{margin:12px 0 0}
+.schedule-weekdays .toolbar{gap:4px 14px;margin-top:4px}
+.schedule-weekdays .job-enable-label{margin:0}
+.schedule-help{margin:6px 0 0;font-size:12px;color:var(--muted)}
+
+/* Jobs */
+.job-step{margin:10px 0;padding:10px 12px 12px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface-2)}
+.job-step legend{float:left;margin-bottom:2px;font-size:12px;font-weight:700;color:var(--ink)}
+.job-step legend+*{clear:both}
+.job-step label{margin-top:8px}
+.job-step textarea{min-height:84px}
+.job-step>button{margin-top:10px}
+.job-step small{display:block;margin:6px 0}
+#job-steps:empty::after{content:"—";color:var(--muted)}
+#job-alerts table{table-layout:fixed;min-width:900px}
+#job-alerts th,#job-alerts td{white-space:normal;overflow-wrap:anywhere}
+#job-alerts th:nth-child(1){width:9%}#job-alerts th:nth-child(2){width:31%}#job-alerts th:nth-child(3){width:14%}#job-alerts th:nth-child(4){width:14%}#job-alerts th:nth-child(5){width:7%}#job-alerts th:nth-child(6){width:13%}#job-alerts th:nth-child(7){width:12%}
+#job-alerts td{font-family:var(--sans)}
+#job-alerts small{display:block;margin-top:4px}
+#job-alerts details{padding:4px 0 0;font-size:12px}
+#job-alerts summary{font-weight:500;color:var(--muted)}
+#job-runs{max-height:420px}
+#job-runs-filter{max-width:280px}
+#job-runs td{white-space:nowrap}#job-runs td:first-child{min-width:0}#job-runs td:nth-child(2){white-space:normal;overflow-wrap:anywhere;min-width:160px}
+#job-failure{margin:10px 14px}
+.notes{display:grid;gap:2px;padding:10px 14px 0;font-size:12px;color:var(--muted)}
+
+/* Transformation */
+.lineage{display:grid;gap:10px}
+.lineage-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.lineage-row strong{min-width:120px;font-size:12px;color:var(--ink-2)}
+.node{padding:3px 8px;background:var(--surface-2);border:1px solid var(--line);border-radius:4px;font:12px var(--mono);overflow-wrap:anywhere}
+
+/* Catalog */
+.catalog-grid{display:grid;grid-template-columns:260px minmax(0,1fr);gap:14px;align-items:start}
+.catalog-grid .panel{margin-bottom:0}
+#catalog-tree{padding:4px 8px 10px;max-height:calc(100vh - 220px);overflow:auto}
+#catalog-tree.empty{padding:24px 12px}
+#inspector-tabs{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line);overflow-x:auto}
+#inspector-tabs button{min-height:34px;margin-bottom:-1px;padding:6px 10px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;font-size:12.5px;color:var(--ink-2)}
+#inspector-tabs button[aria-selected=true]{color:var(--accent-ink);border-bottom-color:var(--accent)}
+#inspect-columns h3{padding:12px 14px 6px}
+#table-ddl{margin:14px}
+#table-title{font-family:var(--mono);font-size:13px;overflow-wrap:anywhere}
+
+/* AI Bears */
+
+/* Jobs: size each workflow row from the available panel width. */
+#db-jobs-panel{container:db-jobs / inline-size}
+#db-jobs-panel .panel-body{padding:20px}
+#db-jobs-panel label{margin:0 0 6px}
+#db-jobs-panel .toolbar{align-items:end;gap:12px;margin-bottom:20px}
+#db-jobs-panel .toolbar :is(input:not([type=checkbox]),select){width:100%}
+#db-jobs-panel button{white-space:normal}
+#db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar,.jobs-input-row){display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+#db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar,.jobs-input-row)>*{min-width:0}
+#db-jobs-panel #db-jobs-form{margin-block:24px}
+#db-jobs-panel #db-jobs-form>.job-fields{grid-template-columns:minmax(0,1fr);gap:18px 12px;margin-top:20px}
+#db-jobs-panel #db-jobs-form>.workflow-details{margin-top:20px}
+#db-jobs-panel #db-jobs-files{margin-top:20px}
+#db-jobs-panel .jobs-actions{margin-top:20px}
+#db-jobs-panel #db-jobs-next{margin-block:12px 20px}
+#db-jobs-panel #db-jobs-run-detail:not(:empty){margin-block:20px}
+/* Keep the shared schedule independent of the Job definition grid. */
+#db-jobs-panel #db-schedule-job-form>.job-fields{grid-template-columns:minmax(0,1fr);gap:18px 12px;margin-block:20px}
+#db-jobs-panel #db-schedule-job-form .job-fields>div:has(>#db-schedule-job-arguments){grid-column:1/-1}
+#db-jobs-panel #db-schedule-job-weekdays{grid-column:1/-1}
+#db-jobs-panel .panel-body>.toolbar>div:has(>#db-schedule-job-list){flex:1 1 260px}
+@container db-jobs (min-width:600px){
+ #db-jobs-panel :is(.jobs-context-toolbar,.jobs-saved-toolbar){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-jobs-panel :is(#db-jobs-form,#db-schedule-job-form)>.job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-jobs-panel .jobs-input-row{grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto}
+}
+@container db-jobs (min-width:960px){
+ #db-jobs-panel .jobs-context-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr) auto}
+ #db-jobs-panel .jobs-saved-toolbar{grid-template-columns:minmax(0,1fr) auto auto auto}
+}
+@media(max-width:600px){#db-jobs-panel .panel-body{padding:14px}}
+#db-jobs-panel :is(.panel-body,.toolbar,.job-fields,.job-json,form,details){min-width:0;max-width:100%}
+#db-jobs-panel :is(p,summary,strong,span,button){overflow-wrap:anywhere}
+#db-jobs-panel :is(input,select,textarea){min-width:0;max-width:100%;box-sizing:border-box}
+#db-jobs-panel .toolbar>label{min-width:0;max-width:100%}
+#db-jobs-panel :is(pre,textarea){white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.workflow-details{margin-top:12px}
+.workflow-details summary{padding-block:8px}
+#bears .workflow-details{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#bears .workflow-details :is(p,pre,summary){white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%}
+.bear-workflows{display:grid;gap:8px;justify-items:start}
+.bear-workflows button{white-space:normal;text-align:start}
+.bear-panel p{color:var(--muted)}
+.bear-panel textarea{min-height:84px}
+.bear-panel pre{margin-top:12px}
+
+
+/* Dialog */
+dialog{width:min(480px,calc(100% - 28px));max-height:90dvh;overflow:auto;padding:20px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+dialog::backdrop{background:oklch(.2 .02 258 / .45)}
+
+/* Roles: hidden controls are a convenience only; the server enforces every permission. */
+#role-indicator{background:var(--warn-soft);color:var(--warn)}
+html[data-role="bi_viewer"] :is(#drop-table-btn,#ai-settings-button,#clone-table-btn,[data-role-write="admin"],[data-role-write="engineer"]),html[data-role="data_engineer"] :is(#ai-settings-button,[data-role-write="admin"]){display:none!important}
+
+/* Responsive */
+@media(max-width:1180px){.detail-grid{grid-template-columns:1fr}.detail-grid>*+*{border-left:0;border-top:1px solid var(--line)}}
+@media(max-width:1024px){main{padding:16px 16px 40px}.sql-layout,.catalog-grid{grid-template-columns:1fr}.explorer{position:static;max-height:none}.sql-main{display:contents}.sql-main .panel{margin-bottom:0}.editor-panel{order:1}.explorer{order:2}.results-panel{order:3}#worksheet-tree{max-height:260px;overflow:auto}#catalog-tree{max-height:300px}}
+@media(max-width:760px){
+ #role-controls,#lang-switcher,#ai-settings-button{order:2}
+ main{padding:14px 20px 32px}
+ .editor{min-height:112px;height:clamp(112px,20vh,220px)}
+ .query-footer .run-group{order:-1;width:100%;justify-content:space-between}
+ .sql-layout{gap:10px}
+ .results-tools input[type=search]{width:100%}
+}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+/* Database-mode explorer and SQL workspace (UX-D1). Aligned with the UX-D1 mock: one tree pane, one
+   tab strip, context above the editor and run actions below it. Scoped to IDs that exist only in Database mode. */
+html[data-data-mode=database] #warehouse>.page-head{margin-bottom:10px;align-items:center}
+html[data-data-mode=database] #warehouse>.page-head h1{font-size:18px}
+html[data-data-mode=database] #warehouse>.page-head .page-title p{display:none}
+#database-workspace{grid-template-columns:264px minmax(0,1fr);gap:12px;align-items:start}
+#database-workspace-main{display:flex;flex-direction:column;gap:0;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-lg)}
+#database-workspace-main>[hidden]{display:none}
+#database-worksheet-pane{display:flex;flex-direction:column;gap:12px;min-width:0;padding:12px}
+#database-worksheet-pane>.panel{margin:0}
+#database-details{min-width:0;margin:12px;border:1px solid var(--line);box-shadow:none}
+/* Explorer: title, search and refresh first; the tree takes the remaining height; context last. */
+#database-workspace .explorer-search{display:grid;gap:6px;flex:none;padding:8px 10px;border-bottom:1px solid var(--line)}
+#database-workspace .explorer-search label,#database-workspace .explorer-search .help{margin:0}
+#database-workspace .explorer-search input{width:100%;min-width:0;min-height:28px;font-size:12px}
+#database-workspace #refresh-catalog{justify-self:start}
+#database-workspace #refresh-catalog{flex:none;min-height:28px;padding:2px 8px;font-size:12px}
+#database-workspace #catalog-tree{flex:1 1 auto;min-height:120px;max-height:none;margin:0;padding:6px 4px 10px;overflow:auto;text-align:left;color:var(--ink)}
+#database-workspace #catalog-error{margin:6px 10px}
+#database-workspace .explorer-foot{flex:none;border-top:1px solid var(--line);padding:8px 10px 10px;font-size:12px;color:var(--muted)}
+#database-workspace .explorer-foot p{margin:0 0 6px}
+#database-workspace .explorer-foot details>summary{font-weight:500;color:var(--ink-2)}
+#database-workspace .explorer-foot .toolbar{display:grid;gap:6px;margin-top:6px;padding:0}
+#database-workspace .explorer-foot .field{display:grid;gap:2px;min-width:0}
+#database-workspace .explorer-foot label{margin:0;font-size:11px}
+#database-workspace .explorer-foot select{width:100%;min-height:28px;font-size:12px;padding:2px 6px}
+#database-workspace .explorer-foot button{min-height:26px;padding:2px 8px;font-size:12px;justify-self:start}
+#catalog-context-state{display:block;color:var(--ink-2);overflow-wrap:anywhere}
+/* Tree: Database → Schema → Tables / Views, indented, with kind icons and a clear selection. */
+#database-workspace #catalog-tree details{padding:0}
+#database-workspace #catalog-tree details details{padding-left:14px}
+#database-workspace #catalog-tree summary{display:flex;align-items:center;gap:6px;min-height:28px;padding:3px 6px;border-radius:5px;font-size:12.5px;font-weight:500;color:var(--ink);list-style:none;cursor:pointer}
+#database-workspace #catalog-tree summary::-webkit-details-marker{display:none}
+#database-workspace #catalog-tree summary::before{content:"";order:-2;flex:none;width:10px;height:10px;background:var(--muted);-webkit-mask:var(--chevron) center/10px no-repeat;mask:var(--chevron) center/10px no-repeat;transition:transform .12s}
+#database-workspace #catalog-tree details[open]>summary::before{transform:rotate(90deg)}
+#database-workspace #catalog-tree .tree-node::after{content:"";order:-1;flex:none;width:15px;height:15px;background:currentColor;opacity:.75;-webkit-mask:var(--kind-icon) center/15px no-repeat;mask:var(--kind-icon) center/15px no-repeat}
+#database-workspace #catalog-tree .tree-database{--kind-icon:var(--icon-database)}
+#database-workspace #catalog-tree .tree-schema{--kind-icon:var(--icon-folder)}
+#database-workspace #catalog-tree .tree-table{--kind-icon:var(--icon-table)}
+#database-workspace #catalog-tree .tree-view{--kind-icon:var(--icon-view)}
+#database-workspace #catalog-tree .tree-group{margin:6px 0 2px 22px;font-size:11px;font-weight:500;color:var(--muted);letter-spacing:.04em}
+#database-workspace #catalog-tree .table-link{display:flex;align-items:center;justify-content:flex-start;width:100%;gap:6px;min-height:28px;margin:0;padding:3px 6px 3px 22px;border-radius:5px;font:12.5px/1.4 var(--sans);color:var(--ink);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#database-workspace #catalog-tree p{margin:2px 0 4px 22px;font-size:12px;color:var(--muted)}
+#database-workspace #catalog-tree summary:hover,#database-workspace #catalog-tree .table-link:hover:not(:disabled){background:var(--surface-2)}
+#database-workspace #catalog-tree summary[aria-current=true],#database-workspace #catalog-tree .table-link[aria-current=true]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+#database-workspace #catalog-tree summary:focus-visible,#database-workspace #catalog-tree .table-link:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+/* Explorer details: the rebuilt page owns its heading, actions and management sections. */
+#database-details .toolbar{flex-wrap:wrap}
+/* Editor: execution context bar above, run actions below. */
+#database-context-bar{display:flex;align-items:flex-end;flex-wrap:wrap;gap:8px 10px;padding:10px 12px;border-bottom:1px solid var(--line);background:var(--surface)}
+#database-context-bar label{display:grid;gap:5px;min-width:0;font-size:12px;color:var(--ink);flex:0 1 auto}
+#database-context-bar label[hidden]{display:none}
+#database-context-bar label:has(> #query-database){flex:1 1 230px}
+#database-context-bar label:has(> #query-schema){flex:1 1 200px}
+#database-context-bar label:has(> #query-execution-role){flex:0 1 160px}
+#database-context-bar label:has(> #max-rows){flex:0 1 120px}
+#database-context-bar select,#database-context-bar input{width:100%;min-width:0;min-height:30px;font-size:12.5px}
+/* Run row: the single block reason sits next to the button and is its description. */
+#database-editor .run-group #database-context-state{flex:1 1 220px;min-width:0;margin:0;padding:0;border:0;background:transparent;font-size:12px;line-height:1.45;color:var(--warn);overflow-wrap:anywhere}
+#database-editor .run-group #database-context-state:empty{display:none}
+#sample-sql-tools{display:flex;align-items:center;gap:8px 10px;flex-wrap:wrap;min-width:0;padding:10px 14px;border-top:1px solid var(--line)}
+#sample-sql-tools label{margin:0;font-weight:500;color:var(--muted)}
+#sample-sql-tools select{width:auto;max-width:100%;min-width:0;min-height:30px;padding:2px 6px}
+#sample-sql-tools button{min-height:30px}
+#database-editor .run-group{flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+#database-editor #cancel-query{min-height:30px}
+@media(max-width:600px){
+ #database-context-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:end;gap:10px 8px;min-width:0}
+ #database-context-bar label{flex:none;min-width:0}
+ #database-context-bar :is(select,input){min-height:44px;font-size:1rem;padding-inline:6px}
+ #database-editor .run-group{width:100%;justify-content:flex-start}
+ #database-editor :is(#run-query,#cancel-query){min-height:44px}
+ #database-editor .run-group #database-context-state{flex-basis:100%}
+ #sample-sql-tools{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:8px;padding:10px;min-width:0}
+ #sample-sql-tools label{grid-column:1 / -1}
+ #sample-sql-tools select{width:100%;min-height:44px;font-size:1rem}
+ #sample-sql-tools button{min-height:44px}
+ #database-results :is(button,select,input){min-height:44px}
+ #database-workspace .explorer-search input,
+ #database-workspace .explorer-search select,
+ #database-workspace .explorer-foot select,
+ #warehouse #refresh-catalog,
+ #warehouse .explorer-foot button,
+ #warehouse #catalog-tree .table-link,
+ #warehouse #query-results th button,
+ #warehouse :is(button,select,input:not([type=checkbox])){min-height:44px}
+ .editor{font-size:1rem}
+}
+#database-results .history-field{max-width:none;flex:1 1 280px;justify-content:flex-end}
+#database-results .history-field select{max-width:360px}
+#database-results>details{padding:8px 14px;border-top:1px solid var(--line);font-size:12px}
+#database-results>details pre{margin-top:8px}
+@media(max-width:1024px){
+ #database-workspace{grid-template-columns:minmax(0,1fr)}
+ #database-workspace>.explorer{order:0;position:static;max-height:none}
+ #database-workspace-main{order:1}
+ #database-workspace #catalog-tree{max-height:300px}
+ :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0;max-width:100%}
+ :is(#db-jobs-panel,#db-stages-panel,#p35-wap,#db-marts-panel) select{min-width:0;max-width:100%}
+}
+.wb-task-context{min-width:0;max-width:100%;overflow-wrap:anywhere;line-height:1.5;margin-block:8px 12px}
+.wb-task-context p{margin:0}
+.wb-task-context p+p{margin-top:4px;color:var(--muted)}
+@media(max-width:760px){
+ #p35-ingest .job-fields>*{min-width:0}
+ #p35-ingest :is(input,select,textarea,button){max-width:100%}
+}
+#database-compute-status{min-height:32px;min-width:0;max-width:100%;white-space:normal;text-align:start}
+#database-compute-state{min-width:0;overflow-wrap:anywhere}
+#db-stages-panel :is(.toolbar button,.toolbar input,.toolbar select){min-width:0;max-width:100%}
+#db-stages-panel :is(.toolbar button,[id$="-detail"],[id$="-list"],#db-stages-owner){overflow-wrap:anywhere}
+@media(max-width:760px){
+ #database-worksheet-pane{padding:8px}
+ #database-details{margin:8px}
+ html[data-data-mode=database] .warehouse-strip{min-width:0;max-width:100%}
+ html[data-data-mode=database] .warehouse-strip .badge{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+}
+@media(max-width:360px){
+ .breadcrumb{flex:0 1 auto;min-width:0}
+ #database-compute-status{font-size:11px;padding:2px 7px}
+}
+#db-creation-history{margin-block-start:16px}
+#db-creation-history summary{cursor:pointer}
+#db-creation-history .toolbar{align-items:end;margin-block-start:8px}
+#db-creation-history .toolbar>div{min-width:0;max-width:100%}
+#db-creation-history-picker{max-width:100%}
+#db-creation-next-action{font-weight:600;max-width:75ch}
+#db-creation-actions{margin-block:16px;overflow-wrap:anywhere}
+#db-creation-observation{max-width:75ch;font-size:13px}
+#db-audit-panel{padding:0}
+#db-audit-panel #db-audit-guide li+li{margin-top:8px}
+#runtime-panel{min-width:0;max-width:100%}
+#runtime-panel p{max-width:75ch;overflow-wrap:anywhere;margin:0 0 8px}
+#runtime-panel p:last-child{margin-bottom:0}#runtime-panel p:empty{display:none}
+#runtime-panel h3{margin-bottom:8px}#runtime-panel .panel-head{gap:12px;padding:14px}
+#runtime-panel #runtime-physical{color:var(--ink);font-weight:600}
+#runtime-panel .toolbar{gap:8px;flex-wrap:wrap;min-width:0}
+#runtime-panel .runtime-policy-editor{align-items:flex-end;margin-top:12px;gap:12px 16px}
+#runtime-panel .runtime-minutes-field{flex:0 1 24rem;min-width:0;max-width:100%}
+#runtime-panel .runtime-minutes-field label{margin:0 0 6px}
+#runtime-panel input{width:9rem;min-width:0;max-width:100%}
+#runtime-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#runtime-panel .runtime-actions{margin-block:12px}
+#runtime-panel .help{color:var(--muted)}
+#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}
+#observation-compute-panel,#observation-resources-panel{min-width:0;max-width:100%}
+#observation-compute-panel .panel-body,#observation-compute-output,#observation-resources-panel .panel-body,#observation-resources-output{min-width:0;max-width:100%}
+#observation-compute-output p,#observation-resources-output p{max-width:75ch;overflow-wrap:anywhere}
+#observation-compute-panel .toolbar,#observation-resources-panel .toolbar{min-width:0;max-width:100%;flex-wrap:wrap}
+#observation-compute-panel button,#observation-resources-panel button{min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+#observation-activity-panel{min-width:0;max-width:100%}
+#observation-activity-panel .panel-body,#observation-activity-panel .field{min-width:0;max-width:100%}
+#observation-activity-panel .toolbar{flex-wrap:wrap;align-items:end;gap:12px}
+#observation-activity-panel :is(input,select,button){min-width:0;max-width:100%}
+#observation-activity-panel :is(p,td,th,button){white-space:normal;overflow-wrap:anywhere}
+#observation-activity-panel .table-wrap{max-width:100%;overflow-x:auto}
+/* Database dbt uses the established operational toolbar and table vocabulary. */
+
+/* Transformation forms share Job spacing while retaining their own context and actions. */
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel){container:transformation / inline-size}
+:is(#p35-wap,#db-marts-panel){min-width:0;max-width:100%}
+#db-dbt-panel{min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .panel-body{padding:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(details,.panel-body,.job-fields,.toolbar,form){min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(p,summary,label,button){white-space:normal;overflow-wrap:anywhere}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) label{margin:0 0 6px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(input:not([type=checkbox]),select,textarea){width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) input[type=checkbox]{flex:none}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .toolbar{align-items:end;gap:12px;flex-wrap:wrap;margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .toolbar>div{min-width:0}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved){display:grid;grid-template-columns:minmax(0,1fr);align-items:end;gap:18px 12px;margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved)>*{min-width:0}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) pre{white-space:pre-wrap;overflow-wrap:anywhere;min-width:0;max-width:100%}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .workflow-details{margin-block:20px}
+:is(#db-dbt-panel,#p35-wap,#db-marts-panel) h3{margin-top:24px}
+#db-dbt-panel .transformation-context>p{margin:0}
+#db-dbt-panel .transformation-saved>span{grid-column:1/-1}
+#db-dbt-panel #db-dbt-native-controls{display:grid;grid-template-columns:minmax(0,1fr);grid-column:1/-1;gap:12px;margin:0}
+#db-dbt-panel #db-dbt-native-controls>label{display:flex;align-items:center;gap:8px;margin:0}
+#db-dbt-panel #db-dbt-native-controls>p{grid-column:1/-1;margin:0}
+#db-dbt-panel :is(select,button){max-width:100%}
+#db-dbt-panel :is(p,td,th,summary){overflow-wrap:anywhere}
+#db-dbt-panel .table-wrap{max-width:100%;overflow-x:auto}
+#db-dbt-panel table{width:100%}
+#db-dbt-panel details{padding-block:10px;border-bottom:1px solid var(--line)}
+#db-dbt-panel summary{cursor:pointer}
+#db-dbt-candidates :is(td,th){white-space:normal}
+#db-dbt-candidates td:last-child{min-width:10rem;max-width:28rem}
+#db-dbt-candidates details{padding-block:0;border:0}
+#db-dbt-panel .db-dbt-compatibility{padding-block:12px;border-block:1px solid var(--line);margin-block:8px}
+#db-dbt-panel .db-dbt-compatibility h3{margin-bottom:8px}
+#db-dbt-panel .db-dbt-confirm{padding-block:12px;border-top:1px solid var(--line)}
+#p35-wap>.panel-body{max-width:66rem;min-width:0}
+#p35-wap .job-fields>div:has(>textarea){grid-column:1/-1}
+#p35-wap textarea{min-height:9rem}
+#p35-wap :is(.wap-guide,.wap-editor,.wap-history){min-width:0;overflow-wrap:anywhere}
+#p35-wap .wap-steps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px;padding-inline-start:24px}
+#p35-wap .wap-steps li[aria-current=step]{font-weight:700;color:var(--accent-ink)}
+#p35-wap .transformation-ai-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-block:12px}
+#p35-wap .transformation-ai-actions .help{margin:0}
+#p35-wap #p35-wap-publish-review{max-width:100%;overflow-wrap:anywhere;white-space:pre-line}
+#p35-wap #p35-wap-published{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+#p35-wap #p35-wap-stage-reason{max-width:100%;overflow-wrap:anywhere}
+#p35-wap .wap-editor h3{margin-block:18px 0}
+#p35-wap button{max-width:100%;white-space:normal}
+@container transformation (min-width:600px){
+ #p35-wap .wap-steps{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+#p35-wap #p35-wap-sources .toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+#p35-wap .transformation-actions{display:flex;align-items:end;flex-wrap:wrap;gap:12px;margin-block:20px}
+#p35-wap .workflow-details>div{margin-block:12px}
+#p35-wap :is(form,.panel-body)>button{margin-block:12px;margin-inline-end:12px}
+#db-marts-panel #db-marts-form{margin-block:24px}
+#db-marts-panel #db-marts-form>div:has(>#db-marts-watch){margin-block:20px}
+#db-marts-panel .transformation-actions>div:has(>input[type=checkbox]){display:flex;align-items:center;gap:8px}
+#db-marts-panel .transformation-actions>div:has(>input[type=checkbox]) label{margin:0}
+#db-marts-panel #db-schedule-mart-form>.job-fields{margin-block:20px}
+#db-marts-panel #db-schedule-mart-form .job-fields>div:has(>#db-schedule-mart-arguments),#db-marts-panel #db-schedule-mart-weekdays{grid-column:1/-1}
+#db-marts-panel #db-schedule-mart-weekdays>div{display:inline-flex;align-items:center;gap:6px;margin:8px 12px 0 0}
+#db-marts-panel #db-schedule-mart-weekdays label{margin:0}
+#db-marts-panel .panel-body>.toolbar>div:has(>#db-schedule-mart-list){flex:1 1 260px}
+@container transformation (min-width:600px){
+ :is(#db-dbt-panel,#p35-wap,#db-marts-panel) :is(.job-fields,.transformation-context,.transformation-inputs,.transformation-saved){grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-dbt-panel #db-dbt-native-controls{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #p35-wap #p35-wap-sources .toolbar{grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto}
+}
+@container transformation (min-width:960px){
+ #p35-wap .transformation-context{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+ :is(#p35-wap,#db-marts-panel) .job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-dbt-panel .transformation-context{grid-template-columns:minmax(0,1fr) minmax(0,2fr) minmax(0,1fr) auto}
+ #db-marts-panel #db-marts-form>.job-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #db-marts-panel .transformation-context{grid-template-columns:repeat(3,minmax(0,1fr)) auto}
+ #db-marts-panel .transformation-saved{grid-template-columns:minmax(0,1fr) auto auto auto}
+}
+@media(max-width:600px){#db-dbt-panel .toolbar>div{flex-basis:100%}:is(#db-dbt-panel,#p35-wap,#db-marts-panel) .panel-body{padding:14px}}
+
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel) .toolbar{flex-wrap:wrap}
+html[data-data-mode="database"] #table-lineage{grid-template-columns:minmax(0,1fr);min-width:0;overflow-wrap:anywhere}
+html[data-data-mode="database"] #table-lineage>*{min-width:0;overflow-wrap:anywhere}.lineage section{min-width:0}.lineage ul{padding-inline-start:1.25rem}
+#db-drop-panel{min-width:0;max-width:100%;padding:16px;border-top:1px solid var(--line)}
+#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;word-break:normal;min-width:0;max-width:100%}#db-drop-panel input{box-sizing:border-box;max-width:100%}#db-drop-panel .toolbar{flex-wrap:wrap}
+html[data-data-mode=database][data-role=bi_viewer] #drop-table-btn{display:inline-block!important}
+
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) :is(.panel-body,p,h3,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-foundation-baseline-panel,#observation-sre-foundation-baseline-panel,#observation-policy-foundation-baseline-panel) .toolbar{flex-wrap:wrap}
+
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel){min-width:0;max-width:100%}
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel) :is(.panel-body,p,h3,button,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel) .toolbar{flex-wrap:wrap}
+.foundation-controller-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));gap:8px 16px}
+.foundation-controller-counts>div{min-width:0;border-bottom:1px solid var(--line);padding:4px 0}.foundation-controller-counts dt{color:var(--muted)}.foundation-controller-counts dd{margin:4px 0;font-variant-numeric:tabular-nums}
+
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness){min-width:0;max-width:100%}
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) .toolbar{flex-wrap:wrap}
+:is(#observation-sre-telemetry-readiness,#observation-telemetry-readiness-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-telemetry-readiness-panel,#observation-sre-telemetry-readiness) :is(.panel-body,p,h2,button){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel){min-width:0;max-width:100%}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel) .toolbar{flex-wrap:wrap}
+:is(#observation-sre-telemetry-logs,#observation-telemetry-logs-panel,#observation-sre-loki-errors-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-telemetry-logs-panel,#observation-sre-telemetry-logs,#observation-sre-loki-errors-panel) :is(.panel-body,p,h2,h3,button,li){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures){min-width:0;max-width:100%}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) :is(.panel-body,p,h2,button,table,th,td,details,summary,dl,dt,dd){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) .toolbar{flex-wrap:wrap}
+:is(#observation-recent-failures-panel,#observation-sre-recent-failures) table{table-layout:fixed;width:100%;min-width:0}
+:is(#observation-sre-recent-failures,#observation-recent-failures-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+
+:is(#observation-policy-pod-baseline,#observation-pod-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) :is(.panel-body,p,h2,button,table,th,td,details,summary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) .toolbar{flex-wrap:wrap}
+:is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) table{table-layout:fixed;width:100%;min-width:0}
+:is(#observation-policy-pod-baseline,#observation-pod-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel){min-width:0;max-width:100%}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) :is(.panel-body,p,h2,button,table,th,td,details,summary){min-width:0;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .toolbar{flex-wrap:wrap}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) table{table-layout:fixed;width:100%;min-width:0}
+:is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}
+#observation-policy-manifest-advisory{min-width:0;max-width:100%;overflow-wrap:anywhere}
+#observation-policy-manifest-advisory .panel-body p{max-inline-size:min(75ch,100%)}
+#observation-policy-manifest-advisory textarea{display:block;inline-size:min(75ch,100%);box-sizing:border-box;resize:vertical}
+#observation-policy-manifest-advisory .toolbar{flex-wrap:wrap}
+/* Explorer details: primary SQL actions first, data management apart (2026-11-04). */
+#database-details #explorer-open-lineage[hidden]{display:none}
+.db-manage{min-width:0;margin:0;padding:16px 14px 18px;border-top:1px solid var(--line)}
+.db-manage>summary{font-weight:600;cursor:pointer}
+.db-manage summary:focus-visible,.db-manage-recovery button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.db-manage-recovery{padding:10px 14px;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line)}
+.db-manage :is(#db-clone-panel,#db-drop-panel){min-width:0;max-width:100%;padding:14px 0;margin-top:16px;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>summary{cursor:pointer;font-weight:600}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>:not(summary){margin-top:12px}
+.db-manage :is(input,select,button){min-width:0;max-width:100%;box-sizing:border-box}
+.db-manage button,.db-manage-recovery button{white-space:normal;overflow-wrap:anywhere}
+.db-manage :is(#db-clone-panel,#db-drop-panel)>button{margin-right:8px;margin-bottom:4px}
+.db-manage .job-fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:12px}
+.db-manage details details{min-width:0;overflow-wrap:anywhere}
+.db-manage details details>summary{cursor:pointer}
+.db-manage #db-drop-ack{flex:none}
+.db-manage #db-drop-name{width:100%}
+.db-manage-group{min-width:0;padding:12px 0 0}
+.db-manage-group+.db-manage-group{margin-top:16px;padding-top:16px;border-top:1px dashed var(--line)}
+.db-manage-group h4{margin:0 0 4px;font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.db-manage-group p{max-width:75ch;margin:0 0 10px;overflow-wrap:anywhere}
+.db-manage-group .toolbar{gap:10px 12px}
+.db-manage-group .toolbar select{min-height:26px;font-size:12px;padding:2px 6px}
+.db-manage-reason{margin:8px 0 0!important;color:var(--muted);font-size:12px}
+.db-manage-reason:empty{display:none}
+#p35-table-export{padding:12px 14px;border-top:1px solid var(--line)}
+#p35-table-export[hidden]{display:none}
+#p35-table-export>button{margin:6px 8px 0 0}
+/* Compute: state, usage and controls first; operator diagnostics by purpose. */
+#runtime-panel #runtime-capability{color:var(--ink);margin-bottom:10px}
+#runtime-panel details.runtime-meaning{margin-top:6px;font-size:12px;color:var(--muted)}
+#runtime-panel details.runtime-meaning>summary{font-weight:500;color:var(--ink-2)}
+#runtime-panel details.runtime-meaning p{margin:6px 0 0}
+#runtime-panel .runtime-condition[hidden]{display:none}
+.compute-group{min-width:0;margin-bottom:16px}
+.compute-group>h2{margin:4px 0 4px}
+.compute-group>p{max-width:75ch;margin:0 0 10px;color:var(--muted)}
+.compute-group>p:empty{display:none}
+#compute-usage-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:12px;align-items:start}
+#compute-usage-list[hidden]{display:none}
+#compute-usage-list>.panel{margin-bottom:0}
+.compute-kind{display:inline-block;margin:0 0 2px;font-size:11.5px;font-weight:600;color:var(--accent-ink)}
+#compute-diagnostics{min-width:0}
+#compute-diagnostics[hidden]{display:none}
+#compute-diagnostics>p{max-width:75ch;margin:6px 0 0;color:var(--muted)}
+#compute-diagnostics .compute-diag-group{min-width:0;margin-top:16px}
+#compute-diagnostics .compute-diag-group>h3{margin:0 0 8px;color:var(--ink-2)}
+#compute-diagnostics .panel{margin-bottom:12px}
+.panel-head>.compute-kind{flex-basis:100%;margin-bottom:-6px}
+/* Atlas Home (UX-R1): the mock-up grid and row components come from the Atlas
+   foundation appended below. These rules bind the rebuilt markup and add the
+   status/empty treatment without reviving the old home layout. */
+.home-main,.homeright{min-width:0}
+.target .primary.full{display:block;text-align:center;padding:8px 12px;margin-right:0;max-width:100%}
+.status.error{padding:0;border:0;background:none;margin:0;max-width:none;white-space:nowrap;overflow-wrap:normal}
+.home-source-error{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding:6px 10px;border-left:3px solid var(--bad);background:var(--bad-soft);color:var(--bad);font-size:12px}
+.home-source-error p{margin:0}
+.home-source-error button{flex:none}
+/* Atlas data exploration (UX-R3): the mock's list and detail inside the details pane.
+   The old tree + inspector two-pane layout is not used on this screen. */
+#database-workspace[data-pane=details]{grid-template-columns:minmax(0,1fr)}
+#database-workspace[data-pane=details]>.explorer{display:none}
+#database-workspace[data-pane=details] #database-workspace-main{border:0;border-radius:0;background:transparent}
+#database-workspace[data-pane=details] #database-details{margin:0;border:0;border-radius:0;box-shadow:none;background:transparent}
+#explore-page,#explore-detail{min-width:0}
+#table-title,#explore-heading{min-width:0;overflow-wrap:anywhere}
+#explore-detail #table-title{font-family:var(--sans);font-size:22px;font-weight:650;line-height:1.45;letter-spacing:-.6px}
+@media(max-width:600px){#explore-detail #table-title{font-size:20px}}
+.explore-detail-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0}
+#explore-more-actions{margin:0 0 18px}
+#explore-more-actions>summary{cursor:pointer;padding-block:10px;color:var(--muted);font-size:12px}
+#explore-more-actions>.toolbar{margin:4px 0 0}
+#explore-eyebrow{overflow-wrap:anywhere}
+#explore-back{display:inline-flex;align-items:center;min-height:44px;margin:0 0 16px;color:var(--muted);font-size:11px}
+#explore-back:hover{text-decoration:underline}
+.explore-rows{min-width:0}
+.explore-rows .objectrow{padding:10px 0}
+.explore-rows .objectrow .rowend{white-space:nowrap}
+#explore-more{margin-top:12px}
+.explore-note{margin:0;padding:6px 8px;border-left:3px solid var(--line-strong);background:var(--surface-2);font-size:12px;overflow-wrap:anywhere}
+.explore-note.error{border-left-color:var(--bad);background:var(--bad-soft);color:var(--bad)}
+#inspector-context p:empty,#snapshot-context:empty{display:none}
+#table-null-hint{display:block}
+@media(max-width:600px){
+ .explore-controls select,.explore-search input,.explore-search select{min-height:44px;font-size:16px}
+ .explore-rows .objectrow{min-height:44px}
+ .pageheading{flex-wrap:wrap}
+ .tabletabs{overflow-x:auto;max-width:100%;gap:16px}
+ .tabletabs button{min-height:44px;white-space:nowrap}
+ #explore-detail .explore-detail-actions{justify-content:flex-start}
+ #explore-detail .explore-detail-actions>button{min-height:44px}
+}
+@media(max-width:600px){
+ .homegrid{grid-template-columns:minmax(0,1fr);gap:26px}
+ .actionrow{grid-template-columns:17px minmax(0,1fr) auto;gap:7px}
+ .actionrow,.run,.objectrow,.target .primary.full,.secondaryaction,.textlink,.home-source-error button{min-height:44px}
+ .secondaryaction{display:flex;justify-content:center;width:100%}
+ .textlink{display:inline-flex;align-items:center;justify-content:center}
+ .target{padding:17px}
+}
+/* Atlas database management (UX-R5): list, detail, access, metadata, flow and retirement.
+   The list/flow/retirement rules below follow the approved shirokuma-atlas mock-up. */
+#db-admin{min-width:0}
+.db-list-view{min-width:0;max-width:1100px}
+.db-heading{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.db-heading h1,.db-heading h2{margin:0;overflow-wrap:anywhere}
+.db-title-line{display:flex;flex:1 1 auto;align-items:baseline;gap:10px;flex-wrap:wrap;min-width:0}
+.db-title-line .db-title{min-width:0;overflow-wrap:anywhere}
+.db-title-line .status{flex:none}
+.db-heading .db-actions{margin:0;margin-left:auto;flex:none}
+.db-table caption{text-align:left}
+.db-table{width:100%;border-collapse:collapse}
+.db-table th,.db-table td{border-top:1px solid var(--line);text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.db-table tbody th{font-weight:600}
+.db-table small{display:block;margin-top:2px;color:var(--muted);font-size:11.5px;font-weight:400}
+.db-table a{color:var(--accent-ink);text-decoration:none}
+.db-table a:hover{text-decoration:underline}
+.db-table .badge{white-space:normal;overflow-wrap:anywhere}
+.db-table time{white-space:nowrap;font-variant-numeric:tabular-nums}
+#db-admin-detail-state{margin:0}
+#db-admin-detail-state:empty{display:none}
+#db-admin-detail-title{margin:8px 0 4px;font-size:20px;font-weight:650;overflow-wrap:anywhere}
+#db-admin-back,#db-admin-access-back,#db-admin-metadata-back,#db-admin-operation-back,#db-admin-retire-back,#db-admin-retire-confirm-back,#db-creation-list-back{display:inline-flex;align-items:center;min-height:36px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-admin-back:hover,#db-admin-access-back:hover,#db-admin-metadata-back:hover,#db-admin-operation-back:hover,#db-admin-retire-back:hover,#db-admin-retire-confirm-back:hover,#db-creation-list-back:hover{text-decoration:underline}
+#db-admin-info{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 16px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+#db-admin-info dt{color:var(--muted);font-size:12px}
+#db-admin-info dd{margin:0;color:var(--ink);font-size:12px;overflow-wrap:anywhere}
+#db-admin-detail-actions{flex-wrap:wrap;gap:8px;margin:10px 0}
+#db-admin-subnav a{display:inline-flex;align-items:center;min-height:44px;padding:8px 12px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-admin-subnav a:hover{text-decoration:underline}
+#db-admin-management{margin:14px 0;padding:10px 0;border-top:1px solid var(--line)}
+#db-admin-management>summary{font-weight:650;cursor:pointer}
+#db-admin-management :is(input,select,textarea,button){min-width:0;max-width:100%;box-sizing:border-box}
+#db-admin-management details>summary{cursor:pointer;color:var(--ink-2);font-weight:600;padding:4px 0}
+#db-admin-access-panel,#db-admin-metadata-panel{margin-top:8px;min-width:0}
+#db-admin-access-panel>h2,#db-admin-metadata-panel>h2{margin:8px 0;font-size:16px}
+#db-admin-metadata-panel details>summary{cursor:pointer;font-weight:600}
+#db-admin-retire-impact-summary{margin:12px 0 8px}
+#db-admin-retire-impact-summary[hidden]{display:none}
+#db-admin-retire-users{min-width:0}
+.db-creation-form-shell{display:grid;gap:14px;min-width:0}
+.db-creation-form-shell fieldset{display:grid;gap:14px;min-width:0;border:1px solid var(--line);padding:14px;margin:0}
+#db-creation-form{display:grid;gap:14px;min-width:0}
+#db-creation-form .form-actions{margin-top:0}
+#db-admin-request-history{margin:0 0 8px}
+#db-admin-request-history>summary{cursor:pointer;font-weight:550;padding-block:8px}
+#db-admin-request-history ul{margin:8px 0 0;padding-left:22px}
+#db-admin-request-history li{margin:8px 0;overflow-wrap:anywhere}
+#db-admin-request-history .badge{margin-inline:4px}
+#db-admin-retire-operation-panel{margin-top:24px;border-top:1px solid var(--line);padding-top:14px}
+#db-admin-retire-operation-panel>summary{cursor:pointer;font-weight:550;padding-block:8px}
+#db-admin-retire-steps{margin-top:8px}
+#db-admin-retire-impact-panel>section>h2,#db-admin-retire-impact-panel>section>h2{margin-top:18px}
+#db-admin-retire-confirm-panel>.db-actions{flex-wrap:wrap}
+#db-admin :is(button,a,input,select,textarea,summary):focus{outline:2px solid var(--focus);outline-offset:2px}
+@media(max-width:600px){
+ #db-admin :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),#db-admin-subnav a,
+ #db-admin-back,#db-admin-access-back,#db-admin-metadata-back,#db-admin-operation-back,#db-admin-retire-back,
+ #db-admin-retire-confirm-back,#db-creation-list-back,.db-creation-form-shell button,.db-pin{min-height:44px}
+ #db-admin-info{grid-template-columns:minmax(0,1fr);gap:2px}
+ #db-admin-info dd{margin-bottom:6px}
+ .db-table{min-width:590px}
+}
+
+@media(max-width:760px){
+ :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:1rem}
+ .editor,#database-workspace .explorer-search input,#database-workspace .explorer-foot select,#database-context-bar select,#database-context-bar input,.db-manage-group .toolbar select{font-size:1rem}
+ :is(.topbar,#role-controls,#role-selector,.toolbar,.editor-tabs,#database-workspace-main){min-width:0;max-width:100%}
+ main>section,.results-tools,.panel-body{min-width:0;max-width:100%}
+ pre{max-width:100%;overflow:auto}
+ .toolbar{flex-wrap:wrap}
+ .toolbar select,.toolbar input{max-width:100%}
+ #worksheet-closers{max-width:100%}
+ #worksheet-close-select{font-size:1rem}
+ #database-workspace-main>.editor-tabs{flex-wrap:wrap}
+ #database-workspace-main>.editor-tabs>.history-field{max-width:100%}
+}
+/* Atlas jobs and audit log (UX-A6a): list rows, step summaries and JST filters. */
+#jobs,#pawprints{min-width:0}
+#db-jobs-panel,#db-audit-panel{min-width:0}
+#db-jobs-panel .panel-body{min-width:0}
+#db-jobs-panel .db-heading{margin-top:4px}
+#db-jobs-panel .db-heading h1,#db-jobs-panel .db-heading h2{margin:0;overflow-wrap:anywhere}
+#db-jobs-panel .db-heading h1{font-size:20px}
+#db-jobs-panel .db-heading h2{font-size:18px}
+#db-jobs-list-panel,#db-jobs-detail,#db-schedule-job-panel{min-width:0}
+#db-jobs-list-rows .objectrow{padding-inline:8px;border:1px solid transparent;border-top-color:var(--line);border-radius:0}
+#db-jobs-list-rows .objectrow:first-child{border-top-color:transparent}
+#db-jobs-list-rows .objectrow:hover{border-color:var(--line-strong);background:var(--surface-2)}
+#db-jobs-recent-runs .run{padding-inline:8px}
+#db-jobs-back{display:inline-flex;align-items:center;min-height:36px;margin-bottom:4px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-jobs-back:hover{text-decoration:underline}
+#db-jobs-steps-view .step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:8px;align-items:start;padding:8px 0;border-top:1px solid var(--line)}
+#db-jobs-steps-view .step:first-child{border-top:0}
+#db-jobs-steps-view .step-number{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:11px;font-weight:650}
+#db-jobs-steps-view .step strong{display:block;overflow-wrap:anywhere}
+#db-jobs-steps-view .step small{display:block;color:var(--muted);overflow-wrap:anywhere}
+.popover-count{margin:0 0 4px!important;color:var(--muted);font-size:11px;font-weight:650;letter-spacing:.03em;text-transform:uppercase}
+.alert-preview{list-style:none;margin:0 0 8px;padding:0;display:grid;gap:6px}
+.alert-preview li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 8px;align-items:start;padding:6px 0;border-top:1px solid var(--line);min-width:0}
+.alert-preview .badge{grid-row:1 / span 2;align-self:start;white-space:nowrap}
+.alert-preview-text{min-width:0;overflow-wrap:anywhere;font-size:12px}
+.alert-preview-meta{grid-column:2;color:var(--muted);font-size:11px;overflow-wrap:anywhere}
+#db-audit-back{display:inline-flex;align-items:center;min-height:36px;color:var(--accent-ink);text-decoration:none;font-weight:550}
+#db-audit-back:hover{text-decoration:underline}
+#db-audit-detail small.muted{overflow-wrap:anywhere}
+@media(max-width:600px){
+ #jobs :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),
+ #pawprints :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),
+ #workbench-alerts-popover button,#workbench-alerts-popover a{min-height:44px}
+ #db-jobs-list-rows .objectrow,#db-jobs-recent-runs .run{min-height:44px}
+ #db-jobs-panel .db-heading{align-items:flex-start}#db-audit-back,#db-jobs-back{min-height:44px}
+}
+
+/* UX-A6b: AI Bears handoff and the Atlas compute order. */
+#bear-handoff{display:grid;gap:8px;min-width:0}
+#bear-handoff textarea{width:100%;min-height:6rem}
+#bear-handoff-context,#bear-handoff-sources{overflow-wrap:anywhere}
+#bear-handoff .toolbar{flex-wrap:wrap;gap:8px}
+#bear-handoff pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+#bear-handoff-approved{margin-inline-end:0}
+#bear-handoff-actions .primary{order:-1}
+#compute-ai-settings,#compute-usage{min-width:0;max-width:100%}
+#compute-ai-settings h2,#compute-usage summary{overflow-wrap:anywhere}
+#compute-ai-settings-lead{margin-top:4px}
+#compute-ai-settings-open{white-space:normal}
+#compute-usage summary,#compute-diagnostics summary{cursor:pointer}
+#runtime-chill-impact{white-space:normal;overflow-wrap:anywhere;max-width:75ch}
+#runtime-chill-confirm{display:grid;gap:8px;margin-top:10px;min-width:0}
+#runtime-chill-confirm .toolbar{flex-wrap:wrap}
+#runtime-chill-confirm-title{margin:0;font-size:15px}
+@media(max-width:600px){
+ #bears :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a),
+ #compute :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary,a){min-height:44px}
+ #bear-handoff .toolbar,#runtime-chill-confirm .toolbar{align-items:stretch}
+ #bear-handoff .toolbar button,#runtime-chill-confirm .toolbar button{width:100%}
+}
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP",
+          sans-serif;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+      button,
+      a,
+      input,
+      textarea,
+      select {
+        outline-offset: 4px;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      summary:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 2px solid var(--ring);
+      }
+      button,
+      a {
+        touch-action: manipulation;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:disabled {
+        cursor: wait;
+        opacity: 0.6;
+      }
+      button {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 7px 12px;
+      }
+      button:hover{
+        background: var(--selected);
+      }
+      .primary {
+        border-radius: 6px;
+        background: var(--button);
+        border-color: var(--button);
+        color: var(--onbutton);
+      }
+      .primary:hover {
+        opacity: 0.85;
+        background: var(--button);
+      }
+      a.primary {
+        display: inline-block;
+        padding: 7px 12px;
+        border: 1px solid var(--button);
+        margin-right: 8px;
+      }
+      .primary.danger,
+      .primary.danger:hover {
+        background: var(--red);
+        border-color: var(--red);
+        color: var(--bg, #fff);
+      }
+      .impact {
+        border-left: 3px solid var(--red);
+        padding: 6px 10px;
+        margin: 8px 0;
+      }
+      .impact.neutral {
+        border-left-color: var(--line, currentColor);
+      }
+      .compute-chip {
+        color: var(--amber);
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .compute-chip[hidden] {
+        display: none;
+      }
+      /* Keep the editor focus ring inside its card. */
+      .editor textarea:focus-visible {
+        outline-offset: -2px;
+      }
+      .pageheading > .badge {
+        flex: none;
+        white-space: nowrap;
+      }
+      @media (max-width: 600px) {
+        /* One-line breadcrumb on phones; the page title below carries the full name. */
+        #breadcrumb {
+          display: block;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
+          max-width: 34vw;
+        }
+        .pageheading {
+          flex-wrap: wrap;
+        }
+        .pageheading > .badge {
+          font-size: 11px;
+        }
+      }
+      .app {
+        display: grid;
+        grid-template-columns: 244px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+      .sidebar {
+        overflow-y: auto;
+        background: var(--rail);
+        border-right: 1px solid var(--line);
+        padding: 24px 16px 18px;
+        display: flex;
+        flex-direction: column;
+        position: sticky;
+        top: 0;
+        height: 100vh;
+      }
+      .brand {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 0 10px;
+        margin-bottom: 32px;
+      }
+      .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: #202226;
+        display: grid;
+        place-items: center;
+      }
+      .mark:after {
+        content: "";
+        width: 8px;
+        height: 8px;
+        background: #b9f227;
+        border-radius: 2px;
+      }
+      .brand strong {
+        font-size: 14px;
+        letter-spacing: -0.2px;
+      }
+      .brand small {
+        display: block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-top: 0;
+      }
+      .navlist {
+        display: grid;
+        gap: 4px;
+      }
+      .navlink {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+        gap: 11px;
+        padding: 9px 11px;
+        border-radius: 6px;
+        color: var(--muted);
+      }
+      .navlink:hover {
+        background: var(--selected);
+      }
+      .navlink[aria-current="page"] {
+        color: var(--ink);
+        background: var(--selected);
+        font-weight: 600;
+      }
+      .icon {
+        width: 17px;
+        font-size: 17px;
+        line-height: 1;
+        text-align: center;
+        font-family: system-ui;
+      }
+      .navtitle {
+        margin: 28px 11px 9px;
+        color: var(--muted);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+      .favorite {
+        font-size: 12px;
+        padding: 7px 11px;
+        display: flex;
+        gap: 10px;
+        color: var(--muted);
+        border-radius: 6px;
+      }
+      .favorite:hover {
+        background: var(--selected);
+      }
+      .favorite span {
+        color: var(--muted);
+      }
+      .railbottom {
+        margin-top: auto;
+        padding: 20px 10px 0;
+      }
+      .profile {
+        border-top: 1px solid var(--line);
+        padding-top: 16px;
+        margin-top: 18px;
+        display: flex;
+        gap: 9px;
+        align-items: center;
+      }
+      .avatar {
+        width: 29px;
+        height: 29px;
+        border: 1px solid var(--line);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+      }
+      .theme {
+        display: flex;
+        padding: 3px;
+        background: var(--selected);
+        border-radius: 6px;
+      }
+      .theme button {
+        flex: 1;
+        border: 0;
+        background: transparent;
+        padding: 4px;
+        font-size: 11px;
+      }
+      .theme button[aria-pressed="true"] {
+        background: var(--bg);
+        box-shadow: 0 1px 3px #00000012;
+      }
+      .muted {
+        color: var(--muted);
+      }
+      .tiny {
+        font-size: 11px;
+      }
+      .small {
+        font-size: 12px;
+      }
+      .shell {
+        min-width: 0;
+      }
+      .topbar {
+        min-height: 77px;
+        padding: 20px 32px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .toptools {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .searchbutton {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      kbd {
+        font: 10px system-ui;
+        border: 1px solid var(--line);
+        padding: 1px 4px;
+        border-radius: 3px;
+        color: var(--muted);
+      }
+      .mobilemenu {
+        display: none;
+      }
+      .sample {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .sampledot {
+        width: 6px;
+        height: 6px;
+        background: var(--amber);
+        border-radius: 50%;
+        flex: none;
+      }
+      .searchbutton svg {
+        display: block;
+        width: 18px;
+        height: 18px;
+        flex: none;
+      }
+      main {
+        padding: 28px 32px 40px;
+        max-width: 1536px;
+        margin: auto;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h1 {
+        font-size: 22px;
+        letter-spacing: -0.6px;
+        font-weight: 650;
+        line-height: 1.45;
+      }
+      h2 {
+        font-size: 14px;
+        font-weight: 650;
+      }
+      h3 {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .homegrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
+        gap: 40px;
+      }
+      .section {
+        margin-top: 30px;
+      }
+      .sectionhead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+      .textlink {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .textlink:hover {
+        text-decoration: underline;
+      }
+      .taskgroup {
+        margin-top: 22px;
+      }
+      .grouplabel {
+        font-size: 10px;
+        color: var(--muted);
+        margin-bottom: 6px;
+      }
+      .grouplabel.urgent {
+        color: var(--muted);
+      }
+      .actionrow {
+        display: grid;
+        grid-template-columns: 21px minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        padding: 11px 9px;
+        border-radius: 6px;
+        margin: 0 -9px;
+      }
+      .actionrow.review,
+      .actionrow:hover {
+        background: var(--selected);
+      }
+      .actionrow.review:hover {
+        background: var(--line);
+      }
+      .rowmark {
+        font-size: 15px;
+        color: var(--muted);
+      }
+      .actionrow strong {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .actionrow small {
+        display: block;
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+      .rowend {
+        font-size: 10px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .target {
+        border: 1px solid var(--line);
+        background: var(--surface);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        margin-bottom: 10px;
+      }
+      .target h2 {
+        font-size: 17px;
+        letter-spacing: -0.3px;
+      }
+      .target .subtitle {
+        font-size: 11px;
+        color: var(--muted);
+        margin: 4px 0 18px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 84px minmax(0, 1fr);
+        gap: 9px;
+        font-size: 11px;
+        margin: 16px 0;
+      }
+      .kv dt {
+        color: var(--muted);
+      }
+      .kv dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .status:before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .success {
+        color: var(--green);
+      }
+      .warning {
+        color: var(--amber);
+      }
+      .error {
+        color: var(--red);
+      }
+      .full {
+        width: 100%;
+      }
+      .secondaryaction {
+        display: block;
+        text-align: center;
+        font-size: 11px;
+        margin-top: 11px;
+        color: var(--muted);
+      }
+      .objectrow {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .objectrow:last-child {
+        border-bottom: 0;
+      }
+      .objecticon {
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        display: grid;
+        place-items: center;
+        color: var(--muted);
+        flex: none;
+      }
+      .objectrow strong {
+        font-size: 11px;
+        font-weight: 550;
+        display: block;
+      }
+      .objectrow small {
+        color: var(--muted);
+        font-size: 10px;
+      }
+      .objectrow .rowend {
+        margin-left: auto;
+      }
+      .activity {
+        padding: 10px 0;
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .activity:last-child {
+        border: 0;
+      }
+      .activity small {
+        display: block;
+        font-size: 10px;
+        margin-top: 4px;
+        color: var(--muted);
+      }
+      .run {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .run strong {
+        font-size: 12px;
+        font-weight: 550;
+      }
+      .run small {
+        display: block;
+        color: var(--muted);
+        font-size: 10px;
+        margin-top: 3px;
+      }
+      .pageheading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin: 18px 0;
+      }
+      .field {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px;
+        min-width: 0;
+      }
+      .filter {
+        flex: 1;
+        max-width: 320px;
+        width: 100%;
+      }
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        margin-top: 20px;
+      }
+      .panelhead {
+        padding: 14px 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .panelbody {
+        padding: 18px;
+      }
+      .tablewrap {
+        position: relative;
+        overflow: auto;
+        max-width: 100%;
+        overscroll-behavior-x: contain;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+        text-align: left;
+        white-space: nowrap;
+      }
+      caption {
+        text-align: left;
+        color: var(--muted);
+        font-size: 11px;
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        font-size: 10px;
+        color: var(--muted);
+        font-weight: 500;
+        background: var(--surface);
+      }
+      th,
+      td {
+        padding: 12px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody tr:last-child td {
+        border: 0;
+      }
+      td a {
+        font-weight: 550;
+      }
+      td a:hover {
+        text-decoration: underline;
+      }
+      .tabletabs {
+        display: flex;
+        gap: 20px;
+        border-bottom: 1px solid var(--line);
+        margin-top: 24px;
+      }
+      .tabletabs button {
+        border: 0;
+        border-radius: 0;
+        padding: 10px 0;
+        color: var(--muted);
+        background: transparent;
+      }
+      .tabletabs button[aria-selected="true"] {
+        color: var(--ink);
+        border-bottom: 2px solid var(--ink);
+      }
+      .contextbar {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        background: var(--surface);
+        border-bottom: 1px solid var(--line);
+        font-size: 11px;
+      }
+      .contextbar b {
+        font-weight: 550;
+        color: var(--ink);
+      }
+      .contextbar span {
+        color: var(--muted);
+      }
+      .editor {
+        display: flex;
+        background: var(--code);
+        padding: 20px 0;
+        min-height: 220px;
+      }
+      .linenumbers {
+        width: 46px;
+        padding: 0 12px;
+        color: var(--muted);
+        font:
+          12px/1.9 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        text-align: right;
+        user-select: none;
+        flex: none;
+      }
+      .editor textarea {
+        width: 100%;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        color: var(--ink);
+        padding: 0 16px 0 0;
+        resize: vertical;
+        min-height: 185px;
+        font:
+          12px/1.9 ui-monospace,
+          SFMono-Regular,
+          Consolas,
+          monospace;
+        tab-size: 2;
+      }
+      .editorfooter {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--line);
+        align-items: center;
+      }
+      .sqlhint {
+        font-size: 11px;
+        color: var(--muted);
+        margin: 12px 0;
+      }
+      .resultmessage {
+        font-size: 12px;
+        padding: 15px 18px;
+      }
+      .resultmeta {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .jobdetailgrid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.7fr) minmax(240px, 1fr);
+        gap: 26px;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 20px minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 15px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .step:last-child {
+        border: 0;
+      }
+      .step p {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 3px;
+      }
+      .codeblock {
+        font:
+          11px/1.9 ui-monospace,
+          SFMono-Regular,
+          monospace;
+        background: var(--code);
+        padding: 16px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        margin: 0;
+      }
+      .backlink {
+        display: inline-block;
+        color: var(--muted);
+        font-size: 11px;
+        margin-bottom: 16px;
+      }
+      dialog {
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 0;
+        width: min(510px, calc(100% - 32px));
+        box-shadow: 0 24px 80px #0003;
+      }
+      dialog::backdrop {
+        background: #15181d55;
+        backdrop-filter: blur(2px);
+      }
+      .dialoghead {
+        padding: 18px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+      }
+      .dialoghead input {
+        flex: 1;
+        width: 100%;
+      }
+      .commandlist {
+        padding: 8px;
+        display: grid;
+        gap: 3px;
+      }
+      .commandlist a {
+        padding: 12px;
+        border-radius: 6px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .commandlist a:hover {
+        background: var(--selected);
+      }
+      .dialogfoot {
+        padding: 9px 18px;
+        border-top: 1px solid var(--line);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .empty {
+        padding: 30px 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      .toast {
+        position: fixed;
+        bottom: 22px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--button);
+        color: var(--onbutton);
+        border-radius: 7px;
+        padding: 10px 18px;
+        box-shadow: 0 5px 20px #0002;
+        font-size: 12px;
+        max-width: calc(100% - 32px);
+        z-index: 10;
+      }
+      .skip {
+        position: fixed;
+        left: 240px;
+        top: -100px;
+        z-index: 20;
+        background: var(--bg);
+        padding: 12px;
+        border: 1px solid var(--line);
+      }
+      .skip:focus {
+        top: 8px;
+      }
+      @media (min-width: 1500px) {
+        main {
+          padding-top: 34px;
+        }
+        .homegrid {
+          gap: 56px;
+        }
+      }
+      @media (max-width: 1100px) {
+        .homegrid {
+          gap: 24px;
+          grid-template-columns: minmax(0, 1.2fr) minmax(270px, 1fr);
+        }
+        .topbar,
+        main {
+          padding-left: 24px;
+          padding-right: 24px;
+        }
+        .searchbutton {
+          gap: 12px;
+        }
+      }
+      @media (max-width: 850px) {
+        .app {
+          grid-template-columns: 192px minmax(0, 1fr);
+        }
+        .sidebar {
+          padding-left: 10px;
+          padding-right: 10px;
+        }
+        .homegrid,
+        .jobdetailgrid {
+          grid-template-columns: 1fr;
+        }
+        .homeright {
+          margin-top: 0;
+        }
+        .searchbutton .searchlabel {
+          display: none;
+        }
+        .searchbutton {
+          gap: 8px;
+        }
+        .homegrid {
+          gap: 30px;
+        }
+      }
+      @media (max-width: 600px) {
+        .app {
+          display: block;
+        }
+        .sidebar {
+          display: none;
+        }
+        .mobilemenu {
+          display: block;
+          border-bottom: 1px solid var(--line);
+          background: var(--rail);
+        }
+        .mobilemenu summary {
+          padding: 14px 20px;
+          font-size: 14px;
+          font-weight: 650;
+          cursor: pointer;
+          list-style: none;
+          display: flex;
+          justify-content: space-between;
+        }
+        .mobilemenu summary::-webkit-details-marker {
+          display: none;
+        }
+        .mobilemenu summary:after {
+          content: "☰";
+          font-size: 16px;
+          margin-left: 8px;
+        }
+        .mobilemenu summary > span:first-child {
+          margin-right: auto;
+        }
+        .mobilemenu[open] summary:after {
+          content: "×";
+        }
+        .mobilenav {
+          padding: 0 12px 12px;
+          display: grid;
+          gap: 2px;
+        }
+        .mobiletheme {
+          margin: 10px 8px 0;
+        }
+        .topbar {
+          min-height: 62px;
+          padding: 14px 20px;
+          gap: 8px;
+        }
+        .breadcrumb {
+          gap: 6px;
+          font-size: 12px;
+        }
+        .toptools {
+          gap: 6px;
+        }
+        .toptools > .primary {
+          font-size: 11px;
+          padding: 7px 9px;
+        }
+        .searchbutton {
+          padding: 7px 9px;
+        }
+        .searchbutton kbd {
+          display: none;
+        }
+        main {
+          padding: 23px 20px 32px;
+        }
+        h1 {
+          font-size: 20px;
+        }
+        .homegrid {
+          gap: 26px;
+        }
+        .section {
+          margin-top: 26px;
+        }
+        .actionrow {
+          gap: 7px;
+          grid-template-columns: 17px minmax(0, 1fr) auto;
+        }
+        .actionrow strong {
+          font-size: 11px;
+        }
+        .rowend {
+          font-size: 9px;
+        }
+        .target {
+          padding: 17px;
+        }
+        .pageheading {
+          align-items: flex-start;
+          margin-bottom: 18px;
+        }
+        .pageheading > button {
+          font-size: 10px;
+          white-space: nowrap;
+          padding: 7px;
+        }
+        .toolbar {
+          gap: 8px;
+        }
+        .filter {
+          max-width: none;
+        }
+        .panelhead,
+        .panelbody {
+          padding: 13px;
+        }
+        .panelhead {
+          align-items: flex-start;
+        }
+        .contextbar {
+          gap: 8px 14px;
+          padding: 11px 12px;
+        }
+        .editorfooter {
+          align-items: flex-start;
+        }
+        .editorfooter .tiny {
+          max-width: 130px;
+        }
+        .linenumbers {
+          width: 32px;
+          padding: 0 8px;
+        }
+        .field,
+        .editor textarea {
+          font-size: 16px;
+        }
+        .skip {
+          left: 20px;
+        }
+        .tabletabs {
+          gap: 16px;
+        }
+        .tabletabs button {
+          font-size: 11px;
+        }
+        .jobdetailgrid {
+          gap: 6px;
+        }
+      }
+      .pageheading > div {
+        min-width: 0;
+      }
+      .breadcrumb {
+        min-width: 0;
+      }
+      .objectrow > div,
+      .run > div {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+      .tablewrap {
+        scrollbar-gutter: stable;
+      }
+      .toptools {
+        flex-shrink: 0;
+      }
+      @media (max-width: 600px) {
+        .editorfooter {
+          flex-wrap: wrap;
+        }
+        .editorfooter .primary {
+          margin-left: auto;
+        }
+        .breadcrumb span {
+          overflow-wrap: anywhere;
+        }
+        .topbar {
+          padding-inline: 16px;
+        }
+      }
+      /* Database management shares the Atlas tokens and native controls. */
+      .db-filters { display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin:20px 0; }
+      .db-filters label { display:grid; gap:4px; color:var(--muted); font-size:11px; }
+      .db-filters .db-search { flex:1 1 240px; min-width:0; }
+      .db-filter-toggle { display:none; }
+      .db-filter-controls { display:flex; flex-wrap:wrap; gap:12px; align-items:end; }
+      .db-filters .field { width:100%; min-height:40px; }
+      .db-filters .db-pinned { display:flex; align-items:center; min-height:40px; color:var(--ink); }
+      .db-paging { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:14px 0; }
+      .db-paging span { margin-right:auto; }
+      .db-paging button { min-height:40px; }
+      .db-paging button:disabled { cursor:default; }
+      .db-table { table-layout:fixed; min-width:690px; }
+      .db-table th, .db-table td { padding:8px 12px; }
+      .db-table th:first-child { width:260px; }
+      .db-table th:nth-child(2) { width:100px; }
+      .db-table th:nth-child(3) { width:140px; }
+      .db-table th:nth-child(4) { width:110px; }
+      .db-table th:last-child { width:80px; }
+      .db-table th[scope="row"] { color:var(--ink); background:transparent; font-size:12px; font-weight:500; white-space:normal; overflow-wrap:anywhere; }
+      .db-table th[scope="row"] small { display:block; color:var(--muted); font-size:10px; }
+      .db-table tbody tr:hover { background:var(--surface); }
+      .db-table tbody tr { cursor:pointer; }
+      .db-pin { min-height:36px; min-width:40px; padding:4px 8px; }
+      .db-pin[aria-pressed="true"] { background:var(--selected); }
+      .db-context { color:var(--muted); font-size:11px; }
+      .db-title { overflow-wrap:anywhere; }
+      .db-info { max-width:720px; }
+      .db-flow { max-width:720px; overflow-wrap:anywhere; }
+      .db-flow form, .db-flow fieldset { display:grid; gap:14px; min-width:0; }
+      .db-flow fieldset { border:1px solid var(--line); padding:14px; margin:0; }
+      .db-flow label { display:grid; gap:6px; }
+      .db-flow .field { width:100%; min-width:0; min-height:44px; }
+      .db-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:18px 0; }
+      .db-actions > * { max-width:100%; }
+      .db-actions a { padding:8px 12px; }
+      .db-steps { display:flex; flex-wrap:wrap; gap:8px 24px; padding-left:24px; margin:18px 0; }
+      .db-steps [aria-current="step"] { color:var(--ink); font-weight:650; }
+      .db-steps li { color:var(--muted); }
+      .db-flow textarea.field { resize:vertical; font:inherit; }
+      .db-p1-row { border-top:1px solid var(--line); padding:16px 0; }
+      .db-p1-row h2 { margin:0 0 12px; font-size:16px; }
+      .db-p1-row .db-actions { margin:8px 0; }
+      .db-p1-row .kv { margin:8px 0; }
+      .db-flow button, .db-flow a, .db-flow code { overflow-wrap:anywhere; white-space:normal; }
+      .db-flow .kv dd { min-width:0; }
+      .db-flow progress { width:100%; height:12px; accent-color:var(--ring); }
+      .db-flow button:disabled { opacity:.5; cursor:not-allowed; }
+      @media(max-width:600px) {
+        .db-flow input, .db-flow select, .db-flow textarea.field, .db-flow button, .db-actions button,
+        .db-actions a, .db-filters button, .db-paging button, .db-pin { font-size:16px; min-height:44px; }
+        .db-flow .kv { grid-template-columns:1fr; gap:4px; }
+        .db-flow .kv dd { margin:0 0 10px; }
+      }
+      .db-info dd { overflow-wrap:anywhere; min-width:0; }
+      .db-info details { margin-top:20px; border-top:1px solid var(--line); padding-top:14px; }
+      .db-info summary { cursor:pointer; font-weight:550; }
+      .db-info li { margin:10px 0; }
+      @media(max-width:600px) {
+        .db-filters { gap:10px; }
+        .db-filter-controls > label { flex:1 1 105px; min-width:0; }
+        .db-filter-toggle { display:inline-flex; align-items:center; gap:8px; min-height:44px; }
+        .db-filter-toggle::after { content:"⌄"; }
+        .db-filter-toggle[aria-expanded="true"]::after { content:"⌃"; }
+        .db-filter-controls { flex-basis:100%; gap:10px; }
+        .db-filters[data-open="false"] .db-filter-controls { display:none; }
+        .db-heading .db-context { display:none; }
+        .db-filters .db-search { flex-basis:100%; }
+        .db-filters .db-pinned { flex-basis:100%; }
+        .db-table th:first-child { width:160px; }
+        .db-table { min-width:590px; }
+        .db-table th, .db-table td { padding-inline:8px; }
+        .db-paging span { flex-basis:100%; }
+        .db-paging button { padding:7px 10px; }
+        .db-heading { align-items:start; flex-direction:column; }
+      }
+      .sql-context label, .sql-actions label { display: grid; gap: 5px; min-width: 0; font-size: 12px; color: var(--ink); }
+      .sql-context select { width: 100%; min-width: 0; }
+      .sql-fixed { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; font-size: 12px; }
+      .sql-fixed > span { white-space: nowrap; }
+      .sql-actions { flex-wrap: wrap; justify-content: flex-start; align-items: flex-end; }
+      @media (min-width: 601px) { .sql-actions select, .sql-actions button { height: 36px; box-sizing: border-box; } }
+      .sql-note { margin: 0; padding: 10px 16px; font-size: 12px; overflow-wrap: anywhere; }
+      .sql-note p { margin: 6px 0; }
+      .sql-note summary { cursor: pointer; padding: 8px 0; }
+      #sql-request .codeblock { white-space: pre-wrap; overflow-wrap: anywhere; }
+      #sql-next { padding-bottom: 0; }
+      @media (max-width: 600px) {
+        .sql-context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 8px; }
+        .sql-context select { min-height: 44px; padding-inline: 6px; }
+        .sql-fixed { grid-column: 1 / -1; gap: 6px 12px; }
+        .sql-context select, .sql-actions select, #sample-query{ font-size: 16px; }
+        .sql-actions { align-items: stretch; }
+        .sql-actions label { flex-basis: 100%; }
+        .sql-actions button { min-height: 44px; }
+        #sql-request .kv { grid-template-columns: minmax(0, 1fr); }
+      }
+
+.worksheet-bar { display:flex; gap:6px; align-items:center; margin-bottom:12px; min-width:0; }
+#worksheet-tabs { display:flex; gap:4px; overflow-x:auto; min-width:0; flex:1; padding:3px; }
+#worksheet-tabs button { flex:none; white-space:nowrap; }
+#worksheet-tabs [aria-selected="true"] { background:var(--ink); color:var(--surface, #fff); }
+.worksheet-bar > button { flex:none; }
+#sql-history { padding-left:20px; }
+#sql-history button { text-align:left; white-space:normal; overflow-wrap:anywhere; max-width:100%; margin:4px 0; }
+.sql-result-tools, .sql-downloads { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.sql-result-tools label { display:grid; gap:4px; min-width:0; }
+.sql-downloads { flex-basis:100%; }
+[id^="worksheet-panel-"] { min-width:0; }
+#sql-restored:empty { display:none; }
+#sample-query { max-width:100%; }
+@media(max-width:600px) { .worksheet-bar button, .sql-downloads button{ min-height:44px; } .sql-context { padding:10px; gap:8px; } .sql-result-tools input { width:100%; min-width:0; } .sql-result-tools label { width:100%; } }
+/* SQL P2: result views and reviewed sample proposals. */
+.sql-view-switch, .sql-chart-controls{ display:flex; flex-wrap:wrap; align-items:end; gap:8px; }
+.sql-view-switch { flex-basis:100%; }
+.sql-view-switch [aria-pressed="true"] { background:var(--ink); color:var(--surface, #fff); }
+.sql-chart-controls label{ display:grid; gap:4px; min-width:0; flex:1 1 180px; }
+.sql-chart-controls select{ width:100%; min-width:0; max-width:100%; }
+#sql-chart { margin:0; padding:16px; min-width:0; overflow-wrap:anywhere; }
+#sql-chart figcaption { font-weight:650; }
+@media(max-width:600px) { .sql-view-switch button{ min-height:44px; } .sql-chart-controls select{ min-height:44px; font-size:16px; } }
+      .explore-controls, .explore-search { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+      .explore-controls label { flex:1 1 160px; min-width:0; font-size:12px; }
+      .explore-controls label:only-child { max-width:260px; }
+      .explore-search label { flex:1 1 180px; min-width:0; font-size:12px; }
+      .explore-search label:last-child { flex:0 1 160px; }
+      .explore-controls .field, .explore-search .field { display:block; width:100%; min-width:0; margin-top:4px; }
+      .explore-rows .objectrow > div { min-width:0; overflow-wrap:anywhere; }
+      .explore-rows .rowend { flex:none; }
+      [data-inspector-scope], [data-inspector-scope] [role="tabpanel"] { min-width:0; }
+      .inspector-panel { margin-top:20px; }
+      #inspector-tabs { max-width:100%; overflow-x:auto; flex-wrap:nowrap; padding:3px; scroll-padding-inline:3px; }
+      #inspector-tabs button { flex:none; white-space:nowrap; position:relative; border-bottom:0; min-height:44px; }
+      #inspector-tabs button[aria-selected="true"]::after { content:""; position:absolute; inset:auto 0 0; border-bottom:2px solid var(--ink); }
+      .inspector-context { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin:12px 0; overflow-wrap:anywhere; }
+      .inspector-context p { margin:0; }
+      .snapshot-controls { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+      .snapshot-controls label { display:grid; gap:4px; min-width:0; max-width:100%; }
+      .snapshot-controls select { max-width:100%; min-width:0; }
+      @media(max-width:600px) {
+        .snapshot-controls select, .snapshot-controls button { min-height:44px; font-size:16px; }
+      }
+      .table-management, .table-operations { margin-top:24px; min-width:0; overflow-wrap:anywhere; }
+      .table-management summary, .table-operations summary { cursor:pointer; padding-block:12px; }
+      .table-management form { margin-block:20px; }
+      .table-management label, .table-operations label { display:grid; gap:6px; margin-block:10px; }
+      .table-management .field, .table-operations .field { width:100%; min-width:0; max-width:460px; }
+      .table-management button, .table-operations button { min-height:44px; max-width:100%; white-space:normal; }
+      .table-management h3 { margin-top:20px; }
+      .table-operations li { margin-block:10px; }
+      @media(max-width:600px) { .table-management .field, .table-operations .field { font-size:16px; min-height:44px; } }
+      .explore-controls ~ .toolbar { flex-wrap:wrap; }
+      main:has(#explore-role) .eyebrow { overflow-wrap:anywhere; }
+      main:has(#explore-role) .codeblock { white-space:pre-wrap; overflow-wrap:anywhere; }
+      @media(max-width:600px) {
+        .explore-controls select, .explore-search .field { min-height:44px; font-size:16px; }
+        #explore-more { min-height:44px; }
+      }
+
+/* Atlas phase 1: task-first offline lifecycle. */
+.atlas-flow { max-width:1100px; min-width:0; }
+.atlas-flow h1 { margin-bottom:16px; }
+.atlas-flow h2 { margin-top:28px; font-size:18px; }
+.atlas-fields { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:16px 0; }
+.atlas-fields label { display:grid; gap:6px; flex:1 1 180px; min-width:0; font-size:13px; }
+.atlas-fields .field { width:100%; min-width:0; max-width:100%; }
+.atlas-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:16px 0; }
+.atlas-flow button, .atlas-flow .field { min-height:40px; }
+.atlas-flow section { border-top:1px solid var(--line); margin-top:24px; padding-top:4px; }
+.atlas-flow details { margin:16px 0; }
+.atlas-flow summary { cursor:pointer; padding:8px 0; }
+.atlas-flow p, .atlas-flow a, .atlas-flow code { overflow-wrap:anywhere; }
+.atlas-flow #atlas-message:empty { display:none; }
+.atlas-flow [role="status"] { border-left:3px solid var(--green); padding:10px 14px; background:var(--bg); }
+/* UX-R7: screen messages and the state explanation are plain lines in the mock-up. */
+#bears-atlas #bears-message, #compute-atlas #runtime-message { border-left:3px solid var(--green); background:none; padding:10px 14px; margin:8px 0; font-size:12px; color:var(--muted); }
+#bears-atlas #bears-message:empty { display:none; padding:0; border:0; margin:0; }
+#bears-atlas #bears-curator-reason, #bears-atlas #bears-explanation-note,
+#compute-atlas #runtime-capability, #compute-atlas #runtime-action-reason,
+#compute-atlas #compute-viewer-guidance { border-left:0; background:none; padding:0; margin:8px 0; font-size:12px; color:var(--muted); }
+#compute-atlas #runtime-chill-impact { border-left:3px solid var(--bad); background:var(--bad-soft); padding:6px 10px; font-weight:600; }
+#compute-atlas #runtime-chill-impact.neutral { border-left-color:var(--line); background:var(--selected); }
+#bears-atlas .bear-details, #compute-atlas .runtime-details { margin:16px 0; }
+#compute-atlas #compute-usage > summary, #compute-atlas #compute-auto-chill > summary, #compute-atlas #compute-diagnostics > summary { font-size:15px; font-weight:600; }
+#compute-atlas .compute-group { border:0; padding:0; margin:16px 0; }
+#compute-atlas .compute-diag-group { margin:18px 0; }
+#compute-atlas .compute-diag-group > h3 { font-size:13px; color:var(--ink-2); margin:12px 0 6px; }
+#bears-atlas .section, #compute-atlas .section { padding:4px 0 0; border-top:1px solid var(--line); margin-top:24px; }
+#bears-atlas .section > h2, #compute-atlas .section > h2 { margin:28px 0 0; font-size:18px; }
+#bears-atlas .kv, #compute-atlas .kv { grid-template-columns:84px minmax(0,1fr); gap:9px; font-size:11px; margin:16px 0; }
+#bears-atlas .kv dt, #compute-atlas .kv dt { font-weight:400; color:var(--muted); font-size:11px; }
+#bears-atlas .kv dd, #compute-atlas .kv dd { margin:0; }
+@media(max-width:600px){ #bears-atlas .kv, #compute-atlas .kv { grid-template-columns:minmax(0,1fr); gap:4px; } }
+#bears-pageheading h1, #compute-overview h1 { margin-bottom:0; }
+#bears-atlas .atlas-sql-field { display:block; width:100%; margin:16px 0; }
+#bears-atlas .atlas-sql-field > div { display:block; width:100%; }
+#bears-atlas .atlas-sql-field label { display:grid; gap:6px; width:100%; margin:0; }
+#bears-atlas .atlas-sql-field textarea { width:100%; min-height:120px; box-sizing:border-box; }
+.atlas-flow .tablewrap { margin:12px 0; }
+.atlas-flow th { white-space:nowrap; }
+.atlas-flow button:disabled { cursor:not-allowed; }
+.atlas-flow td { max-width:320px; overflow-wrap:anywhere; }
+@media(max-width:600px) { .atlas-fields { align-items:stretch; } .atlas-fields label { flex-basis:100%; } .atlas-flow button, .atlas-flow .field { min-height:44px; font-size:16px; } }
+/* UX-R4: ingestion and transformation adopt the mock-up's flat vertical flow. */
+#ingestion,#transformation{min-width:0;max-width:100%}
+.atlas-flow .panel,.atlas-flow .atlas-section{background:none;border:0;border-radius:0;box-shadow:none;padding:0;margin:0 0 24px}
+.atlas-flow .panel-body,.atlas-flow .atlas-section-body{padding:0}
+.atlas-flow .atlas-empty{display:none}
+.atlas-flow .atlas-section,.atlas-flow .atlas-publications{border-top:1px solid var(--line);margin-top:28px;padding-top:8px}
+.atlas-flow .atlas-section>h2,.atlas-flow .atlas-publications>h2,.atlas-flow #transformation-candidate>h2{margin-top:8px}
+.atlas-message-slot{min-width:0}
+.atlas-message-slot>p{margin:0}
+.atlas-message-slot p:empty,.atlas-message-slot [role=status]:empty{display:none}
+.atlas-message-slot>p[hidden]{display:none}
+.atlas-fields .atlas-field{display:grid;gap:6px;flex:1 1 180px;min-width:0;font-size:13px;align-content:end}
+.atlas-fields .atlas-field>.field,.atlas-fields .atlas-field>label+.field{width:100%;min-width:0;max-width:100%}
+#ingestion .atlas-fields label,#transformation .atlas-fields label{margin:0}
+.atlas-fields label>.field{width:100%;min-width:0;max-width:100%}
+.atlas-fields .atlas-label{font-size:13px}
+.atlas-inline-action{white-space:nowrap;align-self:end;flex:0 0 auto;max-width:100%;min-height:40px;margin:0}
+.atlas-flow #p35-ingest-form,.atlas-flow #p35-ingest-destination,.atlas-flow #p35-ingest-destination-fields{width:100%;max-width:none}
+.atlas-flow #p35-ingest>.panel-body,.atlas-flow #p35-wap>.panel-body{padding:0;max-width:none;width:100%}
+.atlas-flow .atlas-file-details{width:100%;max-width:none}
+.atlas-flow #p35-ingest-dropzone{max-width:100%;width:100%}
+.atlas-flow #p35-ingest-choose-file{width:100%;max-width:none;justify-self:stretch}
+.atlas-message-slot [role=status]{border-left:0;background:none;padding:0;margin:0 0 8px;font-size:12px;color:var(--muted)}
+.atlas-actions a[aria-current=page]{font-weight:700;text-decoration:underline;text-underline-offset:5px}
+.atlas-target-line{margin:8px 0 16px;color:var(--ink-2)}
+.atlas-target-line code{font-size:12px}
+
+.atlas-file-details>summary{font-weight:600;list-style:none}
+.atlas-file-details>summary::-webkit-details-marker{display:none}
+.atlas-flow h2{overflow-wrap:anywhere}
+.atlas-flow .kv{display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:6px 16px;margin:0 0 16px}
+.atlas-flow .kv dt{font-weight:600;color:var(--ink-2)}
+.atlas-flow .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.atlas-flow .kv p{margin:0}
+.atlas-flow .tablewrap,.atlas-flow .table-wrap{max-width:100%;overflow-x:auto}
+.atlas-flow pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:600px){
+ .atlas-flow .atlas-fields .atlas-field{flex-basis:100%}
+ .atlas-flow .kv{grid-template-columns:minmax(0,1fr);gap:4px}
+ .atlas-flow .kv dd{margin:0 0 10px}
+ .atlas-flow :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary){min-height:44px;font-size:16px}
+ .atlas-flow a[href]{display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+ .atlas-actions{gap:8px}
+ .atlas-actions a{min-height:44px}
+}
+      .atlas-admin-label { margin:14px 11px 2px; }
+
+/* ---------------------------------------------------------------------------
+   Workbench shell integration (UX-R0). The rules above are the approved
+   mock-up; these bind its structure to the Workbench's existing controls and
+   keep legacy screens on the same tokens.
+   --------------------------------------------------------------------------- */
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--ring);outline-offset:4px}
+#workbench-boot{z-index:40;background:var(--bg);color:var(--ink)}
+.shell{min-width:0}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:77px;padding:20px 32px;border-bottom:1px solid var(--line)}
+.breadcrumb{display:flex;align-items:center;gap:12px;min-width:0;font-weight:400;overflow:visible;text-overflow:clip;white-space:normal}
+.toptools{display:flex;gap:10px;align-items:center;flex:0 0 auto}
+#database-compute-status{min-height:0;padding:0;border:0;background:none;color:var(--amber);font-size:11px;font-weight:600;white-space:nowrap}
+#database-compute-status:hover:not(:disabled){background:none;opacity:.85}
+#database-compute-state{font-weight:600;white-space:nowrap}
+#workbench-environment{display:inline-flex;align-items:center;gap:6px}
+#workbench-command-button{display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;gap:10px;font-size:12px;color:var(--muted)}
+#workbench-command-button svg{display:block;width:18px;height:18px;flex:none}
+#workbench-open-sql{border-radius:6px;padding:8px 12px;font-size:12px}
+.navlink[hidden]{display:none!important}
+.navlink .badge{margin-left:auto;background:var(--red);color:var(--bg);min-height:18px;padding:0 6px;font-size:11px}
+.navtitle{display:block}
+.favorite span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nav-workspace-context{color:var(--muted)}
+#rail-warehouse{color:var(--ink)}
+.profile{position:relative;display:block;margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.profile summary{display:flex;align-items:center;gap:9px;cursor:pointer;list-style:none;border-radius:6px}
+.profile summary::-webkit-details-marker{display:none}
+.profile summary:hover{background:var(--selected)}
+.profile-text{display:grid;min-width:0;line-height:1.35}
+.profile-text strong,.profile-text span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile[open] summary{background:var(--selected)}
+.user-menu-panel{position:absolute;left:-10px;right:-10px;bottom:calc(100% + 8px);z-index:60;display:grid;gap:10px;width:auto;max-width:none;max-height:min(70vh,520px);overflow:auto;padding:12px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--bg);box-shadow:0 12px 40px #0002}
+.user-menu-panel>*+*{margin-top:0}
+#role-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#role-controls label{margin:0;font-size:11px;font-weight:500;color:var(--muted)}
+#role-selector{width:auto;min-height:32px;padding:4px 8px;flex:1 1 120px}
+#lang-switcher{display:inline-flex;gap:2px;padding:3px;border:0;border-radius:6px;background:var(--selected);flex-shrink:0}
+#lang-switcher button{min-height:28px;border:0;background:transparent;color:var(--muted);padding:4px 9px;font-size:11px;border-radius:4px;box-shadow:none}
+#lang-switcher button:hover{color:var(--ink);background:transparent}
+#lang-switcher button[aria-pressed="true"]{background:var(--bg);color:var(--ink);box-shadow:0 1px 3px #00000012}
+#ai-settings-button{width:100%;justify-content:flex-start;border-color:var(--line);background:var(--bg)}
+.header-popover{position:relative;display:block}
+.icon-button{position:relative;width:36px;height:36px;min-height:36px;padding:0;border-color:var(--line);background:var(--bg)}
+.header-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--red);color:var(--bg);font:600 10px/16px var(--sans);text-align:center}
+.user-menu-panel .popover{position:static;width:auto;margin-top:8px;padding:10px;border-color:var(--line);background:var(--surface);box-shadow:none}
+.popover p{margin:0 0 8px;max-width:none;overflow-wrap:anywhere}
+.popover button{width:100%}
+.mobilemenu{display:none}
+.mobiletheme{margin-top:10px}
+.mobilenav .navlink{padding:9px 11px}
+.mobilemenu summary>span:last-child{margin-left:auto}
+.commandlist a{color:var(--ink);cursor:pointer}
+.commandlist a:focus-visible{background:var(--selected);outline-offset:-2px}
+.commandlist .command-kind{color:var(--muted);font-size:10px;white-space:nowrap}
+#command-empty{border:0;background:none}
+dialog#command{border-radius:12px;border-color:var(--line);background:var(--bg)}
+dialog#command::backdrop{background:#15181d55;backdrop-filter:blur(2px)}
+#command-search{min-width:0}
+#close-command{min-height:36px;padding:6px 10px;font-size:11px}
+#toast{background:var(--button);color:var(--onbutton)}
+
+/* Legacy screens keep their layouts but use the Atlas controls everywhere. */
+.query-footer .field{border:0;background:none;padding:0}
+main p{margin:0 0 8px}
+input:not([type=checkbox]):not([type=radio]),select,textarea{min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+input[readonly],input:disabled,select:disabled,textarea:disabled{background:var(--surface);color:var(--muted)}
+label{font-weight:500}
+table td{font-family:var(--sans);font-size:12px}
+.table-wrap,#query-results,#catalog-tree{max-width:100%;overscroll-behavior-x:contain}
+.warehouse-strip .badge,.state.badge,.status-line.badge{background:var(--selected);color:var(--ink)}
+#role-indicator{background:var(--selected);color:var(--ink)}
+button.primary,a.primary{background:var(--button);border-color:var(--button);color:var(--onbutton)}
+button.primary:hover:not(:disabled),a.primary:hover{background:var(--button);border-color:var(--button);opacity:.85;color:var(--onbutton)}
+button.primary.danger,a.primary.danger{background:var(--red);border-color:var(--red);color:var(--bg)}
+.impact{background:none;border-left-color:var(--red)}
+.impact.neutral{background:none;border-left-color:var(--line)}
+
+@media(max-width:1100px){
+ .topbar,main{padding-left:24px;padding-right:24px}
+}
+@media(max-width:600px){
+ .app{display:block}
+ .sidebar{display:none}
+ .mobilemenu{display:block;border-bottom:1px solid var(--line);background:var(--rail)}
+ .mobilemenu summary{padding:14px 20px;font-size:14px;font-weight:650;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:44px}
+ .mobilenav{padding:0 12px 12px;display:grid;gap:2px}
+ .mobilenav .navlink,.mobilemenu a,.commandlist a{display:flex;align-items:center;min-height:44px}
+ .mobilenav .navtitle{margin:18px 11px 6px}
+ .topbar{padding:14px 16px;min-height:62px;flex-wrap:nowrap;gap:8px;align-items:center}
+ .breadcrumb{flex:1 1 auto;min-width:0;gap:6px;font-size:12px}
+ .breadcrumb span{max-width:26vw;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;display:block}
+ .toptools{gap:6px;flex-wrap:nowrap;justify-content:flex-end;flex:0 0 auto;min-width:0}
+ .toptools>.primary{font-size:11px;padding:7px 9px;white-space:nowrap}
+ .searchbutton{padding:7px 9px;gap:0;flex:none}
+ .searchbutton kbd{display:none}
+ .searchbutton .searchlabel{display:none}
+ #database-compute-status{display:none}
+ #workbench-environment{font-size:11px}
+ main{padding:23px 20px 32px}
+ .railbottom{display:none}
+ .sidebar .theme{display:none}
+ .mobilemenu .profile{display:block;margin:10px 0 0;padding:12px 4px 0;border-top:1px solid var(--line)}
+ .mobilemenu .profile summary{padding:6px 4px}
+ .mobilemenu .user-menu-panel{position:static;left:auto;right:auto;bottom:auto;width:auto;max-width:none;max-height:none;margin-top:8px;padding:10px;border:1px solid var(--line);background:var(--surface);box-shadow:none}
+ main :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary),
+ .topbar :is(button,a),.mobilemenu :is(button,a,summary),.commandlist a{min-height:44px!important}
+ main a{display:inline-flex;align-items:center;min-height:44px}
+ body{overflow-x:hidden}
+ #lang-switcher button,#role-selector,#ai-settings-button{min-height:44px}
+ .user-menu-panel,.popover{max-width:calc(100vw - 32px)}
+}
+@media(max-width:360px){
+ .topbar{padding-inline:12px;gap:4px}
+ .breadcrumb span{max-width:22vw}
+ .toptools{gap:4px}
+ #workbench-environment{font-size:10px}
+ #workbench-open-sql{padding-inline:6px}
+}
+
+/* ---------------------------------------------------------------------------
+   UX-R2 SQL worksheet rebuild. The structure and class names come from
+   sql()/worksheetTabs()/resultHTML() in the approved Atlas mock-up.
+   --------------------------------------------------------------------------- */
+#database-workspace{display:block;min-width:0}
+#database-workspace-main{display:block;background:none;border:0;border-radius:0;min-width:0}
+#database-worksheet-pane{display:flex;flex-direction:column;gap:0;padding:0;min-width:0}
+#database-worksheet-pane>.panel{margin-top:20px;margin-bottom:0;background:var(--bg)}
+#database-worksheet-pane>#sql-restored:empty{display:none}
+#sql-linenumbers{white-space:pre;line-height:1.9;overflow:hidden}
+#database-editor .editor{align-items:stretch}
+#database-editor .editor textarea{display:block}
+#database-editor .editorfooter.sql-actions{justify-content:flex-start;align-items:center}
+#database-editor .editorfooter .run-group{justify-content:flex-start;margin-left:0;flex-wrap:wrap;gap:8px}
+#database-editor .editorfooter #database-context-state{flex:1 1 220px;min-width:0;margin:0;padding:0;border:0;background:none;font-size:12px;line-height:1.45;color:var(--warn);overflow-wrap:anywhere}
+#database-editor .editorfooter #database-context-state:empty{display:none}
+#database-editor #sql-next{padding-top:8px;padding-bottom:8px;color:var(--muted)}
+#database-editor #sql-next:empty{display:none}
+.sql-fixed b{font-weight:550;color:var(--ink)}
+.sql-fixed a,.sql-fixed button{min-height:0;padding:0;border:0;background:none;color:var(--accent-ink);font:inherit;text-decoration:underline}
+.sql-fixed a:hover,.sql-fixed button:hover:not(:disabled){background:none;opacity:.8}
+#database-results .panelhead{flex-wrap:wrap;align-items:flex-start}
+#database-results #query-meta{min-width:0;overflow-wrap:anywhere;text-align:right}
+.sql-result-tools label{color:var(--ink)}
+.sql-result-tools .sql-view-switch button[aria-pressed="true"]{background:var(--ink);color:var(--surface,#fff)}
+.sql-downloads button{min-height:32px}
+#database-worksheet-pane>details.sql-note,#database-worksheet-pane>#worksheet-explorer{padding:10px 16px}
+#database-worksheet-pane>details.sql-note>summary,#database-worksheet-pane>#worksheet-explorer>summary{cursor:pointer;padding:4px 0;font-weight:550}
+#database-worksheet-pane>#worksheet-explorer{max-height:none;border-radius:0;margin:0;overflow:visible}
+#database-worksheet-pane>#worksheet-explorer #catalog-tree{max-height:320px;overflow:auto}
+#database-worksheet-pane>#worksheet-explorer .explorer-search{padding:8px 0;border-bottom:1px solid var(--line)}
+#database-worksheet-pane>#worksheet-explorer .explorer-foot{padding:8px 0 0}
+#sql-connection-actions,#sql-history-host{display:flex;flex-wrap:wrap;align-items:end;gap:10px;padding-top:4px;min-width:0}
+#sql-connection-actions button,#sql-history-host button{min-height:36px}
+#sql-history-host .history-field{display:grid;gap:4px;flex:1 1 240px;min-width:0}
+#sql-history-host select{max-width:100%;min-width:0}
+#database-worksheet-pane .copilot.sql-note{display:block}
+#database-worksheet-pane .copilot.sql-note>summary{cursor:pointer;padding:4px 0;font-weight:550}
+#database-worksheet-pane .copilot-body{padding-top:8px}
+#database-worksheet-pane #sample-sql-tools{margin-bottom:0}
+#database-worksheet-pane #sample-sql-tools label{display:block;margin-bottom:4px}
+#sql-supported p{margin:6px 0 0}
+#sql-supported summary{cursor:pointer}
+@media(max-width:600px){
+ #database-context-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sql-fixed{display:grid;grid-template-columns:minmax(0,1fr);gap:4px}
+ .sql-fixed>span{white-space:normal}
+ #database-editor .editorfooter.sql-actions{align-items:stretch}
+ #database-editor .editorfooter .run-group{width:100%;justify-content:flex-start}
+ #database-editor .editorfooter .run-group #database-context-state{flex-basis:100%}
+ .worksheet-bar{flex-wrap:nowrap;min-width:0}
+ .worksheet-bar #close-worksheet{min-width:44px}
+ #database-results #query-meta{text-align:left}
+ .sql-result-tools label{width:100%}
+ .sql-result-tools input{width:100%}
+ #database-worksheet-pane>details.sql-note,#database-worksheet-pane>#worksheet-explorer{padding-inline:12px}
+ #database-worksheet-pane>#worksheet-explorer #catalog-tree{max-height:260px}
+ #sql-connection-actions button,#sql-history-host button{min-height:44px}
+}
+html[data-data-mode=database] #warehouse .pageheading h1{font-size:22px;letter-spacing:-.6px;font-weight:650;line-height:1.45}
+@media(max-width:600px){html[data-data-mode=database] #warehouse .pageheading h1{font-size:20px}}
+#database-context-bar{padding:12px 16px}
+@media(max-width:600px){#database-context-bar{padding:10px}}
+@media(max-width:600px){.sql-fixed a,.sql-fixed button{min-height:44px;display:inline-flex;align-items:center}}
+#database-worksheet-pane #sample-sql-tools{padding:0;border-top:0;margin:18px 0 0}
+.column-type{display:block;font-size:9px;font-weight:400;margin-top:2px;color:var(--muted)}
+#worksheet-tabs{flex-wrap:nowrap}
+#worksheet-tabs button[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface,#fff);font-weight:600}
+#database-context-bar .sql-context-label{color:var(--ink);font-size:12px}
+
+/* UX-R6 jobs and audit rebuilt from the Atlas mock-up. The selectors below
+   follow the mock-up markup verbatim; scoping keeps the legacy screens intact. */
+.pageheading{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px}
+.pageheading>div{min-width:0}
+.pageheading>span{flex:none;white-space:nowrap}
+.jobs-page,.audit-page{min-width:0;max-width:1100px}
+.jobs-page h1,.audit-page h1{margin-bottom:16px}
+.jobs-page .panel,.audit-page .panel{background:transparent;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin:20px 0 0;padding:0}
+.jobs-page .panelhead,.audit-page .panelhead{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid var(--line)}
+.jobs-page .panelbody,.audit-page .panelbody{padding:18px}
+.jobs-page .tablewrap,.audit-page .tablewrap{position:relative;overflow:auto;max-width:100%;overscroll-behavior-x:contain;scrollbar-gutter:stable;margin:12px 0}
+.jobs-page .tablewrap table,.audit-page .tablewrap table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap;font-size:12px}
+.jobs-page .tablewrap caption,.audit-page .tablewrap caption{text-align:left;color:var(--muted);font-size:11px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.jobs-page .tablewrap th,.audit-page .tablewrap th{position:static;font-size:10px;color:var(--muted);font-weight:500;background:var(--surface);white-space:nowrap}
+.jobs-page .tablewrap th,.jobs-page .tablewrap td,.audit-page .tablewrap th,.audit-page .tablewrap td{padding:12px 18px;border-bottom:1px solid var(--line)}
+.jobs-page .tablewrap td,.audit-page .tablewrap td{font-family:var(--sans);font-size:12px;vertical-align:top}
+.jobs-page .tablewrap tbody tr:last-child td,.audit-page .tablewrap tbody tr:last-child td{border-bottom:0}
+.jobs-page .tablewrap td a,.audit-page .tablewrap td a{font-weight:550}
+.jobs-page .tablewrap td a:hover,.audit-page .tablewrap td a:hover{text-decoration:underline}
+.jobs-page .sqlhint,.audit-page .sqlhint{font-size:11px;color:var(--muted);margin:12px 0}
+.jobs-page .empty,.audit-page .empty{padding:30px 18px;color:var(--muted);font-size:12px}
+.jobs-page .backlink,.audit-page .backlink{display:inline-block;color:var(--muted);font-size:11px;margin-bottom:16px}
+.jobs-page .eyebrow,.audit-page .eyebrow{font-size:10px;letter-spacing:.05em;color:var(--muted);margin-bottom:10px}
+.jobs-page .tiny,.audit-page .tiny{font-size:11px}
+.jobdetailgrid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(240px,1fr);gap:26px}
+.jobdetailgrid>div{min-width:0}
+.step{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:10px;padding:15px 0;border-bottom:1px solid var(--line)}
+.step:last-child{border:0}
+.step h3{overflow-wrap:anywhere}
+.step p{font-size:11px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere}
+.step .status{align-self:start;margin-top:2px}
+.step-icon{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;font-size:12px;line-height:1}
+.step .failed{color:var(--red);font-weight:700}
+.status.failed{color:var(--red)}
+.jobs-page #db-jobs-steps-view .step{grid-template-columns:20px minmax(0,1fr) auto;gap:10px;padding:15px 0;border-top:0;border-bottom:1px solid var(--line);align-items:start}
+.jobs-page #db-jobs-steps-view .step:last-child{border-bottom:0}
+.jobs-page #db-jobs-steps-view .step p{margin-top:3px}
+.codeblock{font:11px/1.9 ui-monospace,SFMono-Regular,Consolas,monospace;background:var(--code);padding:16px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;max-width:100%}
+.jobs-page .kv,.audit-page .kv{display:grid;grid-template-columns:84px minmax(0,1fr);gap:9px;font-size:11px;margin:16px 0}
+.jobs-page .kv dt,.audit-page .kv dt{color:var(--muted)}
+.jobs-page .kv dd,.audit-page .kv dd{margin:0;overflow-wrap:anywhere}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:10px;white-space:nowrap}
+.status:before{content:"";width:5px;height:5px;border-radius:50%;background:currentColor}
+.status.success{color:var(--green)}
+.status.warning{color:var(--amber)}
+.status.error{color:var(--red)}
+.target{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:18px 20px}
+.target h2{font-size:17px;letter-spacing:-.3px;overflow-wrap:anywhere}
+.target .subtitle{font-size:11px;color:var(--muted);margin:4px 0 18px}
+.target .kv{display:grid;grid-template-columns:84px minmax(0,1fr);gap:9px;font-size:11px;margin:16px 0}
+.target .kv dt{color:var(--muted)}
+.target .kv dd{margin:0;overflow-wrap:anywhere}
+.audit-page .atlas-fields{margin:16px 0}
+.jobs-page .atlas-fields label,.audit-page .atlas-fields label{margin:0}
+.jobs-page .atlas-fields .field,.audit-page .atlas-fields .field{width:100%;min-width:0;max-width:100%}
+.jobs-page .atlas-fields>.job-json{flex-basis:100%;max-width:100%}
+.jobs-edit-details{margin-top:20px;border-top:1px solid var(--line);padding-top:12px}
+.jobs-edit-details>summary{font-weight:650;cursor:pointer;padding:8px 0}
+.jobs-edit-details>.panel{margin-top:16px}
+.jobs-edit-details .atlas-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:14px 18px;align-items:start}
+.jobs-edit-details .atlas-fields>.job-json{grid-column:1/-1;flex-basis:auto}
+.jobs-edit-details .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.jobs-page #db-jobs-list-rows .objectrow>div{min-width:0;overflow-wrap:anywhere}
+.audit-page #audit-filters{border:0;margin:0 0 12px;padding:0}
+.audit-page #audit-filters>summary{font-weight:650;padding:8px 0}
+.audit-page #db-audit-advanced-filters{margin:8px 0 0}
+.audit-page #db-audit-advanced-filters>summary{font-weight:550;color:var(--ink-2);padding:8px 0}
+.audit-page #audit-applied{margin:4px 0 8px;color:var(--ink-2);font-size:12px;overflow-wrap:anywhere}
+.audit-page #db-audit-status{font-size:12px;color:var(--muted);margin:4px 0 0;border:0;background:none;padding:0}
+.audit-page #db-audit-status:empty{display:none}
+.audit-page #db-audit-detail h2{font-size:18px;margin:18px 0 10px}
+.audit-page #db-audit-detail .kv{grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:6px 16px;margin:12px 0}
+.audit-page #db-audit-detail .kv dt{font-weight:600;color:var(--ink-2)}
+.audit-page #db-audit-detail .kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.audit-page #db-audit-detail .kv p{margin:0 0 6px}
+.audit-page #db-audit-detail .kv p:last-child{margin-bottom:0}
+@media(max-width:850px){
+ .jobdetailgrid{grid-template-columns:1fr}
+}
+@media(max-width:600px){
+ .pageheading{align-items:flex-start;margin-bottom:18px;flex-wrap:wrap}
+ .jobs-page .panelhead,.jobs-page .panelbody,.audit-page .panelhead,.audit-page .panelbody{padding:13px}
+ .jobs-page .panelhead,.audit-page .panelhead{align-items:flex-start}
+ .jobdetailgrid{gap:6px}
+ .jobs-page .tablewrap,.audit-page .tablewrap{max-width:100%}
+ .jobs-edit-details .atlas-fields{grid-template-columns:minmax(0,1fr)}
+ .jobs-page :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary),.audit-page :is(button,select,input:not([type=checkbox]):not([type=radio]),textarea,summary){min-height:44px;font-size:16px}
+ .jobs-page a[href],.audit-page a[href]{display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere}
+ .jobs-page .kv,.audit-page .kv,.audit-page #db-audit-detail .kv{grid-template-columns:minmax(0,1fr);gap:4px}
+ .jobs-page .kv dd,.audit-page .kv dd,.audit-page #db-audit-detail .kv dd{margin:0 0 10px}
+}
+@media(max-width:390px){
+ .jobs-page,.audit-page{max-width:100%;overflow-wrap:anywhere}
+ .jobdetailgrid{grid-template-columns:minmax(0,1fr)}
+}
+
+/* Outside Database mode the retired screens keep their heading and the current
+   mode guidance only; the Database-backed Atlas controls are not installed. */
+html:not([data-data-mode=database]) #ingestion-atlas > :not(#ingestion-heading):not(#ingestion-mode-guidance),
+html:not([data-data-mode=database]) #transformation-atlas > :not(#transformation-heading):not(#transformation-mode-guidance),
+html:not([data-data-mode=database]) #bears-atlas > :not(#bears-pageheading):not(#bears-mode-guidance),
+html:not([data-data-mode=database]) #compute-atlas > :not(#compute-overview):not(#compute-mode-guidance),
+html:not([data-data-mode=database]) #compute-diagnostics{display:none!important}

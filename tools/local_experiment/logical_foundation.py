@@ -52,6 +52,44 @@ NESTED = {
     'trino': {'endpoint', 'ca_file', 'provisioner_credentials_file', 'publisher_pod', 'publisher_container', 'compute_selector', 'workers', 'include_coordinator'},
     'artifacts': {'jar'},
 }
+COORDINATOR_KEYS = {'cpu_request_millicores', 'cpu_limit_millicores',
+                    'memory_request_mib', 'memory_limit_mib', 'heap_mib'}
+COORDINATOR_OPTIONAL_KEYS = {'max_stage_count'}
+MAX_STAGE_COUNT = 2147483647
+STAGE_LIMIT_ANNOTATION = 'shirokuma.dev/coordinator-stage-limit'
+STAGE_LIMIT_PROPERTY = 'query.max-stage-count'
+TRINO_JVM_CONFIG = '-server\n-Xmx2G\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n'
+
+
+def coordinator_profile(validated_config):
+    """Return coordinator overrides from validated settings without I/O or mutation."""
+    if 'coordinator' not in validated_config['trino']:
+        return None
+    coordinator = validated_config['trino']['coordinator']
+    resources = {key: coordinator[key] for key in COORDINATOR_KEYS}
+
+    def cpu(value):
+        return str(value // 1000) if value % 1000 == 0 else str(value)+'m'
+
+    def memory(value, whole, fraction):
+        return str(value // 1024)+whole if value % 1024 == 0 else str(value)+fraction
+
+    profile = {
+        'resources': {
+            'requests': {'cpu': cpu(coordinator['cpu_request_millicores']),
+                         'memory': memory(coordinator['memory_request_mib'], 'Gi', 'Mi')},
+            'limits': {'cpu': cpu(coordinator['cpu_limit_millicores']),
+                       'memory': memory(coordinator['memory_limit_mib'], 'Gi', 'Mi')}},
+        'jvm_config': TRINO_JVM_CONFIG.replace(
+            '-Xmx2G\n', '-Xmx'+memory(coordinator['heap_mib'], 'G', 'M')+'\n'),
+        'annotations': {'shirokuma.dev/coordinator-resources': hashlib.sha256(
+            json.dumps(resources, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}}
+    if 'max_stage_count' in coordinator:
+        value = coordinator['max_stage_count']
+        profile['stage_limit'] = str(value)
+        profile['annotations'][STAGE_LIMIT_ANNOTATION] = hashlib.sha256(
+            json.dumps({'max_stage_count': value}, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    return profile
 
 
 class ConfigError(ValueError):
@@ -62,6 +100,43 @@ class ConfigError(ValueError):
 def _require(ok):
     if not ok:
         raise ConfigError()
+
+
+def stage_limit_property(config_properties):
+    """Return the single active query.max-stage-count value, or None.
+
+    Follows the normal Java properties separators and line comments used by
+    Trino config files. Duplicate or malformed active stage entries are
+    rejected instead of accepting a misleading first or last value. Active
+    lines containing a backslash are rejected because Java Properties can use
+    them to continue a line or escape a key, creating another alias of the
+    same stage key. Comments may contain backslashes. Generated config uses
+    neither form.
+    """
+    _require(isinstance(config_properties, str))
+    values = []
+    for raw in config_properties.splitlines():
+        line = raw.strip()
+        if not line or line[0] in '#!':
+            continue
+        _require('\\' not in line)
+        key, value = line, ''
+        for index, char in enumerate(line):
+            if char in '=:':
+                key, value = line[:index], line[index+1:]
+                break
+            if char.isspace():
+                key, value = line[:index], line[index:].lstrip()
+                if value[:1] in '=:':
+                    value = value[1:].lstrip()
+                break
+        if key.strip() != STAGE_LIMIT_PROPERTY:
+            continue
+        value = value.strip()
+        _require(re.fullmatch(r'[0-9]+', value) is not None)
+        values.append(value)
+    _require(len(values) <= 1)
+    return values[0] if values else None
 
 
 def private_read(path):
@@ -87,7 +162,18 @@ def validate(config):
             c['polaris'].setdefault('credential_duration_seconds', 900)
             c['polaris'].setdefault('credential_cache_duration_seconds', 450)
         for key, fields in NESTED.items():
-            _require(isinstance(c[key], dict) and set(c[key]) == fields)
+            allowed = fields | ({'coordinator'} if key == 'trino' and 'coordinator' in c[key] else set())
+            _require(isinstance(c[key], dict) and set(c[key]) == allowed)
+        if 'coordinator' in c['trino']:
+            coordinator = c['trino']['coordinator']
+            _require(isinstance(coordinator, dict) and set(coordinator) in (
+                COORDINATOR_KEYS, COORDINATOR_KEYS | COORDINATOR_OPTIONAL_KEYS))
+            _require(all(type(value) is int and value > 0 for value in coordinator.values()))
+            _require(coordinator['cpu_request_millicores'] <= coordinator['cpu_limit_millicores'])
+            _require(coordinator['memory_request_mib'] <= coordinator['memory_limit_mib'])
+            _require(1536 < coordinator['heap_mib'] < coordinator['memory_limit_mib'])
+            if 'max_stage_count' in coordinator:
+                _require(coordinator['max_stage_count'] <= MAX_STAGE_COUNT)
         for key in ('foundation_id', 'environment_id', 'warehouse_id'):
             _require(isinstance(c[key], str) and bool(ID.fullmatch(c[key])))
         _require(type(c['revision']) is int and c['revision'] > 0)
@@ -410,7 +496,7 @@ def render(config):
         'http-server.https.keystore.path=/etc/foundation/trino.pem', 'http-server.authentication.type=PASSWORD',
         'internal-communication.shared-secret=${ENV:TRINO_INTERNAL_SHARED_SECRET}', 'query.max-memory=1GB', 'query.max-memory-per-node=1GB', 'memory.heap-headroom-per-node=512MB'])+'\n',
         'catalog-store.properties': 'catalog.config-dir=/var/trino-catalogs\n',
-        'node.properties': 'node.environment=logical\nnode.data-dir=/tmp/trino\n', 'jvm.config': '-server\n-Xmx2G\n-XX:+UseG1GC\n-DsecretsConfig=/etc/trino/secrets.toml\n',
+        'node.properties': 'node.environment=logical\nnode.data-dir=/tmp/trino\n', 'jvm.config': TRINO_JVM_CONFIG,
         'log.properties': 'io.trino=WARN\n', 'secrets.toml': 'secrets-plugins-dir="/usr/lib/trino/secrets-plugin"\n[env]\nsecrets-provider.name="env"\n[file]\nsecrets-provider.name="file"\n',
         'password-authenticator.properties': 'password-authenticator.name=file\nfile.password-file=/etc/trino-private-secrets/password.db\nfile.refresh-period=1s\nfile.auth-token-cache.max-size=0\n',
         'access-control.properties': 'access-control.name=file\nsecurity.config-file=/etc/trino-private-secrets/rules.json\nsecurity.refresh-period=1s\n',
@@ -427,9 +513,10 @@ def render(config):
         mount('catalogs', '/var/trino-catalogs', False), mount('code', '/opt/logical-secrets'),
         mount('code', '/usr/lib/trino/secrets-plugin/logical-file'), mount('config', '/etc/trino'), mount('private', '/etc/foundation')],
         envs=[env('TRINO_INTERNAL_SHARED_SECRET', secret_key='shared')])
-    public.append(workload('trino-local', [trino], [runtime, codevol, privatevol('trino.pem'),
+    coordinator_deployment = workload('trino-local', [trino], [runtime, codevol, privatevol('trino.pem'),
         volume('config', 'configMap', {'name': prefix+'-trino-config'}), volume('catalogs', 'persistentVolumeClaim', {'claimName': 'trino-catalogs'}),
-        volume('bootstrap', 'secret', {'secretName': prefix+'-bootstrap', 'defaultMode': 0o440})], [bootstrapper]))
+        volume('bootstrap', 'secret', {'secretName': prefix+'-bootstrap', 'defaultMode': 0o440})], [bootstrapper])
+    public.append(coordinator_deployment)
     worker_config = copy.deepcopy(config)
     del worker_config['catalog-store.properties']
     worker_config['config.properties'] = '\n'.join(line for line in config['config.properties'].replace(
@@ -437,6 +524,16 @@ def render(config):
             'catalog.store=', 'catalog.config-dir=', 'node-scheduler.include-coordinator=')))+'\n'
     public.append(doc('ConfigMap', prefix+'-trino-worker-config', data=worker_config))
     worker = copy.deepcopy(trino)
+    # Apply only after copying the legacy defaults for the worker.
+    profile = coordinator_profile(c)
+    if profile is not None:
+        coordinator_deployment['spec']['template']['metadata'].setdefault('annotations', {}).update(profile['annotations'])
+        trino['resources'] = profile['resources']
+        config['jvm.config'] = profile['jvm_config']
+        if profile.get('stage_limit') is not None:
+            # The ConfigMap above holds this same dict; worker_config was copied first.
+            config['config.properties'] = (config['config.properties'].rstrip('\n') +
+                '\n' + STAGE_LIMIT_PROPERTY + '=' + profile['stage_limit'] + '\n')
     worker['volumeMounts'] = [m for m in worker['volumeMounts'] if m['name'] != 'catalogs']
     next(m for m in worker['volumeMounts'] if m['name'] == 'runtime')['readOnly'] = True
     worker_deployment = workload('trino-local-worker', [worker], [runtime, codevol, privatevol('trino.pem'),

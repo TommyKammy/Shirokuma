@@ -111,7 +111,7 @@ def export(principal, query_id, selected_role, body):
         context = qs._metadata(row)
         if (row['request_id'] != body['request_id'] or row['worksheet_id'] != body['worksheet_id']):
             raise QueryError('CONTEXT_MISMATCH', 409)
-        if pin.plan is not None or row['mode'] == 'dataops':
+        if pin.full_results or pin.plan is not None or row['mode'] == 'dataops':
             _unavailable()
         with control_store.connect() as db:
             if db.execute('SELECT 1 FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone():
@@ -204,7 +204,8 @@ def dispatch(handler, method, url, principal, role):
         raise QueryError('QUERY_NOT_FOUND', 404)
     if '?' in handler.path or '#' in handler.path or url.query or url.fragment or url.scheme or url.netloc:
         raise QueryError('INVALID_RESULT_EXPORT', 400)
-    from workbench_server import WorkbenchHandler, request_origin_allowed
+    import database_http_json
+    from http_origin import request_origin_allowed
     if handler.headers.get('Origin') and not request_origin_allowed(handler.headers):
         raise QueryError('INVALID_ORIGIN', 403)
     lengths = handler.headers.get_all('Content-Length', [])
@@ -212,6 +213,6 @@ def dispatch(handler, method, url, principal, role):
             handler.headers.get_all('Transfer-Encoding', []) or
             len(handler.headers.get_all('Content-Type', [])) != 1):
         raise QueryError('INVALID_RESULT_EXPORT', 400)
-    body = WorkbenchHandler.database_body(handler)
+    body = database_http_json.database_body(handler)
     handler.respond(export(principal, match[1], role, body))
     return True

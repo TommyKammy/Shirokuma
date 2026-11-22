@@ -1,0 +1,3 @@
+# Optional isolated benchmark environment; Python >=3.11.
+pyiceberg[pyarrow]==0.12.0
+pyarrow==26.0.1

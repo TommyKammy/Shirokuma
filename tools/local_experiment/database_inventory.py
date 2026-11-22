@@ -341,6 +341,30 @@ def _decode_cursor(token, scope):
         raise InventoryError('STALE_CURSOR', 409, 'Invalid or stale inventory cursor') from None
 
 
+def _catalog_names(api, schema_name, kind):
+    """List one schema/kind without reading object metadata."""
+    names = []
+    token, seen = None, set()
+    path = '/namespaces/' + quote(schema_name, safe='') + ('/tables' if kind == 'TABLE' else '/views')
+    while True:
+        params = {'page-size': 100}
+        if token:
+            params['page-token'] = token
+        page = api(path + '?' + urlencode(params))
+        for identifier in page.get('identifiers', []):
+            name = identifier.get('name')
+            if not isinstance(name, str) or not name or identifier.get('namespace') != [schema_name]:
+                raise InventoryError('CATALOG_UNAVAILABLE', 502, 'Invalid catalog listing')
+            names.append(name)
+        token = page.get('next-page-token')
+        if not token:
+            break
+        if not isinstance(token, str) or token in seen:
+            raise InventoryError('CATALOG_UNAVAILABLE', 502, 'Invalid catalog pagination')
+        seen.add(token)
+    return names
+
+
 def list_objects(principal, selected_role, schema_id, *, kind=None, q='', limit=50, cursor=None):
     if kind not in (None, 'TABLE', 'VIEW') or not isinstance(q, str) or type(limit) is not int or not 1 <= limit <= 100:
         raise ValueError('Invalid object listing parameters')
@@ -351,24 +375,9 @@ def list_objects(principal, selected_role, schema_id, *, kind=None, q='', limit=
     names = []
     with catalog_api(database, binding) as api:
         for object_kind in ([kind] if kind else ['TABLE', 'VIEW']):
-            token, seen = None, set()
-            while True:
-                params = {'page-size': 100}
-                if token:
-                    params['page-token'] = token
-                page = api(_path(schema, object_kind) + '?' + urlencode(params))
-                for identifier in page.get('identifiers', []):
-                    name = identifier.get('name')
-                    if not isinstance(name, str) or not name or identifier.get('namespace') != [schema.sql_name]:
-                        raise InventoryError('CATALOG_UNAVAILABLE', 502, 'Invalid catalog listing')
-                    if q.casefold() in name.casefold():
-                        names.append((object_kind, name))
-                token = page.get('next-page-token')
-                if not token:
-                    break
-                if not isinstance(token, str) or token in seen:
-                    raise InventoryError('CATALOG_UNAVAILABLE', 502, 'Invalid catalog pagination')
-                seen.add(token)
+            for name in _catalog_names(api, schema.sql_name, object_kind):
+                if q.casefold() in name.casefold():
+                    names.append((object_kind, name))
         names = sorted(set(names))
         digest = hashlib.sha256(json.dumps(names).encode()).hexdigest()
         if previous and previous['digest'] != digest:
@@ -378,6 +387,60 @@ def list_objects(principal, selected_role, schema_id, *, kind=None, q='', limit=
             for typ, name in names[offset:offset + limit]]
     offset += len(items)
     return {'items': items, 'next_cursor': _encode_cursor(dict(scope=scope, offset=offset, digest=digest)) if offset < len(names) else None}
+
+
+def search_objects(principal, selected_role, *, q, kind=None, limit=20):
+    """Search authorized, ready databases by object name without reading metadata.
+
+    Only databases returned by list_databases and schemas returned by
+    list_schemas are scanned, so unauthorized names never appear in items or
+    errors. A catalog failure for one database is reported separately and does
+    not stop the remaining databases.
+    """
+    if not isinstance(q, str) or not q.strip():
+        raise ValueError('Search text is required')
+    q = q.strip()
+    if kind not in (None, 'TABLE', 'VIEW') or type(limit) is not int or not 1 <= limit <= 50:
+        raise ValueError('Invalid object search parameters')
+    items, unavailable, truncated = [], [], False
+    databases = [d for d in list_databases(principal, selected_role)['items'] if d.get('state') == 'READY']
+    for database in sorted(databases, key=lambda d: (d['sql_catalog'], d['id'])):
+        start = len(items)
+        try:
+            database_record, binding, _ = _database(principal, selected_role, database['id'])
+            schemas = list_schemas(principal, selected_role, database['id'])['items']
+            if not schemas:
+                continue
+            with catalog_api(database_record, binding) as api:
+                for schema in sorted(schemas, key=lambda s: (s['sql_name'], s['id'])):
+                    matches = []
+                    for object_kind in ([kind] if kind else ['TABLE', 'VIEW']):
+                        for name in sorted(set(_catalog_names(api, schema['sql_name'], object_kind))):
+                            if q.casefold() in name.casefold():
+                                matches.append((object_kind, name))
+                    matches.sort(key=lambda match: (match[1], match[0]))
+                    for object_kind, name in matches:
+                        items.append(dict(database_id=database_record.id,
+                            sql_catalog=database_record.sql_catalog,
+                            database_display_name=database_record.display_name,
+                            schema_id=schema['id'], schema_sql_name=schema['sql_name'],
+                            name=name, kind=object_kind))
+                        if len(items) > limit:
+                            truncated = True
+                            del items[limit:]
+                            break
+                    if truncated:
+                        break
+        except InventoryError as error:
+            # A mid-request authorization change hides the database, while an
+            # actual catalog failure is reported for an already-visible database.
+            del items[start:]
+            if error.code != 'NOT_FOUND':
+                unavailable.append(dict(id=database['id'], sql_catalog=database['sql_catalog']))
+            continue
+        if truncated:
+            break
+    return {'items': items, 'truncated': truncated, 'unavailable_databases': unavailable}
 
 
 def _native_name(name):
@@ -472,6 +535,9 @@ def object_detail(principal, selected_role, object_id, *, detail, snapshot_id=No
     elif detail == 'snapshots':
         result['snapshots'] = [dict(snapshot_id=str(s['snapshot-id']), parent_id=str(s['parent-snapshot-id']) if s.get('parent-snapshot-id') is not None else None,
             timestamp_ms=str(s['timestamp-ms']), summary=s.get('summary', {})) for s in metadata.get('snapshots', [])]
+        # A rollback keeps newer snapshots in history, so recency is not currency.
+        current = metadata.get('current-snapshot-id')
+        result['current_snapshot_id'] = str(current) if current is not None and current != -1 else None
     else:
         if snapshot_id is not None and (obj.kind != 'TABLE' or snapshot_id not in {str(s['snapshot-id']) for s in metadata.get('snapshots', [])}):
             missing()

@@ -27,7 +27,7 @@ class NameLookupRouteChecks:
     """Exercise both modes through the production HTTP handler and real store."""
 
     def lookup_target(self):
-        status, ack, _ = self.request(body=dict(sql_catalog='research'))
+        status, ack, _ = self.request(body=dict(sql_catalog='research',team='Data Team'))
         self.assertIn(status, (201, 202))
         return ack
 
@@ -181,11 +181,11 @@ class CreationRouteTests(NameLookupRouteChecks, CreationFixture):
         return response.status,json.loads(response.read()),dict(response.headers)
 
     def test_create_replay_detail_location_and_no_store_normal_http(self):
-        status,ack,headers=self.request(body=dict(sql_catalog='research'))
+        status,ack,headers=self.request(body=dict(sql_catalog='research',team='Data Team'))
         self.assertEqual(status,201)
         self.assertEqual(headers['Location'],creations.COLLECTION+'/'+ack['creation_id'])
         self.assertEqual(headers['Cache-Control'],'no-store')
-        self.assertEqual(self.request(body=dict(sql_catalog='research'))[:2],(200,ack))
+        self.assertEqual(self.request(body=dict(sql_catalog='research',team='Data Team'))[:2],(200,ack))
         detail=self.request('/'+ack['creation_id'])
         self.assertEqual(detail[0],200)
         self.assertEqual(detail[1]['lifecycle'],'registered')
@@ -213,17 +213,17 @@ class CreationRouteTests(NameLookupRouteChecks, CreationFixture):
                     prepare.assert_not_called()
 
     def test_strict_duplicate_headers_json_fields_origin_types_and_unknown_fields(self):
-        cases=[dict(body=dict(sql_catalog='research'),headers=[('X-Shirokuma-Role','admin')]),
-            dict(body=dict(sql_catalog='research'),headers=[('Idempotency-Key','second')]),
-            dict(body=dict(sql_catalog='research'),key=None),
+        cases=[dict(body=dict(sql_catalog='research',team='Data Team'),headers=[('X-Shirokuma-Role','admin')]),
+            dict(body=dict(sql_catalog='research',team='Data Team'),headers=[('Idempotency-Key','second')]),
+            dict(body=dict(sql_catalog='research',team='Data Team'),key=None),
             dict(raw=b'{"sql_catalog":"one","sql_catalog":"two"}'),
-            dict(body=dict(sql_catalog='research',actor='alice')),
-            dict(body=dict(sql_catalog='research',initial_grants=True)),
-            dict(body=dict(sql_catalog='research',display_name=False))]
+            dict(body=dict(sql_catalog='research',team='Data Team',actor='alice')),
+            dict(body=dict(sql_catalog='research',team='Data Team',initial_grants=True)),
+            dict(body=dict(sql_catalog='research',team='Data Team',display_name=False))]
         for kwargs in cases:
             with self.subTest(kwargs=kwargs):
                 self.assertEqual(self.request(**kwargs)[0],400)
-        self.assertEqual(self.request(body=dict(sql_catalog='research'),headers=[('Origin','https://unrelated.example')])[0],403)
+        self.assertEqual(self.request(body=dict(sql_catalog='research',team='Data Team'),headers=[('Origin','https://unrelated.example')])[0],403)
         self.assertEqual(self.snapshot()['databases'],[])
 
     def test_authentication_selected_role_and_principal_secrecy(self):
@@ -238,13 +238,13 @@ class CreationRouteTests(NameLookupRouteChecks, CreationFixture):
     def test_capability_missing_implementation_and_bad_queries_are_explicit(self):
         self.probe.owner=False
         self.assertEqual(self.request('/capabilities')[1]['blocker'],'OPERATOR_UNAVAILABLE')
-        self.assertEqual(self.request(body=dict(sql_catalog='research'))[0],503)
+        self.assertEqual(self.request(body=dict(sql_catalog='research',team='Data Team'))[0],503)
         for tail in ('?limit=0','?limit=101','?limit=1&limit=2','?unknown=1','?cursor=!!!','/principals?limit=1'):
             with self.subTest(tail=tail):
                 self.assertEqual(self.request(tail)[0],400)
 
     def test_other_admin_reads_but_cannot_mutate_and_no_public_attach(self):
-        status,ack,_=self.request(body=dict(sql_catalog='research'))
+        status,ack,_=self.request(body=dict(sql_catalog='research',team='Data Team'))
         self.assertEqual(self.request('/'+ack['creation_id'],identity='bob')[0],200)
         self.assertEqual(self.request('/'+ack['creation_id']+'/withdraw',identity='bob',body=dict(expected_revision=1))[0],403)
         self.assertEqual(self.request('/'+ack['creation_id']+'/attach',body=dict(operation_id='arbitrary'))[0],404)

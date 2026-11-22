@@ -211,6 +211,33 @@ def authorize_database(principal, database_id, selected_role, *, expected_genera
         return decision
 
 
+def _account_authority(principal, database_id, expected_generation_id, selected_role, account=None):
+    """Validate the current caller account/role, optionally from one fresh read."""
+    if (type(principal) is not AuthenticatedPrincipal or
+            any(not isinstance(value, str) or not value.strip()
+                for value in (principal.principal_id, database_id, expected_generation_id)) or
+            not isinstance(selected_role, str) or selected_role not in ROLES):
+        raise PermissionError('Explicit authenticated database context is required')
+    if account is None:
+        account = _principal_accounts().get(principal.principal_id)
+    if (not account or account.get('enabled', True) is not True or account.get('disabled', False) is not False or
+            principal.maximum_role not in ROLES or ROLES[selected_role] > ROLES[principal.maximum_role] or
+            ROLES[selected_role] > ROLES[account['role']]):
+        raise PermissionError('Database role is not authorized')
+    return account['platform_admin'] and account['role'] == 'admin'
+
+
+def _grant_epoch(db, principal_id, database_id, selected_role, admin):
+    if selected_role == 'admin' and admin:
+        return None
+    from grant_management import effective
+    grant = effective(db, principal_id, database_id)
+    if (grant is None or grant['maximum_role'] not in ROLES or
+            ROLES[selected_role] > ROLES[grant['maximum_role']]):
+        raise PermissionError('Explicit database grant is required')
+    return grant['epoch']
+
+
 def _authorize_database_current(principal, database_id, selected_role, *, expected_generation_id, db):
     """Current authority metadata for private denial classification only.
 
@@ -219,17 +246,7 @@ def _authorize_database_current(principal, database_id, selected_role, *, expect
     The caller supplies the connection; no continuation capability is created.
     """
     import data_management as registry
-    if (type(principal) is not AuthenticatedPrincipal or
-            any(not isinstance(value, str) or not value.strip()
-                for value in (principal.principal_id, database_id, expected_generation_id)) or
-            not isinstance(selected_role, str) or selected_role not in ROLES):
-        raise PermissionError('Explicit authenticated database context is required')
-    account = _principal_accounts().get(principal.principal_id)
-    if (not account or account.get('enabled', True) is not True or account.get('disabled', False) is not False or
-            principal.maximum_role not in ROLES or ROLES[selected_role] > ROLES[principal.maximum_role] or
-            ROLES[selected_role] > ROLES[account['role']]):
-        raise PermissionError('Database role is not authorized')
-    admin = account['platform_admin'] and account['role'] == 'admin'
+    admin = _account_authority(principal, database_id, expected_generation_id, selected_role)
     database = registry.get_database(db, database_id)
     binding = registry.get_binding(db, database_id)
     if (database is None or binding is None or
@@ -237,14 +254,7 @@ def _authorize_database_current(principal, database_id, selected_role, *, expect
             binding.applied_generation_id != expected_generation_id or
             registry.get_generation(db, expected_generation_id) is None):
         raise PermissionError('Database is not ready for this generation')
-    grant_revision = None
-    if not (selected_role == 'admin' and admin):
-        from grant_management import effective
-        grant = effective(db, principal.principal_id, database_id)
-        if (grant is None or grant['maximum_role'] not in ROLES or
-                ROLES[selected_role] > ROLES[grant['maximum_role']]):
-            raise PermissionError('Explicit database grant is required')
-        grant_revision = grant['epoch']
+    grant_revision = _grant_epoch(db, principal.principal_id, database_id, selected_role, admin)
     import logical_registry
     if logical_registry.creation_mode(db, database_id) == 'logical_v1':
         try:
@@ -264,14 +274,45 @@ def _authorize_database_current(principal, database_id, selected_role, *, expect
                 logical_registry._identity_for_binding(db, dict(logical, generation_id=expected_generation_id),
                     principal.principal_id, database_id, selected_role, grant_revision, selected_role == 'admin' and admin)
             else:
-                logical_registry.resolve_binding(db, database_id, expected_generation_id)
-                logical_registry.resolve_identity(db, principal.principal_id, database_id,
+                logical = logical_registry.resolve_binding(db, database_id, expected_generation_id)
+                logical_registry._identity_for_binding(db, logical, principal.principal_id, database_id,
                     selected_role, grant_revision, selected_role == 'admin' and admin)
         except ValueError:
             raise PermissionError('Verified database identity is unavailable') from None
     return DatabaseAuthorization(principal.principal_id, database_id, database.sql_catalog,
         selected_role, selected_role == 'admin' and admin,
         database.revision, grant_revision, expected_generation_id)
+
+
+def _authorize_database_prepared(principal, database_id, selected_role, *, expected_generation_id,
+                                 db, database, binding, generation, logical, account=None):
+    """Authorize from facts read once in the caller's transaction.
+
+    `logical` is the caller's resolve_binding(...) result for the same
+    generation and transaction; `generation` is the registry row for it.
+    Account/role/grant/identity authority is still read current here; no
+    authorization snapshot survives the transaction.
+    """
+    import logical_registry
+    import warehouse_admission
+    admin = _account_authority(principal, database_id, expected_generation_id, selected_role, account)
+    if (database is None or binding is None or
+            binding.applied_revision != binding.desired_revision or binding.desired_revision <= 0 or
+            binding.applied_generation_id != expected_generation_id or logical is None or
+            logical['generation_id'] != expected_generation_id or generation is None):
+        raise PermissionError('Database is not ready for this generation')
+    grant_revision = _grant_epoch(db, principal.principal_id, database_id, selected_role, admin)
+    try:
+        identity = logical_registry._identity_for_binding(db, logical, principal.principal_id,
+            database_id, selected_role, grant_revision, selected_role == 'admin' and admin)
+    except ValueError:
+        raise PermissionError('Verified database identity is unavailable') from None
+    if (database.state != 'READY' and not warehouse_admission.continuing_database(
+            db, principal.principal_id, database_id, expected_generation_id)):
+        raise PermissionError('Database is not ready for this generation')
+    return DatabaseAuthorization(principal.principal_id, database_id, database.sql_catalog,
+        selected_role, selected_role == 'admin' and admin,
+        database.revision, grant_revision, expected_generation_id), identity
 
 
 def select_role(maximum, selectors):

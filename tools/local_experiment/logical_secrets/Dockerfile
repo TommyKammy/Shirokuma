@@ -12,6 +12,8 @@ RUN javac -version 2>&1 | grep '^javac 25' \
     && cp -R src/main/resources/. classes/ \
     && printf 'Manifest-Version: 1.0\nClass-Path: file:/usr/lib/trino/lib/io.airlift_secrets-spi-439.jar\n\n' > manifest.mf \
     && jar --create --file logical-secrets.jar --manifest manifest.mf -C classes .
+# Root is only needed to compile; return to the base image's user.
+USER trino
 
 FROM scratch AS artifact
 COPY --from=compile /tmp/logical-secrets-build/logical-secrets.jar /logical-secrets.jar

@@ -3,7 +3,8 @@
 No SQL or compile is launched by reads/reconciliation. Execution credentials and
 leases live only in the accepting process; records contain no reusable secrets.
 """
-from dataclasses import asdict
+from contextlib import contextmanager
+from dataclasses import asdict, dataclass
 import hashlib
 import json
 import os
@@ -27,6 +28,29 @@ _ACTIVE = {'QUEUED', 'BUILDING', 'TESTING', 'AUDITING', 'PUBLISHING', 'CANCELING
 _REPO = Path(__file__).resolve().parents[2]
 _UNREVIEWED = object()
 _ABSENT_NODE = object()
+
+
+@dataclass(frozen=True)
+class ViewCreation:
+    locator: registry.DestinationLocator
+    select_sql: str
+    native_graph: bool
+
+
+@dataclass(frozen=True)
+class NativeAuditQuery:
+    sql: str
+    pending_json: str
+    publication_id: str
+    operation_id: str
+
+
+@dataclass(frozen=True)
+class NativePublicationQuery:
+    sql: str
+    locator: registry.DestinationLocator
+    commit_json: str
+    publication_id: str
 
 
 def _access(principal, context, *, admin=False):
@@ -646,13 +670,13 @@ def _normalized(run, node):
 
 
 def _pinned(execution, sources):
-    scope = ds._dbt.get()
+    scope = ds.current_dbt_continuation()
     if scope is None:
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
-        _, run = _row(db, scope[5])
-        if run['kind'] != 'run' or scope[6] not in ('build', 'test') or run['_pins'] is None:
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
+        _, run = _row(db, scope.run_id)
+        if run['kind'] != 'run' or scope.phase not in ('build', 'test') or run['_pins'] is None:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
     pins = dict(run['_pins'])
     for model in run['models']:
@@ -683,40 +707,40 @@ def _row_run(ident):
 
 def _view_node(execution):
     """Resolve action exclusively from the admitted node and immutable plan."""
-    scope = ds._dbt.get()
-    if scope is None or scope[:2] != (execution.principal, execution._context()) or scope[6] != 'build':
+    scope = ds.current_dbt_continuation()
+    if scope is None or (scope.principal, scope.context) != (execution.principal, execution._context()) or scope.phase != 'build':
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-    if _live.get(scope[5], ())[:5] != scope[:5]:
+    if _live.get(scope.run_id, ())[:5] != scope.owner_pin:
         raise QueryError('DBT_OWNER_LOST', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
         _check_operation(db, execution.id)
         link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
-        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope.child_key:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-        _, run = _row(db, scope[5])
+        _, run = _row(db, scope.run_id)
         plan = _check_plan(db, run)
         if run.get('executor') == 'native_graph':
             import database_dbt_graph as graph
-            node = next((m for m in plan['models'] if m['unique_id'] == scope[7]), None)
-            selected = next(m for m in run['models'] if m['unique_id'] == scope[7])
+            node = next((m for m in plan['models'] if m['unique_id'] == scope.node_id), None)
+            selected = next(m for m in run['models'] if m['unique_id'] == scope.node_id)
             op = execution._row()
-            expected = ds._json(dict(payload=graph.payload(run, 'build', scope[7]), context=run['context']))
+            expected = ds._json(dict(payload=graph.payload(run, 'build', scope.node_id), context=run['context']))
             if (node is None or node['materialized'] != 'view' or node.get('view_security') != 'INVOKER'
-                    or selected['state'] != 'BUILDING' or run['_phase'] != 'build' or run['_node_id'] != scope[7]
+                    or selected['state'] != 'BUILDING' or run['_phase'] != 'build' or run['_node_id'] != scope.node_id
                     or op['route'] != 'dbt-graph-build' or op['payload'] != expected
                     or op['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()):
                 raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-            return run, node, registry.DestinationLocator(**run['_graph_locators'][scope[7]])
+            return run, node, registry.DestinationLocator(**run['_graph_locators'][scope.node_id])
         if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
             raise QueryError('DBT_PLAN_CHANGED', 409)
     operation = execution._row()
-    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=scope[7]), context=run['context']))
+    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=scope.node_id), context=run['context']))
     if (operation['route'] != 'dbt-view-create' or operation['payload'] != expected
             or operation['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()):
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-    nodes = [m for m in plan['models'] if m['unique_id'] == scope[7] and m['materialized'] == 'view']
-    selected = next(m for m in run['models'] if m['unique_id'] == scope[7])
+    nodes = [m for m in plan['models'] if m['unique_id'] == scope.node_id and m['materialized'] == 'view']
+    selected = next(m for m in run['models'] if m['unique_id'] == scope.node_id)
     if (not _supported_contract(plan) or plan['compatibility']['version'] != 2 or len(nodes) != 1
             or selected['state'] != 'BUILDING' or selected['operation_ids'] != [execution.id]):
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
@@ -725,6 +749,31 @@ def _view_node(execution):
     if selected['_view_locator'] != asdict(locator):
         raise QueryError('DBT_VIEW_CHANGED', 409)
     return run, nodes[0], locator
+
+
+def prepare_view_creation(execution):
+    """Validate/prepare a saved VIEW action, save its digest, and send no SQL."""
+    from manual_wap import _compile_model
+    run, node, locator = _view_node(execution)
+    native_graph = run.get('executor') == 'native_graph'
+    if native_graph:
+        import database_dbt_graph
+        with control_store.connect() as db:
+            plan = _check_plan(db, run)
+        _, normalized = database_dbt_graph.bindings_for(plan, run, node)
+    else:
+        normalized = _normalized(run, node)
+    inputs = _pinned(execution, normalized['sources'])
+    if any(m.get('kind') == 'VIEW' for m in inputs.values()):
+        raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
+    generated = _compile_model(normalized['sql'], normalized['sources'], execution=execution, measurements=inputs)
+    import database_dbt
+    canonical = database_dbt._sql_tree(generated).sql(dialect='trino')
+    with control_store.connect() as db:
+        _, saved_run = _row(db, run['id'])
+        next(m for m in saved_run['models'] if m['unique_id'] == node['unique_id'])['_view_definition_digest'] = hashlib.sha256(canonical.encode()).hexdigest()
+        _write(db, saved_run)
+    return ViewCreation(locator, generated, native_graph)
 
 
 def _view_saved(db, run, model):
@@ -800,21 +849,21 @@ def _verify_views(metadata, run, *, complete=False):
 
 def _view_binding(execution, ref, *, expected=None):
     """Private scoped read: no descriptors or general WAP VIEW inputs accepted."""
-    scope = ds._dbt.get()
-    if scope is None or scope[:2] != (execution.principal, execution._context()) or scope[6] not in ('build', 'test'):
+    scope = ds.current_dbt_continuation()
+    if scope is None or (scope.principal, scope.context) != (execution.principal, execution._context()) or scope.phase not in ('build', 'test'):
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-    if _live.get(scope[5], ())[:5] != scope[:5]:
+    if _live.get(scope.run_id, ())[:5] != scope.owner_pin:
         raise QueryError('DBT_OWNER_LOST', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
         if hasattr(execution, 'id'):
             _check_operation(db, execution.id)
             link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
-            if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+            if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope.child_key:
                 raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-        _, run = _row(db, scope[5])
+        _, run = _row(db, scope.run_id)
         plan = _check_plan(db, run)
-        node = next(n for n in plan['tests' if scope[6] == 'test' else 'models'] if n['unique_id'] == scope[7])
+        node = next(n for n in plan['tests' if scope.phase == 'test' else 'models'] if n['unique_id'] == scope.node_id)
         if run.get('executor') == 'native_graph':
             import database_dbt_graph as graph
             _, normalized = graph.bindings_for(plan, run, node)
@@ -839,7 +888,7 @@ def _view_binding(execution, ref, *, expected=None):
 
 
 def _build_view(ident, principal, context, parent, frozen, credential, uid):
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
         execution = ds.begin(principal, context, route='dbt-view-create', idempotency_key=ident + ':' + uid,
             payload=dict(run_id=ident, node_id=uid))
         if execution.replayed:
@@ -882,23 +931,23 @@ def _build_view(ident, principal, context, parent, frozen, credential, uid):
 
 def _table_properties(execution, *, build=None):
     """Only the exact admitted build/publish child may read saved typed properties."""
-    scope = ds._dbt.get()
+    scope = ds.current_dbt_continuation()
     if scope is None:
         return {}
     phase = 'build' if build is None else 'publish'
-    if scope[:2] != (execution.principal, execution._context()) or scope[6] != phase:
+    if (scope.principal, scope.context) != (execution.principal, execution._context()) or scope.phase != phase:
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
         link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
-        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope.child_key:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-        _, run = _row(db, scope[5])
+        _, run = _row(db, scope.run_id)
         if phase == 'publish':
             if run['kind'] != 'publication' or run['build_id'] != build['id']:
                 raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
             _, source = _row(db, run['parent_run_id'])
-            model, saved_build = _gate(db, source, scope[7], publication=run['id'])
+            model, saved_build = _gate(db, source, scope.node_id, publication=run['id'])
             if saved_build != build:
                 raise QueryError('DBT_CANDIDATE_CHANGED', 409)
         else:
@@ -910,24 +959,40 @@ def _table_properties(execution, *, build=None):
             return {}  # Historical admitted runs retain their original SQL semantics.
         if not _supported_contract(plan):
             raise QueryError('DBT_PLAN_CHANGED', 409)
-        matches = [m for m in plan['models'] if m['unique_id'] == scope[7] and m['materialized'] == 'table']
+        matches = [m for m in plan['models'] if m['unique_id'] == scope.node_id and m['materialized'] == 'table']
         if len(matches) != 1 or matches[0].get('table_properties') not in ({}, {'format': 'PARQUET'}):
             raise QueryError('DBT_PLAN_CHANGED', 409)
         return dict(matches[0]['table_properties'])
 
 
+@contextmanager
+def saved_test_query(execution):
+    """Prepare saved SQL for use by the caller, then post-check VIEW bindings.
+
+    No connection scope spans use; post-checks run only after a successful query.
+    """
+    from manual_wap import _compile_model
+    normalized = _test_select(execution)
+    inputs = _pinned(execution, normalized['sources'])
+    sql = _compile_model(normalized['sql'], normalized['sources'], execution=execution, measurements=inputs)
+    yield 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures'
+    for alias, ref in normalized['sources'].items():
+        if inputs[alias].get('kind') == 'VIEW':
+            _view_binding(execution, ref, expected=inputs[alias])
+
+
 def _test_select(execution):
-    scope = ds._dbt.get()
-    if scope is None or scope[6] != 'test':
+    scope = ds.current_dbt_continuation()
+    if scope is None or scope.phase != 'test':
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
         link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
-        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]:
+        if link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope.child_key:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-        _, run = _row(db, scope[5])
+        _, run = _row(db, scope.run_id)
         plan = _check_plan(db, run)
-    test = next(t for t in plan['tests'] if t['unique_id'] == scope[7])
+    test = next(t for t in plan['tests'] if t['unique_id'] == scope.node_id)
     return _normalized(run, test)
 
 
@@ -994,17 +1059,17 @@ def _guard(principal, context, action, *, model_id=None, build=None):
         if len(managed) != 1:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
         run, model = managed[0]
-        scope = ds._dbt.get()
-        if scope is None or scope[:2] != (principal, context) or scope[7] != model['unique_id']:
+        scope = ds.current_dbt_continuation()
+        if scope is None or (scope.principal, scope.context) != (principal, context) or scope.node_id != model['unique_id']:
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
-        _check_child(db, principal, context, *scope[5:])
+        _check_child(db, principal, context, *scope.child_key)
         if action in ('save', 'build'):
-            if scope[5] != run['id'] or scope[6] != 'build' or model['state'] != 'BUILDING':
+            if scope.run_id != run['id'] or scope.phase != 'build' or model['state'] != 'BUILDING':
                 raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
         else:
-            _, publication = _row(db, scope[5])
+            _, publication = _row(db, scope.run_id)
             if (publication['kind'] != 'publication' or publication['parent_run_id'] != run['id']
-                    or scope[6] != action or publication['build_id'] != model['build_id']):
+                    or scope.phase != action or publication['build_id'] != model['build_id']):
                 raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
             _gate(db, run, model['unique_id'], publication=publication['id'])
             if build is None or build['id'] != model['build_id']:
@@ -1461,7 +1526,7 @@ def _native_run(ident, principal, context, parent, frozen, credential):
         run['_pins'] = pins
         _write(db, run)
     _phase(ident, 'BUILDING', 'build', uid)
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
         payload = dict(plan_id=plan['id'], node_id=uid, digest=plan['_plan_digest'], **native._PROVENANCE)
         execution = ds.begin(principal, context, route='dbt-native-table', idempotency_key=ident + ':' + uid, payload=payload)
         if execution.replayed:
@@ -1491,7 +1556,7 @@ def _native_run(ident, principal, context, parent, frozen, credential):
             _, current = _row(db, ident)
             current['tests_status'] = 'RUNNING'
             _write(db, current)
-        with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'test', uid):
+        with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'test', uid):
             payload = dict(plan_id=plan['id'], node_id=uid, selected_node_id=run['selected_node_id'],
                 digest=plan['_plan_digest'], **native._TEST_PROVENANCE)
             execution = ds.begin(principal, context, route='dbt-native-test',
@@ -1558,7 +1623,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
             continue
         target = plan['_targets'][uid]
         target = registry.ResourceRef(**target) if 'object_id' in target else registry.DestinationLocator(**target)
-        with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
+        with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'build', uid):
             saved = wap.save_model(principal, context, model_id=selected['wap_model_id'],
                 sql=normalized['sql'], sources=normalized['sources'], target=target, expected_version=None)
             with control_store.connect() as db:
@@ -1581,7 +1646,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
     for test in plan['tests']:
         uid = test['unique_id']
         _phase(ident, 'TESTING', 'test', uid)
-        with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'test', uid):
+        with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'test', uid):
             execution = ds.begin(principal, context, route='dbt-test', idempotency_key=ident + ':' + uid,
                 payload=dict(run_id=ident, node_id=uid))
             if execution.replayed:
@@ -1625,21 +1690,83 @@ def _native_child_payload(publication, phase):
 
 def _native_execution_intent(execution, phase):
     """No caller data: resolve only an admitted, owned, exact phase continuation."""
-    scope = ds._dbt.get()
-    if scope is None or scope[6] != phase:
+    scope = ds.current_dbt_continuation()
+    if scope is None or scope.phase != phase:
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
     with control_store.connect() as db:
-        _check_child(db, execution.principal, execution._context(), *scope[5:])
+        _check_child(db, execution.principal, execution._context(), *scope.child_key)
         _check_operation(db, execution.id)
         link = db.execute('SELECT * FROM dbt_run_operations WHERE operation_id=?', (execution.id,)).fetchone()
-        publication = _row(db, scope[5])[1]
+        publication = _row(db, scope.run_id)[1]
         if (publication.get('origin') not in ('native_table', 'native_graph') or publication['kind'] != 'publication'
-                or link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope[5:]):
+                or link is None or tuple(link[k] for k in ('run_id', 'phase', 'node_id')) != scope.child_key):
             raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
         if phase == 'publish' and _native_audit_saved(db, publication) is None:
             raise QueryError('AUDIT_MISMATCH', 409)
     _native_publication_live(execution, publication)
     return publication
+
+
+def prepare_native_audit(execution) -> NativeAuditQuery:
+    publication = _native_execution_intent(execution, 'audit')
+    intent = publication['_native_intent']
+    receipt_id = str(uuid.uuid4())
+    pending = dict(origin=publication['origin'], audit_id=receipt_id, intent=intent)
+    with control_store.connect() as db:
+        pending_json = ds._json(pending)
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (pending_json, execution.id))
+    candidate = intent['candidate']
+    source = execution._ref(registry.ResourceRef(**candidate['ref']))
+    snapshot = candidate['snapshot']
+    if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+        raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+    sql = 'SELECT COUNT(*) FROM ' + source + ' FOR VERSION AS OF ' + snapshot
+    return NativeAuditQuery(sql, pending_json, publication['id'], execution.id)
+
+
+def native_audit_result(query, page) -> dict:
+    rows = page['data']
+    if (len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0):
+        raise QueryError('INVALID_AUDIT_RESULT', 502)
+    pending = json.loads(query.pending_json)
+    intent = pending['intent']
+    receipt = dict(id=pending['audit_id'], origin=pending['origin'], publication_id=query.publication_id, intent=intent,
+        operation_id=query.operation_id, query_id=page['id'], count=rows[0][0], passed=rows[0][0] >= intent['audit_policy']['min_rows'])
+    return dict(audit_id=pending['audit_id'], audit=receipt)
+
+
+def prepare_native_publication(execution) -> NativePublicationQuery:
+    publication = _native_execution_intent(execution, 'publish')
+    intent = publication['_native_intent']
+    candidate = intent['candidate']
+    target = _native_target(intent['expected_target']['destination'])
+    locator = execution.wap_claim(target)
+    if type(target) is registry.ResourceRef:
+        name, prefix = execution._ref(target, write=True, admin=True), 'CREATE OR REPLACE TABLE '
+    else:
+        name, prefix = execution._locator(target, admin=True), 'CREATE TABLE '
+    source = execution._ref(registry.ResourceRef(**candidate['ref']))
+    snapshot = candidate['snapshot']
+    if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
+        raise QueryError('DBT_CANDIDATE_CHANGED', 409)
+    columns = ', '.join(ds._column(c['name']) for c in candidate['columns'])
+    result = _native_publish_intent(publication, execution.id)
+    with control_store.connect() as db:
+        commit_json = ds._json(result)
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (commit_json, execution.id))
+    sql = (prefix + name + " WITH (format='PARQUET') AS SELECT " + columns
+        + ' FROM ' + source + ' FOR VERSION AS OF ' + snapshot)
+    return NativePublicationQuery(sql, locator, commit_json, publication['id'])
+
+
+def record_native_publication(execution, query, page, measured_target) -> dict:
+    result = json.loads(query.commit_json)
+    receipt = dict(result, id=query.publication_id, actor=execution.principal.principal_id,
+        context=asdict(execution._context()), query_id=page['id'], target=measured_target)
+    result = dict(result, publication=receipt)
+    with control_store.connect() as db:
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(result), execution.id))
+    return result
 
 
 def _native_child_saved(db, publication, phase, *, settle=True):
@@ -1855,7 +1982,7 @@ def _native_publish_run(ident, principal, context, parent, frozen, credential):
     publication = _row_run(ident)
     uid = publication['node_id']
     _phase(ident, 'AUDITING', 'audit', uid)
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):
         child = _native_publication_child(ident, principal, context, 'audit')
     audited = (child.get('result') or {}).get('audit')
     with control_store.connect() as db:
@@ -1870,7 +1997,7 @@ def _native_publish_run(ident, principal, context, parent, frozen, credential):
         if _native_audit_saved(db, publication) is None:
             raise QueryError('AUDIT_MISMATCH', 409)
     _phase(ident, 'PUBLISHING', 'publish', uid)
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'publish', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'publish', uid):
         _native_publication_child(ident, principal, context, 'publish')
     # _settle consumes the closed canonical receipt, even after a parent write failure.
 
@@ -1883,7 +2010,7 @@ def _publish_run(ident, principal, context, parent, frozen, credential):
     _verify_views(_access(principal, context), _row_run(publication['parent_run_id']), complete=True)
     uid = publication['node_id']
     _phase(ident, 'AUDITING', 'audit', uid)
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'audit', uid):
         child = wap.audit(principal, context, key=ident + ':audit', build_id=publication['build_id'])
     result = child.get('result') or {}
     if child['state'] != 'FINISHED' or not result.get('audit', {}).get('passed'):
@@ -1893,7 +2020,7 @@ def _publish_run(ident, principal, context, parent, frozen, credential):
         publication['audit_id'] = result['audit_id']
         _write(db, publication)
     _phase(ident, 'PUBLISHING', 'publish', uid)
-    with ds._dbt_scope(principal, context, parent, frozen, credential, ident, 'publish', uid):
+    with ds.dbt_child_scope(principal, context, parent, frozen, credential, ident, 'publish', uid):
         child = wap.publish(principal, context, key=ident + ':publish', build_id=publication['build_id'], audit_id=result['audit_id'])
     with control_store.connect() as db:
         _, publication = _row(db, ident)

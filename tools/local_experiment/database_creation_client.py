@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import tempfile
 from types import SimpleNamespace
+import unicodedata
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import Request
@@ -43,6 +44,20 @@ class Failure(Exception):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'))
+
+
+def validate_team(value):
+    if not isinstance(value, str):
+        raise Failure('INVALID_TEAM')
+    team = value.strip()
+    if (not 1 <= len(team) <= 64 or team != value
+            or any(unicodedata.category(c) == 'Cc' for c in team)):
+        raise Failure('INVALID_TEAM')
+    try:
+        team.encode('utf-8')
+    except UnicodeError:
+        raise Failure('INVALID_TEAM') from None
+    return team
 
 
 def profile_references():
@@ -270,10 +285,11 @@ def validate_receipt(receipt, scope, label):
             raise ValueError()
         path, body = receipt['path'], receipt['body']
         if action == 'create':
-            if (path != COLLECTION or set(body) != {'sql_catalog', 'display_name', 'description', 'initial_grants'}
+            if (path != COLLECTION or set(body) != {'sql_catalog', 'display_name', 'description', 'initial_grants', 'team'}
                     or body['sql_catalog'] != scope['target'] or not isinstance(body['display_name'], str)
                     or not isinstance(body['description'], str) or not isinstance(body['initial_grants'], list)):
                 raise ValueError()
+            validate_team(body['team'])
             principals = set()
             for grant in body['initial_grants']:
                 if (set(grant) != {'principal_id', 'maximum_role'} or not isinstance(grant['principal_id'], str)
@@ -393,7 +409,7 @@ def review(detail, plan, recovery):
 
 
 # Explicit public field projection: unexpected server fields never reach stdout.
-FIELDS = {'creation_id', 'database_id', 'sql_catalog', 'display_name', 'description',
+FIELDS = {'creation_id', 'database_id', 'sql_catalog', 'display_name', 'description', 'team',
           'requester_id', 'revision', 'lifecycle', 'progress_code', 'initial_grants',
           'principal_id', 'maximum_role', 'desired_role', 'effective_role', 'principals',
           'creations', 'plans', 'plan_id', 'phase', 'purpose', 'sequence', 'operation_id',
@@ -441,6 +457,7 @@ def parser():
         p.add_argument('--json', action='store_true')
         if action == 'create':
             p.add_argument('--sql-catalog', required=True)
+            p.add_argument('--team', required=True)
             p.add_argument('--grant', action='append', default=[])
             p.add_argument('--display-name')
             p.add_argument('--description', default='')
@@ -538,7 +555,8 @@ def execute(args, *, profile=None, state_dir=None):
             if any(g['principal_id'] not in available or ROLES[g['maximum_role']] > ROLES.get(available[g['principal_id']], -1) for g in grants):
                 raise Failure('INVALID_INITIAL_GRANTS')
         body = dict(sql_catalog=name, display_name=args.display_name if args.display_name is not None else name,
-                    description=args.description, initial_grants=sorted(grants, key=lambda g: g['principal_id']))
+                    description=args.description, team=validate_team(args.team.strip()),
+                    initial_grants=sorted(grants, key=lambda g: g['principal_id']))
         return success(receipts.mutate(client, 'create', COLLECTION, body), 'Creation accepted; use show to inspect progress.')
     detail = resolve(client, name)
     path = COLLECTION + '/' + quote(detail['creation_id'], safe='')

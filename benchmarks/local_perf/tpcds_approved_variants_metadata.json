@@ -1,0 +1,2936 @@
+{
+  "format": 1,
+  "suite": "TPC-derived approved alternatives: Spark v4.0.1 tpcds-v2.7.0 pinned 14; per-dataset Spark qualification required",
+  "provenance": {
+    "repository": "https://github.com/apache/spark",
+    "release": "v4.0.1",
+    "commit": "29434ea766b0fc3c3bf6eaadb43a8f931133649e",
+    "resource_version": "tpcds-v2.7.0",
+    "resource_pattern": "sql/core/src/test/resources/tpcds-v2.7.0/q<ID>.sql"
+  },
+  "input_schema_sha256": "927c5907b111d0f55469633e9143a5e47ea18a9ffcde7444d3614a8d26788a78",
+  "oracle_profile": {
+    "spark.sql.ansi.enabled": "true",
+    "spark.sql.caseSensitive": "false",
+    "spark.sql.session.timeZone": "UTC",
+    "spark.sql.shuffle.partitions": "2",
+    "spark.sql.decimalOperations.allowPrecisionLoss": "true",
+    "spark.sql.ansi.enforceReservedKeywords": "false",
+    "spark.sql.legacy.allowNegativeScaleOfDecimal": "false",
+    "spark.sql.storeAssignmentPolicy": "ANSI"
+  },
+  "oracle_engine": "Apache Spark",
+  "oracle_version": "4.1.3",
+  "current_v4_template_identity": false,
+  "universal_algebraic_equivalence": false,
+  "official_tpc_score": false,
+  "source_cast_same_sql": true,
+  "qualification": "every dataset requires all 14 independent original raw Spark outputs; exact decimals; float tolerance at most 1e-8",
+  "limitations": [
+    "old v2.7-derived source may omit later specification changes",
+    "DOUBLE AVG/division plus decimal casts are empirical adaptations, not universal algebraic equivalence"
+  ],
+  "queries": [
+    {
+      "id": "5a",
+      "source_sql_sha256": "9c70e64aa7f0e514abc06bb33381b983d7a8591cb71e165308650a622cfda2ff",
+      "columns": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "varchar"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(37,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(37,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "0ee6a593d9bae1eecdea4f2ec05f05a66d3305a9d21afc966437c18f0578092b",
+      "raw_source_sha256": "ec21c9c62324c4aa9572b0afd3c6a79e8b75206ae8bb41c92b382763f17f1ee8",
+      "normalized_body_sha256": "7dea40324bc2f13b67bfab4df7429168cbe1f67dbdc60b591b13ba863ff6b281",
+      "effective_body_sha256": "7dea40324bc2f13b67bfab4df7429168cbe1f67dbdc60b591b13ba863ff6b281",
+      "source_ast_counts": {
+        "try_cast": 18,
+        "avg": 0,
+        "div": 0,
+        "order": 1,
+        "ordered": 2,
+        "union": 7,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "varchar"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "cast_sql_sha256": "9c70e64aa7f0e514abc06bb33381b983d7a8591cb71e165308650a622cfda2ff",
+      "portable_body_sha256": "a76c7bbd0e7a5e5744dcd5f56d97ed7858dbd59ad2b8e3f4bf1a7648b4900e83",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "date",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(7,2)",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(28,2)",
+          "child_types": [
+            "decimal(18,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "9c70e64aa7f0e514abc06bb33381b983d7a8591cb71e165308650a622cfda2ff"
+    },
+    {
+      "id": "10a",
+      "source_sql_sha256": "75f36c2337675b87907d1ea9068be26c3a7f0e2cef9c763771b5914f64aae595",
+      "columns": [
+        {
+          "name": "cd_gender",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_marital_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_education_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cnt1",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_purchase_estimate",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt2",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_credit_rating",
+          "type": "varchar"
+        },
+        {
+          "name": "cnt3",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt4",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_employed_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt5",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_college_count",
+          "type": "integer"
+        },
+        {
+          "name": "cnt6",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 6,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 8,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 10,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 12,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "8a74dc75a1b99cc39f6e460803bc850f2d90e40f3f826a28fb78cd53711548f3",
+      "raw_source_sha256": "a7c90c2de481fc4e144e770d8d9fdf50af0064986dc5339f08da87834f6c571e",
+      "normalized_body_sha256": "a8f55bde93fc9d6fbedd91fbe6e41032f51339e77d8f436c30609ff96f5a70f0",
+      "effective_body_sha256": "a8f55bde93fc9d6fbedd91fbe6e41032f51339e77d8f436c30609ff96f5a70f0",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 0,
+        "order": 1,
+        "ordered": 8,
+        "union": 1,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "cd_gender",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_marital_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_education_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cnt1",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_purchase_estimate",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt2",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_credit_rating",
+          "type": "varchar"
+        },
+        {
+          "name": "cnt3",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt4",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_employed_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt5",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_college_count",
+          "type": "integer"
+        },
+        {
+          "name": "cnt6",
+          "type": "bigint"
+        }
+      ],
+      "cast_sql_sha256": "75f36c2337675b87907d1ea9068be26c3a7f0e2cef9c763771b5914f64aae595",
+      "portable_body_sha256": "43725b148e30ecbafe4419626f6bd0c2216bbf9f2b4da4dadbfa50cadd0a0a41",
+      "spark_dtype_evidence": [
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "75f36c2337675b87907d1ea9068be26c3a7f0e2cef9c763771b5914f64aae595"
+    },
+    {
+      "id": "14a",
+      "source_sql_sha256": "d2967a94a65aff81336d746e67b66536d6815ff0430f4dcefaefcb5c0a89d247",
+      "columns": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand_id",
+          "type": "bigint"
+        },
+        {
+          "name": "i_class_id",
+          "type": "bigint"
+        },
+        {
+          "name": "i_category_id",
+          "type": "bigint"
+        },
+        {
+          "name": "sum_sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "number_sales",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "9713fa22eacd8601ad8c6acb812feca863a88486eec334e1895da5e5a889576c",
+      "raw_source_sha256": "04b37ba5dd9d19b03e071d533913d5fe90c9bbbd1ef2c83ed4c9da01fcfd343e",
+      "normalized_body_sha256": "75ac32eac9b0c084e9c7c287de85ebaf79564f55663c75cbb8be9fb78d6c60ef",
+      "effective_body_sha256": "75ac32eac9b0c084e9c7c287de85ebaf79564f55663c75cbb8be9fb78d6c60ef",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 1,
+        "div": 0,
+        "order": 1,
+        "ordered": 4,
+        "union": 8,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand_id",
+          "type": "bigint"
+        },
+        {
+          "name": "i_class_id",
+          "type": "bigint"
+        },
+        {
+          "name": "i_category_id",
+          "type": "bigint"
+        },
+        {
+          "name": "sum_sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "number_sales",
+          "type": "hugeint"
+        }
+      ],
+      "cast_sql_sha256": "d2967a94a65aff81336d746e67b66536d6815ff0430f4dcefaefcb5c0a89d247",
+      "portable_body_sha256": "fbf31ae3f78a369084c39ebcc8beb0dbd14da0795fea275ff1e6c68297f722a1",
+      "spark_dtype_evidence": [
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "decimal(32,6)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(20,0)",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(38,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "bigint",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(32,6)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "d2967a94a65aff81336d746e67b66536d6815ff0430f4dcefaefcb5c0a89d247"
+    },
+    {
+      "id": "18a",
+      "source_sql_sha256": "0c97edd649bbce67f7dd65d1235f7bce9bf59d39db89a7efb29fcf4daa8ee0c7",
+      "columns": [
+        {
+          "name": "i_item_id",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_country",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_state",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_county",
+          "type": "varchar"
+        },
+        {
+          "name": "agg1",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg2",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg3",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg4",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg5",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg6",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg7",
+          "type": "decimal(16,6)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "697c0b61ee0c88afe1a54bafb91b7a163731358f274e591b2abf83377a01521b",
+      "raw_source_sha256": "8a4a3c51a7f173287c40162e26512638106b9cb7168a19fc0c2cd8474579e4f5",
+      "normalized_body_sha256": "c232c25e4745cd043b2eca01fc6138373fafea565558ddfaa0e9f236615f96ff",
+      "effective_body_sha256": "77948f2d80e90caf43b40167ca9dd51f5801a58cc9e140bf04a661e56ebfb35a",
+      "source_ast_counts": {
+        "try_cast": 7,
+        "avg": 35,
+        "div": 0,
+        "order": 1,
+        "ordered": 4,
+        "union": 4,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 35,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "i_item_id",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_country",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_state",
+          "type": "varchar"
+        },
+        {
+          "name": "ca_county",
+          "type": "varchar"
+        },
+        {
+          "name": "agg1",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg2",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg3",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg4",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg5",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg6",
+          "type": "decimal(16,6)"
+        },
+        {
+          "name": "agg7",
+          "type": "decimal(16,6)"
+        }
+      ],
+      "cast_sql_sha256": "0c97edd649bbce67f7dd65d1235f7bce9bf59d39db89a7efb29fcf4daa8ee0c7",
+      "portable_body_sha256": "8d2bce7754b56487f1271b056e9714658d877ab1c6b38c4231003d69c61c9ea7",
+      "spark_dtype_evidence": [
+        {
+          "node": "cast",
+          "data_type": "decimal(12,2)",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(12,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "decimal(16,6)",
+          "child_types": [
+            "decimal(12,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "0c97edd649bbce67f7dd65d1235f7bce9bf59d39db89a7efb29fcf4daa8ee0c7"
+    },
+    {
+      "id": "22a",
+      "source_sql_sha256": "0d935f6833fa92ea3b59a96e6c1a6b086665104162bd2707ae09c64295ab0e39",
+      "columns": [
+        {
+          "name": "i_product_name",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "qoh",
+          "type": "double"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "85943bf960da6323d35151389b2955046d37715e362d800194161d4b98d6e2d7",
+      "raw_source_sha256": "27113a9ae22857967bb2f8bc090bf90693e010f845b29f8ccc28cf5c955f4a55",
+      "normalized_body_sha256": "58f2273fd961d473b3571c048b8f431f2dd40487efe5702c482d96ff9b14880d",
+      "effective_body_sha256": "58f2273fd961d473b3571c048b8f431f2dd40487efe5702c482d96ff9b14880d",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 6,
+        "div": 0,
+        "order": 1,
+        "ordered": 5,
+        "union": 4,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "i_product_name",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "qoh",
+          "type": "double"
+        }
+      ],
+      "cast_sql_sha256": "0d935f6833fa92ea3b59a96e6c1a6b086665104162bd2707ae09c64295ab0e39",
+      "portable_body_sha256": "0fe4bc1ceedee8e667afd95645b1d789cd72db3356c234322d525ea969367e86",
+      "spark_dtype_evidence": [
+        {
+          "node": "avg",
+          "data_type": "double",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "double",
+          "child_types": [
+            "double"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "double",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "double"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "0d935f6833fa92ea3b59a96e6c1a6b086665104162bd2707ae09c64295ab0e39"
+    },
+    {
+      "id": "27a",
+      "source_sql_sha256": "d82074d7f92a4439acbecc19044ea870ee5449465a2d1dbefa089720c973b191",
+      "columns": [
+        {
+          "name": "i_item_id",
+          "type": "varchar"
+        },
+        {
+          "name": "s_state",
+          "type": "varchar"
+        },
+        {
+          "name": "g_state",
+          "type": "integer"
+        },
+        {
+          "name": "agg1",
+          "type": "double"
+        },
+        {
+          "name": "agg2",
+          "type": "decimal(11,6)"
+        },
+        {
+          "name": "agg3",
+          "type": "decimal(11,6)"
+        },
+        {
+          "name": "agg4",
+          "type": "decimal(11,6)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "fa97e37deab3229a2f9c417f6a95f1bc2cb85e89c1855b927ffd4a06daa13c83",
+      "raw_source_sha256": "d5e0c09264606bd8234f0124bf8ce832b76c92933c48def06ef79f8213955c2a",
+      "normalized_body_sha256": "72084177f2efc59fb765f9505d9fc792ed00f5b883e7852295e430d2ee6cd77e",
+      "effective_body_sha256": "605a1219aae7d373d017c7c687c061832a351d49b7ef393f36ae36e66877919d",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 12,
+        "div": 0,
+        "order": 1,
+        "ordered": 2,
+        "union": 2,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 9,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "i_item_id",
+          "type": "varchar"
+        },
+        {
+          "name": "s_state",
+          "type": "varchar"
+        },
+        {
+          "name": "g_state",
+          "type": "integer"
+        },
+        {
+          "name": "agg1",
+          "type": "double"
+        },
+        {
+          "name": "agg2",
+          "type": "decimal(11,6)"
+        },
+        {
+          "name": "agg3",
+          "type": "decimal(11,6)"
+        },
+        {
+          "name": "agg4",
+          "type": "decimal(11,6)"
+        }
+      ],
+      "cast_sql_sha256": "d82074d7f92a4439acbecc19044ea870ee5449465a2d1dbefa089720c973b191",
+      "portable_body_sha256": "3df6d01a08d71a169f8ac20241facad7ccb7ab208404cc16a8a785d1676c94b7",
+      "spark_dtype_evidence": [
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "double",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "decimal(11,6)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "d82074d7f92a4439acbecc19044ea870ee5449465a2d1dbefa089720c973b191"
+    },
+    {
+      "id": "35a",
+      "source_sql_sha256": "fe87fff8e86a69ba61aeffbe83961b3fbe98fb9f3eb7c186a22cff6346efe138",
+      "columns": [
+        {
+          "name": "ca_state",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_gender",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_marital_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_dep_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt1",
+          "type": "bigint"
+        },
+        {
+          "name": "c5",
+          "type": "double"
+        },
+        {
+          "name": "c6",
+          "type": "bigint"
+        },
+        {
+          "name": "c7",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_employed_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt2",
+          "type": "bigint"
+        },
+        {
+          "name": "c10",
+          "type": "double"
+        },
+        {
+          "name": "c11",
+          "type": "bigint"
+        },
+        {
+          "name": "c12",
+          "type": "bigint"
+        },
+        {
+          "name": "cd_dep_college_count",
+          "type": "integer"
+        },
+        {
+          "name": "cnt3",
+          "type": "bigint"
+        },
+        {
+          "name": "c15",
+          "type": "double"
+        },
+        {
+          "name": "c16",
+          "type": "integer"
+        },
+        {
+          "name": "c17",
+          "type": "bigint"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 8,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 13,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "0d985b3b024a168c0e2571e000a2a769a789e1db0f145ba475d0fb27b3d7e977",
+      "raw_source_sha256": "afd469e8a43edbd393670d46b8237b2be9aa431ddaa7fbe4bb1e4ad7f373cc6c",
+      "normalized_body_sha256": "2a9dd15bc6cec10326eecfc1f33d4ff814319adc50aa9574353d3d38dacd1b6a",
+      "effective_body_sha256": "2a9dd15bc6cec10326eecfc1f33d4ff814319adc50aa9574353d3d38dacd1b6a",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 3,
+        "div": 0,
+        "order": 1,
+        "ordered": 6,
+        "union": 1,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "ca_state",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_gender",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_marital_status",
+          "type": "varchar"
+        },
+        {
+          "name": "cd_dep_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt1",
+          "type": "bigint"
+        },
+        {
+          "name": "avg(cd_dep_count)",
+          "type": "double"
+        },
+        {
+          "name": "max(cd_dep_count)",
+          "type": "bigint"
+        },
+        {
+          "name": "sum(cd_dep_count)",
+          "type": "hugeint"
+        },
+        {
+          "name": "cd_dep_employed_count",
+          "type": "bigint"
+        },
+        {
+          "name": "cnt2",
+          "type": "bigint"
+        },
+        {
+          "name": "avg(cd_dep_employed_count)",
+          "type": "double"
+        },
+        {
+          "name": "max(cd_dep_employed_count)",
+          "type": "bigint"
+        },
+        {
+          "name": "sum(cd_dep_employed_count)",
+          "type": "hugeint"
+        },
+        {
+          "name": "cd_dep_college_count",
+          "type": "integer"
+        },
+        {
+          "name": "cnt3",
+          "type": "bigint"
+        },
+        {
+          "name": "avg(cd_dep_college_count)",
+          "type": "double"
+        },
+        {
+          "name": "max(cd_dep_college_count)",
+          "type": "integer"
+        },
+        {
+          "name": "sum(cd_dep_college_count)",
+          "type": "hugeint"
+        }
+      ],
+      "cast_sql_sha256": "fe87fff8e86a69ba61aeffbe83961b3fbe98fb9f3eb7c186a22cff6346efe138",
+      "portable_body_sha256": "ce26334dfd1984a4c5d6704fba30c0a9931f1f2bcb7c877b89335286fb365ce3",
+      "spark_dtype_evidence": [
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "double",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "bigint",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "avg",
+          "data_type": "double",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "fe87fff8e86a69ba61aeffbe83961b3fbe98fb9f3eb7c186a22cff6346efe138"
+    },
+    {
+      "id": "36a",
+      "source_sql_sha256": "ad1656c20c4b241e18209ca8d115d8265e5eef93c2b11b9a7c93aa879a498eff",
+      "columns": [
+        {
+          "name": "gross_margin",
+          "type": "decimal(38,11)"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "integer"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 3,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "expression": {
+            "op": "case_equal",
+            "condition": 3,
+            "value": 0,
+            "then": 1
+          },
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": [
+          {
+            "source_expression": "CASE WHEN lochierarchy = 0 THEN i_category END",
+            "expression": {
+              "op": "case_equal",
+              "condition": 3,
+              "value": 0,
+              "then": 1
+            }
+          }
+        ]
+      },
+      "portable_sql_sha256": "e7163d5dd1dbe64c55571cb98d1056974313a2a82dcc328d2b15de0fdf323f44",
+      "raw_source_sha256": "f2943008be0c9f5f4bebacc1da865a4b962657826f1cd4c38c6e6ce39288b624",
+      "normalized_body_sha256": "9d81779aa2ee617b7a9ef959010ec3566606bab474ac7c1e7a64ec7b91320d2d",
+      "effective_body_sha256": "79e88b36a8db4fdd9434572a48c238ba066e45cc181fde41af965a958dbd140f",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 3,
+        "order": 2,
+        "ordered": 4,
+        "union": 2,
+        "window": 1
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 3
+      },
+      "effective_native_schema": [
+        {
+          "name": "gross_margin",
+          "type": "decimal(38,11)"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "bigint"
+        }
+      ],
+      "cast_sql_sha256": "ad1656c20c4b241e18209ca8d115d8265e5eef93c2b11b9a7c93aa879a498eff",
+      "portable_body_sha256": "b1ed08e7288dc5f595fcfb5d39d452d3db6bd164771824f70b7fdbd462bb6608",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "divide",
+          "data_type": "decimal(37,20)",
+          "child_types": [
+            "decimal(17,2)",
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,11)",
+          "child_types": [
+            "decimal(37,20)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "divide",
+          "data_type": "decimal(38,11)",
+          "child_types": [
+            "decimal(27,2)",
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "casewhen",
+          "data_type": "string",
+          "child_types": [
+            "boolean",
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "decimal(38,11)",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "decimal(38,11)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "ad1656c20c4b241e18209ca8d115d8265e5eef93c2b11b9a7c93aa879a498eff"
+    },
+    {
+      "id": "51a",
+      "source_sql_sha256": "957bc77858e95dd41f80609ab6262b55e1b46a42861e71c806beaee77f19a604",
+      "columns": [
+        {
+          "name": "item_sk",
+          "type": "bigint"
+        },
+        {
+          "name": "d_date",
+          "type": "date"
+        },
+        {
+          "name": "web_sales",
+          "type": "decimal(27,2)"
+        },
+        {
+          "name": "store_sales",
+          "type": "decimal(27,2)"
+        },
+        {
+          "name": "web_cumulative",
+          "type": "decimal(27,2)"
+        },
+        {
+          "name": "store_cumulative",
+          "type": "decimal(27,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "99bab6b6e17e24f2c5e030b63951c9a900973b52ad01c5b354ef2073c80f2568",
+      "raw_source_sha256": "8d8825e2b824bd2d1520af899cf787df76dee8ee88d8dc6527f92f9f7d6a6aba",
+      "normalized_body_sha256": "ba99c770a788aa74b20a385006bdf37bae307c7a2b4aeea22518ba96c34a4f8c",
+      "effective_body_sha256": "ba99c770a788aa74b20a385006bdf37bae307c7a2b4aeea22518ba96c34a4f8c",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 0,
+        "order": 4,
+        "ordered": 5,
+        "union": 0,
+        "window": 3
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "item_sk",
+          "type": "bigint"
+        },
+        {
+          "name": "d_date",
+          "type": "date"
+        },
+        {
+          "name": "web_sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "store_sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "web_cumulative",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "store_cumulative",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "cast_sql_sha256": "957bc77858e95dd41f80609ab6262b55e1b46a42861e71c806beaee77f19a604",
+      "portable_body_sha256": "3ceabb530fcd2a62e1c663c65c125f5e9e547cceb572c1efe4578b2da837ab47",
+      "spark_dtype_evidence": [
+        {
+          "node": "sortorder",
+          "data_type": "date",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "date"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "casewhen",
+          "data_type": "bigint",
+          "child_types": [
+            "boolean",
+            "bigint",
+            "bigint"
+          ]
+        },
+        {
+          "node": "casewhen",
+          "data_type": "date",
+          "child_types": [
+            "boolean",
+            "date",
+            "date"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "957bc77858e95dd41f80609ab6262b55e1b46a42861e71c806beaee77f19a604"
+    },
+    {
+      "id": "67a",
+      "source_sql_sha256": "999e4f461b15fb513fa019310a5b8c3a4e590208906329c0fecee1e2c56debc2",
+      "columns": [
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand",
+          "type": "varchar"
+        },
+        {
+          "name": "i_product_name",
+          "type": "varchar"
+        },
+        {
+          "name": "d_year",
+          "type": "bigint"
+        },
+        {
+          "name": "d_qoy",
+          "type": "bigint"
+        },
+        {
+          "name": "d_moy",
+          "type": "bigint"
+        },
+        {
+          "name": "s_store_id",
+          "type": "varchar"
+        },
+        {
+          "name": "sumsales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "rk",
+          "type": "integer"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 2,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 3,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 5,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 6,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 7,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 8,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 9,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "9056b0b22992f51a2b9453ff32ee4a96cd619aefad9a3d9c9334c1ccb9a40062",
+      "raw_source_sha256": "c4161125806a015d5c9f9f72dc99d25be28ff458ecdbd09706239cb663f712da",
+      "normalized_body_sha256": "099be6218e09c2731a5d13598fc7b1032be82c71565714a2a5c227e17f5cbe2a",
+      "effective_body_sha256": "099be6218e09c2731a5d13598fc7b1032be82c71565714a2a5c227e17f5cbe2a",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 0,
+        "order": 2,
+        "ordered": 11,
+        "union": 8,
+        "window": 1
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "i_brand",
+          "type": "varchar"
+        },
+        {
+          "name": "i_product_name",
+          "type": "varchar"
+        },
+        {
+          "name": "d_year",
+          "type": "bigint"
+        },
+        {
+          "name": "d_qoy",
+          "type": "bigint"
+        },
+        {
+          "name": "d_moy",
+          "type": "bigint"
+        },
+        {
+          "name": "s_store_id",
+          "type": "varchar"
+        },
+        {
+          "name": "sumsales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "rk",
+          "type": "bigint"
+        }
+      ],
+      "cast_sql_sha256": "999e4f461b15fb513fa019310a5b8c3a4e590208906329c0fecee1e2c56debc2",
+      "portable_body_sha256": "cd30b291a8bea52a71fdce979e05b77f6d2b65b361984c14cb0391dc7b884749",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "coalesce",
+          "data_type": "decimal(28,2)",
+          "child_types": [
+            "decimal(28,2)",
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(20,0)",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(28,2)",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(38,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "decimal(38,2)",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "decimal(38,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "decimal(38,2)",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "decimal(38,2)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "999e4f461b15fb513fa019310a5b8c3a4e590208906329c0fecee1e2c56debc2"
+    },
+    {
+      "id": "70a",
+      "source_sql_sha256": "05e8350505fa972e21a886339418735d13873d7a48f7653011a834a5be2b849b",
+      "columns": [
+        {
+          "name": "total_sum",
+          "type": "decimal(27,2)"
+        },
+        {
+          "name": "s_state",
+          "type": "varchar"
+        },
+        {
+          "name": "s_county",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "integer"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 3,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "expression": {
+            "op": "case_equal",
+            "condition": 3,
+            "value": 0,
+            "then": 1
+          },
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": [
+          {
+            "source_expression": "CASE WHEN lochierarchy = 0 THEN s_state END",
+            "expression": {
+              "op": "case_equal",
+              "condition": 3,
+              "value": 0,
+              "then": 1
+            }
+          }
+        ]
+      },
+      "portable_sql_sha256": "bff8ee8d2c52199810502c47ea20bf8134772d66b53c0776c99234aedf775ad2",
+      "raw_source_sha256": "997059931d76726731430919b2c82a524f696cea5a07a59887f590f8ec2fedf7",
+      "normalized_body_sha256": "231b9f9af2aeda211cf2d3012001b9ee23669477ae240592e9cf82cf801ec88f",
+      "effective_body_sha256": "231b9f9af2aeda211cf2d3012001b9ee23669477ae240592e9cf82cf801ec88f",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 0,
+        "order": 3,
+        "ordered": 5,
+        "union": 2,
+        "window": 2
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "total_sum",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "s_state",
+          "type": "varchar"
+        },
+        {
+          "name": "s_county",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "bigint"
+        }
+      ],
+      "cast_sql_sha256": "05e8350505fa972e21a886339418735d13873d7a48f7653011a834a5be2b849b",
+      "portable_body_sha256": "bc6ea2d839f43bc51eeb1eeb58cdf5241d67a6c9f93c7050913c52545f2543ec",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "casewhen",
+          "data_type": "string",
+          "child_types": [
+            "boolean",
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "decimal(27,2)",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "05e8350505fa972e21a886339418735d13873d7a48f7653011a834a5be2b849b"
+    },
+    {
+      "id": "77a",
+      "source_sql_sha256": "1896cdd4bb6696c9b839a47004a5bb0b8baf0e648867e415b00da3ea9b15eb59",
+      "columns": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "bigint"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(37,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(37,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "a2abcd0e0c3bd661f6267d1f3adb164cec5db972c026b5dea50e5878658f39b9",
+      "raw_source_sha256": "c8e97ddab4c063e9c3f31ae62d50e4afd3fdd4cbe9159e8d941218478bdb1258",
+      "normalized_body_sha256": "ada47c737bff12bc7c368d620db5a4ee2c6ce9a3994b45c6883f20c4d174db2f",
+      "effective_body_sha256": "ada47c737bff12bc7c368d620db5a4ee2c6ce9a3994b45c6883f20c4d174db2f",
+      "source_ast_counts": {
+        "try_cast": 12,
+        "avg": 0,
+        "div": 0,
+        "order": 1,
+        "ordered": 2,
+        "union": 4,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "bigint"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "cast_sql_sha256": "1896cdd4bb6696c9b839a47004a5bb0b8baf0e648867e415b00da3ea9b15eb59",
+      "portable_body_sha256": "7864eec731e1832212a1d266bc87de7fea5bb59f7a06d249bb346fe403eec2e8",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "date",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(28,2)",
+          "child_types": [
+            "decimal(18,2)"
+          ]
+        },
+        {
+          "node": "coalesce",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(17,2)",
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "bigint",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "bigint"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(28,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "1896cdd4bb6696c9b839a47004a5bb0b8baf0e648867e415b00da3ea9b15eb59"
+    },
+    {
+      "id": "80a",
+      "source_sql_sha256": "3ac7db31fd24c9833b3203e510ad67a9d07b9d15bc002ea93e1823204ca5985a",
+      "columns": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "varchar"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(37,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 0,
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 1,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": []
+      },
+      "portable_sql_sha256": "31c27a9b2a2320d08136186cd52fa2ea55bfdb414df764c155e698330be0c3ad",
+      "raw_source_sha256": "f412af3897fb1b07c25ecd6188840e73b5407b74c4cb45d13697bb39bef1aa29",
+      "normalized_body_sha256": "cc64c23118cda525eaaa728f0f10e437e2f3e68e3a7ab149eaaf1ca8bc6c5d28",
+      "effective_body_sha256": "cc64c23118cda525eaaa728f0f10e437e2f3e68e3a7ab149eaaf1ca8bc6c5d28",
+      "source_ast_counts": {
+        "try_cast": 6,
+        "avg": 0,
+        "div": 0,
+        "order": 1,
+        "ordered": 2,
+        "union": 4,
+        "window": 0
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "channel",
+          "type": "varchar"
+        },
+        {
+          "name": "id",
+          "type": "varchar"
+        },
+        {
+          "name": "sales",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "returns",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "profit",
+          "type": "decimal(38,2)"
+        }
+      ],
+      "cast_sql_sha256": "3ac7db31fd24c9833b3203e510ad67a9d07b9d15bc002ea93e1823204ca5985a",
+      "portable_body_sha256": "5af9b0b909b44291c67c7de96224bfdc4ee58d8c83e200731e9650586b2ab99b",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(22,2)",
+          "child_types": [
+            "decimal(12,2)"
+          ]
+        },
+        {
+          "node": "coalesce",
+          "data_type": "decimal(12,2)",
+          "child_types": [
+            "decimal(12,2)",
+            "decimal(12,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(12,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(12,2)",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(23,2)",
+          "child_types": [
+            "decimal(13,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "date",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(7,2)",
+          "child_types": [
+            "decimal(2,0)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(2,0)",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(32,2)",
+          "child_types": [
+            "decimal(22,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(33,2)",
+          "child_types": [
+            "decimal(23,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(32,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(33,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(37,2)",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(32,2)"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(38,2)",
+          "child_types": [
+            "decimal(33,2)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "3ac7db31fd24c9833b3203e510ad67a9d07b9d15bc002ea93e1823204ca5985a"
+    },
+    {
+      "id": "86a",
+      "source_sql_sha256": "d0dd0fa3cf0db0775e5eb1db0030aa6b7d4fde39cdb85022869cc52f5b877550",
+      "columns": [
+        {
+          "name": "total_sum",
+          "type": "decimal(27,2)"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "integer"
+        }
+      ],
+      "order_by": [
+        {
+          "index": 3,
+          "descending": true,
+          "nulls": "last"
+        },
+        {
+          "expression": {
+            "op": "case_equal",
+            "condition": 3,
+            "value": 0,
+            "then": 1
+          },
+          "descending": false,
+          "nulls": "first"
+        },
+        {
+          "index": 4,
+          "descending": false,
+          "nulls": "first"
+        }
+      ],
+      "limit": 100,
+      "rewrite_provenance": {
+        "source": "Apache Spark v4.0.1 tpcds-v2.7.0; raw Spark 4.1.3 ANSI=true oracle",
+        "generator": "SQLGlot 30.31.0",
+        "method": "generate_contracts(inventory, table_schemas)",
+        "ordering": "shared projected-column indices and expressions; validate_order",
+        "transformations": [
+          "DuckDB parse; qualify and expand aliases/stars with input schemas",
+          "AVG inputs and both division operands explicitly DOUBLE",
+          "integer SUM explicitly BIGINT; signed64 validated on raw source results",
+          "DATE literals explicitly typed where compared to DATE expressions",
+          "Trino render; exact output ordinal casts; explicit outer ORDER/nulls"
+        ],
+        "manual_order_overrides": [
+          {
+            "source_expression": "CASE WHEN lochierarchy = 0 THEN i_category END",
+            "expression": {
+              "op": "case_equal",
+              "condition": 3,
+              "value": 0,
+              "then": 1
+            }
+          }
+        ]
+      },
+      "portable_sql_sha256": "7f48b1272220f59024c1926ea669d2764775cabdc77710cebc6ffd8ead026e92",
+      "raw_source_sha256": "f489e6ecb109fecdf2c2246d297c54dc14c997873b7dfc16817ba81b366a9241",
+      "normalized_body_sha256": "388c27f5c99f484024fd778e5aa163a8b0833aa58698161cc9336f642087e35d",
+      "effective_body_sha256": "388c27f5c99f484024fd778e5aa163a8b0833aa58698161cc9336f642087e35d",
+      "source_ast_counts": {
+        "try_cast": 0,
+        "avg": 0,
+        "div": 0,
+        "order": 2,
+        "ordered": 4,
+        "union": 2,
+        "window": 1
+      },
+      "transformations": {
+        "decimal_avg_cast": 0,
+        "decimal_division_cast": 0
+      },
+      "effective_native_schema": [
+        {
+          "name": "total_sum",
+          "type": "decimal(38,2)"
+        },
+        {
+          "name": "i_category",
+          "type": "varchar"
+        },
+        {
+          "name": "i_class",
+          "type": "varchar"
+        },
+        {
+          "name": "lochierarchy",
+          "type": "integer"
+        },
+        {
+          "name": "rank_within_parent",
+          "type": "bigint"
+        }
+      ],
+      "cast_sql_sha256": "d0dd0fa3cf0db0775e5eb1db0030aa6b7d4fde39cdb85022869cc52f5b877550",
+      "portable_body_sha256": "390d94242c814668a7580d01f4e7f96e1fd8653cf8e95d2618013cecee62ec2f",
+      "spark_dtype_evidence": [
+        {
+          "node": "sum",
+          "data_type": "decimal(17,2)",
+          "child_types": [
+            "decimal(7,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "bigint",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "cast",
+          "data_type": "string",
+          "child_types": [
+            "void"
+          ]
+        },
+        {
+          "node": "sum",
+          "data_type": "decimal(27,2)",
+          "child_types": [
+            "decimal(17,2)"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "string",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "string"
+          ]
+        },
+        {
+          "node": "casewhen",
+          "data_type": "string",
+          "child_types": [
+            "boolean",
+            "string"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "int",
+          "direction": "ASC",
+          "null_ordering": "NULLS FIRST",
+          "child_types": [
+            "int"
+          ]
+        },
+        {
+          "node": "sortorder",
+          "data_type": "decimal(27,2)",
+          "direction": "DESC",
+          "null_ordering": "NULLS LAST",
+          "child_types": [
+            "decimal(27,2)"
+          ]
+        }
+      ],
+      "effective_sql_sha256": "d0dd0fa3cf0db0775e5eb1db0030aa6b7d4fde39cdb85022869cc52f5b877550"
+    }
+  ],
+  "normalization_contract": {
+    "parser": "SQLGlot 30.31.0",
+    "read_dialect": "spark",
+    "effective_dialect": "duckdb",
+    "source_ansi_mode": true,
+    "source_try_cast_nodes": "Cast under actual ANSI=true oracle",
+    "division_safe": false,
+    "null_ordering": "preserve all Spark top/inner ORDER flags explicitly",
+    "alias_rendering": "77a implicit alias rendered with AS; raw unmodified Spark remains oracle",
+    "stage": "B intermediate decimal result casts before union/window rank",
+    "source_role": "canonical projection of effective DuckDB body; never raw SQL execution in DuckDB",
+    "source_cast_role": "same SQL as effective source; not independent proof",
+    "decimal_comparison": "exact typed native decimals; DOUBLE intermediate rounding limitations require per-dataset qualification"
+  },
+  "raw_pinned_source_fidelity": "exact fourteen raw Spark v4.0.1 tpcds-v2.7.0 source hashes; Spark 4.1.3 oracle is separate",
+  "base_template_equivalence": {
+    "36a": {
+      "group_and_rank_keys": "same in paired observation",
+      "strict_equivalence": false,
+      "variant_decimal": "decimal(38,11)",
+      "base_decimal": "decimal(37,20)",
+      "decimal_values": "differ"
+    },
+    "other_13": {
+      "fixed_parameters": "different",
+      "equivalence": "not assessed"
+    }
+  }
+}

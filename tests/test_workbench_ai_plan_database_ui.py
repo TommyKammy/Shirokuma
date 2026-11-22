@@ -853,8 +853,8 @@ assert.equal(dbExplanationIntent('sql_plan_explanation').key,intent.key);assert.
         additions = re.findall(
             r'const (?:dbCreationGuidance|dbPlanHelp|dbWorkflowHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
             r'|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', harness.SCRIPT)
-        result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
-                                 + '\nconsole.log(JSON.stringify(i18n.ja));'], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=dictionary + '\n' + '\n'.join(additions)
+                                 + '\nconsole.log(JSON.stringify(i18n.ja));', capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         labels = json.loads(result.stdout)
         self.assertEqual(labels['Acquire plan and explain'], '実行計画を取得して説明')

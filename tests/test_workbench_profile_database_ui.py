@@ -13,7 +13,7 @@ const profileOperation=(context,extra={})=>accepted(context,{id:'profile-op',sta
 async function profileReady(){
  await boot();
  Object.assign(dbExplorer,{database_id:'db',schema_id:'raw',binding_revision:1,generation_id:'gen',grant_revision:4,invalid:false,schemas:structuredClone(schemas),schemaScope:dbSchemaKey(currentRole,'db')});
- dbObject=stable('orders');dbWorkspacePane='details';dbExplorerControls();
+ dbObject={...stable('orders'),capabilities:{...stable('orders').capabilities,columns:true,snapshots:true,ddl:true}};dbWorkspacePane='details';dbExplorerControls();
  route=async(path,options)=>{
   if(path.includes('detail=snapshots'))return {snapshots:profileSnapshots.map(snapshot_id=>({snapshot_id}))};
   const body=options?.body?JSON.parse(options.body):null;
@@ -206,8 +206,10 @@ assert.equal($('table-profile-observe').disabled,false);assert.equal($('table-pr
 
     def test_readable_three_roles_and_keyboard_profile_tab_without_sql(self):
         self.javascript(r'''
-await profileReady();const profile=inspectorTabs.find(b=>b.dataset.inspect==='profile'),previewTab=inspectorTabs.find(b=>b.dataset.inspect==='preview');
-activeInspector='preview';previewTab.onkeydown({key:'ArrowRight',preventDefault(){}});assert.equal(activeInspector,'profile');assert.equal(document.activeElement,profile);
+await profileReady();const profile=inspectorTabs.find(b=>b.dataset.inspect==='profile');
+activeInspector='preview';
+for(const section of ['preview','columns','snapshots'])inspectorTabs.find(b=>b.dataset.inspect===section).onkeydown({key:'ArrowRight',preventDefault(){}});
+assert.equal(activeInspector,'profile');assert.equal(document.activeElement,profile);
 assert.equal(submissions.length,0);
 for(const role of ['admin','data_engineer','bi_viewer']){
  currentRole=role;dbInventories.set(role,{items:structuredClone(inventory)});dbExplorer.schemaScope=dbSchemaKey(role,'db');dbDatabases=structuredClone(inventory);
@@ -222,25 +224,25 @@ const tab=section=>inspectorTabs.find(b=>b.dataset.inspect===section);
 const worksheet=JSON.stringify(worksheets),sql=$('sql').value,ingest=$('p35-ingest-name').value,wap=$('p35-wap-sql').value;
 const key=(section,value,expected)=>{
  tab(section).onkeydown({key:value,preventDefault(){}});
- assert.equal(activeInspector,expected);assert.equal(document.activeElement,tab(expected));
+ assert.equal(activeInspector,expected,section+' '+value);assert.equal(document.activeElement,tab(expected));
  assert.equal(document.activeElement.disabled,false);assert.equal(document.activeElement.hidden,false);
 };
-key('preview','ArrowRight','profile');await tick();
-dbObject={...stable('orders_view'),kind:'VIEW'};await dbDescribe(dbObject,'preview');
+key('preview','ArrowRight','columns');await tick();
+dbObject={...stable('orders_view'),kind:'VIEW',capabilities:{...stable('orders_view').capabilities,columns:true,snapshots:true,ddl:true}};await dbDescribe(dbObject,'preview');
 assert.equal(tab('profile').disabled,true);
-key('preview','ArrowRight','ddl');await tick();
+assert.equal(tab('snapshots').disabled,false);
+key('preview','ArrowRight','columns');key('columns','ArrowRight','snapshots');await tick();
 tab('snapshots').disabled=true;
-key('ddl','ArrowRight','lineage');key('columns','ArrowLeft','lineage');
-key('preview','End','lineage');key('ddl','Home','columns');await tick();
+key('columns','ArrowRight','lineage');key('preview','End','lineage');key('lineage','Home','preview');await tick();
 for(const role of ['data_engineer','bi_viewer','admin']){
  currentRole=role;dbInventories.set(role,{items:structuredClone(inventory)});dbExplorer.schemaScope=dbSchemaKey(role,'db');dbDatabases=structuredClone(inventory);
  dbExplorerControls();assert.equal(tab('profile').disabled,true);
- key('preview','ArrowRight','ddl');await tick();
- dbObject=stable('orders');dbExplorerControls();assert.equal(tab('profile').disabled,false);
- key('preview','ArrowRight','profile');await tick();
- dbObject={...stable('orders_view'),kind:'VIEW'};dbExplorerControls();
+ key('preview','ArrowRight','columns');await tick();
+ dbObject={...stable('orders'),capabilities:{...stable('orders').capabilities,columns:true,snapshots:true,ddl:true}};dbExplorerControls();assert.equal(tab('profile').disabled,false);
+ key('preview','ArrowRight','columns');key('columns','ArrowRight','snapshots');key('snapshots','ArrowRight','profile');await tick();
+ dbObject={...stable('orders_view'),kind:'VIEW',capabilities:{...stable('orders_view').capabilities,columns:true,snapshots:true,ddl:true}};dbExplorerControls();
 }
-tab('ddl').hidden=true;key('preview','ArrowRight','lineage');
+tab('profile').hidden=true;key('preview','ArrowRight','columns');
 const focused=document.activeElement;tab('profile').onkeydown({key:'Home',preventDefault(){throw Error('disabled key');}});
 assert.equal(document.activeElement,focused);
 assert.equal(submissions.filter(s=>s.path.includes('table-profiles')||s.path.includes('/queries')).length,0);

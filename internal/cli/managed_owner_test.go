@@ -146,7 +146,12 @@ func managedFixture(t *testing.T, mode string) *managedOwner {
 func managedFixtureRole(t *testing.T, mode, role string) *managedOwner {
 	t.Helper()
 	// Keep the configured Unix socket below the macOS sockaddr_un limit.
-	root, err := os.MkdirTemp("/private/tmp", "p53-")
+	// /private/tmp exists only on macOS; /tmp is equally short elsewhere.
+	base := "/private/tmp"
+	if _, err := os.Stat(base); err != nil {
+		base = "/tmp"
+	}
+	root, err := os.MkdirTemp(base, "p53-")
 	if err != nil {
 		t.Fatal(err)
 	}

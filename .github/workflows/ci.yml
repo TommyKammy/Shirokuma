@@ -11,9 +11,23 @@ permissions:
 
 jobs:
   verify:
-    name: Verify
+    name: Verify (${{ matrix.target }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
+    strategy:
+      # Run every shard to completion so one push reports all failures.
+      fail-fast: false
+      matrix:
+        target:
+          - verify-static
+          - test-resident-core-1
+          - test-resident-core-2
+          - test-resident-core-3
+          - test-resident-core-4
+          - test-resident-core-5
+          - test-resident-core-6
+          - test-resident-core-7
+          - test-resident-core-8
 
     steps:
       - name: Checkout
@@ -131,5 +145,58 @@ jobs:
           chmod 0755 "${RUNNER_TEMP}/kyverno-bin/kyverno"
           echo "${RUNNER_TEMP}/kyverno-bin" >> "${GITHUB_PATH}"
 
+      - name: Set up verified uv and the DataOps environment
+        env:
+          UV_VERSION: 0.9.28
+          UV_ARCHIVE_SHA256: 66ad1822dd9cf96694b95c24f25bc05cff417a65351464da01682a91796d1f2b
+        run: |
+          set -euo pipefail
+          archive="uv-x86_64-unknown-linux-gnu.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+            "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${archive}" \
+            -o "${RUNNER_TEMP}/${archive}"
+          echo "${UV_ARCHIVE_SHA256}  ${RUNNER_TEMP}/${archive}" \
+            | sha256sum --check --strict
+          mkdir -p "${RUNNER_TEMP}/uv-bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/uv-bin" \
+            --strip-components=1 uv-x86_64-unknown-linux-gnu/uv
+          chmod 0755 "${RUNNER_TEMP}/uv-bin/uv"
+          "${RUNNER_TEMP}/uv-bin/uv" sync --frozen --python 3.12 \
+            --project tools/local_experiment/dataops
+
+      - name: Provide the rtk proxy passthrough
+        # Local tools invoke host commands as `rtk proxy <command>`, which runs
+        # the command unchanged. CI has no rtk, so supply only that form.
+        run: |
+          set -euo pipefail
+          bin_dir="${RUNNER_TEMP}/rtk-bin"
+          mkdir -p "${bin_dir}"
+          cat > "${bin_dir}/rtk" <<'EOF'
+          #!/bin/sh
+          if [ "$1" != proxy ] || [ "$#" -lt 2 ]; then
+            echo "rtk shim: only 'rtk proxy <command>' is supported" >&2
+            exit 64
+          fi
+          shift
+          exec "$@"
+          EOF
+          chmod 0755 "${bin_dir}/rtk"
+          echo "${bin_dir}" >> "${GITHUB_PATH}"
+
       - name: Run repo-owned checks
-        run: make verify
+        env:
+          TARGET: ${{ matrix.target }}
+        run: make "${TARGET}" PYTHON=tools/local_experiment/dataops/.venv/bin/python3
+
+  verify-summary:
+    # One overall result for the PR; together the shards equal `make verify`.
+    name: Verify
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every verify shard to pass
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: test "${RESULT}" = success

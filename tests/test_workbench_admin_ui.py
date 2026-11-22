@@ -33,7 +33,8 @@ class AdminUI(unittest.TestCase):
 
     def test_static_navigation_is_database_only(self):
         self.assertIn('id="tab-db-admin"', HTML)
-        self.assertIn('data-tab="db-admin" hidden', HTML)
+        start = HTML.index('id="tab-db-admin"')
+        self.assertIn('hidden', HTML[start:start + 400])
         self.javascript(r'''
 await boot();assert.equal($('tab-db-admin').hidden,true);await dbAdminOpen();
 assert.equal(calls.some(c=>c.path==='/api/v1/admin/databases'),false);
@@ -46,7 +47,8 @@ for(const [platform,maximum,selected] of [[false,'admin','admin'],[true,'data_en
     def test_metadata_patch_exact_unicode_schema_and_safe_binding(self):
         self.javascript(SETUP + r'''
 assert.equal($('db-admin-database-db-name').value,adminItems[0].display_name);
-assert.equal($('db-admin-summary').textContent,'sales · db · REGISTERED · revision 3');
+assert.equal($('db-admin-summary').textContent,'売上 <img onerror=x> 🐻 · sales');
+assert.equal($('db-admin-summary').textContent.includes(' · db'),false);
 assert.equal($('db-admin-binding').textContent.includes('must-not-render'),false);
 assert.equal($('db-admin-binding').textContent.includes('desired_revision'),true);
 const name='  売上 <script> 🐻 e\u0301  ',description='\tline 1\r\n説明';
@@ -112,7 +114,7 @@ const worksheetsBefore=JSON.stringify(worksheets),expected=$('db-admin-database-
 // A different administrator changed metadata. The ordinary 15-second inventory sees its revision first.
 inventory[0].revision+=1;inventory[0].display_name='他画面で保存した表示名';adminItems[0].revision+=1;
 await periodicRefresh();
-assert.equal(activeTab,'db-admin');assert.equal($('tab-db-admin').getAttribute('aria-selected'),'true');
+assert.equal(activeTab,'db-admin');assert.equal($('tab-db-admin').getAttribute('aria-current'),'page');
 assert.equal($('db-admin').hidden,false);assert.equal(dbAdminAllowed(),true);assert.equal(dbAdmin.database,'db');
 assert.equal($('db-admin-content'),content);assert.equal($('db-admin-detail'),detail);assert.equal($('db-admin-database-db-name'),field);
 assert.equal(field.value,'競合側の未保存 draft');assert.equal(document.activeElement,field);assert.equal(field.selectionStart,2);assert.equal(field.selectionEnd,5);
@@ -146,7 +148,7 @@ session.platform_admin=false;await dbRefreshAccess();assert.equal(dbAdmin.reques
 assert.equal(dbAdmin.databases.length,0);assert.equal($('db-admin-content').children.length,0);assert.equal($('tab-db-admin').hidden,true);
 held.resolve(metadataResponse);await saving;
 session.platform_admin=true;await dbRefreshAccess();await dbAdminOpen();await choose('finance');
-assert.equal($('db-admin-summary').textContent,'finance · finance · REGISTERED · revision 3');assert.equal(dbAdmin.requests.size,0);
+assert.match($('db-admin-summary').textContent,/finance/);assert.equal($('db-admin-summary').textContent.includes('finance · finance'),false);assert.equal(dbAdmin.requests.size,0);
 ''')
 
     def test_revalidated_retry_after_discarded_authorization_response(self):
@@ -170,7 +172,7 @@ assert.equal(writeCalls()[1].options.body,original.options.body);assert.equal(wr
 assert.equal($('db-admin-select').disabled,false);await choose('finance');assert.equal(dbAdmin.database,'finance');assert.equal(dbAdmin.requests.size,0);
 assert.equal($('db-admin-plan-result').textContent,'');assert.equal($('db-admin-generation').value,'gen');
 adminItems=adminItems.filter(d=>d.id!=='finance');await dbAdminRefresh();
-assert.equal(dbAdmin.database,'');assert.equal($('db-admin-detail').children.length,0);
+assert.equal(dbAdmin.database,'');assert.equal($('db-admin-detail-view').hidden,true);
 ''')
 
     def test_pending_mutation_blocks_selection_without_losing_accepted_receipt(self):
@@ -283,7 +285,7 @@ assert.equal($('db-admin-use-registration').hidden,false);await click('use-regis
 assert.notEqual($('db-admin-select').value,'new');
 adminItems.at(-1).sql_catalog='new_db';await click('use-registration');
 assert.equal($('db-admin-select').value,'new');assert.equal(writeCalls().length,1);
-assert.match($('db-admin-current-target').textContent,/new_db.*REGISTERED/);
+assert.match($('db-admin-summary').textContent,/new_db/);assert.equal(/ · new$/.test($('db-admin-summary').textContent),false);assert.match($('db-admin-detail-state').children[0].textContent,/Registered/);
 assert.equal(document.activeElement,$('db-admin-generation'));
 assert.match($('db-admin-target-guidance').textContent,/request apply.*verify/);
 $('db-admin-creation-entry').onclick();assert.equal(document.activeElement,$('db-creation-title'));

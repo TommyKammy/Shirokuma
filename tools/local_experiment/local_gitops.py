@@ -14,6 +14,18 @@ import time
 
 import yaml
 
+# libyaml's safe loader yields the same objects as yaml.SafeLoader, much faster.
+_SAFE_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+
+def _yaml_load(text):
+    return yaml.load(text, Loader=_SAFE_YAML_LOADER)
+
+
+def _yaml_load_all(text):
+    return yaml.load_all(text, Loader=_SAFE_YAML_LOADER)
+
+
 CONTEXT = "colima-mac-studio-solo"
 SOURCE = "shirokuma-local-source"
 BUCKET = "shirokuma-gitops"
@@ -50,7 +62,7 @@ def validate_content(path, content):
             elif isinstance(value, list):
                 for item in value:
                     inspect(item)
-        for document in yaml.safe_load_all(text):
+        for document in _yaml_load_all(text):
             inspect(document)
 
 
@@ -69,7 +81,7 @@ def validate_references(files):
     for path, content in files.items():
         if PurePosixPath(path).name not in ("kustomization.yaml", "kustomization.yml", "Kustomization"):
             continue
-        doc = yaml.safe_load(content)
+        doc = _yaml_load(content)
         for field in ("resources", "bases", "components", "configurations", "crds", "generators", "transformers", "patchesStrategicMerge"):
             for value in doc.get(field, []):
                 if isinstance(value, str) and "\n" in value and field == "patchesStrategicMerge":
@@ -128,7 +140,7 @@ def generation_prefix(digest):
 
 def child_definitions(files, prefix, suspend=False):
     """Render the local child map; never render/re-read the old root overlay."""
-    data = yaml.safe_load(files[f"{CHILD_ROOT}/polaris-runtime-generation.yaml"])["data"]
+    data = _yaml_load(files[f"{CHILD_ROOT}/polaris-runtime-generation.yaml"])["data"]
     generations = {}
     for key in GENERATION_KEYS:
         if key not in data:
@@ -142,7 +154,7 @@ def child_definitions(files, prefix, suspend=False):
         raise ValueError("missing Polaris runtime generation")
     children = []
     for filename in CHILD_FILES:
-        doc = yaml.safe_load(files[f"{CHILD_ROOT}/{filename}.yaml"])
+        doc = _yaml_load(files[f"{CHILD_ROOT}/{filename}.yaml"])
         if (doc.get("kind") != "Kustomization" or
                 doc["metadata"]["name"] != f"shirokuma-{filename}" or
                 doc["metadata"].get("namespace") != "flux-system"):
@@ -182,9 +194,9 @@ def child_definitions(files, prefix, suspend=False):
 
 def source_definitions(root, prefix):
     base = root / "deploy/local-experiment/gitops"
-    bucket = yaml.safe_load((base / "bucket.yaml").read_bytes())
+    bucket = _yaml_load((base / "bucket.yaml").read_bytes())
     bucket["spec"]["prefix"] = prefix
-    return [bucket, yaml.safe_load((base / "networkpolicy.yaml").read_bytes())]
+    return [bucket, _yaml_load((base / "networkpolicy.yaml").read_bytes())]
 
 
 def generation_children(files, child_files, prefix):
@@ -192,7 +204,7 @@ def generation_children(files, child_files, prefix):
     children = []
     for filename in child_files:
         checked_path(filename)
-        doc = yaml.safe_load(files[filename])
+        doc = _yaml_load(files[filename])
         if (doc.get("apiVersion") != "kustomize.toolkit.fluxcd.io/v1" or
                 doc.get("kind") != "Kustomization" or
                 doc["metadata"].get("namespace") != "flux-system"):

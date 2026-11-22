@@ -1,11 +1,9 @@
 """Compare fixed LOCAL Pod-template declarations with four advisory rules."""
 import json
 import re
-import selectors
-import subprocess
-import time
 
 import audit_service as audit
+from db_platform_collect import read_fixed_deployments
 from db_platform_observations import _authority, _now, SOURCE_ERRORS
 from db_platform_resources import _quantity
 import logical_foundation
@@ -118,32 +116,7 @@ def _collect():
         raise ValueError()
     argv = [('--request-timeout=3s' if arg == '--request-timeout=15s' else arg)
             for arg in logical_foundation.kube_argv(foundation)]
-    deadline = time.monotonic() + 8
-    process = subprocess.Popen(argv + ['get', 'deployments', 'trino-local',
-        'trino-local-worker', '-o', JSONPATH],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=False)
-    raw = b''
-    try:
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or not selector.select(remaining):
-                    raise subprocess.TimeoutExpired(argv, 8)
-                chunk = process.stdout.read1(MAX_STDOUT_BYTES + 1 - len(raw))
-                if not chunk:
-                    break
-                raw += chunk
-                if len(raw) > MAX_STDOUT_BYTES:
-                    raise ValueError()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or process.wait(timeout=remaining) != 0:
-            raise ValueError()
-    finally:
-        if process.poll() is None:
-            process.kill()
-            process.wait()
-        process.stdout.close()
+    raw = read_fixed_deployments(argv, JSONPATH, max_stdout_bytes=MAX_STDOUT_BYTES)
     return _parse(raw, namespace)
 
 

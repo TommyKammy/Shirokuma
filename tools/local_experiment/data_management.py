@@ -77,6 +77,7 @@ class Database:
     managed_by: str
     state: str
     revision: int
+    team: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +205,9 @@ def _insert(db, table, values):
     db.execute('INSERT INTO ' + table + ' VALUES (' + ','.join('?' for _ in values) + ')', values)
 
 
+_UNSET = object()
+
+
 def _get(db, sql, parameters, record):
     row = db.execute(sql, parameters).fetchone()
     return record(**dict(row)) if row is not None else None
@@ -238,10 +242,15 @@ def retire_database_state(db, database_id, expected_revision, *, finalize=False)
     return get_database(db, database_id)
 
 
-def update_database_display(db, database_id, expected_revision, display_name, description):
-    _cas(db.execute('''UPDATE databases SET display_name=?, description=?, revision=revision+1
-                       WHERE id=? AND revision=?''',
-                    (display_name, description, database_id, expected_revision)))
+def update_database_display(db, database_id, expected_revision, display_name, description, team=_UNSET):
+    if team is _UNSET:
+        _cas(db.execute('''UPDATE databases SET display_name=?, description=?, revision=revision+1
+                           WHERE id=? AND revision=?''',
+                        (display_name, description, database_id, expected_revision)))
+    else:
+        _cas(db.execute('''UPDATE databases SET display_name=?, description=?, team=?, revision=revision+1
+                           WHERE id=? AND revision=?''',
+                        (display_name, description, team, database_id, expected_revision)))
     return get_database(db, database_id)
 
 
@@ -445,9 +454,9 @@ def get_query_execution(db, query_id):
                 (query_id,), QueryExecutionContext)
 
 
-def set_query_backend_id(db, query_id, backend_id):
+def set_query_backend_id(db, query_id, backend_id, *, closure_checked=False):
     import warehouse_admission
-    if warehouse_admission.query_closure(db, query_id):
+    if not closure_checked and warehouse_admission.query_closure(db, query_id):
         raise RevisionConflict('execution closed; historical outcome is immutable')
     _text(backend_id)
     execution = get_query_execution(db, query_id)
@@ -457,9 +466,9 @@ def set_query_backend_id(db, query_id, backend_id):
                (backend_id, query_id))
 
 
-def set_query_state(db, query_id, state):
+def set_query_state(db, query_id, state, *, closure_checked=False):
     import warehouse_admission
-    if warehouse_admission.query_closure(db, query_id):
+    if not closure_checked and warehouse_admission.query_closure(db, query_id):
         raise RevisionConflict('execution closed; historical outcome is immutable')
     if state not in {'QUEUED', 'RUNNING', 'FINISHED', 'FAILED', 'CANCELED', 'UNKNOWN'}:
         raise ValueError('invalid query state')

@@ -21,6 +21,7 @@ from unittest.mock import patch, Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
 import workbench_server as wb
 import runtime_profile
+from workbench_source import WorkbenchSource
 
 
 class WorkbenchHTML(HTMLParser):
@@ -28,6 +29,7 @@ class WorkbenchHTML(HTMLParser):
 
     def __init__(self, html):
         super().__init__()
+        self.html = html
         self.nodes = []
         self.stack = []
         self.feed(html)
@@ -53,11 +55,8 @@ class WorkbenchHTML(HTMLParser):
         return next(n for n in self.nodes if n.get('id') == identifier)
 
     def main_script(self):
-        """Select the body application script, excluding head boot scripts."""
-        script, = (node for node in self.nodes
-                   if node['tag'] == 'script' and 'src' not in node
-                   and any(parent['tag'] == 'body' for parent in node['ancestors']))
-        return script['text']
+        """Read body classic scripts from this already-parsed document."""
+        return WorkbenchSource(self.html).source
 
 
 class HistoryHandlerTests(unittest.TestCase):
@@ -306,65 +305,6 @@ class WorkbenchTests(unittest.TestCase):
                 self.assertEqual(self.json_request('/api/stages/exports',{'name':'missing'})[0],404)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_export_controls_revisions_and_stale_output_responses(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){this.textContent='';},setAttribute(){},reset(){},append(){},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',mode:'append',table:'raw.orders'},schedule:null};
- editStage(entry);assert.equal($('stage-export-area').hidden,false);assert.equal($('stage-export-table').value,'raw.orders');assert.equal($('stage-export-directory').textContent,'/host/orders/exports');
- $('stage-export-format').value='jsonl';$('stage-export-format').onchange();assert.equal($('stage-export-file').value,'orders.jsonl');
- $('stage-export-table').value='iceberg.marts.results';
- let pending=$('stage-export-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1),{path:'/api/stages/export',body:{name:'orders',table:'iceberg.marts.results',format:'jsonl',file:'orders.jsonl',version:'revision-1'}});
- assert.equal($('stage-export-submit').disabled,true);let count=calls.length;
- $('stage-export-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- respond({run:{id:'export-1'}});await pending;assert.equal(stageRunId,'export-1');assert.equal($('stage-view-run').hidden,false);
- pending=$('stage-exports-refresh').onclick();assert.equal(calls.at(-1).path,'/api/stages');
- respond({stages:[entry]});await Promise.resolve();await Promise.resolve();assert.equal(calls.at(-1).path,'/api/stages/exports');
- respond({directory:'/host/orders/exports',files:[]});await pending;
- assert.equal(stageRunId,'export-1');assert.equal($('stage-exports').textContent,'No exported files.');
- // Saved edits invalidate displayed output and use the new revision on the next export.
- pending=$('stage-exports-refresh').onclick();
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new'}};
- respond({stages:[revised]});await Promise.resolve();await Promise.resolve();
- assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(selectedStage.updated_at,'revision-2');
- // Changing stage while the response is in flight must not show an old path or files.
- ++stageEpoch;editStage({...revised,name:'other',definition:{...revised.definition,name:'other',directory:'/host/other'}});
- respond({directory:'/secret/old/exports',files:[{name:'old.csv'}]});await pending;
- assert.equal($('stage-export-directory').textContent,'/host/other/exports');assert.equal($('stage-exports').textContent,'Refresh outputs to list exported files.');
- stagePending=false;$('stage-form').oninput();assert.equal($('stage-export-area').hidden,true);count=calls.length;
- $('stage-export-form').onsubmit({preventDefault(){}});$('stage-exports-refresh').onclick();assert.equal(calls.length,count);
- stageDirty=false;pending=$('stage-export-form').onsubmit({preventDefault(){}});
- currentRole='bi_viewer';resetStageUI();respond({run:{id:'late-secret'}});await pending;
- assert.equal(selectedStage,null);assert.equal(stageRunId,null);assert.equal($('stage-export-area').hidden,true);assert.equal($('stage-export-directory').textContent,'');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result=subprocess.run(['node','-e','const HANDLERS='+json.dumps(handlers)+';'+harness],capture_output=True,text=True)
-        self.assertEqual(result.returncode,0,result.stderr)
-
-    def test_stage_export_ui_has_labels_limits_and_translations(self):
-        doc=self.workbench_document()
-        self.assertIn(doc.by_id('stages-area'),doc.by_id('stage-export-area')['ancestors'])
-        for identifier in ('stage-export-table','stage-export-format','stage-export-file'):
-            self.assertTrue(any(node.get('for')==identifier for node in doc.nodes))
-        self.assertEqual(doc.by_id('stage-export-form')['tag'],'form')
-        script=doc.main_script()
-        for key in ('Manual export','Output folder','Source table (qualified name)','Export format','Output filename','Export table','Refresh outputs','Stage export','parquet export requires pyarrow','export filename already exists; choose a new filename'):
-            self.assertIn(repr(key)+':',script)
-        self.assertIn('100000 rows and 25 MiB',doc.by_id('stage-export-area')['text'])
-        self.assertIn('Existing filenames are refused.',doc.by_id('stage-export-area')['text'])
-        self.assertIn("run.id===stageExportRunId&&!liveJobStates.has(run.status)",script)
-        self.assertIn("stage_export:'Stage export'",script)
-
     def test_stage_routes_dispatch_authenticated_identity(self):
         definition = dict(name='orders', directory='/host/orders', table='raw.orders', mode='append', format='auto')
         selection = dict(name='orders', file='orders.csv', version='version-1')
@@ -498,9 +438,9 @@ eval(HANDLERS+`
     def test_calendar_schedule_controls_payloads_readback_and_async_permissions(self):
         doc = self.workbench_document()
         script = doc.main_script()
-        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function stageCurrent(', 1)[0]
+        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function jobAlertTime(', 1)[0]
         jobs = 'function jobSchedulePayload(' + script.split('function jobSchedulePayload(', 1)[1].split("$('job-parameter-example')", 1)[0]
-        for prefix in ('job-schedule', 'stage-schedule'):
+        for prefix in ('job-schedule',):
             for field in ('kind', 'minutes', 'time', 'timezone', 'date', 'day', *('weekday-' + str(day) for day in range(1, 8))):
                 self.assertTrue(any(node.get('for') == prefix + '-' + field for node in doc.nodes))
             kind = doc.by_id(prefix + '-kind')
@@ -571,255 +511,14 @@ eval(SHARED+JOBS+`
 })().catch(error=>{console.error(error);process.exitCode=1;});`);
 """
         source = 'const SHARED=' + json.dumps(shared) + ';const JOBS=' + json.dumps(jobs) + ';const BUSY=' + json.dumps(busy_handler) + ';' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('calendar schedule behavior complete', result.stdout)
 
-    def test_stage_ui_stays_in_ingestion_and_requires_preview(self):
-        doc = self.workbench_document()
-        area = doc.by_id('stages-area')
-        self.assertIn(doc.by_id('ingestion'), area['ancestors'])
-        self.assertIn('hidden', area)
-        self.assertEqual(doc.by_id('stage-form')['tag'], 'form')
-        self.assertEqual(doc.by_id('stage-error')['role'], 'alert')
-        self.assertEqual(doc.by_id('stage-state')['role'], 'status')
-        self.assertIn('disabled', doc.by_id('stage-import'))
-        for identifier in ('stage-name', 'stage-directory', 'stage-table', 'stage-mode', 'stage-format', 'stage-key', 'stage-file'):
-            self.assertTrue(any(node.get('for') == identifier for node in doc.nodes))
-        script = doc.main_script()
-        for text in ("epoch===stageEpoch", "stageEpoch", "invalidateStagePreview()", "if(!stagePreview)return", "stageDirty||!stageImportAllowed()", "'/api/stages/preview'", "'/api/stages/import'", "selectedRunId=stageRunId;activate($('tab-jobs'))", "stage_import:'Stage import'", "'Stage import':'ステージ取込'", "'View run history':'実行履歴を見る'"):
-            self.assertIn(text, script)
-
-    def test_stage_localized_display_and_contained_tables(self):
-        html = wb.INDEX.read_text()
-        doc = self.workbench_document()
-        script = doc.main_script()
-        for text in ("ui(row.cells[2],entry.definition.mode)", "jobAlertTimestamp(file.modified_at)", "mode:t(definition.mode)", "'Automatic':'自動判定'", '取込済みの内容はファイル名を変更しても除外します。'):
-            self.assertIn(text, script)
-        format_control = doc.by_id('stage-format')
-        automatic = next(node for node in doc.nodes if node.get('value') == 'auto' and format_control in node['ancestors'])
-        self.assertEqual(automatic['text'], 'Automatic')
-        self.assertIn('#stages-area .table-wrap{max-width:100%;overflow:auto}', html)
-        self.assertIn('#stages-list th,#stages-list td,#stage-files th,#stage-files td{white-space:normal;overflow-wrap:anywhere}', html)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_preview_invalidation_and_role_change_pending_guard(self):
-        script = self.workbench_document().main_script()
-        handlers = script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        handlers = 'let stageEntries=' + handlers
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){this.children=[];},setAttribute(){},reset(){},append(){},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};
-let currentRole='admin',activeTab='ingestion',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{throw Error('Stale response must not render a table');};
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- selectedStage={name:'orders',can_manage:true,definition:{mode:'append',table:'raw.orders'}};
- stageFiles=[{name:'orders.csv',version:'v1',available:true}];$('stage-file').value='orders.csv';
- stagePreview={name:'orders',file:'orders.csv',version:'v1'};stageControls();assert.equal($('stage-import').disabled,false);
- $('stage-form').oninput();assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stageDirty,true);
- stageDirty=false;stageControls();
- const pending=$('stage-preview-button').onclick();assert.equal(stagePending,true);assert.equal($('stage-file').disabled,true);
- currentRole='data_engineer';resetStageUI();assert.equal($('stages-area').hidden,true);assert.equal(selectedStage,null);
- respond({columns:[{name:'secret'}],sample_rows:[['secret']],row_count:1});await pending;
- assert.equal(stagePreview,null);assert.equal($('stage-import').disabled,true);assert.equal(stagePending,false);
- assert.equal(calls.length,1);assert.deepEqual(calls[0].body,{name:'orders',file:'orders.csv',version:'v1'});
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_preview_uses_current_server_settings_after_external_edit(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',hidden:false,disabled:false,elements:[],replaceChildren(){},setAttribute(){},append(){}};
-const ui=(node,text,values)=>{node.textContent=text;node.values=typeof values==='function'?values():values;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='ingestion',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- selectedStage={name:'orders',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.old_target'}};
- stageFiles=[{name:'orders.csv',version:'revision-2-file-token',available:true}];$('stage-file').value='orders.csv';
- const pending=$('stage-preview-button').onclick();
- const authoritative={name:'orders',directory:'/host/new',table:'raw.new_target',mode:'replace',format:'csv'};
- respond({stage:authoritative,columns:[{name:'id',type:'bigint'}],sample_rows:[[1]],row_count:1});await pending;
- assert.deepEqual($('stage-confirmation').values,{file:'orders.csv',table:'raw.new_target',mode:'replace',count:1});
- assert.equal(selectedStage.definition.table,'raw.new_target');assert.equal($('stage-table').value,'raw.new_target');assert.equal($('stage-mode').value,'replace');
- assert.equal($('stage-append-notice').hidden,true);assert.equal($('stage-import').disabled,false);
- const importing=$('stage-import').onclick();assert.equal(calls.at(-1).path,'/api/stages/import');
- assert.deepEqual(calls.at(-1).body,{name:'orders',file:'orders.csv',version:'revision-2-file-token'});
- respond({run:{id:'run-new-settings'}});await importing;
- assert.equal(stageRunId,'run-new-settings');assert.equal(stagePreview,null);
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_schedule_stop_retry_and_stale_async_behavior(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        handlers += '\nconst jobStatuses=' + script.split('const jobStatuses=', 1)[1].split(';', 1)[0] + ';'
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],querySelectorAll(){return [];},replaceChildren(){},setAttribute(){},reset(){},append(){},focus(){}};
-const uiTexts=[];const ui=(node,text)=>{uiTexts.push(text);node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-const calls=[];let respond;const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',mode:'append',table:'raw.orders'},schedule:null};
- editStage(entry);assert.equal($('stage-schedule-enabled').checked,false);
- $('stage-schedule-minutes').value='7';$('stage-schedule-enabled').checked=true;
- let pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',kind:'interval',every_minutes:7,enabled:true,version:'revision-1'}});
- respond({schedule:{name:'orders',enabled:true,every_minutes:7}});await pending;
- assert.equal(selectedStage.schedule.enabled,true);assert.equal(stagePending,false);
- // Each calendar kind is saved explicitly and read back without losing the stage revision.
- for(const calendar of [
-  {kind:'daily',time:'09:45',timezone:'Asia/Tokyo',enabled:true},
-  {kind:'once',date:'2030-04-21',time:'12:00',timezone:'Europe/London',enabled:true},
-  {kind:'weekly',weekdays:[2,6],time:'16:10',timezone:'America/New_York',enabled:true},
-  {kind:'monthly',day_of_month:'last',time:'23:00',timezone:'Asia/Tokyo',enabled:true}
- ]){
-  fillScheduleFields('stage-schedule',calendar);pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
-  assert.deepEqual(calls.at(-1),{path:'/api/stages/schedule',body:{name:'orders',...calendar,version:'revision-1'}});
-  respond({schedule:{name:'orders',...calendar}});await pending;
-  assert.deepEqual(schedulePayload(readScheduleFields('stage-schedule')),calendar);assert.equal(selectedStage.updated_at,'revision-1');
- }
- fillScheduleFields('stage-schedule',{kind:'interval',every_minutes:7,enabled:true});
- // A completed check is successful even when it imports no files.
- for(const [status,label] of [['success','Succeeded'],['failed','Failed'],['skipped','Skipped'],['unknown','Unknown outcome']]){
-  selectedStage.schedule.last_status=status;uiTexts.length=0;renderStageSchedule();assert.ok(uiTexts.includes(label));assert.ok(!uiTexts.includes('Already imported'));
- }
- assert.equal(stageIngestionStatus('success'),'Already imported');
- // Stopping ignores invalid interval and unsaved definition fields.
- $('stage-schedule-minutes').value='bad';$('stage-form').oninput();assert.equal($('stage-schedule-stop').disabled,false);
- pending=$('stage-schedule-stop').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',enabled:false});
- respond({schedule:{name:'orders',enabled:false,every_minutes:7}});await pending;assert.equal(selectedStage.schedule.enabled,false);
- stageDirty=false;let count=calls.length;
- await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Successful/inflight content cannot be imported even by invoking the handler directly.
- for(const status of ['success','queued','running']){stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};stageControls();assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);}
- for(const status of ['failed','unknown']){
-  stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:status};$('stage-retry').checked=false;stageControls();
-  assert.equal($('stage-import').disabled,true);$('stage-import').onclick();assert.equal(calls.length,count);
-  $('stage-retry').checked=true;$('stage-retry').onchange();assert.equal($('stage-import').disabled,false);
-  $('stage-import').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',file:'a.csv',version:'v1',retry:true});
-  respond({run:{id:'retry-run'}});await new Promise(resolve=>setImmediate(resolve));count=calls.length;
-  assert.equal($('stage-retry').checked,false);assert.equal(stagePreview,null);
- }
- // Refreshing an externally edited stage updates the visible definition and its revision together.
- stageRunId='keep-history';$('stage-view-run').hidden=false;
- stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,table:'raw.new_destination',mode:'upsert',key:'id'},schedule:{enabled:false,every_minutes:9}};
- pending=fetchStageFiles(stageEpoch);respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
- assert.equal(selectedStage.updated_at,'revision-2');assert.equal(selectedStage.definition.table,'raw.new_destination');
- assert.equal($('stage-table').value,'raw.new_destination');assert.equal($('stage-mode').value,'upsert');assert.equal($('stage-key').value,'id');
- assert.equal(stagePreview,null);assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
- $('stage-schedule-enabled').checked=true;pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- assert.deepEqual(calls.at(-1).body,{name:'orders',kind:'interval',every_minutes:9,enabled:true,version:'revision-2'});
- respond({schedule:{enabled:true,every_minutes:9}});await pending;
- pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1).body,{name:'orders',version:'revision-2'});
- respond({run:{id:'new-scan'}});await new Promise(resolve=>setImmediate(resolve));respond({stages:[revised]});await new Promise(resolve=>setImmediate(resolve));respond({files:[]});await pending;
- assert.equal(stageRunId,'new-scan');assert.equal($('stage-view-run').hidden,false);
- // A late schedule response cannot restore state after role changes, even if admin returns.
- $('stage-schedule-minutes').value='5';pending=$('stage-schedule-form').onsubmit({preventDefault(){}});
- currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({schedule:{enabled:true}});await pending;
- assert.equal(selectedStage,null);assert.equal($('stage-schedule-enabled').checked,false);assert.equal(stagePending,false);
- // Legacy imports remain inspectable and pausable but cannot bypass missing dedup records.
- editStage({...entry,legacy_history:true,schedule:{enabled:true}});stageControls();
- assert.equal($('stage-legacy-notice').hidden,false);assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
- stagePreview={name:'orders',file:'a.csv',version:'v1',ingestion_status:'new'};stageControls();assert.equal($('stage-import').disabled,true);
- count=calls.length;$('stage-import').onclick();await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Replace allows pausing an existing schedule but cannot scan or save an enabled schedule.
- editStage({...entry,definition:{...entry.definition,mode:'replace'},schedule:{enabled:true}});stageControls();
- assert.equal($('stage-scan').disabled,true);assert.equal($('stage-schedule-enabled').disabled,true);assert.equal($('stage-schedule-stop').disabled,false);
- count=calls.length;await $('stage-scan').onclick();await $('stage-schedule-form').onsubmit({preventDefault(){}});assert.equal(calls.length,count);
- // Scan is stage-only. A stale response after losing admin cannot show a history link.
- editStage(entry);pending=$('stage-scan').onclick();assert.deepEqual(calls.at(-1),{path:'/api/stages/scan',body:{name:'orders',version:'revision-1'}});
- currentRole='data_engineer';resetStageUI();respond({run:{id:'late-scan'}});await pending;
- assert.equal(stageRunId,null);assert.equal($('stage-view-run').hidden,true);assert.equal($('stages-area').hidden,true);
- console.log('stage behavioral checks complete');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('stage behavioral checks complete', result.stdout)
-
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_stage_refresh_reconciles_schedule_without_discarding_work(self):
-        script = self.workbench_document().main_script()
-        handlers = 'let stageEntries=' + script.split('let stageEntries=', 1)[1].split('let selectedModel=null;', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,hidden:false,disabled:false,elements:[],children:[],querySelectorAll(){return [];},replaceChildren(...children){this.children=children;this.textContent='';if(this===nodes['stage-file'])this.value='';},setAttribute(){},reset(){},append(...children){this.children.push(...children);},focus(){}};
-const ui=(node,text)=>{node.textContent=text;};const message=(id,text)=>ui($(id),text);const pruneUIBindings=()=>{};const t=value=>value;
-let currentRole='admin',activeTab='warehouse',selectedRunId=null;
-let respond;const calls=[];const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>{respond=resolve;});};
-const activate=()=>{};const table=()=>{};const actionButton=()=>({});const jobAlertTimestamp=value=>value;const jobStatuses={success:'Succeeded'};
-const document={createElement:()=>({append(){}})};
-eval(HANDLERS+`
-(async()=>{
- const entry={name:'orders',updated_at:'revision-1',can_manage:true,definition:{name:'orders',directory:'/host/orders',table:'raw.orders',mode:'append'},schedule:{enabled:false,every_minutes:7}};
- editStage(entry);stageFiles=[{name:'orders.csv',available:true}];$('stage-file').value='orders.csv';
- const preview={name:'orders',file:'orders.csv',version:'file-v1',ingestion_status:'new'};stagePreview=preview;
- $('stage-preview').replaceChildren('preview');$('stage-exports').replaceChildren('output-list');
- $('stage-export-table').value='raw.custom';$('stage-export-file').value='custom.csv';stageRunId='keep-history';$('stage-view-run').hidden=false;
- // A second browser can enable or pause without changing the definition revision.
- for(const enabled of [true,false]){
-  const fresh={...entry,schedule:{enabled,every_minutes:9,last_status:'success'}};
-  const pending=$('stages-refresh').onclick();respond({stages:[fresh]});await pending;
-  assert.equal(selectedStage.schedule.enabled,enabled);assert.equal($('stage-schedule-enabled').checked,enabled);
-  assert.equal($('stage-schedule-minutes').value,9);assert.equal($('stage-schedule-stop').disabled,!enabled);
-  assert.equal($('stage-schedule-state').children[0].textContent,enabled?'Enabled':'Disabled');
-  assert.equal(stagePreview,preview);assert.deepEqual($('stage-preview').children,['preview']);assert.equal($('stage-import').disabled,false);
-  assert.equal($('stage-file').value,'orders.csv');assert.deepEqual($('stage-exports').children,['output-list']);
-  assert.equal($('stage-export-table').value,'raw.custom');assert.equal($('stage-export-file').value,'custom.csv');assert.equal(stageRunId,'keep-history');
- }
- // A calendar-only edit from another tab replaces all visible schedule fields and retains the preview.
- let pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{kind:'weekly',enabled:true,time:'11:20',timezone:'Europe/London',weekdays:[2,4]}}]});await pending;
- assert.equal($('stage-schedule-kind').value,'weekly');assert.equal($('stage-schedule-time').value,'11:20');assert.equal($('stage-schedule-timezone').value,'Europe/London');
- assert.equal($('stage-schedule-weekday-2').checked,true);assert.equal($('stage-schedule-weekday-1').checked,false);assert.equal(stagePreview,preview);
- pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:false,every_minutes:9}}]});await pending;
- // Unchanged server schedule values do not overwrite an unsaved interval or checkbox.
- $('stage-schedule-minutes').value='13';$('stage-schedule-enabled').checked=true;
- pending=$('stages-refresh').onclick();respond({stages:[{...selectedStage,schedule:{...selectedStage.schedule,last_status:'skipped'}}]});await pending;
- assert.equal($('stage-schedule-minutes').value,'13');assert.equal($('stage-schedule-enabled').checked,true);assert.equal(selectedStage.schedule.enabled,false);
- // Schedule-only changes preserve dirty definition fields while updating the pause control.
- $('stage-table').value='raw.unsaved';$('stage-form').oninput();
- pending=$('stages-refresh').onclick();respond({stages:[{...entry,schedule:{enabled:true,every_minutes:11}}]});await pending;
- assert.equal(stageDirty,true);assert.equal($('stage-table').value,'raw.unsaved');assert.equal($('stage-schedule-stop').disabled,false);
- assert.equal($('stage-schedule-save').disabled,true);assert.equal(stageRunId,'keep-history');
- // Adopting a new directory revision invalidates all previous input/output choices, retaining run history.
- stageFiles=[{name:'old.csv'}];$('stage-file').value='old.csv';$('stage-file').replaceChildren('old-option');$('stage-file').value='old.csv';$('stage-files').replaceChildren('old-list');
- $('stage-exports').replaceChildren('old-output');stagePreview=preview;
- const revised={...entry,updated_at:'revision-2',definition:{...entry.definition,directory:'/host/new',table:'raw.new'}};
- pending=refreshStageSchedule(stageEpoch);respond({stages:[revised]});await pending;
- assert.equal(selectedStage.updated_at,'revision-2');assert.equal(stageDirty,false);assert.equal($('stage-directory').value,'/host/new');
- assert.deepEqual(stageFiles,[]);assert.equal($('stage-file').value,'');assert.deepEqual($('stage-file').children,[]);assert.deepEqual($('stage-files').children,[]);
- assert.equal(stagePreview,null);assert.deepEqual($('stage-preview').children,[]);assert.deepEqual($('stage-exports').children,[]);
- assert.equal($('stage-export-directory').textContent,'/host/new/exports');assert.equal(stageRunId,'keep-history');assert.equal($('stage-view-run').hidden,false);
- // A refresh issued under an earlier admin epoch cannot restore selection after a role reset.
- pending=$('stages-refresh').onclick();currentRole='bi_viewer';resetStageUI();currentRole='admin';resetStageUI();respond({stages:[entry]});await pending;
- assert.equal(selectedStage,null);assert.deepEqual(stageEntries,[]);assert.equal(stagePending,false);assert.equal($('stage-schedule-enabled').checked,false);
- assert.ok(calls.every(call=>call.path==='/api/stages'));
- console.log('stage refresh behavioral checks complete');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('stage refresh behavioral checks complete', result.stdout)
-
     def test_invalid_roles_rejected_on_get_and_post(self):
         with patch.object(wb.bears_resident, 'load_ai_config') as load, \
              patch.object(wb.warehouse_resident, 'transition') as transition:
@@ -1081,31 +780,31 @@ eval(HANDLERS+`
 const assert=require('node:assert/strict');
 const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,options:[]};
 const document={documentElement:{dataset:{}}};let selectedTable=null;
-$('ai-settings').open=true;$('ai-settings').close=()=>{$('ai-settings').open=false;};
+$('ai-settings').hidden=true;
 $('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>({value}));
-$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
-$('bear-data-action').selectedOptions=[$('bear-data-action').options[2]];
 const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
-let currentRole='admin',synced=[];function updateDataBearForm(){synced.push($('bear-data-action').value);}
+let currentRole='admin',stageEpoch=0;
 // Catalog cache and status invalidation have separate harnesses; isolate the role/header contract here.
 let catalogGeneration=0;function catalogMutation(){return false;}function catalogIdentity(){return currentRole;}
 function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
 function invalidateStatus(){}
 function loadCatalog(){}
+function workbenchRenderAlerts(){}
+function workbenchSyncMobileNav(){}
 eval(HANDLERS+`
 (async()=>{
  await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
- $('bear-data-action').value='publish';$('role-selector').value='bi_viewer';$('role-selector').onchange();
- assert.equal(document.documentElement.dataset.role,'bi_viewer');assert.equal(synced.at(-1),'generate','form follows the corrected action');
+ $('role-selector').value='bi_viewer';$('role-selector').onchange();
+ assert.equal(document.documentElement.dataset.role,'bi_viewer');
  assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
  assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
- assert.equal($('ai-settings').open,false);
- for(const id of ['run-dbt-build','drop-table-btn','run-ingest','ai-settings-button'])assert.equal($(id).disabled,true);
+ assert.equal($('ai-settings').hidden,true);
+ for(const id of ['drop-table-btn','ai-settings-button'])assert.equal($(id).disabled,true);
  await api('/api/warehouse/query',{sql:'SELECT 1'});
  assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'bi_viewer');
  assert.equal(calls.at(-1).headers['Content-Type'],'application/json');
  $('role-selector').value='data_engineer';$('role-selector').onchange();
- assert.equal($('run-ingest').disabled,false);assert.equal($('ai-settings-button').disabled,true);
+ assert.equal($('ai-settings-button').disabled,true);
  assert.equal($('query-mode').options[2].disabled,true);
  $('role-selector').value='admin';$('role-selector').onchange();
  assert.equal($('ai-settings-button').disabled,false);assert.equal($('role-indicator').hidden,true);
@@ -1113,63 +812,8 @@ eval(HANDLERS+`
  assert.equal($('clone-table-btn').disabled,true);
 })().catch(error=>{console.error(error);process.exitCode=1;});`);
 """
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness],
+        result = subprocess.run(['node', '-'], input='const HANDLERS=' + json.dumps(handlers) + ';' + harness,
                                 capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_data_bear_completion_uses_current_action_and_role(self):
-        script = self.workbench_document().main_script()
-        dictionary = script[script.index('const i18n'):script.index('function ui(')]
-        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
-        busy = script[script.index('async function busy('):script.index('function aiStatus(')]
-        handler = script[script.index(' const show=(label,tone)=>', script.index('for(const bear of bears)')):script.index("\n}\n$('bear-data-action').onchange")]
-        role = script[script.index(" for(const option of $('bear-data-action').options)"):script.index("\n}\n$('role-selector').onchange")]
-        harness = r'''
-const assert=require('node:assert/strict');
-const databaseMode=false;
-class Element{constructor(){this.value='';this.disabled=false;this.dataset={};this.attrs={};this.parentElement={};this.labels=[{}];this.children=[];this.textContent='';}
- setAttribute(k,v){this.attrs[k]=v;}removeAttribute(k){delete this.attrs[k];}getAttribute(k){return this.attrs[k]??null;}
- replaceChildren(...nodes){this.children=nodes;this.firstChild=nodes[0];}checkValidity(){return true;}}
-const nodes={},$=id=>nodes[id]??=new Element(),document={createElement:()=>new Element()};
-const ui=(node,key)=>{node.textContent=t(key);},pruneUIBindings=()=>{};
-const button=$('bear-data-run'),state=new Element(),tabState=new Element(),output=new Element();
-const fields=['action','request','sql','stage_table','publish','refresh','rollback','snapshot_id'];
-const bear={key:'data',fields:fields.map(key=>[key])};
-const content={querySelectorAll:()=>fields.map(key=>$('bear-data-'+key))};
-let calls=[],pending=[],currentRole='admin';
-const api=(path,payload)=>{calls.push(payload);return new Promise((resolve,reject)=>pending.push({resolve,reject}));};
-$('bear-data-action').options=['generate','stage','publish','refresh','rollback'].map(value=>({value}));
-Object.defineProperty($('bear-data-action'),'selectedOptions',{get(){return this.options.filter(o=>o.value===this.value);}});
-const applyRole=()=>{const viewer=currentRole==='bi_viewer',engineer=currentRole==='data_engineer';eval(ROLE);};
-eval(HANDLER);
-for(const [key,value] of Object.entries({request:'draft',sql:'SELECT 1',stage_table:'sandbox.t',publish:'sandbox.p',refresh:'marts.f',rollback:'marts.r',snapshot_id:'9223372036854775807'}))$('bear-data-'+key).value=value;
-(async()=>{
- for(const fail of [false,true]){
-  $('bear-data-action').value='generate';updateDataBearForm();const count=calls.length;
-  const run=button.onclick();assert.equal(button.disabled,true);assert.equal(button.getAttribute('aria-busy'),'true');
-  $('bear-data-action').value='rollback';updateDataBearForm();await button.onclick();
-  assert.equal(calls.length,count+1);assert.equal(button.disabled,true);
-  assert.deepEqual(calls.at(-1),{bear:'data',action:'generate',request:'draft',sql:'SELECT 1'});
-  fail?pending.at(-1).reject(Error('failed')):pending.at(-1).resolve({status:'ok'});await run;
-  assert.equal(button.disabled,false);assert.equal(button.getAttribute('aria-busy'),null);
-  assert.equal(button.textContent,t('Roll back to snapshot'));assert.equal($('bear-data-action').value,'rollback');
-  assert.equal($('bear-data-sql').disabled,true);assert.equal($('bear-data-sql').value,'SELECT 1');
-  const rollback=button.onclick();assert.deepEqual(calls.at(-1),{bear:'data',action:'rollback',rollback:'marts.r',snapshot_id:'9223372036854775807'});
-  pending.at(-1).resolve({status:'ok'});await rollback;
- }
- for(const role of ['bi_viewer','data_engineer']){
-  currentRole='admin';$('bear-data-action').value='rollback';applyRole();const run=button.onclick();
-  currentRole=role;applyRole();await button.onclick();assert.equal(button.disabled,true);
-  assert.equal($('bear-data-action').value,'generate');assert.equal($('bear-data-rollback').disabled,true);
-  pending.at(-1).reject(Error('old role request'));await run;
-  assert.equal(button.textContent,t('Generate SQL'));assert.equal(button.disabled,false);
-  assert.equal($('bear-data-request').disabled,false);assert.equal($('bear-data-snapshot_id').value,'9223372036854775807');
- }
-})().catch(error=>{console.error(error);process.exitCode=1;});
-'''
-        source = dictionary + helpers + busy + '\nconst HANDLER=' + json.dumps(handler) + ',ROLE=' + json.dumps(role) + ';\n' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
@@ -1189,55 +833,63 @@ function boot(saved=null,unavailable=false){
   setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k];}
   addEventListener(k,fn){this['on'+k]=fn;}focus(){focused=this;}click(){if(!this.disabled)this.onclick?.();}
   setSelectionRange(a,b,d){this.selectionStart=a;this.selectionEnd=b;this.selectionDirection=d;}
-  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'||selector==='.worksheet-close'&&c.className==='worksheet-close'?[c]:[]),...c.querySelectorAll(selector)]);}
+  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'?[c]:[]),...c.querySelectorAll(selector)]);}
  }
  const $=id=>nodes[id]||$('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.id===id);
- for(const id of ['sql','worksheet-tabs','add-worksheet-tab','query-meta'])nodes[id]=new Element();
+ for(const id of ['sql','worksheet-tabs','worksheet-closers','worksheet-close-select','worksheet-close-action','add-worksheet-tab','query-meta'])nodes[id]=new Element();
  const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};nodes.sql.value=samples.orders;
  const context=vm.createContext({$,samples,document:{createElement:tag=>new Element(tag)},crypto:{randomUUID:()=>String(++sequence)},
   localStorage:{getItem:k=>{if(unavailable)throw Error('blocked');return store[k]??null;},setItem:(k,v)=>{if(unavailable)throw Error('blocked');store[k]=v;}},
   confirm:text=>{confirmations.push(text);return answer;},activate:()=>{},ui:(node,key,values)=>{node.textContent=context.t(key,values);}});
  vm.runInContext(DICTIONARY+WIRE+SOURCE,context);
  return {context,nodes,store,confirmations,answer:value=>answer=value,run:code=>vm.runInContext(code,context),
-  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),closes:()=>nodes['worksheet-tabs'].querySelectorAll('.worksheet-close'),focus:()=>focused};
+  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),select:()=>nodes['worksheet-close-select'],action:()=>nodes['worksheet-close-action'],focus:()=>focused};
 }
-const a=boot();assert.equal(a.closes()[0].disabled,true);assert.match(a.closes()[0].title,/at least one/);
+const a=boot();assert.equal(a.select().disabled,true);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,true);assert.match(a.action().title,/at least one/);
 a.run("closeWorksheet(worksheetId)");assert.equal(a.tabs().length,1);
 a.nodes['add-worksheet-tab'].click();a.nodes['add-worksheet-tab'].click();
-assert.equal(a.tabs().length,3);assert.equal(a.closes()[0].tag,'button');assert.equal(a.tabs()[0].children.length,0);
-// Closing a nonactive sample preserves the current draft and selection, even before an input event.
-a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.closes()[0].click();
+const ids=a.run('worksheets.map(w=>w.id)');
+assert.equal(a.tabs().length,3);assert.equal(a.select().disabled,false);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,false);assert.equal(a.select().children.length,4);
+assert.deepEqual(a.select().children.slice(1).map(option=>option.textContent),['Close Worksheet 1','Close Worksheet 2','Close Worksheet 3']);
+assert.equal(a.tabs().every(n=>n.attrs.role==='tab'),true);assert.equal(a.nodes['worksheet-tabs'].children.length,a.tabs().length);
+// Choosing a target never closes it; only the explicit action button does.
+a.select().value=ids[0];a.select().onchange();
+assert.equal(a.tabs().length,3);assert.equal(a.confirmations.length,0);assert.equal(a.action().disabled,false);
+// Closing a nonactive sample through the explicit action preserves the current draft and selection.
+a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.action().click();
 assert.equal(a.confirmations.length,0);assert.equal(a.nodes.sql.value,'SELECT latest');assert.equal(a.nodes.sql.selectionStart,2);assert.equal(a.nodes.sql.selectionEnd,7);assert.equal(a.nodes.sql.selectionDirection,'backward');
-assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');
-// Cancellation leaves state, persisted data and focus unchanged.
-const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'],focus=a.focus();
-a.answer(false);a.closes()[1].click();assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),focus);
+assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');assert.equal(a.tabs().length,2);assert.equal(a.focus(),a.tabs()[1]);
+// Cancellation leaves state and persisted data unchanged, restoring focus to the close action.
+a.run("worksheets.find(w=>w.id==='"+ids[1]+"').sql='SELECT keep'");
+const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'];
+a.answer(false);a.select().value=ids[1];a.select().onchange();a.action().click();
+assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),a.action());
 assert.match(a.confirmations.at(-1),/removes this worksheet’s SQL/);
-// Active last tab chooses left; the replacement active ID and removal survive reload.
-a.answer(true);a.closes()[1].click();assert.equal(a.tabs().length,1);assert.equal(a.nodes.sql.value,a.context.samples.orders);assert.equal(a.focus(),a.tabs()[0]);
+// Closing the active last tab chooses the remaining tab, confirms, and restores focus there.
+a.answer(true);a.select().value=ids[2];a.select().onchange();a.action().click();assert.equal(a.tabs().length,1);assert.equal(a.run('worksheetId'),ids[1]);assert.equal(a.nodes.sql.value,'SELECT keep');assert.equal(a.focus(),a.tabs()[0]);
 const reloaded=boot(JSON.parse(a.store['shirokuma.worksheets.v1']));assert.equal(reloaded.tabs().length,1);assert.equal(reloaded.run('worksheetId'),a.run('worksheetId'));
 // Numbering follows the largest remaining number, never the tab count.
 const b=boot({active:'b',tabs:[{id:'a',name:'Worksheet 1',sql:''},{id:'b',name:'Worksheet 3',sql:'persisted SQL'},{id:'c',name:'Worksheet 4',sql:''}]});
-b.answer(false);b.closes()[1].click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');
-b.answer(true);b.closes()[1].click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
+b.answer(false);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');assert.equal(b.focus(),b.action());
+b.answer(true);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
 b.nodes['add-worksheet-tab'].click();assert.equal(b.run('worksheets.at(-1).name'),'Worksheet 5');
-// Keyboard tab movement receives only role=tab buttons; close uses native button activation.
+// Keyboard tab movement receives only role=tab buttons; close remains a labeled select plus explicit action.
 let prevented=0;b.tabs()[2].onkeydown({key:'Home',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'a');
 b.tabs()[0].onkeydown({key:'End',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'1');
 b.tabs()[2].onkeydown({key:'ArrowLeft',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'c');assert.equal(prevented,3);
-b.closes()[0].click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
-b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.closes()[0].title,/閉じる/);
-b.nodes.sql.value='編集 SQL';b.answer(false);b.closes()[0].click();assert.match(b.confirmations.at(-1),/SQL が削除/);
-const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.closes()[0].click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
+b.select().value='a';b.select().onchange();assert.equal(b.confirmations.length,2);b.action().click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
+b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.select().children[1].textContent,/閉じる/);assert.match(b.action().title,/閉じる/);
+b.nodes.sql.value='編集 SQL';b.answer(false);b.select().value='c';b.select().onchange();b.action().click();assert.match(b.confirmations.at(-1),/SQL が削除/);assert.equal(b.focus(),b.action());
+const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.select().value=c.run('worksheets[0].id');c.select().onchange();c.action().click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
 '''
-        result = subprocess.run(['node', '-e', 'const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input='const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_copilot_generate_preserves_origin_and_intervening_edits(self):
         script = self.workbench_document().main_script()
         helpers = script[script.index('const worksheetKey='):script.index('function worksheetName(')]
-        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('let browserFile=null;')]
+        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('// Shared authorization epoch')]
         harness = r'''
 const assert=require('node:assert/strict'),vm=require('node:vm');
 async function check(scenario){
@@ -1279,42 +931,7 @@ async function check(scenario){
 (async()=>{for(const scenario of ['active','inactive','deleted','edited active','edited inactive'])await check(scenario);})().catch(error=>{console.error(error);process.exitCode=1;});
 '''
         source = 'const HELPERS=' + json.dumps(helpers) + ',HANDLERS=' + json.dumps(handlers) + ';\n' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_data_bear_sends_only_the_current_action_inputs(self):
-        script = self.workbench_document().main_script()
-        dictionary = script[script.index('const i18n'):script.index('function ui(')]
-        helpers = script[script.index('const dataBearActions='):script.index('// One list of specialists')]
-        harness = r'''
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={id,value:'',disabled:false,required:false,parentElement:{hidden:false},labels:[{}]};
-const ui=(node,key)=>{node.text=t(key);};
-const values={request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t',publish:'pub_t',refresh:'ref_t',rollback:'marts.roll_t',snapshot_id:'9223372036854775807'};
-const expected={generate:{request:'revenue by nation',sql:'SELECT 1'},stage:{request:'revenue by nation',sql:'SELECT 1',stage_table:'stage_t'},
- publish:{publish:'pub_t'},refresh:{refresh:'ref_t',sql:'SELECT 1'},rollback:{rollback:'marts.roll_t',snapshot_id:'9223372036854775807'}};
-for(const [action,fields] of Object.entries(expected))assert.deepEqual(dataBearPayload(action,values),{bear:'data',action,...fields},action);
-assert.equal(typeof dataBearPayload('rollback',values).snapshot_id,'string');
-assert.deepEqual(dataBearPayload('refresh',{...values,sql:'  '}),{bear:'data',action:'refresh',refresh:'ref_t'},'empty SQL uses the saved SQL');
-for(const [action,bad,message] of [['generate',{},/description|SQL/],['stage',{request:'x'},/table name/],['publish',{stage_table:'x'},/table name/],
- ['rollback',{rollback:'marts.t',snapshot_id:'12a'},/digits only/],['rollback',{rollback:'marts.t',snapshot_id:'1e3'},/digits only/],['other',values,/WAP action/]])
- assert.throws(()=>dataBearPayload(action,bad),message,action);
-// Visible inputs follow the action; hidden ones are disabled and keep their drafts.
-for(const key of Object.keys(values))$('bear-data-'+key).value=values[key];
-const visible=()=>Object.keys(values).filter(key=>!$('bear-data-'+key).parentElement.hidden);
-for(const [action,spec] of Object.entries(dataBearActions)){
- $('bear-data-action').value=action;updateDataBearForm();
- assert.deepEqual(visible(),Object.keys(values).filter(key=>spec.fields.includes(key)),action);
- for(const key of Object.keys(values))assert.equal($('bear-data-'+key).disabled,!spec.fields.includes(key),key);
- assert.equal($('bear-data-run').text,spec.button);assert.equal($('bear-data-help').text,spec.help);
- if(spec.target)assert.equal($('bear-data-'+spec.target).required,true);assert.equal($('bear-data-request').required,false);
-}
-assert.equal($('bear-data-publish').value,'pub_t','drafts survive action changes');
-language='ja';$('bear-data-action').value='rollback';updateDataBearForm();assert.equal($('bear-data-run').text,'指定スナップショットへ戻す');
-$('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-data-sql').labels[0].text,/保存済み/);
-'''
-        result = subprocess.run(['node', '-e', dictionary + ';\n' + helpers + '\n' + harness], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @patch.object(wb.bears_resident, 'load_ai_config')
@@ -1369,8 +986,10 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
     def test_ai_settings_form_and_translations(self):
         doc = self.workbench_document()
         dialog = doc.by_id('ai-settings')
-        self.assertEqual(dialog['tag'], 'dialog')
+        self.assertEqual(dialog['tag'], 'section')
         self.assertEqual(dialog['aria-labelledby'], 'ai-settings-title')
+        self.assertIn('hidden', dialog)
+        self.assertTrue(any(n.get('id') == 'compute' for n in dialog['ancestors']))
         for identifier in ('ai-provider', 'ai-model', 'ai-url', 'ai-key', 'ai-timeout'):
             self.assertIn(dialog, doc.by_id(identifier)['ancestors'])
             self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
@@ -1395,8 +1014,8 @@ $('bear-data-action').value='refresh';updateDataBearForm();assert.match($('bear-
         harness = r"""
 const assert=require('node:assert/strict');
 new Function(SCRIPT);
-const nodes={};const $=id=>nodes[id]??=( {value:'',disabled:false,
- addEventListener(){},showModal(){this.open=true;},close(){this.open=false;},reportValidity(){return true;}} );
+const nodes={};const $=id=>nodes[id]??=( {value:'',disabled:false,hidden:false,
+ addEventListener(){},focus(){},scrollIntoView(){},reportValidity(){return true;}} );
 const ui=(node,key,values)=>{node.label=key;node.values=values;};
 const busy=async(button,task)=>{await task();};
 const calls=[];
@@ -1408,7 +1027,7 @@ const api=async(path,body)=>{calls.push([path,body]);
 eval('function aiStatus('+HANDLERS);
 (async()=>{
  await $('ai-settings-button').onclick();
- assert.equal($('ai-settings').open,true);assert.equal($('ai-model').value,'test-model');
+ assert.equal($('ai-settings').hidden,false);assert.equal($('ai-model').value,'test-model');
  assert.equal($('ai-key').value,'');
  await $('ai-test').onclick();
  assert.equal($('ai-config-status').label,'Connected {latency}ms');
@@ -1425,7 +1044,7 @@ eval('function aiStatus('+HANDLERS);
  await $('ai-settings-form').onsubmit({preventDefault(){}});
  assert.equal(calls.at(-1)[0],'/api/ai/config');assert.equal(calls.at(-1)[1].api_key,'new-key');
  assert.equal($('ai-key').value,'');assert.equal($('ai-config-status').label,'Settings saved');
- $('ai-close').onclick();assert.equal($('ai-settings').open,false);
+ $('ai-close').onclick();assert.equal($('ai-settings').hidden,true);
 })().catch(error=>{console.error(error);process.exitCode=1;});
 """
         harness = 'const SCRIPT=' + json.dumps(script) + ';const HANDLERS=' + json.dumps(handlers) + ';' + harness
@@ -1437,8 +1056,6 @@ eval('function aiStatus('+HANDLERS);
         controls = {
             'warehouse': 'query-schema result-view-table result-view-chart chart-type chart-x-col chart-y-col query-chart',
             'catalog': 'clone-table-btn export-table-format export-table-btn',
-            'compute': 'auto-chill-minutes save-auto-chill auto-chill-state',
-            'pawprints': 'refresh-history runtime-queries-results load-history-results',
         }
         for section, identifiers in controls.items():
             for identifier in identifiers.split():
@@ -1448,7 +1065,6 @@ eval('function aiStatus('+HANDLERS);
                              ('staging', 'staging'), ('tpch_tiny', 'tpch_tiny'), ('smoke', 'smoke')],
             'chart-type': [('bar', 'Bar Chart'), ('line', 'Line Chart')],
             'export-table-format': [('csv', 'CSV'), ('jsonl', 'JSONL'), ('parquet', 'Parquet')],
-            'auto-chill-minutes': [('0', 'Off'), ('5', '5m'), ('15', '15m'), ('30', '30m'), ('60', '60m')],
         }
         for identifier, expected in options.items():
             select = doc.by_id(identifier)
@@ -1458,8 +1074,6 @@ eval('function aiStatus('+HANDLERS);
         for identifier, text in {
             'result-view-table': 'Table View', 'result-view-chart': 'Chart View',
             'clone-table-btn': 'Clone to Sandbox', 'export-table-btn': 'Export Table',
-            'save-auto-chill': 'Apply Auto-Chill', 'refresh-history': 'Refresh History',
-            'auto-chill-state': 'Auto-Chill: Off',
         }.items():
             self.assertEqual(doc.by_id(identifier)['text'], text)
         self.assertEqual(doc.by_id('result-view-table')['aria-pressed'], 'true')
@@ -1468,8 +1082,7 @@ eval('function aiStatus('+HANDLERS);
         for identifier in ('clone-table-btn', 'export-table-btn'):
             self.assertIn('disabled', doc.by_id(identifier))
         self.assertEqual(doc.by_id('export-table-format')['aria-label'], 'Export format')
-        self.assertEqual(doc.by_id('auto-chill-state')['role'], 'status')
-        for identifier in ('query-schema', 'chart-type', 'chart-x-col', 'chart-y-col', 'auto-chill-minutes'):
+        for identifier in ('query-schema', 'chart-type', 'chart-x-col', 'chart-y-col'):
             self.assertTrue(any(n.get('for') == identifier for n in doc.nodes))
 
     def test_phase8_translations_cover_static_and_dynamic_ui(self):
@@ -1478,13 +1091,11 @@ eval('function aiStatus('+HANDLERS);
         dictionary = script.split('const i18n = {ja: {', 1)[1].split('}};', 1)[0]
         translations = dict(re.findall(r"'([^']+)':'([^']+)'", dictionary))
         labels = '''Schema|Table View|Chart View|Chart type|Bar Chart|Line Chart|X column|Y column|
-            Clone to Sandbox|Clone Snapshot|Export format|Export Table|Auto-Chill (idle minutes)|
-            Off|5m|15m|30m|60m|Apply Auto-Chill|Auto-Chill: Off|Auto-Chill: {minutes}m|
-            Query & Load History|Refresh History|Trino Query History|Copy & Data Load History|
-            Query ID|User|Source|SQL|Target|Result chart|
+            Clone to Sandbox|Clone Snapshot|Export format|Export Table|
+            Result chart|
             Choose a numeric Y column to chart visible rows.|Clone audit needs review|
             Cloned {source} to {table}.|Clone failed: {error}|Exported {table} ({row_count} / {total_rows} rows) to {filename}.|
-            Export failed: {error}|Auto-Chill failed: {error}|History failed: {error}'''
+            Export failed: {error}'''
         for label in labels.split('|'):
             with self.subTest(label=label.strip()):
                 self.assertRegex(translations[label.strip()], r'[ぁ-んァ-ヶ一-龯]')
@@ -1521,6 +1132,140 @@ const run=eval(HANDLER);
         result = subprocess.run(['node'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
+    def test_result_sorting_keeps_header_focus_and_updates_only_current_aria_sort(self):
+        script = self.workbench_document().main_script()
+        table_source = script[script.index('function table('):script.index('let statusEpoch=')]
+        results_source = script[script.index('let queryResult=null'):script.index('function download(')]
+        harness = r'''
+const assert=require('node:assert/strict');
+let activeElement=null;
+class Element{
+ constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this.attrs={};this.className='';this.textContent='';this.value='';this.cells=[];this.rows=[];}
+ append(...nodes){for(const node of nodes){if(node.parentElement){node.parentElement.children=node.parentElement.children.filter(child=>child!==node);}node.parentElement=this;this.children.push(node);if(this.tagName==='TR'&&['TH','TD'].includes(node.tagName)&&!this.cells.includes(node))this.cells.push(node);}}
+ prepend(...nodes){for(const node of [...nodes].reverse()){node.parentElement=this;this.children.unshift(node);}}
+ replaceChildren(...nodes){this.children=[];this.textContent='';this.append(...nodes);}
+ setAttribute(key,value){this.attrs[key]=String(value);}
+ getAttribute(key){return this.attrs[key];}
+ removeAttribute(key){delete this.attrs[key];}
+ createTHead(){const head=new Element('thead');this.append(head);return head;}
+ createTBody(){const body=new Element('tbody');this.append(body);return body;}
+ get tHead(){return this.children.find(child=>child.tagName==='THEAD');}
+ get tBodies(){return this.children.filter(child=>child.tagName==='TBODY');}
+ insertRow(){const row=new Element('tr');this.append(row);this.rows.push(row);return row;}
+ insertCell(){const cell=new Element('td');this.append(cell);return cell;}
+ focus(){activeElement=this;}
+ click(){this.onclick?.();}
+ querySelector(selector){
+  if(selector.startsWith('.'))return this.descendants().find(node=>node.className.split(' ').includes(selector.slice(1)));
+  return this.descendants().find(node=>node.tagName===selector.toUpperCase());
+ }
+ querySelectorAll(selector){return this.descendants().filter(node=>node.tagName===selector.toUpperCase());}
+ descendants(){return this.children.flatMap(child=>[child,...child.descendants()]);}
+}
+const nodes={};
+for(const id of ['query-results','query-chart','result-filter','export-csv','export-json','copy-tsv'])nodes[id]??=Object.assign(new Element('div'),{id});
+const $=id=>nodes[id]??=Object.assign(new Element('div'),{id});
+const document={createElement:tag=>new Element(tag),get activeElement(){return activeElement;}};
+const t=key=>key,ui=(node,key)=>{node.textContent=key;},charts=[],renderChart=()=>charts.push(visibleRows().map(row=>row.slice()));
+''' + table_source + '\n' + results_source + r'''
+queryResult={columns:[{name:'name',type:'text'},'n','payload'],rows:[['b',2,{x:1}],['a',null,{x:2}],['a',1,null],['c',3,{x:1}]]};sortColumn=-1;renderResults();
+const container=$('query-results'),grid=container.querySelector('table'),caption=grid.querySelector('caption');
+assert.equal(caption.textContent,'Query results');
+const headers=[...grid.tHead.rows[0].cells],buttons=headers.map(th=>th.children[0]);
+assert.deepEqual(buttons.map(button=>button.getAttribute('aria-label')),['name','n','payload']);
+assert.equal(headers.some(th=>Object.hasOwn(th.attrs,'aria-sort')),false);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['b','a','a','c']);
+const trs=[...grid.tBodies[0].children],cells=trs.map(row=>[...row.children]);
+const first=buttons[0],firstHeader=headers[0];first.focus();
+first.click();
+assert.equal(document.activeElement,first);assert.equal(buttons[0],first);assert.equal(headers[0],firstHeader);
+assert.equal(firstHeader.getAttribute('aria-sort'),'ascending');assert.equal(headers[1].getAttribute('aria-sort'),undefined);
+assert.equal(first.children[0].textContent,'name');assert.equal(first.children[1].textContent,' ↑');
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['a','a','b','c']);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[1].textContent),['NULL','1','2','3']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[1],trs[2],trs[0],trs[3]]);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['a','a','b','c']);
+assert.deepEqual(trs.map(row=>[...row.children]),cells);
+assert.equal(grid.tBodies[0].children[0],trs[1]);assert.equal(grid.tBodies[0].children[1],trs[2]);
+first.click();
+assert.equal(document.activeElement,first);assert.equal(firstHeader.getAttribute('aria-sort'),'descending');
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[0].textContent),['c','b','a','a']);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['c','b','a','a']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[3],trs[0],trs[1],trs[2]]);
+const second=buttons[1],secondHeader=headers[1];second.focus();second.click();
+assert.equal(document.activeElement,second);assert.equal(firstHeader.getAttribute('aria-sort'),undefined);assert.equal(secondHeader.getAttribute('aria-sort'),'ascending');
+assert.equal(headers.filter(th=>Object.hasOwn(th.attrs,'aria-sort')).length,1);
+assert.deepEqual(grid.tBodies[0].children.map(row=>row.children[1].textContent),['NULL','1','2','3']);
+assert.deepEqual(charts.at(-1).map(row=>row[0]),['a','a','b','c']);
+assert.deepEqual([...grid.tBodies[0].children],[trs[1],trs[2],trs[0],trs[3]]);
+$('result-filter').value='nothing';renderResults();
+assert.deepEqual(charts.at(-1),[]);
+assert.equal(container.querySelector('table'),undefined);
+assert.equal(container.children[0].className,'empty');assert.equal(container.children[0].textContent,'No rows returned.');
+$('result-filter').value='a';renderResults();
+const filtered=container.querySelector('table'),filteredHeader=filtered.tHead.rows[0].cells[1];
+assert.notEqual(filtered,grid);assert.equal(filtered.querySelector('caption').textContent,'Query results');
+assert.equal(filteredHeader.getAttribute('aria-sort'),'ascending');assert.equal(filtered.tHead.rows[0].cells[0].getAttribute('aria-sort'),undefined);
+assert.deepEqual(filtered.tBodies[0].children.map(row=>row.children[0].textContent),['a','a']);
+queryResult={columns:['x'],rows:[['z'],['y']]};sortColumn=-1;$('result-filter').value='';renderResults();
+const replacement=container.querySelector('table'),newHeader=replacement.tHead.rows[0].cells[0];
+assert.notEqual(replacement,filtered);assert.equal(replacement.querySelector('caption').textContent,'Query results');
+assert.equal(Object.hasOwn(newHeader.attrs,'aria-sort'),false);
+assert.deepEqual(replacement.tBodies[0].children.map(row=>row.children[0].textContent),['z','y']);
+assert.equal(['export-csv','export-json','copy-tsv'].every(id=>$(id).disabled===false),true);
+queryResult={columns:['n','text'],rows:[[1,'zz_match'],[1,'aa_match'],[1,'mm_match']]};sortColumn=-1;$('result-filter').value='';renderResults();
+let canonical=container.querySelector('table');
+canonical.tHead.rows[0].cells[1].children[0].click();
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['aa_match','mm_match','zz_match']);
+$('result-filter').value='match';renderResults();
+canonical=container.querySelector('table');
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['aa_match','mm_match','zz_match']);
+const numeric=canonical.tHead.rows[0].cells[0].children[0];numeric.focus();numeric.click();
+assert.equal(document.activeElement,numeric);
+assert.deepEqual(canonical.tBodies[0].children.map(row=>row.children[1].textContent),['zz_match','aa_match','mm_match']);
+assert.deepEqual(visibleRows().map(row=>row[1]),['zz_match','aa_match','mm_match']);
+assert.deepEqual(charts.at(-1).map(row=>row[1]),['zz_match','aa_match','mm_match']);
+assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"1","mm_match"');
+'''
+        result = subprocess.run(['node', '-'], input=harness, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_narrow_form_controls_use_readable_text_and_contain_page_overflow(self):
+        doc = self.workbench_document()
+        css = WorkbenchSource(doc.html).css
+        narrow = '\n'.join(re.findall(r'@media\(max-width:760px\)\{(.*?)\n\}', css, re.S))
+        self.assertNotIn('html,body{max-width:100%;overflow-x:hidden}', narrow)
+        self.assertIn(':is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:1rem}', narrow)
+        for selector in ('.editor', '#database-workspace .explorer-search input',
+                         '#database-workspace .explorer-foot select',
+                         '#database-context-bar select', '#database-context-bar input'):
+            with self.subTest(selector=selector):
+                self.assertIn(selector, narrow)
+        # Desktop typography remains compact outside the narrow media query.
+        self.assertIn('.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px', css)
+        self.assertIn('body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans)', css)
+        for identifier in ('job-name',):
+            with self.subTest(pattern=identifier):
+                pattern = doc.by_id(identifier)['pattern']
+                self.assertIn('[a-z0-9_\\-]', pattern)
+                self.assertNotIn('[a-z0-9_-]', pattern)
+        results = doc.by_id('query-results')
+        self.assertEqual(results['role'], 'region')
+        self.assertEqual(results['tabindex'], '0')
+        self.assertEqual(results['aria-label'], 'Query results')
+
+    def test_top_level_pages_have_one_descriptive_h1(self):
+        doc = self.workbench_document()
+        for name in ('warehouse', 'catalog', 'ingestion', 'transformation', 'jobs',
+                     'bears', 'db-admin', 'pawprints', 'compute'):
+            with self.subTest(page=name):
+                section = doc.by_id(name)
+                headings = [node for node in doc.nodes
+                            if node['tag'] == 'h1' and section in node['ancestors']]
+                self.assertEqual(len(headings), 1)
+                self.assertTrue(headings[0]['text'].strip())
+
     def test_phase8_api_and_rendering_contracts(self):
         script = self.workbench_document().main_script()
         for contract in (
@@ -1532,17 +1277,11 @@ const run=eval(HANDLER);
             "api('/api/lake/export',{table:selected,format})", 'atob(result.content_base64)',
             'downloadFile(content,result.filename', 'link.download=filename',
             'row_count:result.row_count,total_rows:result.total_rows',
-            "if(data.auto_chill)updateAutoChill(data.auto_chill)",
-            "document.activeElement!==select",
-            "api('/api/warehouse/autochill',{minutes:Number($('auto-chill-minutes').value)})",
-            "api('/api/history?mode=runtime')", "$('refresh-history').onclick",
-            "if(activeTab==='pawprints'){$('refresh-pawprints').click();$('refresh-history').click();}",
-            "actionButton('Open in Worksheet',()=>openWorksheet(rows[i][sqlIndex]))",
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, script)
         for action in ('lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop', 'bear.data_engineer'):
-            self.assertIn("'" + action + "'", script)
+            self.assertNotIn("'" + action + "'", script)
 
     def test_query_session_schema_and_legacy_default(self):
         with patch.object(wb.warehouse_resident, 'query', return_value={'rows': []}) as query:
@@ -1649,41 +1388,65 @@ const run=eval(HANDLER);
 
     def test_snowsight_navigation_contract(self):
         doc = self.workbench_document()
-        navigation = next(n for n in doc.nodes if n['tag'] == 'nav')
-        headings = [n['text'] for n in doc.nodes
-                    if n['tag'] == 'h2' and navigation in n['ancestors']]
-        self.assertEqual(headings, ['Work with Data', 'Manage & Monitor'])
+        navigation = doc.by_id('workbench-nav')
+        self.assertEqual(navigation['tag'], 'aside')
+        self.assertEqual(navigation['class'], 'sidebar')
+        self.assertEqual(navigation['aria-label'], 'Main navigation')
+        self.assertNotIn('role', navigation)
+        navtitles = [n['text'].strip() for n in doc.nodes
+                     if 'navtitle' in (n.get('class') or '').split() and navigation in n['ancestors']]
+        self.assertEqual(navtitles, ['Administration', 'Favorites', 'Workspace'])
         expected = [
-            ('catalog', 'Data Explorer'),
-            ('warehouse', 'SQL Worksheets'),
-            ('ingestion', 'Ingestion & Stages'),
-            ('transformation', 'Transformation'),
-            ('jobs', 'Jobs'),
-            ('bears', 'AI Bears'),
-            ('db-admin', 'DB management'),
-            ('pawprints', 'Audit Log'),
-            ('compute', 'Compute & Governance'),
+            ('home', 'Home', '#home'),
+            ('catalog', 'Data Explorer', '#explore'),
+            ('warehouse', 'SQL Worksheets', '#sql'),
+            ('ingestion', 'Ingestion & Stages', '#ingestion'),
+            ('transformation', 'Transformation', '#transformation'),
+            ('jobs', 'Jobs', '#jobs'),
+            ('bears', 'AI Bears', '#bears'),
+            ('db-admin', 'Database Management', '#databases'),
+            ('pawprints', 'Audit log', '#audit'),
+            ('compute', 'Compute & Governance', '#compute'),
         ]
-        tabs = [n for n in doc.nodes if 'data-tab' in n]
-        self.assertEqual([(n['data-tab'], n['text']) for n in tabs], expected)
-        for name, _ in expected:
+        links = [n for n in doc.nodes if 'data-tab' in n]
+        self.assertEqual([n['data-tab'] for n in links], [name for name, _, _ in expected])
+        self.assertTrue(all(n['tag'] == 'a' for n in links))
+        for name, label, href in expected:
             with self.subTest(tab=name):
-                tab, panel = doc.by_id('tab-' + name), doc.by_id(name)
-                self.assertEqual(tab['role'], 'tab')
-                self.assertEqual(tab['aria-controls'], name)
-                self.assertEqual(panel['role'], 'tabpanel')
-                self.assertEqual(panel['aria-labelledby'], tab['id'])
-                self.assertEqual('hidden' in panel, name != 'warehouse')
+                link = doc.by_id('tab-' + name)
+                section = doc.by_id(name)
+                self.assertEqual(link['href'], href)
+                self.assertIn(label, link['text'])
+                self.assertEqual(link['aria-controls'], name)
+                self.assertNotIn('role', link)
+                self.assertNotIn('aria-selected', link)
+                self.assertEqual(section['tag'], 'section')
+                self.assertNotIn('role', section)
+                self.assertEqual('hidden' in section, name != 'home')
+        current = [n for n in links if n.get('aria-current') == 'page']
+        self.assertEqual([n['id'] for n in current], ['tab-home'])
         self.assertIn('hidden', doc.by_id('tab-db-admin'))
-        legacy = doc.by_id('legacy-header-warehouse')
-        self.assertNotIn('hidden', legacy)
-        self.assertTrue(any(n['tag'] == 'header' for n in legacy['ancestors']))
-        for identifier in ('quick-warehouse-state', 'quick-wake', 'quick-chill'):
-            self.assertIn(legacy, doc.by_id(identifier)['ancestors'])
+        identifiers = {n.get('id') for n in doc.nodes}
+        for identifier in ('legacy-header-warehouse', 'quick-warehouse-state', 'quick-wake', 'quick-chill', 'quick-status-error'):
+            self.assertNotIn(identifier, identifiers)
         entry = doc.by_id('database-compute-status')
         self.assertEqual(entry['tag'], 'button')
         self.assertEqual(entry['aria-controls'], 'compute')
-        self.assertIn('hidden', entry)
+        self.assertNotIn('hidden', entry)
+        self.assertTrue(any(n['tag'] == 'header' for n in entry['ancestors']))
+        self.assertIn('database-compute-state', identifiers)
+        for identifier in ('workbench-command-button', 'workbench-open-sql', 'workbench-environment'):
+            self.assertTrue(any(n.get('id') == 'workbench-header' for n in doc.by_id(identifier)['ancestors']), identifier)
+        for identifier in ('workbench-alerts-button', 'user-menu', 'role-selector', 'lang-en', 'lang-ja', 'theme-light', 'theme-dark'):
+            self.assertTrue(any(n.get('id') == 'workbench-nav' for n in doc.by_id(identifier)['ancestors']), identifier)
+        open_sql = doc.by_id('workbench-open-sql')
+        self.assertEqual(open_sql['tag'], 'a')
+        self.assertEqual(open_sql['text'], 'Open SQL')
+        self.assertIn('primary', open_sql['class'].split())
+        self.assertEqual(open_sql['href'], '#sql')
+        self.assertEqual(doc.by_id('main')['tag'], 'main')
+        self.assertFalse(any('environment' in (n.get('class') or '').split() for n in doc.nodes))
+        self.assertFalse(any('nav-note' in (n.get('class') or '').split() for n in doc.nodes))
 
     def test_workbench_controls_belong_to_their_workspaces(self):
         doc = self.workbench_document()
@@ -1691,30 +1454,25 @@ const run=eval(HANDLER);
             'warehouse': '''warehouse-state replicas chill wake refresh-status components status-error
                 sql query-warehouse query-mode max-rows run-query query-meta query-error query-results
                 worksheet-explorer worksheet-tree-filter worksheet-tabs add-worksheet-tab query-history
-                copilot-request copilot-generate copilot-explain copilot-stage-table copilot-stage
-                copilot-publish result-filter export-csv export-json copy-tsv''',
-            'ingestion': '''ingest-form ingest-file ingest-table ingest-mode ingest-key run-ingest
-                ingest-state ingest-error ingest-result ingest-upload-input ingest-dropzone
-                preview-ingest ingest-preview''',
-            'transformation': '''refresh-models run-dbt-build run-dbt-test dbt-models wap-models
-                model-lineage model-sql-preview open-model-sql refresh-wap-model''',
+                copilot-request copilot-generate copilot-explain open-transformation
+                result-filter export-csv export-json copy-tsv''',
+            'ingestion': '''ingestion-heading ingestion-role-field atlas-ingestion-message ingestion-method
+                ingestion-file ingestion-stages''',
+            'transformation': '''transformation-heading transformation-role-field atlas-transformation-message
+                transformation-atlas-models transformation-publications transformation-atlas-marts
+                transformation-atlas-dbt''',
             'catalog': '''refresh-catalog catalog-error catalog-tree catalog-filter table-title
-                table-columns lineage open-table-sql drop-table-btn table-preview table-ddl
+                table-columns open-table-sql drop-table-btn table-preview table-ddl
                 table-snapshots snapshot-preview table-lineage''',
-            'bears': 'bear-cards',
-            'pawprints': '''refresh-pawprints pawprint-meta pawprint-error pawprint-results
-                pawprint-filter pawprint-status-filter''',
-            'compute': 'compute-warehouse compute-components compute-sre-check compute-policy-check',
+            'bears': 'bears-atlas bears-heading bears-form bears-context-fields bears-target-fields bears-sql-field bears-toolbar bears-message bears-explanation bears-proposal bears-curator bears-policy',
+            'compute': 'compute-atlas compute-heading compute-runtime-host compute-usage compute-auto-chill compute-diagnostics ai-settings',
         }
         for section, identifiers in controls.items():
             for identifier in identifiers.split():
                 with self.subTest(control=identifier):
                     self.assertIn(doc.by_id(section), doc.by_id(identifier)['ancestors'])
-        upload = doc.by_id('ingest-upload-input')
-        self.assertEqual(upload['type'], 'file')
-        self.assertEqual(upload['accept'], '.csv,.tsv,.jsonl,.ndjson,.json,.parquet')
         for identifier, label in [('export-csv', 'Download CSV'), ('export-json', 'Download JSON'),
-                                  ('copy-tsv', 'Copy TSV'), ('preview-ingest', 'Preview Schema & Sample Rows')]:
+                                  ('copy-tsv', 'Copy TSV')]:
             self.assertEqual(doc.by_id(identifier)['text'], label)
 
     def test_table_inspector_contract(self):
@@ -1737,14 +1495,16 @@ const run=eval(HANDLER);
         doc = self.workbench_document()
         switcher = doc.by_id('lang-switcher')
         self.assertEqual((switcher['role'], switcher['aria-label']), ('group', 'Language'))
-        header = next(n for n in switcher['ancestors'] if n['tag'] == 'header')
-        environment = next(n for n in doc.nodes if n.get('class') == 'environment')
+        profile = doc.by_id('user-menu')
+        self.assertIn(profile, switcher['ancestors'])
+        environment = doc.by_id('workbench-environment')
+        header = doc.by_id('workbench-header')
         self.assertIn(header, environment['ancestors'])
-        self.assertLess(doc.nodes.index(environment), doc.nodes.index(switcher))
+        self.assertIn('sample', environment['class'].split())
         for lang, label, pressed in [('en', 'EN', 'true'), ('ja', '日本語', 'false')]:
             button = doc.by_id('lang-' + lang)
             self.assertIn(switcher, button['ancestors'])
-            self.assertIn(header, button['ancestors'])
+            self.assertIn(profile, button['ancestors'])
             self.assertEqual((button['tag'], button['data-lang'], button['aria-pressed'], button['text']),
                              ('button', lang, pressed, label))
         self.assertEqual(next(n for n in doc.nodes if n['tag'] == 'html')['lang'], 'en')
@@ -1757,22 +1517,22 @@ const run=eval(HANDLER);
         additions = re.findall(
             r'const (?:dbCreationGuidance|dbPlanHelp|dbWorkflowHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
             r'|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', script)
-        result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
-                                 + '\nprocess.stdout.write(JSON.stringify(i18n.ja));'],
+        result = subprocess.run(['node', '-'], input=dictionary + '\n' + '\n'.join(additions)
+                                 + '\nprocess.stdout.write(JSON.stringify(i18n.ja));',
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         translations = json.loads(result.stdout)
         expected = {
-            'Work with Data': 'データを扱う', 'Catalog': 'カタログ',
-            'Manage & Monitor': '監視・管理',
+            'Catalog': 'カタログ',
             'SQL Worksheets': 'SQL ワークシート',
             'Ingestion & Stages': '取り込み・ステージ',
             'Transformation': 'データ変換',
-            'AI Bears': 'AI Bears（専門AI）',
+            'AI Bears': 'AI Bears',
             'Data Explorer': 'データ探索',
-            'DB management': 'DB 管理',
+            'Database Management': 'データベース管理',
+            'Administration': '運用管理', 'Workspace': 'ワークスペース',
+            'Open SQL': 'SQL を開く',
             'Audit Log': '監査ログ',
-            'AgentHouse Pawprints': 'AgentHouse 監査ログ (Pawprints)',
             'Compute & Governance': 'コンピュート & ガバナンス',
             'Columns': 'カラム定義', 'Data Preview': 'データプレビュー',
             'Profile & NULL Stats': 'プロファイル & NULL統計', 'DDL': 'DDL 定義',
@@ -1783,10 +1543,12 @@ const run=eval(HANDLER);
             with self.subTest(translation=english):
                 self.assertEqual(translations[english], japanese)
         # Every section's title and description, plus all specialist copy, is covered.
+        # Product and specialist names stay in Latin script; every other title and description is Japanese.
         for node in doc.nodes:
             if node.get('class') == 'page-title':
                 for child in doc.nodes:
-                    if node in child['ancestors'] and child['tag'] in {'h1', 'p'}:
+                    if (node in child['ancestors'] and child['tag'] in {'h1', 'p'}
+                            and child['text'].strip() and child['text'] != 'AI Bears'):
                         self.assertRegex(translations[child['text']], r'[ぁ-んァ-ヶ一-龯]')
         for title, description in re.findall(r"name:'([^']+)',description:'([^']+)'", script):
             self.assertIn(title, translations)
@@ -1948,7 +1710,28 @@ const run=eval(HANDLER);
                 self.assertEqual(status, 200)
                 self.assertIn("text/html", headers["Content-Type"])
                 self.assertIn(b"SQL Worksheets", body)
-                self.assertIn(b"AgentHouse Pawprints", body)
+                self.assertIn(b"Audit log is available in Database mode.", body)
+
+    def test_chart_static_asset(self):
+        for name, mime in (('result_chart.js', 'application/javascript; charset=utf-8'),
+                           ('base_i18n.js', 'application/javascript; charset=utf-8'),
+                           ('saved_lineage.js', 'application/javascript; charset=utf-8'),
+                           ('result_export.js', 'application/javascript; charset=utf-8'),
+                           ('workbench.css', 'text/css; charset=utf-8')):
+            path, asset = '/assets/' + name, wb.INDEX.with_name(name)
+            with self.subTest(path=path):
+                status, headers, body = self.request(path)
+                self.assertEqual(status, 200)
+                self.assertEqual(headers['Content-Type'], mime)
+                self.assertEqual(headers['Cache-Control'], 'no-store')
+                self.assertEqual(int(headers['Content-Length']), len(body))
+                self.assertEqual(body, asset.read_bytes())
+            for suffix in ('?v=1', '?x=1&x=2'):
+                with self.subTest(path=path, suffix=suffix):
+                    self.assertEqual(self.request(path + suffix)[0], 403)
+        for path in ('/assets/unknown.js', '/assets/../index.html',
+                     '/assets/%2e%2e/index.html', '/assets/result_chart.js/extra'):
+            self.assertEqual(self.request(path)[0], 404)
 
     @patch.object(wb.warehouse_resident, "kubectl")
     def test_status(self, kubectl):

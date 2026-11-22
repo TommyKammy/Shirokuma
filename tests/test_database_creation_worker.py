@@ -24,6 +24,9 @@ import database_creations as creations
 import warehouse_operations as core
 from warehouse_operator import Operator,save_private
 
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
+
 
 class WorkerTests(CreationFixture):
     def test_private_observe_does_not_rewrite_old_approval_and_public_completes(self):
@@ -135,7 +138,7 @@ class WorkerTests(CreationFixture):
             headers[key] = value
         headers['Idempotency-Key'] = 'same-public-key'
         handler = SimpleNamespace(path=creations.COLLECTION,headers=headers,
-            database_body=lambda:dict(sql_catalog='research'),respond=Mock())
+            database_body=lambda:dict(sql_catalog='research',team='Data Team'),respond=Mock())
         captured = []
         def dispatch(rid,**kwargs):
             with control_store.connect() as db:
@@ -164,7 +167,7 @@ class WorkerTests(CreationFixture):
             headers[key] = value
         headers['Idempotency-Key'] = 'standalone-key'
         handler = SimpleNamespace(path=creations.COLLECTION,headers=headers,
-            database_body=lambda:dict(sql_catalog='research'),respond=Mock())
+            database_body=lambda:dict(sql_catalog='research',team='Data Team'),respond=Mock())
         with patch.object(creations,'_enrollment',None),patch.object(creations,'_foundation',None),patch.object(bridge,'_managed',None):
             creations.dispatch(handler,'POST')
             self.assertEqual(handler.respond.call_args.args[1],503)
@@ -379,7 +382,7 @@ class CallbackDiagnosticsTests(unittest.TestCase):
         from contextlib import ExitStack
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir='/private/tmp'))).resolve()
+        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir=SHORT_TMP))).resolve()
         self.root.chmod(0o700)
         self.log = self.root/'callback-failures.jsonl'
         self.profile = SimpleNamespace(state_dir=str(self.root))

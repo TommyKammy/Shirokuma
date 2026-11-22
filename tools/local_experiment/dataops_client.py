@@ -83,6 +83,14 @@ class Client:
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
         self.context = None
 
+    def _read_response(self, method, path, *, raw, headers, timeout, binary=False,
+                       incomplete_message='incomplete HTTP response'):
+        with self.opener.open(Request(self.base + path, data=raw, headers=headers, method=method), timeout=timeout) as response:
+            data = response.read()
+            if response.headers.get('Content-Length') is not None and len(data) != int(response.headers['Content-Length']):
+                raise ValueError(incomplete_message)
+            return data if binary else json.loads(data)
+
     def request(self, method, path, *, body=None, params=None, key=None, binary=False):
         if params:
             path += '?' + urlencode(params)
@@ -94,11 +102,7 @@ class Client:
         if key is not None:
             headers['Idempotency-Key'] = key
         try:
-            with self.opener.open(Request(self.base + path, data=raw, headers=headers, method=method), timeout=3600) as response:
-                data = response.read()
-                if response.headers.get('Content-Length') is not None and len(data) != int(response.headers['Content-Length']):
-                    raise ValueError('incomplete HTTP response')
-                return data if binary else json.loads(data)
+            return self._read_response(method, path, raw=raw, headers=headers, timeout=3600, binary=binary)
         except HTTPError as error:
             recovery = None
             try:

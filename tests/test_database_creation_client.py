@@ -121,6 +121,9 @@ class CreationTests(unittest.TestCase):
         imports.start(); self.addCleanup(imports.stop)
 
     def run_cli(self, *args, **kw):
+        args = list(args)
+        if args and args[0] == 'create' and '--team' not in args:
+            args += ['--team', 'Data Team']
         return cli.main(list(args), profile=kw.get('profile', self.profile), state_dir=self.root / 'receipts')
 
     def ok(self, *args):
@@ -140,7 +143,7 @@ class CreationTests(unittest.TestCase):
         self.ok('create', '--sql-catalog', 'sales', '--grant', 'bob:bi_viewer')
         first = self.server.posts()[0]
         self.assertEqual(first['path'], cli.COLLECTION)
-        self.assertEqual(first['body'], dict(sql_catalog='sales', display_name='sales', description='',
+        self.assertEqual(first['body'], dict(sql_catalog='sales', display_name='sales', description='', team='Data Team',
                                            initial_grants=[dict(principal_id='bob', maximum_role='bi_viewer')]))
         for phase in ('bootstrap', 'full'):
             review = self.review(phase)
@@ -208,7 +211,7 @@ class CreationTests(unittest.TestCase):
             ('POST', 'http://localhost:8888' + cli.COLLECTION),
             ('GET', 'http://localhost:8888' + cli.COLLECTION + '/capabilities')])
         self.assertEqual(self.server.posts()[0]['body'], dict(
-            sql_catalog='sales', display_name='sales', description='', initial_grants=[]))
+            sql_catalog='sales', display_name='sales', description='', team='Data Team', initial_grants=[]))
 
     def test_nonempty_create_fetches_principals_and_preserves_all_grants(self):
         self.ok('create', '--sql-catalog', 'sales', '--grant', 'bob:bi_viewer', '--grant', 'alice:admin')
@@ -592,11 +595,11 @@ class CreationTests(unittest.TestCase):
                 return dict(request_id='one', creation_id='one', accepted_revision=1)
         client = Slow()
         with ThreadPoolExecutor(2) as pool:
-            first = pool.submit(receipts.mutate, client, 'create', cli.COLLECTION, dict(sql_catalog='sales'))
+            first = pool.submit(receipts.mutate, client, 'create', cli.COLLECTION, dict(sql_catalog='sales',team='Data Team'))
             self.assertTrue(entered.wait(5))
             try:
                 with self.assertRaises(cli.Failure) as caught:
-                    receipts.mutate(client, 'create', cli.COLLECTION, dict(sql_catalog='sales'))
+                    receipts.mutate(client, 'create', cli.COLLECTION, dict(sql_catalog='sales',team='Data Team'))
                 self.assertEqual(caught.exception.code, 'CLIENT_ACTION_BUSY')
             finally:
                 release.set()
@@ -984,9 +987,9 @@ class LoopbackTransportTests(unittest.TestCase):
                 path = Path(directory).resolve() / 'auth.json'
                 path.write_text(json.dumps(dict(username='alice', password='synthetic', selected_role='admin'))); path.chmod(0o600)
                 client = cli.CreationClient(SimpleNamespace(client_auth_file=str(path)), 'http://127.0.0.1:' + str(server.server_port))
-                client.request('POST', cli.COLLECTION, body=dict(sql_catalog='sales'), key='frozen')
+                client.request('POST', cli.COLLECTION, body=dict(sql_catalog='sales',team='Data Team'), key='frozen')
                 self.assertEqual(received[0][0], cli.COLLECTION)
-                self.assertEqual(received[0][2], dict(sql_catalog='sales'))
+                self.assertEqual(received[0][2], dict(sql_catalog='sales',team='Data Team'))
                 self.assertEqual(received[0][1]['Idempotency-Key'], 'frozen')
                 self.assertEqual(received[0][1]['X-Shirokuma-Role'], 'admin')
         finally:
@@ -1101,7 +1104,7 @@ class LogicalCreationClientTests(unittest.TestCase):
         self.logical()
         self.ok('create', '--sql-catalog', 'sales')
         self.assertEqual(len(self.server.posts()), 1)
-        self.assertEqual(self.server.posts()[0]['body'], dict(sql_catalog='sales', display_name='sales', description='', initial_grants=[]))
+        self.assertEqual(self.server.posts()[0]['body'], dict(sql_catalog='sales', display_name='sales', description='', team='Data Team', initial_grants=[]))
         self.ok('create', '--sql-catalog', 'sales')
         self.assertEqual(len(self.server.posts()), 1)
         self.ok('show', '--database', 'sales')

@@ -1,22 +1,18 @@
 """Jobs UI contracts without a live warehouse or browser."""
 import json
 from html.parser import HTMLParser
-from pathlib import Path
-import re
 import subprocess
 import unittest
 
-HTML = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html').read_text()
-SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
+from workbench_source import INDEX, WorkbenchSource, function as source_function
+
+HTML = INDEX.read_text()
+SOURCE = WorkbenchSource(HTML)
+SCRIPT = SOURCE.source
 
 
 def function(name):
-    start = SCRIPT.index('function ' + name + '(')
-    if SCRIPT[max(0, start - 6):start] == 'async ':
-        start -= 6
-    match = re.search(r'\n(?:async )?function ', SCRIPT[start + 1:])
-    source = SCRIPT[start:start + 1 + match.start()] if match else SCRIPT[start:]
-    return source.split("\n$('", 1)[0]
+    return source_function(name, SOURCE.sources)
 
 
 class Elements(HTMLParser):
@@ -38,7 +34,7 @@ class JobsUIContracts(unittest.TestCase):
     def javascript(self, body, *names):
         definitions = SCRIPT[SCRIPT.index('const i18n'):SCRIPT.index('function ui(')]
         source = definitions + '\nlet currentRole="admin",stageEpoch=0;\n' + '\n'.join(function(name) for name in names) + '\n' + body
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_schedule_inputs_start_disabled_and_off(self):
@@ -153,7 +149,7 @@ const busy=async(button,task)=>task(),api=async(path,payload)=>{submitted.push(p
 
     def test_schedule_and_history_are_localized(self):
         self.javascript(r"""
-for(const key of ['Schedule','Every N minutes','Daily','Enable schedule','Saved role: {role}','Next run (UTC): {time}','Trigger','Scheduled for (UTC)','Manual','Scheduled','Skipped']){
+for(const key of ['Schedule','Every N minutes','Daily','Enable schedule','Saved role: {role}','Trigger','Scheduled for (JST)','Times use JST.','Manual','Scheduled','Skipped']){
  if(!i18n.en[key]||!i18n.ja[key]||i18n.en[key]===i18n.ja[key])throw Error('missing localized schedule text: '+key);
 }
 language='ja';if(t('Skipped')!==String.fromCodePoint(0x30b9,0x30ad,0x30c3,0x30d7))throw Error('skip label');
@@ -164,7 +160,7 @@ for(const [run,expected] of [
  if(jobTrigger(run)!==expected||t(jobTrigger(run))===expected)throw Error('localized trigger: '+expected);
 }
 """, 'jobTrigger')
-        self.assertIn("run.scheduled_for||", SCRIPT)
+        self.assertIn("run.scheduled_for?fmtJST(run.scheduled_for)", SCRIPT)
 
     def test_alert_confirmation_and_resolution_are_independent(self):
         self.javascript(r"""
@@ -200,6 +196,7 @@ for(const key of ['Evaluate alert','Alert message','Severity','warning','critica
 const badge={hidden:true};let calls=0,display;
 const $=()=>badge,jobsVisible=()=>false,api=async()=>{calls++;return {alerts:[{id:'one'}],unacknowledged_count:107};};
 const ui=(node,key,values)=>{display=values.count;},pruneUIBindings=()=>{};
+let workbenchAlertCount=0,workbenchAlerts=[];const workbenchRenderAlerts=()=>{};
 """ + source + r"""
 (async()=>{
  await loadJobAlerts(false);if(calls!==1||display!==107||badge.hidden)throw Error('must use total count rather than list length');
@@ -241,7 +238,7 @@ if(headers.length!==7||headers.join('|')!=='Importance|Notification|Acknowledgem
 if(rows[0].cells[6].children.length!==1||rows[0].cells[6].children[0].tag!=='button')throw Error('acknowledgement action must remain visible');
 if(!rows[0].cells[1].children[1].textContent.includes('inventory')||!rows[0].cells[1].children[1].textContent.includes('alice'))throw Error('notification context');
 const timestamp=rows[0].cells[5].children[0];if(timestamp.dateTime!==exact||timestamp.title!==exact||timestamp.textContent===exact)throw Error('localized visible time, exact accessible timestamp');
-if(!zone.textContent.includes(Intl.DateTimeFormat().resolvedOptions().timeZone))throw Error('timezone note');
+if(!zone.textContent.includes('JST'))throw Error('JST note');
 if(rows[0].cells[2].children[0].textContent!==t('Unacknowledged')||rows[0].cells[3].textContent!==t('Active condition'))throw Error('separate states');
 language='ja';if(!jobAlertTime(exact).includes('2026'))throw Error('localized date');
 """, 'jobAlertCanAcknowledge', 'jobAlertResolution', 'jobAlertTime', 'jobAlertTimestamp', 'renderJobAlerts')
@@ -412,7 +409,7 @@ const detail=id=>({run:{id,job_name:id==='run-b'?'job_b':'job_a',status:'success
  $('job-detail-state').textContent='Run run-b · success';$('job-run-detail').rows=[['b-step']];$('job-runs-filter').value='job_b';
  $('job-run-open').dataset.run='run-a';$('job-run-open').dataset.job='job_a';
  let opened=$('job-run-open').onclick();
- assert.deepEqual(views,['jobs-view-runs']);assert.equal(selectedRunId,'run-a');assert.ok(pending['run-a'],'details requested for run-a');
+ assert.deepEqual(views,[]);assert.equal(selectedRunId,'run-a');assert.ok(pending['run-a'],'details requested for run-a');
  assert.equal($('job-runs-filter').value,'job_a');assert.match($('job-detail-state').textContent,/run-a/);assert.deepEqual($('job-run-detail').children,[]);
  pending['run-a'].resolve(detail('run-a'));await opened;
  assert.match($('job-detail-state').textContent,/Run run-a/);assert.deepEqual($('job-run-detail').rows.map(r=>r[0]),['s']);

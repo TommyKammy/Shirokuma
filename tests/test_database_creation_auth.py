@@ -488,7 +488,7 @@ class CreationAuthTests(CreationFixture):
         self.assertEqual((completed['blocker'],completed['next_actions']),(None,[]))
         with self.assertRaisesRegex(operations.OperationError,'REVISION_CONFLICT'):
             creations.mutate(self.alice,'admin',ack['creation_id'],'PREPARE_PLAN',dict(expected_revision=completed['revision'],phase='bootstrap'),'late')
-        second=creations.create(self.bob,'admin',dict(sql_catalog='bob_database'),'bob-create')[0]
+        second=creations.create(self.bob,'admin',dict(sql_catalog='bob_database',team='Data Team'),'bob-create')[0]
         self.assertEqual(creations.get(self.bob,'admin',second['creation_id'])['requester_id'],'bob')
 
     def test_authority_loss_at_final_cas_rolls_back_ready_grant_and_binding(self):

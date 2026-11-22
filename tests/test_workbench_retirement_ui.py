@@ -27,10 +27,10 @@ const drafts=JSON.stringify(worksheets),explorer=JSON.stringify(dbExplorer);$('s
 const retention=$('db-admin-retire-retention').textContent;
 assert.match(retention,/DB ID, SQL name, catalog, tables, object storage, PVCs and credentials/);
 assert.match(retention,/Physical removal is separate/);
-assert.equal($('db-admin-retire-save').textContent,'Retire database (retain data)');
+assert.equal($('db-admin-retire-save').textContent,'Retire database');
 language='ja';
 assert.match(t(uiBindings.get($('db-admin-retire-retention')).key),/PVC、資格情報を保持/);
-assert.match(t(uiBindings.get($('db-admin-retire-save')).key),/データを保持/);
+assert.match(t(uiBindings.get($('db-admin-retire-save')).key),/利用を終了する/);
 language='en';
 const preview=retirePreview();
 for(const [kind,id,state] of [['schedule','a','ENABLED'],['schedule','b','SCHEDULED'],['schedule','c','STOPPED'],['schedule_tick','tick','ENABLED']]){
@@ -40,10 +40,10 @@ const retired={...retireOp('RETIRED'),revision:3,dependencies:[],blockers:[]};
 const firstCall=calls.length;
 adminRoute=async(path,options)=>path.endsWith('/reconcile')?retired:path.endsWith('/retire')&&options.method==='GET'?preview:retireOp();
 await $('db-admin-retire-preview').onclick();
-assert.match($('db-admin-retire-summary').textContent,/sales · db · READY · Database revision 3/);
+assert.match($('db-admin-retire-summary').textContent,/sales · Database revision 3/);
 assert.equal(JSON.stringify($('db-admin-retire-blockers').rows).includes('RUN_UNKNOWN'),true);
 assert.equal(JSON.stringify($('db-admin-retire-dependencies').rows).includes('UNKNOWN'),true);
-assert.equal($('db-admin-retire-stopped').textContent,'[]');assert.equal(writeCalls().length,0);
+assert.equal($('db-admin-retire-stopped').textContent,'');assert.equal(writeCalls().length,0);
 assert.deepEqual($('db-admin-retire-planned').rows,[['a','ENABLED','job','job-a'],['b','SCHEDULED','job','job-b']]);
 assert.equal($('db-admin-retire-planned-section').hidden,false);assert.equal($('db-admin-retire-stopped-section').hidden,true);
 assert.match($('db-admin-retire-scope').textContent,/Observed .+Scope: selected database/);
@@ -58,11 +58,11 @@ assert.ok(c.options.headers['Idempotency-Key']);assert.equal(c.options.headers['
 assert.equal($('db-admin-retire-planned-section').hidden,true);assert.equal($('db-admin-retire-stopped-section').hidden,false);
 assert.equal($('db-admin-retire-confirm').checked,false);assert.equal($('db-admin-retire-save').disabled,true);
 assert.equal($('db-admin-retire-operation').value,'retire-op');assert.equal($('db-admin-retire-op-revision').value,'2');
-assert.match($('db-admin-retire-summary').textContent,/retiring.*RETIRING/);assert.equal($('db-admin-retire-stopped').textContent,'["stopped-1"]');
-assert.equal($('db-admin-retire-impact').textContent,'Recorded stopped schedules 1 · Blockers in receipt 1');
-assert.match($('db-admin-retire-closure').textContent,/RETIRING.*New work is blocked.*UNKNOWN.*closure is verified/);
+assert.match($('db-admin-retire-summary').textContent,/Database revision 4 · Retiring · Operation revision 2/);assert.deepEqual(dbAdmin.retirement.stopped_schedule_ids,['stopped-1']);
+assert.equal($('db-admin-retire-impact').textContent,'Saved stopped schedules 1 · Blockers in receipt 1');
+assert.match($('db-admin-retire-closure').textContent,/Retiring.*New work is blocked.*UNKNOWN.*closure is verified/);
 await $('db-admin-retire-inspect').onclick();
-assert.equal($('db-admin-retire-impact').textContent,'Recorded stopped schedules 1 · Blockers in receipt 1');
+assert.equal($('db-admin-retire-impact').textContent,'Saved stopped schedules 1 · Blockers in receipt 1');
 const operationInput=$('db-admin-retire-operation');operationInput.value='another-database-op';operationInput.oninput();
 assert.equal($('db-admin-retire-reconcile-save').disabled,true);
 await $('db-admin-retire-reconcile-save').onclick();assert.equal(writeCalls().length,1);
@@ -70,9 +70,9 @@ operationInput.value='retire-op';operationInput.oninput();
 assert.equal($('db-admin-retire-reconcile-save').disabled,false);
 await $('db-admin-retire-reconcile-save').onclick();c=writeCalls().at(-1);
 assert.equal(c.path,'/api/v1/operations/retire-op/reconcile');assert.deepEqual(JSON.parse(c.options.body),{expected_revision:2});
-assert.match($('db-admin-retire-summary').textContent,/retired.*RETIRED/);
-assert.equal($('db-admin-retire-impact').textContent,'Recorded stopped schedules 1 · Blockers in receipt 0');
-assert.equal($('db-admin-retire-closure').textContent,'RETIRED · Retirement is complete. New work remains blocked.');
+assert.match($('db-admin-retire-summary').textContent,/Database revision 4 · Retired · Operation revision 3/);
+assert.equal($('db-admin-retire-impact').textContent,'Saved stopped schedules 1 · Blockers in receipt 0');
+assert.equal($('db-admin-retire-closure').textContent,'Retired · Retirement is complete. New work remains blocked.');
 assert.equal($('db-admin-retire-op-revision').value,'3');
 assert.equal($('db-admin-retire-reconcile-save').disabled,true);
 assert.equal($('db-admin-retire-retention').textContent,retention);
@@ -80,7 +80,11 @@ assert.deepEqual(calls.slice(firstCall).map(c=>[c.options?.method??'GET',c.path]
  ['GET','/api/session'],
  ['GET','/api/v1/admin/databases/db/retire'],
  ['GET','/api/session'],
+ ['GET','/api/v1/databases/db/grants'],
+ ['GET','/api/session'],
  ['GET','/api/v1/admin/databases/db/retire'],
+ ['GET','/api/session'],
+ ['GET','/api/v1/databases/db/grants'],
  ['GET','/api/session'],
  ['POST','/api/v1/admin/databases/db/retire'],
  ['GET','/api/session'],
@@ -101,9 +105,9 @@ adminRoute=async()=>preview;
 for(let i=0;i<2;i++){
  await $('db-admin-retire-preview').onclick();
  assert.deepEqual(dbAdmin.retirement,op);
- assert.match($('db-admin-retire-summary').textContent,/retiring.*RETIRING/);
- assert.equal($('db-admin-retire-stopped').textContent,JSON.stringify(op.stopped_schedule_ids));
- assert.equal($('db-admin-retire-impact').textContent,'Recorded stopped schedules 2 · Blockers in receipt 1');
+ assert.match($('db-admin-retire-summary').textContent,/Database revision 4 · Retiring · Operation revision 2/);
+ assert.deepEqual(dbAdmin.retirement.stopped_schedule_ids,op.stopped_schedule_ids);
+ assert.equal($('db-admin-retire-impact').textContent,'Saved stopped schedules 2 · Blockers in receipt 1');
 }
 assert.equal(writeCalls().length,0);
 ''')
@@ -158,7 +162,7 @@ assert.equal(dbAdmin.requests.get('db-admin-retire').uncertain,false);
     def test_all_state_management_and_read_selection_fences(self):
         self.javascript(SETUP + r'''
 adminItems[0].state='retiring';adminItems[1].state='retired';await dbAdminRefresh();
-assert.equal($('db-admin-select').options.length,3);await choose('finance');assert.match($('db-admin-summary').textContent,/retired/);await choose();
+assert.equal($('db-admin-select').options.length,3);await choose('finance');assert.equal($('db-admin-detail-state').children[0].textContent,'Retired');await choose();
 let done;adminRoute=async()=>new Promise(resolve=>done=resolve);
 const pending=$('db-admin-retire-preview').onclick();await tick();await choose('finance');done(retirePreview());await pending;
 assert.equal($('db-admin-retire-snapshot').hidden,true);assert.equal(dbAdmin.retirement,null);

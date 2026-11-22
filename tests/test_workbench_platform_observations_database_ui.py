@@ -156,6 +156,66 @@ body.resolve({...session,authenticated:false,platform_admin:false,maximum_role:'
 assert.equal(dbPlatform.record,saved);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');assert.equal(dbPlatform.notice,'');
 """)
 
+    def test_stale_fetch_and_auth_finally_preserve_newer_pending_token(self):
+        self.javascript(r"""
+await platformBoot();
+for(const action of ['platform-fetch','auth'])for(const transition of ['scope','principal','platform'])for(const mode of ['fetch-success','fetch-error','fetch-401','fetch-403','body-success','body-error','body-500']){
+ await getPlatform();const saved=dbPlatform.record,hold=deferred();let parsed=0;
+ const auth=action==='auth';
+ const reply=()=>auth?{...session}:platformReply();
+ const oldRoute=mode.startsWith('body-')?async()=>({http:mode==='body-500'?500:200,get body(){parsed++;return hold.promise;}}):()=>hold.promise;
+ if(auth)sessionRoute=oldRoute;else route=oldRoute;
+ const button=$('observation-sre-'+action),old=button.onclick();await tick();
+ if(mode.startsWith('body-'))assert.equal(parsed,1);
+ if(transition==='principal'){
+  const owner=dbPrincipal;dbPrincipal=JSON.stringify(['other',true]);dbAdminSession({...session,username:'other'});dbControls();dbPrincipal=owner;dbAdminSession(session);dbControls();
+ }else if(transition==='platform'){dbAdminSession({...session,platform_admin:false});dbAdminSession(session);dbControls();}
+ else{scope('sre','database');scope('sre');}
+ assert.equal(dbPlatform.busy,null);const expected=dbPlatform.record;assert.equal(expected,transition==='scope'?saved:null);
+ const newer=deferred();if(auth)sessionRoute=()=>newer.promise;else route=()=>newer.promise;
+ const pending=button.onclick();await tick();const token=dbPlatform.busy,notice=dbPlatform.notice,count=calls.length;
+ assert.ok(token);assert.equal($('observation-sre-auth').disabled,true);assert.equal($('observation-sre-platform-fetch').disabled,true);
+ if(mode.endsWith('error'))hold.reject(Error('stale secret'));
+ else if(mode==='fetch-401'||mode==='fetch-403')hold.resolve({http:Number(mode.slice(-3)),get body(){parsed++;throw Error('must not parse');}});
+ else hold.resolve(mode==='body-500'?{}:reply());
+ await old;
+ assert.equal(dbPlatform.busy,token);assert.equal(dbPlatform.record,expected);assert.equal(dbPlatform.notice,notice);assert.equal(dbAdmin.platform,true);assert.equal(dbMaximumRole,'admin');
+ if(mode.startsWith('fetch-'))assert.equal(parsed,0);
+ assert.equal($('observation-sre-auth').disabled,true);assert.equal($('observation-sre-platform-fetch').disabled,true);
+ await $('observation-sre-auth').onclick();await $('observation-sre-platform-fetch').onclick();assert.equal(calls.length,count);
+ const value=reply();if(!auth)value.saved_admissions.active=19;newer.resolve(value);await pending;
+ assert.equal(dbPlatform.busy,null);assert.equal($('observation-sre-platform-fetch').disabled,false);
+ if(auth){assert.equal(dbPlatform.record,expected);assert.equal(dbPlatform.notice,'Platform authority verified. Select Fetch platform observation.');}
+ else assert.equal(dbPlatform.record.saved_admissions.active,19);
+ sessionRoute=null;
+}
+""")
+
+    def test_session_failure_policy_and_authority_changing_success_notice(self):
+        self.javascript(r"""
+await platformBoot();await readyObservation('sre');await fetchObservation('sre');const peer=dbObservations.sre.record;
+for(const failure of ['network','malformed','500','revoked']){
+ sessionRoute=null;dbAdminSession(session);await getPlatform();const saved=dbPlatform.record,version=dbAuthorizationVersion;
+ sessionRoute=async()=>{if(failure==='network')throw Error('secret');if(failure==='malformed')return {malformed:true};return failure==='500'?{http:500,body:{...session}}:{...session,platform_admin:false};};
+ await $('observation-sre-auth').onclick();
+ if(['network','malformed'].includes(failure)){
+  assert.equal(dbPlatform.record,saved);assert.equal(dbAdmin.platform,true);assert.equal(dbAuthorizationVersion,version);assert.equal(dbObservations.sre.record,peer);assert.equal(dbPlatform.notice,'Platform observation unavailable. Explicitly refresh authority or fetch again.');
+ }else{assert.equal(dbPlatform.record,null);assert.equal(dbAdmin.platform,false);assert.equal(dbPlatform.notice,'Platform requires a true platform administrator with current and maximum global Admin role. Refresh platform authority explicitly.');}
+ assert.equal(dbPlatform.busy,null);
+}
+""")
+
+    def test_inflight_locale_only_change_keeps_platform_request(self):
+        self.javascript(r"""
+await platformBoot();
+for(const action of ['platform-fetch','auth']){
+ const hold=deferred();if(action==='auth')sessionRoute=()=>hold.promise;else route=()=>hold.promise;
+ const pending=$('observation-sre-'+action).onclick();await tick();const token=dbPlatform.busy;
+ setLanguage('ja');assert.equal(dbPlatform.busy,token);setLanguage('en');assert.equal(dbPlatform.busy,token);
+ hold.resolve(action==='auth'?{...session}:platformReply());await pending;assert.ok(dbPlatform.record);assert.equal(dbPlatform.busy,null);sessionRoute=null;
+}
+""")
+
     def test_current_denial_purges_only_platform_and_source_or_shape_error_is_local(self):
         self.javascript(r"""
 await platformBoot();await readyObservation('sre');await readyObservation('policy');await fetchObservation('sre');await fetchObservation('policy');

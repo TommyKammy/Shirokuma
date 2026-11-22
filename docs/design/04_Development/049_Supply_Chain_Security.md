@@ -73,7 +73,13 @@ local labの期限付き例外とします。初回expiry
 `2026-08-14T00:00:00Z`は到来済みで、[Issue #150](https://github.com/TommyKammy/Shirokuma/issues/150)
 とfinal corrective OWNER [comment 5290345820](https://github.com/TommyKammy/Shirokuma/issues/150#issuecomment-5290345820)
 が、同じ完全一致pathの`KSV-0041` 1件と`KSV-0046` 8件だけを
-`2026-09-13T00:00:00Z`まで再承認しました。`.trivyignore.yaml`はcanonical YAMLで
+`2026-09-13T00:00:00Z`まで再承認しました。この期限も到来したため、2026-11-21に
+OWNER [comment 7070435157](https://github.com/TommyKammy/Shirokuma/issues/150#issuecomment-7070435157)
+が同じmanifest SHA-256、Trivy 0.72.0、同じ9 findingsのまま、RBAC例外だけを再承認しました
+（resident image例外は更新しません）。commentは`2026-12-22T00:00:00Z`までとしていますが、
+承認日はUTCで2026-11-21なので、30日上限に合わせて`2026-12-21T00:00:00Z`を期限とします。
+verifierは`--now`省略時に実時刻で期限を評価するため、期限到来後はCIがfail closedになります。
+`.trivyignore.yaml`はcanonical YAMLで
 記述し、`scripts/verify_trivyignore.py`が完全一致する2つのID、単一の完全一致path、
 2つのexact `statement`、OWNER binding、manifest SHA-256
 `ed307189fd1f9e49819a50843bb6f3c9257fe6d4d8359d1950b38207c26c3854`、UTC expiryから
@@ -86,7 +92,7 @@ retained config report SHA-256は
 `00e87fef815ac9a99401f2a450e71c47555fd991ec6d2cfc7313e1f0dbe3bd7a`、raw Trivy
 metadata SHA-256は
 `a82d05e076fd54c9bd2e57fd1be00891a2384a3f618e9d72037bfd940a5406ea`です。
-expiry instant `2026-09-13T00:00:00Z`自体はfail closedです。日付境界はhost timezone
+expiry instant `2026-12-21T00:00:00Z`自体はfail closedです。日付境界はhost timezone
 ではなくUTC calendarで評価します。
 all-severityのreport scanは例外を適用せずfindingを
 ログへ残します。CIはignore適用前にもcanonical manifestを対象とするfreshな

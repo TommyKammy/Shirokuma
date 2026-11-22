@@ -2,6 +2,7 @@
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_foundation_baseline_database_ui as foundation_ui
+from workbench_source import WorkbenchSource
 
 resources_ui = foundation_ui.resources_ui
 CONTROLLERS = r"""
@@ -95,7 +96,7 @@ const body=deferred(),entered=deferred();route=async()=>({controllerResponse:{ok
 
     def test_refresh_authority_is_manual_independent_and_late_denial_ignored(self):
         self.navigation_javascript(r"""
-await controllerBoot();$('tab-compute').click();await controllerFetch('policy');const held=dbControllerBaseline.policy.record;
+await controllerBoot();dbAISettings.autoOpened=true;$('tab-compute').click();await controllerFetch('policy');const held=dbControllerBaseline.policy.record;
 const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbControllerBaselineRefreshAuth('policy');await tick();const busy=dbControllerBaseline.policy.busy;await controllerFetch('compute');assert.equal(dbControllerBaseline.policy.busy,busy);assert.equal(dbControllerBaseline.policy.record,held);
 $('tab-warehouse').click();$('tab-compute').click();const saved=dbControllerBaseline.compute.record;wait.resolve({controllerResponse:{ok:false,status:403,json:async()=>{throw Error('late');}}});await pending;assert.equal(dbControllerBaseline.compute.record,saved);assert.equal(dbAdmin.platform,true);
 for(const status of [401,403]){dbAdminSession(session);let parsed=0;sessionRoute=async()=>({controllerResponse:{ok:false,status,json:async()=>{parsed++;throw Error('must not parse');}}});await dbControllerBaselineRefreshAuth('compute');assert.equal(parsed,0);controllerEmpty();}
@@ -159,7 +160,7 @@ dbAdminSession({...session,platform_admin:false});controllerEmpty();for(const ki
 
     def test_real_policy_navigation_no_sre_panel_preserves_receipts(self):
         self.navigation_javascript(r"""
-await controllerBoot();$('tab-compute').click();await controllerFetch();const held=dbControllerBaseline.compute.record,count=calls.length;
+await controllerBoot();$('tab-compute').click();await controllerFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const held=dbControllerBaseline.compute.record,count=calls.length;
 for(const locale of ['ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-policy').click();scope('policy');assert.equal($(controllerRoot('policy')).hidden,false);assert.equal($('observation-policy-database-controls').hidden,true);scope('policy','database');assert.equal($(controllerRoot('policy')).hidden,true);$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-controller-baseline'),null);$('tab-compute').click();assert.equal(dbControllerBaseline.compute.record,held);assert.equal(calls.length,count);}
 """)
 
@@ -170,9 +171,10 @@ for(const locale of ['ja','en']){setLanguage(locale);dbControls();for(const kind
 assert.equal(calls.length,n);assert.equal(JSON.stringify(i18n.ja),ja);
 """)
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn(':is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}',html)
-        self.assertIn('table-layout:fixed;width:100%;min-width:0',html)
-        self.assertIn('white-space:normal;overflow-wrap:anywhere',html)
+        css = WorkbenchSource(html).css
+        self.assertIn(':is(#observation-policy-controller-baseline,#observation-controller-baseline-panel) .panel-body p{max-inline-size:min(75ch,100%)}',css)
+        self.assertIn('table-layout:fixed;width:100%;min-width:0',css)
+        self.assertIn('white-space:normal;overflow-wrap:anywhere',css)
 
     def test_wire_and_dto_caps_no_partial_list(self):
         self.javascript(r"""

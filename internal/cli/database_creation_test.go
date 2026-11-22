@@ -18,8 +18,8 @@ func TestDatabaseCreationInvocation(t *testing.T) {
 		args := []string{"creation", action}
 		want := []string{"python3", filepath.Join(root, "tools", "local_experiment", "database_creation_client.py"), action}
 		if action == "create" {
-			args = append(args, "--sql-catalog", "sales", "--grant", "alice:admin", "--grant", "bob:bi_viewer")
-			want = append(want, "--sql-catalog", "sales", "--grant", "alice:admin", "--grant", "bob:bi_viewer")
+			args = append(args, "--sql-catalog", "sales", "--team", "Data Team", "--grant", "alice:admin", "--grant", "bob:bi_viewer")
+			want = append(want, "--sql-catalog", "sales", "--team", "Data Team", "--grant", "alice:admin", "--grant", "bob:bi_viewer")
 		} else if action != "principals" && action != "list" {
 			args = append(args, "--database", "sales")
 			want = append(want, "--database", "sales")
@@ -51,8 +51,10 @@ func TestDatabaseCreationValidationNeverExecutes(t *testing.T) {
 		{"creation", "show", "--database", "../private"},
 		{"creation", "plan", "--database", "sales", "--phase", "other"},
 		{"creation", "approve", "--database", "sales", "--recovery"},
-		{"creation", "create", "--sql-catalog", "sales", "--grant", "alice:superuser"},
-		{"creation", "create", "--sql-catalog", "sales", "--operation-id", "x"},
+		{"creation", "create", "--sql-catalog", "sales"},
+		{"creation", "create", "--sql-catalog", "sales", "--team", "  "},
+		{"creation", "create", "--sql-catalog", "sales", "--team", "ops", "--grant", "alice:superuser"},
+		{"creation", "create", "--sql-catalog", "sales", "--team", "ops", "--operation-id", "x"},
 		{"creation", "show", "--database", "sales", "--release"},
 		{"creation", "resume"},
 		{"creation", "resume", "--database", "sales", "--phase", "full"},

@@ -3,6 +3,7 @@ import json
 import unittest
 
 import test_workbench_database_ui as database_ui
+from workbench_source import WorkbenchSource
 
 
 SETUP = r'''
@@ -173,18 +174,18 @@ assert.equal($('p35-ingest-confirm').disabled,true);assert.equal(p.file,file);as
 ''')
 
     def test_recovery_context_help_controls_and_scoped_long_label_constraints(self):
-        html = database_ui.HTML
+        css = WorkbenchSource(database_ui.HTML).css
         for rule in (
             '#p35-ingest-recovery,#p35-wap-recovery{min-width:0;max-width:100%;flex-wrap:wrap}',
             '#p35-ingest-recovery>*,#p35-wap-recovery>*{min-width:0;max-width:100%}',
             '#p35-ingest-recovery select,#p35-wap-recovery select{min-width:0;max-width:100%}',
             '#p35-ingest-recovery .help,#p35-wap-recovery .help{flex-basis:100%;overflow-wrap:anywhere;white-space:normal}',
         ):
-            self.assertIn(rule, html)
+            self.assertIn(rule, css)
         self.javascript(r'''
 const p=await ready();
 assert.equal(dataopsRecoveryText('x\x85'),true);for(const key of ['x\x00','x\x1f','x\x7f'])assert.equal(dataopsRecoveryText(key),false);
-const op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'x\x85',context:{...p.context,sql_catalog:'original_catalog_'+ 'c'.repeat(80),sql_schema:'original_schema'},time:Date.now(),id:'o'.repeat(128),state:'ACTIVE',ambiguous:false,principal:dbPrincipal,restored:true};
+const op={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',key:'x\x85',context:{...p.context,sql_catalog:'original_catalog_'+ 'c'.repeat(80),sql_schema:'original_schema'},time:Date.now(),id:'9a1ed730-05e5-467a-8920-81cbadd9d114',state:'ACTIVE',ambiguous:false,principal:dbPrincipal,restored:true};
 dataopsRecoveryOwner().ops.push(op);assert.equal(dataopsRecoveryWrite(dataopsRecoveryOwner()),true);p.recoverySelection=op.key;const before=calls.length;dataopsRecoveryRender(p);
 const help=$('p35-ingest-recovery-context'),cancel=$('p35-ingest-recovery-cancel');
 const controls=help.parentElement;
@@ -192,11 +193,31 @@ assert.equal(controls.parentElement,p.recoveryHistory);assert.equal(p.recoveryHi
 assert.equal(p.recoveryHistory.open,true);assert.equal(cancel.parentElement,controls);
 assert.equal($('p35-ingest-recovery-select').parentElement.parentElement,controls);assert.equal(p.receipt.descendants().includes(help),false);assert.equal(p.receipt.descendants().includes(cancel),false);
 assert.equal(help.hidden,false);assert.ok(help.textContent.includes(op.context.sql_catalog+' / original_schema / admin / LOCAL'));assert.match(help.textContent,/Match the original database, schema and execution role manually/);assert.equal($('p35-ingest-reconnect').disabled,true);assert.equal(cancel.disabled,false);
-assert.ok($('p35-ingest-recovery-select').options.some(o=>o.textContent.length>128));
-assert.ok([...$('p35-ingest-recovery-select').options].find(o=>o.value===op.key).textContent.startsWith(t('Ingest')+' · '));
+const recoveryOption=[...$('p35-ingest-recovery-select').options].find(o=>o.value===op.key);
+assert.equal(recoveryOption.textContent.includes(op.id),false);
+assert.doesNotMatch(recoveryOption.textContent,/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+assert.equal(recoveryOption.textContent.startsWith(t('Ingest')+' · '+t('ACTIVE')+' · '),true);
 for(const [action,label] of [['manual-ingest','Ingest'],['manual-wap-build','Stage'],['manual-wap-audit','Audit'],['manual-wap-publish','Publish'],['manual-wap-rollback','Rollback']])assert.equal(dataopsRecoveryActionLabel(action),t(label));
-setLanguage('ja');assert.equal(t('Saved original request'),'保存済みの処理');assert.equal($('p35-ingest-remove-handle').textContent,'終了済みの追跡情報を削除');assert.ok(help.textContent.includes(op.context.sql_catalog));assert.match(help.textContent,/手動で選び/);assert.equal(cancel.textContent,'選択した保存済み処理をキャンセル');
+setLanguage('ja');const japaneseRecovery=[...$('p35-ingest-recovery-select').options].find(o=>o.value===op.key);assert.equal(japaneseRecovery.textContent.startsWith(t('Ingest')+' · '+t('ACTIVE')+' · '),true);assert.equal(japaneseRecovery.textContent.includes('Ingest'),false);assert.equal(japaneseRecovery.textContent.includes(op.id),false);assert.equal(t('Saved original request'),'保存済みの処理');assert.equal($('p35-ingest-remove-handle').textContent,'終了済みの追跡情報を削除');assert.ok(help.textContent.includes(op.context.sql_catalog));assert.match(help.textContent,/手動で選び/);assert.equal(cancel.textContent,'選択した保存済み処理をキャンセル');
 dbPrincipal='["foreign",true]';dataopsValidate();setLanguage('en');assert.equal(help.textContent,'');assert.equal(help.hidden,true);assert.equal($('p35-ingest-recovery-select').value,'');assert.equal([...$('p35-ingest-recovery-select').options].some(o=>o.value===op.key||o.textContent.includes(op.id)),false);assert.equal(cancel.disabled,true);assert.equal(calls.length,before);
+''')
+
+    def test_recovery_option_uses_seconds_only_for_same_minute_without_ids(self):
+        self.javascript(r'''
+const p=await ready(),store=dataopsRecoveryOwner();
+const time=new Date(2026,10,4,12,41,10).getTime();
+const base={panel:p.id,action:'manual-ingest',path:'/api/v1/ingests',context:structuredClone(p.context),state:'FINISHED',ambiguous:false,principal:dbPrincipal,restored:true};
+const a={...base,key:'a',id:'9a1ed730-05e5-467a-8920-81cbadd9d114',time};
+const b={...base,key:'b',id:'0b3d4f11-2222-4333-8444-555566667777',time:time+5000};
+store.ops.push(a,b);p.recoverySelection='';setLanguage('ja');dataopsRecoveryRender(p);
+const option=key=>[...$('p35-ingest-recovery-select').options].find(o=>o.value===key);
+const when=value=>new Date(value).toLocaleString(undefined,{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const aText=option('a').textContent,bText=option('b').textContent;
+assert.notEqual(aText,bText);
+assert.equal(aText,[t('Ingest'),t('FINISHED'),when(time)].join(' · '));
+assert.equal(bText,[t('Ingest'),t('FINISHED'),when(time+5000)].join(' · '));
+assert.equal((aText+bText).includes(a.id)||(aText+bText).includes(b.id),false);
+assert.doesNotMatch(aText+bText,/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
 ''')
 
     def test_all_five_preflight_failures_leave_no_durable_intent_or_mutation(self):
@@ -217,6 +238,7 @@ else{
  }
  $('p35-wap-metadata-id').value='unsaved input';
 }
+if(action==='manual-wap-publish')await $('copilot-publish').onclick();
 const old={id:'old-receipt',key:'old-key',principal:dbPrincipal,context:p.context,state:'FINISHED',ambiguous:false,protected:false};p.op=old;
 const original=route;let mutations=0;
 route=async(path,options)=>{if(path===dataopsRecoveryPaths[action])mutations++;return original(path,options);};
@@ -296,7 +318,7 @@ const op={panel:p.id,action:'manual-wap-build',path:'/api/v1/wap/build',key:'rec
 dataopsRecoveryOwner().ops.push(op);dataopsRecoverySave(op);p.recoverySelection=op.key;
 const wait=deferred();let reads=0;route=()=>{reads++;return wait.promise;};
 const work=dataopsReconnect(p);await tick();assert.equal(reads,1);
-showView('transformation-view-models');showView('transformation-view-wap');
+await activate($('tab-bears'));await activate($('tab-transformation'));
 wait.resolve(denied?{http:403,body:{code:'FORBIDDEN'}}:accepted(op.context,{id:op.id,state:'FINISHED',result:{private:'late'}}));await work;
 assert.equal(p.op,op);assert.equal(op.operation,null);assert.equal(op.protected,false);
 assert.equal(p.invalid,false);assert.equal(p.trackingPending,false);assert.equal(reads,1);
@@ -429,6 +451,7 @@ else{
   dataopsCaptureWap(p,wapReceipt(kind,p.context,record).operation);
  }
 }
+if(action==='manual-wap-publish')await $('copilot-publish').onclick();
 const original=route;let postCount=0;
 route=async(path,options)=>{
  if(path===dataopsRecoveryPaths[action]&&options?.method==='POST'){
@@ -638,7 +661,7 @@ for(const operation of [{id:op.id,state:'UNKNOWN'},{id:op.id,state:'ACTIVE',quer
 await boot();
 for(const p of dataopsPanels.values()){
  const help=$(p.id+'-availability');
- assert.equal(help.getAttribute('role'),'status');assert.equal(p.context,null);
+ assert.equal(p.context,null);
  assert.match(help.textContent,/Panel context is unavailable.*Refresh this panel context or reselect/);
  assert.equal($('p35-wap-model-id').disabled,true);
  const before=calls.length;
@@ -736,20 +759,16 @@ assert.equal(calls.length,before);assert.equal(submissions.length,0);
 
     def test_dedicated_wap_panel_keeps_legacy_gates(self):
         self.javascript(r'''
-$('transformation').append(Object.assign($('run-dbt-build'),{tagName:'BUTTON'}),Object.assign($('run-dbt-test'),{tagName:'BUTTON'}),Object.assign($('transformation-view-marts'),{tagName:'BUTTON'}));
 const p=await ready('p35-wap');
-assert.equal(p.root.parentElement,$('transformation-wap'));
-assert.equal($('transformation-wap').hidden,true);
-assert.equal($('transformation-models').hidden,false);
-assert.equal($('transformation-view-wap').hidden,false);
-assert.match($('database-ingestion-notice').textContent,/file ingestion and registered Stages/);
-assert.equal($('p35-wap-model-id').disabled,false);assert.equal($('transformation-view-marts').disabled,false);
+assert.equal(p.root.parentElement,$('transformation-atlas-models'));
+assert.equal($('transformation-atlas-models').hidden,false);
+assert.equal(Object.hasOwn(nodes,'database-ingestion-notice'),false);
+assert.equal($('p35-wap-model-id').disabled,false);
 assert.equal($('db-marts-panel').hidden,false);
 assert.ok($('jobs').children.filter(n=>!n.hidden).every(n=>n.id==='db-jobs-panel'));
 const before=calls.length;
 for(const lang of ['ja','en']){
  setLanguage(lang);dataopsInstall();dbControls();
- assert.equal($('run-dbt-build').disabled,true);assert.equal($('run-dbt-test').disabled,true);
  assert.equal($('p35-wap-step-0').getAttribute('aria-current'),'step');
  assert.match($('p35-wap-guide-context').textContent,/admin/);
 }
@@ -773,8 +792,8 @@ const choose=$('p35-ingest-choose-file');
 assert.equal(chooser.parentElement,zone);assert.equal(chooser.hidden,true);
 assert.equal(choose.tagName,'BUTTON');assert.equal(choose.getAttribute('aria-describedby'),status.id);
 let pickerOpens=0;chooser.click=()=>{pickerOpens++;};choose.click();assert.equal(pickerOpens,1);
-assert.equal(status.hidden,true);
-assert.equal(status.getAttribute('role'),'status');
+assert.equal(status.hidden,false);
+assert.match(status.textContent,/Choose a CSV \/ JSON \/ JSONL file\./);
 globalThis.DataTransfer=class{
  constructor(){this.files=[];this.items={add:file=>this.files.push(file)};}
 };
@@ -805,10 +824,13 @@ assert.equal(previewCount,before);assert.equal(submissions.length,0);
     def test_manual_ingest_groups_controls_and_preserves_mode_drafts(self):
         self.javascript(r'''
 const p=await ready(),node=key=>$('p35-ingest-'+key);
-const context=node('context-controls');
-assert.equal(context.parentElement,p.form);
-for(const key of ['role','database','schema'])assert.equal(node(key).parentElement.parentElement,context);
-assert.equal(node('refresh').parentElement,context);
+const role=node('role');
+assert.equal(role.parentElement.parentElement.id,'ingestion-role-field');
+assert.equal(String(role.className).split(' ').includes('field'),true);
+const destination=node('destination-fields');
+assert.equal(String(destination.className).split(' ').includes('atlas-fields'),true);
+for(const key of ['database','schema','mode','name','target','keys'])assert.equal(node(key).parentElement.parentElement,destination,key);
+assert.equal(node('refresh').parentElement,destination);
 const options=node('options');
 assert.equal(options.tagName,'DETAILS');assert.ok(!options.open);
 for(const key of ['format','encoding','delimiter','hints','atomic','batch'])
@@ -816,7 +838,7 @@ for(const key of ['format','encoding','delimiter','hints','atomic','batch'])
 const mode=node('mode'),name=node('name'),target=node('target'),keys=node('keys');
 assert.equal(mode.parentElement.parentElement,node('destination-fields'));
 const visibility=(create,existing,upsert)=>{
- assert.equal(name.parentElement.hidden,!create);assert.equal(target.parentElement.hidden,!existing);
+ assert.equal(name.parentElement.hidden,false);assert.equal(target.parentElement.hidden,!existing);
  assert.equal(keys.parentElement.hidden,!upsert);
 };
 visibility(false,false,false);
@@ -928,7 +950,7 @@ await $('p35-wap-save').onclick();assert.equal(submissions[0].body.expected_vers
 assert.deepEqual(submissions[0].body.sources,{source:ref('orders'),other:ref('other')});assert.equal(p.model.version,1);
 await $('p35-wap-build-action').onclick();assert.equal(submissions[1].body.version,1);assert.equal(submissions[1].body.model_id,'daily_orders');
 assert.equal($('p35-wap-build').value,'build_id-record');await $('p35-wap-audit-action').onclick();assert.equal(submissions[2].body.build_id,'build_id-record');
-assert.equal($('p35-wap-publish').disabled,true);await $('p35-wap-publish').onclick();assert.equal(submissions.length,3);
+await $('copilot-publish').onclick();assert.equal($('p35-wap-publish').disabled,true);await $('p35-wap-publish').onclick();assert.equal(submissions.length,3);
 $('p35-wap-sql').oninput();assert.equal($('p35-wap-build-action').disabled,true);await $('p35-wap-save').onclick();assert.equal(submissions[3].body.expected_version,1);
 // Admin resolves both shared artifacts through authorized metadata GETs.
 const engineer={...p.context,grant_revision:17},model=p.model,submit=route;
@@ -946,6 +968,7 @@ route=async(path,options)=>{
 for(const kind of ['build','audit']){
  $('p35-wap-metadata-kind').value=kind;$('p35-wap-metadata-id').value=kind+'_id-record';await $('p35-wap-metadata-load').onclick();
 }
+await $('copilot-publish').onclick();assert.equal($('p35-wap-publish').disabled,false);
 await $('p35-wap-publish').onclick();const publish=submissions.at(-1);
 assert.equal(publish.body.context.selected_role,'admin');assert.equal(publish.headers['X-Shirokuma-Role'],'admin');assert.equal(publish.body.build_id,'build_id-record');
 ''')
@@ -953,7 +976,7 @@ assert.equal(publish.body.context.selected_role,'admin');assert.equal(publish.he
     def test_guided_wap_requires_complete_matching_artifacts(self):
         self.javascript(r'''
 const p=await ready('p35-wap'),id=key=>$('p35-wap-'+key);
-const stage=i=>assert.equal(id('step-'+i).getAttribute('aria-current'),'step');
+const stage=i=>assert.equal(id('step-'+i).getAttribute('aria-current'),'step',i+':'+[0,1,2,3,4,5].map(n=>id('step-'+n).getAttribute('aria-current')).join(','));
 p.sources[0].table.value='0';id('model-id').value='daily_orders';id('name').value='raw.orders';id('min').value='0';
 const original=route;let build=0,audit=0,publish=0;
 route=async(path,options)=>{
@@ -977,25 +1000,26 @@ assert.equal(id('name').getAttribute('aria-invalid'),'true');assert.equal(id('mi
 assert.equal(document.activeElement,id('name'));
 id('name').value='daily_orders';id('name').oninput();id('min').value='1';id('min').oninput();
 const bodyTarget={database_id:'db',schema_id:id('target-schema').value,physical_name:'daily_orders'};
-await id('save').onclick();stage(1);assert.equal(document.activeElement,id('build-action'));assert.match(id('action-target').textContent,/daily_orders/);
-await id('build-action').onclick();stage(1);assert.match(id('guide-next').textContent,/Outcome unknown/);
+await id('save').onclick();stage(2);assert.equal(document.activeElement,id('build-action'));assert.match(id('action-target').textContent,/daily_orders/);
+await id('build-action').onclick();stage(2);assert.match(id('stage-reason').textContent,/Outcome unknown/);assert.equal(id('guide-next').textContent,'');
 await id('audit-action').onclick();assert.equal(audit,0);
 // Reconcile the original request as failed before submitting a fresh build.
 const mutations=route;
 route=async(path,options)=>path.startsWith('/api/v1/dataops/unknown-build?')?
  accepted(p.context,{id:'unknown-build',state:'FAILED',committed:false}):mutations(path,options);
 await id('observe').onclick();route=mutations;
-await id('build-action').onclick();stage(2);await id('audit-action').onclick();stage(2);
+await id('build-action').onclick();stage(3);await id('audit-action').onclick();stage(2);
 assert.match(id('quality-result').textContent,/Failed.*Rows: 3.*code: 1/);
 await id('publish').onclick();assert.equal(publish,0);
-await id('build-action').onclick();await id('audit-action').onclick();stage(2);
+await id('build-action').onclick();await id('audit-action').onclick();stage(3);
 assert.ok(id('quality-result').hidden);await id('publish').onclick();assert.equal(publish,0);
-await id('audit-action').onclick();stage(3);
-assert.match(id('publish-review').textContent,/daily_orders.*Build built-3 and Audit audit-3/);
+await id('audit-action').onclick();stage(4);
+await $('copilot-publish').onclick();stage(5);
+assert.match(id('publish-review').textContent,/Create a new MARTS table with 3 rows/);
 id('build').value='built-2';id('build').onchange();await id('publish').onclick();assert.equal(publish,0);
-id('build').value='built-3';id('build').onchange();
-await id('publish').onclick();stage(3);
-await id('publish').onclick();assert.match(id('step-3').textContent,/complete/);
+id('build').value='built-3';id('build').onchange();await $('copilot-publish').onclick();
+await id('publish').onclick();assert.equal(publish,1);
+await $('copilot-publish').onclick();await id('publish').onclick();assert.match(id('step-5').textContent,/complete/);
 assert.equal(publish,2);
 dataopsInvalidate(p);stage(0);assert.ok(id('quality-result').hidden);assert.ok(id('publish-review').hidden);
 ''')
@@ -1044,7 +1068,7 @@ assert.deepEqual(JSON.parse(new URL('http://localhost'+request.path).searchParam
     def test_bilingual_labels_and_context_response_mismatch(self):
         self.javascript(r'''
 const p=await ready();
-for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('p35-ingest-confirm').textContent,t('Confirm preview and ingest'));assert.equal($('p35-wap-publish').textContent,t('Publish audited build (admin)'));assert.equal($('p35-export-observe').textContent,t('Observe operation'));}
+for(const lang of ['ja','en']){setLanguage(lang);assert.equal($('p35-ingest-confirm').textContent,t('Confirm preview and ingest'));assert.equal($('p35-wap-publish').textContent,t('Publish to MARTS'));assert.equal($('p35-export-observe').textContent,t('Observe operation'));}
 route=async()=>({context:{...p.context,selected_role:'bi_viewer'},preview:{request_fingerprint:'forged'}});
 await preview(p).then(()=>assert.fail('preview must reject mismatched accepted context'),()=>{});
 assert.equal(p.preview,null);assert.equal($('p35-ingest-confirm').disabled,true);

@@ -19,6 +19,8 @@ import request_auth as auth
 import trino_auth
 validate_shared_backend = auth.validate_shared_backend
 import workbench_server as wb
+import runtime_profile
+from workbench_source import WorkbenchSource
 import test_warehouse_resident as warehouse_tests
 w = warehouse_tests.w
 
@@ -135,12 +137,26 @@ class SecurityBoundaryTests(unittest.TestCase):
                 self.assertNotIn(b'secret-', raw)
         finally:
             client.close()
-        html = wb.INDEX.read_text()
+        html = WorkbenchSource().source
         self.assertIn("const response=await fetch('/api/session')", html)
         self.assertIn("option.disabled=ranks[option.value]>ranks[currentRole]", html)
 
+    def test_chart_asset_uses_configured_auth_in_both_modes(self):
+        accounts = {user: dict(account, platform_admin=False) for user, account in self.users.items()}
+        self.accounts.write_text(json.dumps(accounts))
+        for database_mode in (False, True):
+            with self.subTest(database_mode=database_mode), \
+                    patch.object(runtime_profile, 'active', return_value=database_mode), \
+                    patch.object(runtime_profile, 'current', return_value=None):
+                for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/workbench.css'):
+                    with self.subTest(path=path):
+                        self.assertEqual(self.workbench(path), 401)
+                        self.assertEqual(self.workbench(path, Authorization='Basic invalid'), 401)
+                        for user in ('alice', 'emily', 'vera'):
+                            self.assertEqual(self.workbench(path, user=user), 200)
+
     def test_viewer_frontend_bootstrap_uses_authenticated_role(self):
-        html = wb.INDEX.read_text()
+        html = WorkbenchSource().source
         bootstrap = 'async function initializeSession() {' + html.split(
             'async function initializeSession() {', 1)[1].split('\nstartWorkbench();', 1)[0]
         script = """
@@ -172,7 +188,7 @@ initializeSession().then(()=>{
  if(JSON.stringify(calls)!==JSON.stringify(['/api/session','apply','restore','restored','status:bi_viewer','catalog:bi_viewer']))throw Error('API called before identity or restoration');
 }).catch(error=>{console.error(error);process.exit(1);});
 """
-        result = subprocess.run(['node', '-e', script], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=script, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_engineer_endpoint_write_scope(self):

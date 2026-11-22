@@ -45,7 +45,7 @@ TRIVY_METADATA_PATH = (
 )
 SCAN_REPORT = SCAN_REPORT_PATH.read_bytes()
 TRIVY_METADATA = TRIVY_METADATA_PATH.read_bytes()
-NOW = "2026-08-14T06:43:14Z"
+NOW = "2026-11-21T22:48:00Z"
 CANONICAL = canonical_document()
 
 
@@ -114,6 +114,30 @@ class TrivyIgnoreContractTests(unittest.TestCase):
                 check=False,
             )
 
+    def test_default_run_checks_a_fresh_live_scan_against_the_real_clock(
+        self,
+    ) -> None:
+        # CI runs the checker without --now on a report Trivy just produced.
+        report = json.loads(SCAN_REPORT)
+        report["CreatedAt"] = datetime.now(timezone.utc).isoformat()
+        with tempfile.TemporaryDirectory() as directory:
+            live = Path(directory) / "trivy-live-flux-rbac.json"
+            live.write_text(json.dumps(report), encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(CHECKER),
+                    "--live-scan-report-file",
+                    str(live),
+                ],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("live_scan_sha256=", result.stdout)
+
     def test_repository_ignore_file_is_valid_at_review_date(self) -> None:
         result = subprocess.run(
             [
@@ -145,43 +169,43 @@ class TrivyIgnoreContractTests(unittest.TestCase):
         )
 
     def test_exact_owner_authorization_is_pinned(self) -> None:
-        self.assertEqual(APPROVAL_COMMENT_ID, 5290345820)
+        self.assertEqual(APPROVAL_COMMENT_ID, 7070435157)
         self.assertEqual(
             APPROVAL_COMMENT_URL,
             "https://github.com/TommyKammy/Shirokuma/issues/150"
-            "#issuecomment-5290345820",
+            "#issuecomment-7070435157",
         )
         self.assertEqual(
             APPROVAL_CREATED_AT,
-            datetime(2026, 8, 14, 6, 43, 14, tzinfo=timezone.utc),
+            datetime(2026, 11, 21, 22, 48, 0, tzinfo=timezone.utc),
         )
-        self.assertEqual(APPROVED_ON, date(2026, 8, 14))
-        self.assertEqual(APPROVED_EXPIRY, date(2026, 9, 13))
+        self.assertEqual(APPROVED_ON, date(2026, 11, 21))
+        self.assertEqual(APPROVED_EXPIRY, date(2026, 12, 21))
 
     def test_exact_thirty_day_authorization_boundary_is_valid(self) -> None:
         expiry = validate_authorization_window(
             APPROVED_ON, APPROVAL_CREATED_AT, APPROVED_EXPIRY
         )
-        self.assertEqual(expiry, datetime(2026, 9, 13, tzinfo=timezone.utc))
+        self.assertEqual(expiry, datetime(2026, 12, 21, tzinfo=timezone.utc))
 
     def test_more_than_thirty_days_is_rejected(self) -> None:
         with self.assertRaisesRegex(ContractError, "30-day maximum"):
             validate_authorization_window(
                 APPROVED_ON,
                 APPROVAL_CREATED_AT,
-                date(2026, 9, 14),
+                date(2026, 12, 22),
             )
 
     def test_approval_time_must_match_approved_on(self) -> None:
         with self.assertRaisesRegex(ContractError, "approved_on date differ"):
             validate_authorization_window(
                 APPROVED_ON,
-                datetime(2026, 8, 15, 6, 8, 3, tzinfo=timezone.utc),
+                datetime(2026, 11, 22, 6, 8, 3, tzinfo=timezone.utc),
                 APPROVED_EXPIRY,
             )
 
     def test_future_owner_approval_is_rejected(self) -> None:
-        result = self.run_checker(now="2026-08-14T06:08:02Z")
+        result = self.run_checker(now="2026-11-21T22:47:59Z")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("owner approval is not yet effective", result.stderr)
 
@@ -245,17 +269,17 @@ class TrivyIgnoreContractTests(unittest.TestCase):
         self.assertIn("bytes differ", result.stderr)
 
     def test_expired_entry_is_rejected(self) -> None:
-        result = self.run_checker(now="2026-09-13T00:00:01Z")
+        result = self.run_checker(now="2026-12-21T00:00:01Z")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("exception is expired", result.stderr)
 
     def test_effective_expiry_instant_is_rejected(self) -> None:
-        result = self.run_checker(now="2026-09-13T00:00:00Z")
+        result = self.run_checker(now="2026-12-21T00:00:00Z")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("exception is expired", result.stderr)
 
     def test_one_second_before_expiry_is_valid(self) -> None:
-        result = self.run_checker(now="2026-09-12T23:59:59Z")
+        result = self.run_checker(now="2026-12-20T23:59:59Z")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_now_requires_canonical_utc_timestamp(self) -> None:
@@ -266,7 +290,7 @@ class TrivyIgnoreContractTests(unittest.TestCase):
                 self.assertIn("canonical RFC 3339 UTC timestamp", result.stderr)
 
     def test_expiry_byte_drift_is_rejected(self) -> None:
-        result = self.run_checker(CANONICAL.replace(b"2026-09-13", b"2026-09-12", 1))
+        result = self.run_checker(CANONICAL.replace(b"2026-12-21", b"2026-12-20", 1))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("bytes differ", result.stderr)
 

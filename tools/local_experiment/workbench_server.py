@@ -5,6 +5,7 @@ import base64
 import contextlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer as HTTPServer
 import json
+import database_http_json
 from pathlib import Path
 import re
 from types import SimpleNamespace
@@ -20,13 +21,22 @@ import schedule_resident
 import stage_exports
 import warehouse_resident
 import request_auth
+from http_origin import request_origin_allowed
 from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
+RESULT_CHART = INDEX.with_name("result_chart.js")
+STATIC_ASSETS = {
+    '/assets/result_chart.js': (RESULT_CHART, 'application/javascript; charset=utf-8'),
+    '/assets/base_i18n.js': (INDEX.with_name('base_i18n.js'), 'application/javascript; charset=utf-8'),
+    '/assets/saved_lineage.js': (INDEX.with_name('saved_lineage.js'), 'application/javascript; charset=utf-8'),
+    '/assets/result_export.js': (INDEX.with_name('result_export.js'), 'application/javascript; charset=utf-8'),
+    '/assets/workbench.css': (INDEX.with_name('workbench.css'), 'text/css; charset=utf-8'),
+}
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
 EDIT_ROLES = {'admin', 'data_engineer'}
 GET_ROUTES = {path: ALL_ROLES for path in (
-    '/', '/index.html', '/api/session', '/api/status', '/api/catalog', '/api/lineage',
+    '/', '/index.html', *STATIC_ASSETS, '/api/session', '/api/status', '/api/catalog', '/api/lineage',
     '/api/history', '/api/models', '/api/pawprints')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
 GET_ROUTES['/api/stages'] = {'admin'}
@@ -103,21 +113,6 @@ def lake_input(body):
     return None, dict(filename=filename, content=content)
 
 
-def request_origin_allowed(headers):
-    """Match the browser authority; TLS proxies must preserve Host."""
-    origin, host = headers.get('Origin'), headers.get('Host')
-    if not origin or not host:
-        return False
-    if origin == 'http://' + host:
-        return True
-    if origin == 'https://' + host:
-        try:
-            return request_auth.shared_mode()
-        except request_auth.AuthenticationError:
-            return False
-    return False
-
-
 class WorkbenchHandler(BaseHTTPRequestHandler):
     def database_request(self, method):
         """Database mode has its own strict routing and identity boundary."""
@@ -149,11 +144,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     maximum_role=principal.maximum_role, authenticated=True,
                     data_mode='database', platform_admin=principal.platform_admin))
                 return
-            if method == 'GET' and url.path in ('/', '/index.html'):
+            if method == 'GET' and url.path in ('/', '/index.html', *STATIC_ASSETS):
                 parameters(())
-                data = INDEX.read_bytes()
+                asset, content_type = STATIC_ASSETS.get(url.path, (INDEX, 'text/html; charset=utf-8'))
+                data = asset.read_bytes()
                 self.send_response(200)
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.send_header('Content-Type', content_type)
                 self.send_header('Content-Length', str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)
@@ -227,12 +223,16 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             elif path == '/api/v1/queries' and method == 'POST':
                 parameters(())
                 body = self.database_body()
-                if set(body) != {'sql', 'request_id', 'worksheet_id', 'context', 'mode', 'max_rows'}:
+                fields = {'sql', 'request_id', 'worksheet_id', 'context', 'mode', 'max_rows'}
+                full_results = set(body) == fields | {'result_mode'} and body['result_mode'] == 'all'
+                if set(body) != fields and not full_results:
                     raise ValueError('Invalid query fields')
                 for name in ('sql', 'request_id', 'worksheet_id'):
                     if not isinstance(body[name], str) or not body[name].strip():
                         raise ValueError('Query text and identifiers are required')
-                if body['mode'] not in ('read-only', 'sandbox-write', 'admin-write') or type(body['max_rows']) is not int or not 1 <= body['max_rows'] <= 10000:
+                if ((full_results and (body['max_rows'] is not None or body['mode'] != 'read-only')) or
+                        (not full_results and (body['mode'] not in ('read-only', 'sandbox-write', 'admin-write') or
+                         type(body['max_rows']) is not int or not 1 <= body['max_rows'] <= 10000))):
                     raise ValueError('Invalid query mode or row limit')
                 c = body['context']
                 if not isinstance(c, dict) or set(c) != {'database_id', 'schema_id', 'warehouse_id', 'binding_revision', 'generation_id'}:
@@ -245,7 +245,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 if context.generation_id != c['generation_id']:
                     raise inventory.InventoryError('STALE_CONTEXT', 409, 'Database generation changed')
                 result = query_service.submit(principal, context, body['sql'], mode=body['mode'],
-                    max_rows=body['max_rows'], request_id=body['request_id'], worksheet_id=body['worksheet_id'])
+                    max_rows=body['max_rows'], request_id=body['request_id'], worksheet_id=body['worksheet_id'],
+                    **({'result_mode': 'all'} if full_results else {}))
             elif method == 'GET' and re.fullmatch(r'/api/v1/queries/[^/]+', path):
                 parameters(())
                 result = query_service.inspect_query(principal, path.split('/')[4], selected_role=role)
@@ -404,23 +405,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         return True
 
     def database_body(self):
-        def pairs(items):
-            result = {}
-            for key, value in items:
-                if key in result:
-                    raise ValueError('Duplicate JSON field')
-                result[key] = value
-            return result
-        if self.headers.get_content_type() != 'application/json' or len(self.headers.get_all('Content-Length', [])) != 1:
-            raise ValueError('JSON body required')
-        length = int(self.headers['Content-Length'])
-        if not 0 < length <= 10 * 1024 * 1024 or self.headers.get('Transfer-Encoding'):
-            raise ValueError('Invalid body length')
-        value = json.loads(self.rfile.read(length), object_pairs_hook=pairs,
-            parse_constant=lambda _: (_ for _ in ()).throw(ValueError('Invalid JSON number')))
-        if not isinstance(value, dict):
-            raise ValueError('Body must be an object')
-        return value
+        return database_http_json.database_body(self)
 
     def end_headers(self):
         # Only the Workbench's own origin may control this local lab.
@@ -434,18 +419,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def respond(self, value, status=200):
-        data = json.dumps(value, default=str).encode("utf-8")
-        self.send_response(status)
-        creation_location = getattr(self, '_creation_location', None)
-        if creation_location:
-            self.send_header('Location', creation_location)
-            del self._creation_location
-        if status == 401:
-            self.send_header('WWW-Authenticate', 'Basic realm="Shirokuma", charset="UTF-8"')
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        return database_http_json.respond(self, value, status)
 
     def do_OPTIONS(self):
         self.send_response(204)
@@ -503,10 +477,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                               'maximum_role': self.maximum_role,
                               'authenticated': self.authenticated_user is not None})
                 return
-            elif url.path in ("/", "/index.html"):
-                data = INDEX.read_bytes()
+            elif url.path in ('/', '/index.html', *STATIC_ASSETS):
+                asset, content_type = STATIC_ASSETS.get(url.path, (INDEX, 'text/html; charset=utf-8'))
+                data = asset.read_bytes()
                 self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(data)))
                 self.end_headers()
                 self.wfile.write(data)

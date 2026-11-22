@@ -6,6 +6,7 @@ import json
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_foundation_baseline_database_ui as foundation_ui
+from workbench_source import WorkbenchSource
 
 resources_ui = foundation_ui.resources_ui
 CONTROLLERS = r"""
@@ -118,7 +119,7 @@ assert.equal(JSON.stringify(i18n.ja),globalJA);
 
     def test_real_navigation_sre_only_shared_capture_no_auto_get(self):
         self.navigation_javascript(r"""
-session.platform_admin=true;await dualBoot();$('tab-compute').click();await controllerFetch();const saved=dbFoundationControllers.record,count=calls.length;
+session.platform_admin=true;await dualBoot();$('tab-compute').click();await controllerFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const saved=dbFoundationControllers.record,count=calls.length;
 for(const locale of ['ja','en','ja','en']){setLanguage(locale);$('tab-bears').click();$('bear-tab-sre').click();scope('sre');assert.equal($('observation-sre-foundation-controllers-panel').hidden,false);assert.ok(controllerText(controllerIDs[0]).includes(saved.observed_at));scope('sre','database');assert.equal($('observation-sre-foundation-controllers-panel').hidden,true);$('bear-tab-policy').click();scope('policy');assert.equal($('observation-policy-foundation-controllers-panel'),null);$('tab-warehouse').click();$('tab-compute').click();assert.equal(dbFoundationControllers.record,saved);assert.equal(calls.length,count);}
 await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length,1);assert.equal(dbFoundationControllers.record,saved);
 """)
@@ -180,7 +181,7 @@ await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length
 
     def test_late_reauth_cannot_revoke_new_capture_current_bad_parse_purges(self):
             self.javascript(r"""
-    await controllerBoot();await controllerFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbFoundationControllersRefreshAuth();await tick();activeTab='compute';dbControls();await controllerFetch();const current=dbFoundationControllers.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbFoundationControllers.record,current);assert.equal(dbAdmin.platform,true);
+    await controllerBoot();dbAISettings.autoOpened=true;await controllerFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbFoundationControllersRefreshAuth();await tick();activeTab='compute';dbControls();await controllerFetch();const current=dbFoundationControllers.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbFoundationControllers.record,current);assert.equal(dbAdmin.platform,true);
     sessionRoute=async()=>({malformed:true});await dbFoundationControllersRefreshAuth();allControllersEmpty();assert.equal(dbAdmin.platform,true);
     """)
 
@@ -224,8 +225,9 @@ await dbFoundationControllersRefreshAuth();assert.equal(controllerCalls().length
 await controllerBoot();await baselineFetch();const saved=dbFoundationBaseline.record,busy={};dbFoundationBaseline.busy=busy;await controllerFetch();await dbFoundationControllersRefreshAuth();assert.equal(dbFoundationBaseline.record,saved);assert.equal(dbFoundationBaseline.busy,busy);
 """)
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertIn('#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel',html)
-        self.assertIn('repeat(auto-fit,minmax(min(100%,12rem),1fr))',html)
+        css = WorkbenchSource(html).css
+        self.assertIn('#observation-foundation-controllers-panel,#observation-sre-foundation-controllers-panel',css)
+        self.assertIn('repeat(auto-fit,minmax(min(100%,12rem),1fr))',css)
         self.assertIn('未報告（0省略の場合あり）',html)
 
 

@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 from contextlib import ExitStack, contextmanager
 from types import SimpleNamespace
 
+from fixture_lifecycle import setup_fixture
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 
 
@@ -12,10 +14,25 @@ class QueryStatementWireTests(unittest.TestCase):
     def setUp(self):
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs = qs
+
+    def test_public_submit_advertises_only_parametric_datetime(self):
+        sql = "SELECT CAST(TIMESTAMP '2026-01-01 12:34:56.123456' AS TIMESTAMP(6))"
+        columns = [dict(name='value', type='timestamp(6)')]
+        data = [['2026-01-01 12:34:56.123456']]
+        with patch.object(self.qs, '_transport',
+                return_value=dict(id='timestamp_backend', columns=columns, data=data)) as transport:
+            page = self.qs.submit(self.f.principal, self.f.context(), sql, mode='read-only',
+                max_rows=10, request_id=None, worksheet_id=None)
+        transport.assert_called_once()
+        self.assertEqual(transport.call_args.args[1], 'POST')
+        self.assertEqual(transport.call_args.args[3], sql.encode())
+        headers = transport.call_args.args[2].headers
+        self.assertEqual(headers['X-Trino-Client-Capabilities'], 'PARAMETRIC_DATETIME')
+        self.assertEqual(headers['Accept-Encoding'], 'identity')
+        self.assertEqual(page['columns'], columns)
+        self.assertEqual(page['data'], data)
 
     def test_public_submit_preserves_original_and_sends_one_statement(self):
         cases = (
@@ -77,6 +94,7 @@ class QueryStatementWireTests(unittest.TestCase):
         execution = self.f.begin()
         frozen, parent, _, _ = ds._live[execution.id]
         original_headers = dict(frozen.headers)
+        self.assertEqual(original_headers['X-Trino-Client-Capabilities'], 'PARAMETRIC_DATETIME')
         cases = (
             ('job_sql', "SELECT 'a'';b'; -- ;", "SELECT 'a'';b' -- ;"),
             ('drop_table', 'DROP TABLE "sales"."raw"."a"";b"; /* outer /* ; */ ; */',
@@ -90,6 +108,7 @@ class QueryStatementWireTests(unittest.TestCase):
             step = str(step)
             with self.subTest(action=action), patch.object(self.qs, '_transport',
                     return_value=dict(id='private_backend', data=[])) as transport, \
+                    patch('trino_auth.prepare_backend_v2', side_effect=AssertionError('recaptured frozen headers')), \
                     patch.object(wr, 'check_sql_policy', side_effect=AssertionError('public policy on generated SQL')):
                 page = self.qs._submit_dataops(self.f.principal, ds._Statement(action, original),
                     frozen, parent, execution.id, step)
@@ -192,9 +211,7 @@ class QueryPollCleanupTests(unittest.TestCase):
     def setUp(self):
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs = qs
         self.context = self.f.context()
         self.methods = []
@@ -307,9 +324,7 @@ class QueryOriginLivenessTests(unittest.TestCase):
         import warehouse_resident as wr
         from test_dataops_service import DataOpsTests
         persistent_trino = wr.persistent_trino
-        self.f = DataOpsTests()
-        self.f.setUp()
-        self.addCleanup(self.f.doCleanups)
+        self.f = setup_fixture(self, DataOpsTests())
         self.qs, self.wr = qs, wr
         self.old_origin = 'http://127.0.0.1:1234'
         self.new_origin = 'http://127.0.0.1:5678'
@@ -465,9 +480,7 @@ class QueryHistoryTests(unittest.TestCase):
         import query_service as qs
         import warehouse_admission as admission
         from test_dataops_service import DataOpsTests
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         context = fixture.context(schema='marts', role='bi_viewer')
         accepted = admission.accepted
         retired = []
@@ -498,9 +511,7 @@ class QueryHistoryTests(unittest.TestCase):
         import control_store
         import query_service as qs
         from test_dataops_service import DataOpsTests
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         context = fixture.context(schema='marts', role='bi_viewer')
         deletes = []
         def transport(url, method, pin, body=None):
@@ -529,9 +540,7 @@ class QueryHistoryTests(unittest.TestCase):
         import control_store
         import data_management as dm
         import query_service as qs
-        fixture = DataOpsTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
+        fixture = setup_fixture(self, DataOpsTests())
         old = fixture.begin('old')
         ref = fixture.existing()
         old_query = old.select(ref, ['id'], step='old-read')['id']
@@ -680,9 +689,7 @@ class QueryExecutionTests(unittest.TestCase):
     def setUp(self):
         from test_request_auth import PrincipalTests
         QueryExecutionTests._mock_lifecycle(self)
-        self.fixture = PrincipalTests()
-        self.fixture.setUp()
-        self.addCleanup(self.fixture.doCleanups)
+        self.fixture = setup_fixture(self, PrincipalTests())
         import control_store
         import data_management as dm
         with control_store.connect() as db:
@@ -746,6 +753,45 @@ class QueryExecutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 wr.check_sql_policy(sql, 'admin-write', 'admin', context=ctx,
                     _platform_authorized=decision.platform_admin)
+
+    def test_scalar_from_keeps_context_catalog_and_role_boundaries(self):
+        from dataclasses import replace
+        import warehouse_resident as wr
+        for role, mode in (('bi_viewer', 'read-only'), ('data_engineer', 'read-only'),
+                           ('admin', 'read-only'), ('admin', 'admin-write')):
+            ctx = replace(self.context('marts', 'data_engineer'), selected_role=role)
+            sql = 'SELECT substring(phone FROM 1 FOR 2), extract(YEAR FROM stamp) FROM sales.marts.events'
+            with self.subTest(role=role, mode=mode):
+                self.assertEqual(wr.check_sql_policy(sql, mode, role, context=ctx), sql)
+            for target in ('finance.marts.events', 'sales.missing.events', 'system.runtime.queries'):
+                for sql in (f'SELECT substring(phone FROM 1) FROM {target}',
+                            f'SELECT substring((SELECT phone FROM {target}) FROM 1)'):
+                    with self.subTest(role=role, mode=mode, sql=sql), self.assertRaises(ValueError):
+                        wr.check_sql_policy(sql, mode, role, context=ctx)
+        ctx = self.context()
+        for sql in ('SELECT substring(phone FROM 1) FROM sales.raw.events',
+                    "INSERT INTO sales.marts.events SELECT substring('abc' FROM 1)"):
+            with self.assertRaises(ValueError):
+                wr.check_sql_policy(sql, role='bi_viewer', context=ctx)
+
+    def test_nested_scalar_source_rejected_before_query_id_and_admission(self):
+        import query_service as qs
+        import request_auth
+        ctx = self.context()
+        decision = request_auth.authorize_database(self.principal, ctx.database_id, 'bi_viewer',
+            expected_generation_id=ctx.generation_id)
+        with patch.object(qs.trino_auth, 'prepare_backend_v2', return_value=(decision, {})), \
+             patch.object(qs.uuid, 'uuid4') as query_id, \
+             patch.object(qs.admission, 'admit') as admit, \
+             patch.object(qs, '_transport') as transport:
+            with self.assertRaises(qs.QueryError) as error:
+                qs.submit(self.principal, ctx,
+                    'SELECT substring((SELECT phone FROM finance.marts.events) FROM 1 FOR 2)',
+                    mode='read-only', max_rows=10, request_id=None, worksheet_id=None)
+            self.assertEqual(error.exception.code, 'SQL_PERMISSION_DENIED')
+            query_id.assert_not_called()
+            admit.assert_not_called()
+            transport.assert_not_called()
 
     def test_cli_uses_authenticated_endpoint_and_refuses_redirects(self):
         import json

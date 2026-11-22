@@ -7,3 +7,5 @@ RUN /opt/keycloak/bin/kc.sh build --db=dev-file --health-enabled=true
 LABEL shirokuma.dev.component="trino-identity-keycloak" \
       shirokuma.dev.scope="local-experiment-only" \
       shirokuma.dev.keycloak-version="26.7.4"
+# Same non-root user as the Keycloak base image, stated explicitly.
+USER 1000

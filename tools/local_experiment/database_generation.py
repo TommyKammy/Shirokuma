@@ -12,6 +12,18 @@ import re
 
 import yaml
 
+# libyaml's safe loader builds the same objects as yaml.SafeLoader but is far
+# faster on the large generated bundles; fall back when it is not compiled in.
+SAFE_YAML_LOADER = getattr(yaml, 'CSafeLoader', yaml.SafeLoader)
+
+
+def yaml_load(text):
+    return yaml.load(text, Loader=SAFE_YAML_LOADER)
+
+
+def yaml_load_all(text):
+    return yaml.load_all(text, Loader=SAFE_YAML_LOADER)
+
 from data_management import validate_sql_name
 from database_security import render_file_acl_identities, render_opa_policy_identities
 from trino_auth import scoped_username
@@ -252,7 +264,7 @@ def _tofu(spec):
 
 
 def _yaml(profile, path):
-    return yaml.safe_load(profile[path])
+    return yaml_load(profile[path])
 
 
 def _env(container, name, value=None, secret=None, key=None):
@@ -521,7 +533,7 @@ def render(spec, root=ROOT):
              'seaweedfs-s3-credentials': spec['shared_secret_refs']['seaweed_server']['name']}
     for path, content in profile.items():
         if any(path.startswith(directory + '/') for directory in PROFILE_DIRS):
-            document = yaml.safe_load(content)
+            document = yaml_load(content)
             _references(document, names)
             if document.get('kind') != 'Kustomization':
                 _mark(document, spec['generation_id'])

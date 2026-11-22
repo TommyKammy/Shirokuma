@@ -555,6 +555,41 @@ class Provider:
         _require(pod['metadata'].get('namespace') == self._config['kube']['namespace'], 'FOUNDATION_NAMESPACE_MISMATCH')
         return deployment['metadata']['name']
 
+    def _coordinator_profile(self, deployment):
+        if 'coordinator' not in self._config['trino']:
+            return None
+        profile = foundation.coordinator_profile(self._config)
+        template = deployment.get('spec', {}).get('template', {})
+        containers = template.get('spec', {}).get('containers', [])
+        annotations = template.get('metadata', {}).get('annotations', {})
+        _require(len(containers) == 1 and containers[0].get('name') == 'trino' and
+            self._matches_spec(containers[0].get('resources'), profile['resources']) and
+            all(annotations.get(key) == value for key, value in profile['annotations'].items()) and
+            (profile.get('stage_limit') is not None or
+                foundation.STAGE_LIMIT_ANNOTATION not in annotations),
+            'FOUNDATION_COMPUTE_MISMATCH')
+        name = self._config['prefix']+'-trino-config'
+        config = self._json(self._cmd(['get', 'configmap', name, '-o', 'json']))
+        uid = self._labels(config)
+        _require(config['metadata'].get('name') == name, 'FOUNDATION_OWNERSHIP_MISMATCH')
+        _require(config['metadata'].get('namespace') == self._config['kube']['namespace'],
+            'FOUNDATION_NAMESPACE_MISMATCH')
+        # Observe profile material without expanding legacy stable enrollment.
+        key = 'configmap/'+name
+        with self._lock:
+            for pins in (self._incarnation, self._bound_pins):
+                if key in pins:
+                    _require(pins[key] == uid, 'FOUNDATION_INCARNATION_CHANGED')
+        _require(config.get('data', {}).get('jvm.config') == profile['jvm_config'],
+            'FOUNDATION_CONFIG_MISMATCH')
+        try:
+            actual_stage = foundation.stage_limit_property(
+                config.get('data', {}).get('config.properties'))
+        except foundation.ConfigError:
+            raise Rejected('FOUNDATION_CONFIG_MISMATCH') from None
+        _require(actual_stage == profile.get('stage_limit'), 'FOUNDATION_CONFIG_MISMATCH')
+        return profile
+
     def _compute(self):
         # All fixed matching compute must be owned and ready, including a stale
         # serving worker when the configured worker count is zero.
@@ -564,9 +599,12 @@ class Provider:
         expected = {'trino-local': 1, 'trino-local-worker': self._config['trino']['workers']}
         counts = dict.fromkeys(expected, 0)
         result = []
+        coordinator_profile = None
         for name, replicas in expected.items():
             deployment = self._owned('deployment', name)
             _require(deployment.get('spec', {}).get('replicas') == replicas, 'FOUNDATION_COMPUTE_MISMATCH')
+            if name == 'trino-local':
+                coordinator_profile = self._coordinator_profile(deployment)
         for pod in items:
             owner = self._pod(pod)
             _require(owner in expected, 'FOUNDATION_OWNERSHIP_MISMATCH')
@@ -574,6 +612,13 @@ class Provider:
             containers = pod['spec']['containers']
             _require(len(containers) == 1 and containers[0]['name'] == 'trino' and
                 containers[0]['image'] == self._config['images']['trino'], 'FOUNDATION_IMAGE_MISMATCH')
+            if owner == 'trino-local' and coordinator_profile is not None:
+                annotations = pod['metadata'].get('annotations', {})
+                _require(self._matches_spec(containers[0].get('resources'), coordinator_profile['resources']) and
+                    all(annotations.get(key) == value
+                        for key, value in coordinator_profile['annotations'].items()) and
+                    (coordinator_profile.get('stage_limit') is not None or
+                        foundation.STAGE_LIMIT_ANNOTATION not in annotations), 'FOUNDATION_COMPUTE_MISMATCH')
             status = pod.get('status', {}).get('containerStatuses', [])
             _require(len(status) == 1 and status[0].get('ready') is True and
                 status[0].get('imageID', '').endswith(self._config['images']['trino'].split('@')[1]), 'FOUNDATION_IMAGE_MISMATCH')

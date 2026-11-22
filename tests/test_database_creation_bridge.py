@@ -23,6 +23,9 @@ import request_auth
 from warehouse_operations import OperationError
 from warehouse_operator import Operator, save_private
 
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
+
 
 class BaseParentFixture(preparation_tests.PreparationFixture):
     """Real sealed first FULL, with a lost Workbench ACT response."""
@@ -145,7 +148,7 @@ class BaseParentProjectionTests(BaseParentFixture):
 
 class BridgeFixture(unittest.TestCase):
     def setUp(self):
-        temporary = tempfile.TemporaryDirectory(dir='/private/tmp')
+        temporary = tempfile.TemporaryDirectory(dir=SHORT_TMP)
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
         self.root.chmod(0o700)

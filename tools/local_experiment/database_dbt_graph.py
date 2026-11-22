@@ -385,7 +385,7 @@ class Graph:
         dbt._phase(self.ident, 'BUILDING' if self.phase == 'build' else 'TESTING', self.phase, uid)
         self.stack = ExitStack()
         try:
-            self.stack.enter_context(ds._dbt_scope(self.principal, self.context, self.parent,
+            self.stack.enter_context(ds.dbt_child_scope(self.principal, self.context, self.parent,
                 self.frozen, self.credential, self.ident, self.phase, uid))
             execution = ds.begin(self.principal, self.context, route='dbt-graph-' + self.phase,
                 idempotency_key=self.ident + ':' + uid, payload=payload(run, self.phase, uid))

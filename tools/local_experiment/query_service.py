@@ -21,10 +21,15 @@ from typing import Optional
 
 import control_store
 import data_management as registry
+import database_http_json
 import request_auth
 import trino_auth
 import warehouse_admission as admission
 from query_context import QueryError, ResolvedQueryContext, resolve_context, _resolve_context, revalidate_admission
+
+
+FULL_RESPONSE_LIMIT = 16 * 1024 * 1024
+FULL_REQUEST_TIMEOUT = 30
 
 
 @dataclass(repr=False)
@@ -38,6 +43,9 @@ class _Pin:
     tokens: dict = field(default_factory=dict)
     cancel_urls: list = field(default_factory=list)
     max_rows: Optional[int] = 1000
+    full_results: bool = False
+    full_next_token: object = None
+    full_pending_token: object = None
     rows: int = 0
     columns: list = field(default_factory=list)
     lock: object = field(default_factory=threading.RLock, repr=False)
@@ -49,6 +57,9 @@ class _Pin:
     initial_error: object = field(default=None, repr=False)
     initial_attempted: bool = True
     plan: object = field(default=None, repr=False)
+    transport: object = field(default=None, repr=False)
+    payloads: dict = field(default_factory=dict, repr=False)
+    dataops_link: object = field(default=None, repr=False)
 
 
 _pins = {}
@@ -56,6 +67,25 @@ _lifetime = ExitStack()
 _lock = threading.RLock()
 _origin = None
 atexit.register(_lifetime.close)
+
+
+def _close_transport(pin):
+    if pin is None:
+        return
+    connection, pin.transport = pin.transport, None
+    if connection is not None:
+        try:
+            connection.close()
+        except OSError:
+            pass
+
+
+def _close_all_transports():
+    for pin in list(_pins.values()):
+        _close_transport(pin)
+
+
+atexit.register(_close_all_transports)
 
 
 def _acquire_query_owner(query_id):
@@ -79,6 +109,8 @@ def _acquire_query_owner(query_id):
 
 
 def _close_query_owner(pin):
+    if pin is not None:
+        _close_transport(pin)
     if pin is not None and pin.owner is not None:
         owner, pin.owner = pin.owner, None
         owner.close()
@@ -98,6 +130,9 @@ def _transport(url, method, pin, body=None):
     initial = method == 'POST' and parsed.path == '/v1/statement' and not parsed.query and body is not None
     if not initial and not any(target == url and method in methods for target, methods in pin.tokens.values()):
         raise QueryError('QUERY_NOT_FOUND', 404)
+    reuse = pin.full_results and method == 'GET'
+    if not reuse:
+        _close_transport(pin)
     import warehouse_resident as wr
     with wr.warehouse_activity():
         # accepted() precedes the shared gate: a queued old POST must check
@@ -123,12 +158,44 @@ def _transport(url, method, pin, body=None):
                 revalidate_admission(db, pin.plan.principal, pin.context,
                     backend_username=pin.headers['X-Trino-User'])
             pin.initial_attempted = True
-        connection = (http.client.HTTPSConnection(parsed.hostname, parsed.port or 443,
-            context=pin.tls, timeout=30) if parsed.scheme == 'https' else
-            http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=30))
+        connection = pin.transport if reuse else None
+        created = connection is None
+        if created:
+            connection = (http.client.HTTPSConnection(parsed.hostname, parsed.port or 443,
+                context=pin.tls, timeout=30) if parsed.scheme == 'https' else
+                http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=30))
+            if reuse:
+                pin.transport = connection
         timer = None
+        deadline = None
+        full_socket = None
+        response = None
+        keep_transport = False
         try:
-            if pin.plan is not None:
+            if pin.full_results:
+                deadline = time.monotonic() + FULL_REQUEST_TIMEOUT
+                connection.timeout = FULL_REQUEST_TIMEOUT
+                def expire_full():
+                    transport_socket = full_socket or connection.sock
+                    if transport_socket is not None:
+                        try:
+                            transport_socket.shutdown(socket.SHUT_RDWR)
+                        except OSError:
+                            pass
+                timer = threading.Timer(FULL_REQUEST_TIMEOUT, expire_full)
+                timer.daemon = True
+                timer.start()
+                if connection.sock is None:
+                    connection.connect()
+                full_socket = connection.sock
+                if not created:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise QueryError('QUERY_BACKEND_FAILED', 502)
+                    full_socket.settimeout(remaining)
+                if time.monotonic() >= deadline:
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+            elif pin.plan is not None:
                 import db_ai_plan
                 deadline = time.monotonic() + 10 if method == 'DELETE' else pin.plan.deadline
                 remaining = deadline - time.monotonic()
@@ -148,7 +215,28 @@ def _transport(url, method, pin, body=None):
             connection.request(method, parsed.path + ('?' + parsed.query if parsed.query else ''),
                                body=body, headers=pin.headers)
             response = connection.getresponse()
-            if pin.plan is None:
+            if pin.full_results:
+                expected_length = response.length
+                chunks, size = [], 0
+                while response.length != 0:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise QueryError('QUERY_BACKEND_FAILED', 502)
+                    if full_socket is not None:
+                        full_socket.settimeout(remaining)
+                    chunk = response.read1(min(8192, FULL_RESPONSE_LIMIT + 1 - size))
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > FULL_RESPONSE_LIMIT:
+                        raise QueryError('QUERY_BACKEND_FAILED', 502)
+                    chunks.append(chunk)
+                if time.monotonic() >= deadline:
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+                if response.length not in (None, 0) or (expected_length is not None and size != expected_length):
+                    raise QueryError('QUERY_BACKEND_FAILED', 502)
+                payload = b''.join(chunks)
+            elif pin.plan is None:
                 payload = response.read()
             else:
                 chunks, size = [], 0
@@ -170,7 +258,13 @@ def _transport(url, method, pin, body=None):
                     raise QueryError('AI_PLAN_TIMEOUT', 504)
             if not 200 <= response.status < 300:
                 raise QueryError('QUERY_BACKEND_FAILED', 502)
-            return json.loads(payload) if payload else {}
+            result = json.loads(payload) if payload else {}
+            if (pin.full_results and method == 'GET'
+                    and not getattr(response, 'will_close', True)
+                    and connection.sock is not None):
+                pin.transport = connection
+                keep_transport = True
+            return result
         except QueryError:
             raise
         except Exception:
@@ -178,7 +272,14 @@ def _transport(url, method, pin, body=None):
         finally:
             if timer is not None:
                 timer.cancel()
-            connection.close()
+                if pin.full_results:
+                    timer.join()
+            if pin.full_results and response is not None:
+                response.close()
+            if not keep_transport:
+                if pin.transport is connection:
+                    pin.transport = None
+                connection.close()
 
 
 def _registered(pin, url, methods, backend_id):
@@ -200,18 +301,24 @@ def _registered(pin, url, methods, backend_id):
     pin.tokens[token] = (url, frozenset(methods))
     if 'GET' in methods and 'DELETE' in methods and url not in pin.cancel_urls:
         pin.cancel_urls.append(url)
+        if pin.full_results:
+            pin.cancel_urls[:] = pin.cancel_urls[-1:]
     return token
 
 
-def _row(query_id):
+def _row(query_id, db=None):
     if not isinstance(query_id, str) or not query_id:
         raise QueryError('QUERY_NOT_FOUND', 404)
-    with control_store.connect() as db:
-        row = db.execute('''SELECT q.*, e.*,
+    query = '''SELECT q.*, e.*,
             COALESCE((SELECT execution_closure FROM warehouse_admissions a
                 WHERE a.kind='query' AND a.subject_id=q.id),'') AS execution_closure
             FROM query_records q JOIN query_execution_contexts e
-            ON q.id=e.query_id WHERE q.id=?''', (query_id,)).fetchone()
+            ON q.id=e.query_id WHERE q.id=?'''
+    if db is not None:
+        row = db.execute(query, (query_id,)).fetchone()
+        return dict(row) if row else None
+    with control_store.connect() as db:
+        row = db.execute(query, (query_id,)).fetchone()
         return dict(row) if row else None
 
 
@@ -264,22 +371,59 @@ def _retirement_only_denial(principal, context, *, backend_username=None):
 
 
 def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
-    row = _row(query_id)
-    if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
-        raise QueryError('QUERY_NOT_FOUND', 404)
-    if selected_role != row['selected_role']:
-        raise QueryError('CONTEXT_MISMATCH', 409)
-    try:
-        account = request_auth._principal_accounts().get(principal.principal_id)
-    except PermissionError:
-        if cleanup:
-            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-        raise QueryError('DB_ACCESS_REVOKED', 403) from None
-    if account is None:
-        if cleanup:
-            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-        raise QueryError('DB_ACCESS_REVOKED', 403)
-    if grants:
+    if not grants:
+        row = _row(query_id)
+        if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if selected_role != row['selected_role']:
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        try:
+            account = request_auth._principal_accounts().get(principal.principal_id)
+        except PermissionError:
+            if cleanup:
+                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+            _close_transport(_pins.get(query_id))
+            raise QueryError('DB_ACCESS_REVOKED', 403) from None
+        if account is None:
+            if cleanup:
+                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+            _close_transport(_pins.get(query_id))
+            raise QueryError('DB_ACCESS_REVOKED', 403)
+        return row
+
+    account_revoked = denied = False
+    logical_mode = False
+    with control_store.connect() as db:
+        db.execute('BEGIN')
+        row = _row(query_id, db=db)
+        if type(principal) is not request_auth.AuthenticatedPrincipal or row is None or row['actor'] != principal.principal_id:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if selected_role != row['selected_role']:
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        try:
+            account = request_auth._principal_accounts().get(principal.principal_id)
+        except PermissionError:
+            account = None
+        if account is None:
+            account_revoked = True
+        else:
+            try:
+                import logical_registry
+                logical_mode = logical_registry.creation_mode(db, row['database_id']) == 'logical_v1'
+                if logical_mode:
+                    context = _resolve_context(principal, row['database_id'], row['schema_id'], selected_role,
+                        warehouse_id=row['warehouse_id'], expected_binding_revision=row['binding_revision'],
+                        db=db, backend_username=row['backend_username'], account=account,
+                        mode='logical_v1')
+                    if (context.generation_id != row['generation_id'] or context.sql_catalog != row['sql_catalog']
+                            or context.sql_schema != row['sql_schema']
+                            or context.grant_revision != row['grant_revision']):
+                        raise QueryError('CONTEXT_MISMATCH', 409)
+            except (QueryError, PermissionError):
+                denied = True
+    if not account_revoked and not denied and not logical_mode:
+        # Legacy contexts keep their existing short context/final-authority
+        # connections; only logical mode shares the row transaction.
         try:
             context = resolve_context(principal, row['database_id'], row['schema_id'], selected_role,
                 warehouse_id=row['warehouse_id'], expected_binding_revision=row['binding_revision'])
@@ -287,24 +431,19 @@ def _owned(principal, query_id, selected_role, *, grants=True, cleanup=False):
                     or context.sql_schema != row['sql_schema']
                     or context.grant_revision != row['grant_revision']):
                 raise QueryError('CONTEXT_MISMATCH', 409)
-            import logical_registry
-            with control_store.connect() as db:
-                db.execute('BEGIN')
-                if logical_registry.creation_mode(db, context.database_id) == 'logical_v1':
-                    decision = request_auth.authorize_database(principal, context.database_id, selected_role,
-                        expected_generation_id=context.generation_id, db=db)
-                    try:
-                        identity = logical_registry.resolve_identity(db, principal.principal_id, context.database_id,
-                            selected_role, context.grant_revision, decision.platform_admin)
-                    except ValueError:
-                        raise PermissionError('Query identity is no longer current') from None
-                    if identity['backend_username'] != row['backend_username']:
-                        raise PermissionError('Query identity is no longer current')
         except (QueryError, PermissionError):
-            frozen = ResolvedQueryContext(**_metadata(row))
-            if cleanup and not _retirement_only_denial(principal, frozen, backend_username=row['backend_username']):
-                _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
-            raise QueryError('DB_ACCESS_REVOKED', 403) from None
+            denied = True
+    if account_revoked:
+        if cleanup:
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+        _close_transport(_pins.get(query_id))
+        raise QueryError('DB_ACCESS_REVOKED', 403) from None
+    if denied:
+        frozen = ResolvedQueryContext(**_metadata(row))
+        if cleanup and not _retirement_only_denial(principal, frozen, backend_username=row['backend_username']):
+            _best_cancel(query_id, cause='DB_ACCESS_REVOKED')
+        _close_transport(_pins.get(query_id))
+        raise QueryError('DB_ACCESS_REVOKED', 403) from None
     return row
 
 
@@ -313,10 +452,10 @@ def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=N
         db.execute('BEGIN IMMEDIATE')
         if admission.query_closure(db, query_id):
             raise QueryError('EXECUTION_CLOSED', 409)
-        registry.set_query_state(db, query_id, state)
+        registry.set_query_state(db, query_id, state, closure_checked=True)
         if backend_id is not None:
             try:
-                registry.set_query_backend_id(db, query_id, backend_id)
+                registry.set_query_backend_id(db, query_id, backend_id, closure_checked=True)
             except registry.RevisionConflict:
                 raise QueryError('CONTEXT_MISMATCH', 409)
         handle = _pins[query_id].admission
@@ -328,7 +467,9 @@ def _state(query_id, state, backend_id=None, evidence_ref=None, *, plan_result=N
             db_ai_plan.query_state(db, pin.plan, pin.context, query_id, state, backend_id, plan_result)
             if state in _TERMINAL or state == 'UNKNOWN':
                 pin.plan.raw = None
-        child = db.execute('SELECT operation_id,commit_result FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
+        child = None
+        if pin.dataops_link is not False:
+            child = db.execute('SELECT operation_id,commit_result FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
         if child is not None and state == 'FINISHED' and child['commit_result'] is not None:
             db.execute('UPDATE dataops_operations SET committed=1,result=? WHERE id=?',
                        (child['commit_result'], child['operation_id']))
@@ -358,6 +499,7 @@ _TERMINAL = frozenset(('FINISHED', 'FAILED', 'CANCELED'))
 
 def _cancel_locked(query_id, pin, row, url=None, *, caller_intent=True):
     if row['execution_closure']:
+        _close_transport(pin)
         return _reconcile_result(row)
     if row['state'] in _TERMINAL:
         _close_query_owner(pin)
@@ -412,6 +554,8 @@ def _page(query_id, page):
     if page.get('nextUri'):
         token = _registered(pin, page['nextUri'], ('GET', 'DELETE'), backend_id)
         next_uri = '/api/v1/queries/' + query_id + '/pages/' + token
+    if pin.full_results:
+        pin.full_next_token = token if next_uri else None
     if page.get('partialCancelUri'):
         _registered(pin, page['partialCancelUri'], ('DELETE',), backend_id)
     stats = page.get('stats', {})
@@ -439,15 +583,16 @@ def _page(query_id, page):
         truncated = len(data) > remaining or len(data) >= remaining and bool(next_uri)
         data = data[:remaining]
     pin.rows += len(data)
+    persist_backend = backend_id if row['backend_query_id'] is None else None
     if truncated and next_uri and state not in _TERMINAL:
-        _state(query_id, row['state'], backend_id)
+        _state(query_id, row['state'], persist_backend)
         try:
             state = _cancel_locked(query_id, pin, _row(query_id))['state']
         except QueryError:
             state = 'UNKNOWN'
         next_uri = None
     else:
-        _state(query_id, state, backend_id)
+        _state(query_id, state, persist_backend)
     result = dict(id=query_id, result_page_id=secrets.token_urlsafe(24), backend_query_id=backend_id, request_id=row['request_id'],
         worksheet_id=row['worksheet_id'], context=_metadata(row), columns=deepcopy(pin.columns),
         data=data, stats={key: value for key, value in stats.items() if key in {
@@ -460,6 +605,8 @@ def _page(query_id, page):
         result['error'] = {'code': 'QUERY_FAILED', 'message': 'Query execution failed'}
     if truncated:
         result['truncated'] = True
+    if pin.full_results:
+        result['result_mode'] = 'all'
     result['stats']['state'] = state
     return result
 
@@ -544,16 +691,28 @@ def _backend_statement(sql):
 
 
 def _pending_page(query_id, pin, *, state='QUEUED'):
+    # All callers may include the cold-start thread; serialize alias changes.
+    with pin.lock if pin.full_results else nullcontext():
+        return _pending_page_locked(query_id, pin, state=state)
+
+
+def _pending_page_locked(query_id, pin, *, state='QUEUED'):
     row = _row(query_id)
     next_uri = None
     if state == 'QUEUED':
         token = secrets.token_urlsafe(32)
         pin.pending_tokens.add(token)
+        if pin.full_results:
+            pin.full_pending_token = token
+            _prune_full(pin)
         next_uri = '/api/v1/queries/' + query_id + '/pages/' + token
-    return dict(id=query_id, backend_query_id=None, context=_metadata(row),
+    result = dict(id=query_id, backend_query_id=None, context=_metadata(row),
         request_id=row['request_id'], worksheet_id=row['worksheet_id'],
         columns=[], data=[], stats={'state': state}, state=state, next_uri=next_uri,
         cancel_uri='/api/v1/queries/' + query_id + '/cancel')
+    if pin.full_results:
+        result['result_mode'] = 'all'
+    return result
 
 
 def _wake_authorize(principal, query_id):
@@ -585,6 +744,9 @@ def _initial_failure(query_id, error):
         pin.initial_error = (error.code, error.status) if isinstance(error, QueryError) else (
             'QUERY_BACKEND_FAILED', 502)
         pin.initial_done.set()
+        if pin.full_results:
+            pin.initial_response = None
+            _prune_full(pin)
 
 
 def _cold_initial(principal, query_id, backend_sql):
@@ -619,10 +781,13 @@ def _cold_initial(principal, query_id, backend_sql):
         pin.initial_done.set()
 
 
-def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id):
+def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id, result_mode='preview'):
     global _origin
     import warehouse_resident as wr
     if not isinstance(context, ResolvedQueryContext):
+        raise QueryError('UNKNOWN_CONTEXT', 400)
+    if (result_mode not in ('preview', 'all') or
+            result_mode == 'all' and (max_rows is not None or mode != 'read-only')):
         raise QueryError('UNKNOWN_CONTEXT', 400)
     if (not isinstance(sql, str) or not sql.strip() or
             max_rows is not None and (type(max_rows) is not int or max_rows < 1)):
@@ -649,6 +814,7 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
     except (RuntimeError, PermissionError):
         raise QueryError('FEATURE_UNAVAILABLE', 501) from None
     headers.update({'X-Trino-Catalog': context.sql_catalog, 'X-Trino-Schema': context.sql_schema,
+                    'X-Trino-Client-Capabilities': 'PARAMETRIC_DATETIME',
                     'Accept-Encoding': 'identity'})
     query_id, credential_ref = str(uuid.uuid4()), secrets.token_urlsafe(32)
     headers = {key: value for key, value in headers.items() if key.lower() != 'x-trino-source'}
@@ -669,7 +835,7 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
                  context.binding_revision, context.grant_revision, headers['X-Trino-User'],
                  credential_ref, None, request_id, worksheet_id, sql))
         _pins[query_id] = _Pin(context, '', headers, tls, admission=handle, owner=owner,
-            max_rows=max_rows, initial_attempted=False)
+            max_rows=max_rows, full_results=result_mode == 'all', initial_attempted=False)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         owner.close()
         raise QueryError(error.code, error.status) from None
@@ -701,7 +867,8 @@ def submit(principal, context, sql, *, mode, max_rows, request_id, worksheet_id)
             with _pins[query_id].lock:
                 _owned(principal, query_id, context.selected_role, cleanup=True)
                 response = _receive(query_id, origin.rstrip('/') + '/v1/statement', 'POST', backend_sql.encode('utf-8'))
-                _pins[query_id].initial_response = deepcopy(response)
+                if not _pins[query_id].full_results:
+                    _pins[query_id].initial_response = deepcopy(response)
     except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as error:
         _initial_failure(query_id, error)
         raise QueryError(error.code, error.status) from None
@@ -797,6 +964,7 @@ def _capture_dataops(principal, context):
     if current != context:
         raise QueryError('CONTEXT_MISMATCH', 409)
     headers.update({'X-Trino-Catalog': context.sql_catalog, 'X-Trino-Schema': context.sql_schema,
+                    'X-Trino-Client-Capabilities': 'PARAMETRIC_DATETIME',
                     'Accept-Encoding': 'identity'})
     return _Pin(context, '', dict(headers), trino_auth.backend_ssl_context(), max_rows=None)
 
@@ -851,7 +1019,8 @@ def _submit_dataops(principal, statement, frozen, parent, operation_id, step):
             db.execute('INSERT INTO dataops_queries (operation_id,step,query_id,action,commit_result) VALUES (?,?,?,?,?)',
                        (operation_id, step, query_id, statement.action, statement.commit_result))
         _pins[query_id] = _Pin(context, frozen.origin, headers, frozen.tls,
-            admission=handle, owner=owner, max_rows=None, initial_attempted=False)
+            admission=handle, owner=owner, max_rows=None, initial_attempted=False,
+            dataops_link=operation_id)
     except BaseException:
         owner.close()
         raise
@@ -890,20 +1059,26 @@ def _receive(query_id, url, method, body=None):
 
 
 def _receive_accepted(query_id, url, method, body=None):
+    pin = _pins[query_id]
     # A durable dbt cancel/phase fence is checked outside transport uncertainty.
-    # No POST has happened when this check rejects the initial send.
-    if method in ('POST', 'GET'):
+    # No POST has happened when this check rejects the initial send.  Ordinary
+    # public queries have no dataops link: one fresh read proves that, and the
+    # immutable absence is reused for later pages.  A linked query is rechecked
+    # on every page and is never cached as absent.
+    if method in ('POST', 'GET') and pin.dataops_link is not False:
         try:
             with control_store.connect() as db:
                 db.execute('BEGIN')
                 link = db.execute('SELECT operation_id FROM dataops_queries WHERE query_id=?', (query_id,)).fetchone()
                 if link:
+                    pin.dataops_link = link['operation_id']
                     import db_dbt
                     db_dbt._check_operation(db, link['operation_id'])
+                else:
+                    pin.dataops_link = False
         except QueryError:
             _best_cancel(query_id)
             raise
-    pin = _pins[query_id]
     if pin.plan is not None and method in ('POST', 'GET'):
         import db_ai_plan
         try:
@@ -946,6 +1121,91 @@ def _receive_accepted(query_id, url, method, body=None):
         raise QueryError('QUERY_BACKEND_FAILED', 502) from None
 
 
+def _prune_full(pin):
+    """Called with pin.lock held; advancement acknowledges evicted pages."""
+    for cache in (pin.responses, pin.failures, pin.payloads):
+        while len(cache) > 2:
+            del cache[next(iter(cache))]
+    keep = set(pin.responses) | set(pin.payloads) | set(pin.failures) | {pin.full_next_token}
+    if pin.cancel_urls:
+        latest = pin.cancel_urls[-1]
+        cancellation = next((key for key in reversed(pin.tokens)
+                             if pin.tokens[key][0] == latest and 'DELETE' in pin.tokens[key][1]), None)
+        keep.add(cancellation)
+    pin.tokens = {key: value for key, value in pin.tokens.items() if key in keep}
+    pin.pending_tokens.intersection_update(set(pin.responses) | set(pin.payloads) | {pin.full_pending_token})
+
+
+def _remember_full(pin, token, response):
+    # The replay cache owns an immutable UTF-8 JSON encoding of the fresh page,
+    # not the mapping itself.  The caller receives the freshly built mapping in
+    # a dict subclass that carries that same encoding, so the HTTP layer writes
+    # the bytes without serializing the page again.  A caller mutating its
+    # mapping cannot change the cache; cached replays decode a fresh object.
+    payload = database_http_json.encode(response)
+    pin.payloads[token] = payload
+    next_token = response['next_uri'].rsplit('/', 1)[1] if response.get('next_uri') else None
+    pin.full_pending_token = next_token if next_token in pin.pending_tokens else None
+    _prune_full(pin)
+    return database_http_json.JSONResponse(response, payload)
+
+
+def _fetch_full(principal, query_id, page_token, selected_role, pin):
+    if page_token in pin.pending_tokens:
+        pin.initial_done.wait(0.05)
+    with pin.lock:
+        row = _owned(principal, query_id, selected_role, cleanup=True)
+        if row['execution_closure']:
+            _close_transport(pin)
+            raise QueryError('EXECUTION_CLOSED', 409)
+        if page_token in pin.payloads:
+            response = json.loads(pin.payloads[page_token])
+            if row['state'] in ('CANCELED', 'FAILED', 'UNKNOWN'):
+                _close_transport(pin)
+                response['state'] = response['stats']['state'] = row['state']
+                response['next_uri'] = None
+            return response
+        if page_token in pin.failures:
+            _close_transport(pin)
+            raise QueryError(*pin.failures[page_token])
+        if page_token in pin.pending_tokens:
+            if row['state'] == 'CANCELED':
+                _close_transport(pin)
+                response = _pending_page(query_id, pin, state='CANCELED')
+            elif pin.initial_error is not None:
+                _close_transport(pin)
+                pin.failures[page_token] = pin.initial_error
+                _prune_full(pin)
+                raise QueryError(*pin.initial_error)
+            elif pin.initial_response is not None:
+                response = pin.initial_response
+                pin.initial_response = None
+            else:
+                response = _pending_page(query_id, pin)
+            return _remember_full(pin, page_token, response)
+        registered = pin.tokens.get(page_token)
+        # Only the current backend cursor can dispatch. Replay keys are handled
+        # above, so a consumed cursor can never issue another backend request.
+        if page_token != pin.full_next_token or not registered or 'GET' not in registered[1]:
+            raise QueryError('QUERY_NOT_FOUND', 404)
+        if row['state'] == 'UNKNOWN':
+            _close_transport(pin)
+            raise QueryError('ADMISSION_CONFLICT', 409)
+        if row['state'] in _TERMINAL:
+            _close_transport(pin)
+            raise QueryError('CONTEXT_MISMATCH', 409)
+        pin.initial_response = None
+        try:
+            response = _receive(query_id, registered[0], 'GET')
+            _owned(principal, query_id, selected_role, cleanup=True)
+        except QueryError as error:
+            _close_transport(pin)
+            pin.failures[page_token] = (error.code, error.status)
+            _prune_full(pin)
+            raise
+        return _remember_full(pin, page_token, response)
+
+
 def fetch(principal, query_id, page_token, *, selected_role):
     pin = _pins.get(query_id)
     if pin is None:
@@ -953,6 +1213,8 @@ def fetch(principal, query_id, page_token, *, selected_role):
         if row['execution_closure']:
             raise QueryError('EXECUTION_CLOSED', 409)
         raise QueryError('QUERY_CONTEXT_LOST', 409)
+    if pin.full_results:
+        return _fetch_full(principal, query_id, page_token, selected_role, pin)
     if page_token in pin.pending_tokens:
         # Bounded wait outside the lock prevents tight pending-page polling and
         # lets cancellation proceed even while shared Wake is still running.
@@ -1047,7 +1309,7 @@ def _cancel_registered(principal, query_id, token, *, selected_role):
         registered = pin.tokens.get(token)
         if not registered or not {'GET', 'DELETE'}.issubset(registered[1]):
             raise QueryError('QUERY_NOT_FOUND', 404)
-        return _cancel_locked(query_id, pin, row, registered[0])
+        return _cancel_locked(query_id, pin, row, None if pin.full_results else registered[0])
 
 
 def inspect_query(principal, query_id, *, selected_role):

@@ -39,8 +39,8 @@ class LogicalAccessTests(unittest.TestCase):
         os.environ['SHIROKUMA_RUNTIME_PROFILE'] = str(location)
         rp.configure_process()
         fixture = registry_tests.LogicalRegistryTests()
-        fixture.setUp()
         try:
+            fixture.setUp()
             fixture.setup_ready()
             fixture.db.execute("UPDATE warehouse_config_generations SET database_revisions='[]',grant_revisions='[]',configuration_refs='[]'")
             for principal in ('alice', 'bob'):

@@ -119,7 +119,7 @@ class OperationTests(unittest.TestCase):
         self.bundle = generation.render(self.spec)
         with store.connect() as db:
             for key, value in self.spec['databases'].items():
-                db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+                db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                            (key, value['sql_catalog'], key, '', 'user', 'READY', 1))
                 dm.create_binding(db, key, **{k: v for k, v in value['binding'].items()
                                              if k != 'desired_revision'})

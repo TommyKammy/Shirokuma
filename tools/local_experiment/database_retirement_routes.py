@@ -66,7 +66,7 @@ def dispatch(handler, method):
             raise ValueError('invalid route framing')
         origins = headers.get_all('Origin', [])
         if origins:
-            from workbench_server import request_origin_allowed
+            from http_origin import request_origin_allowed
             if len(origins) != 1 or not origins[0] or not request_origin_allowed(headers):
                 raise PermissionError('invalid origin')
         if method == 'GET' and (retirement or not operation[2]):

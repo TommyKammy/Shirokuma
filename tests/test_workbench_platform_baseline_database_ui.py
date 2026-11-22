@@ -3,6 +3,7 @@ import json
 import unittest
 from unittest.mock import patch
 import test_workbench_platform_resources_database_ui as resources_ui
+from workbench_source import WorkbenchSource
 
 BASELINE = r"""
 const baselineIDs=['observation-sre-baseline-','observation-policy-baseline-','observation-baseline-'];
@@ -39,12 +40,7 @@ class PlatformBaselineDatabaseUI(unittest.TestCase):
             resources_ui.PlatformResourcesDatabaseUI.javascript(self, BASELINE + body)
 
     def navigation_javascript(self, body):
-        harness = resources_ui.compute_ui.platform_ui.observations.harness
-        handlers = harness.SCRIPT[harness.SCRIPT.index('const bearTabs='):harness.SCRIPT.index('let auditEpoch=')]
-        self.javascript(r"""
-const bearList=new Node();for(const kind of ['sre','query','data','catalog','policy']){const tab=$('bear-tab-'+kind);tab.tagName='BUTTON';tab.dataset.bear=kind;bearList.append(tab);$('bears').append($('bear-panel-'+kind));}$('bears').append(bearList);
-eval(""" + json.dumps(handlers) + r""");
-""" + body)
+        self.javascript(body)
 
     def test_first_mount_native_siblings_manual_auth_without_database_or_grant(self):
         self.javascript(r"""
@@ -92,7 +88,7 @@ assert.equal(dbBaseline.record,baselineSnapshot);
 
     def test_real_navigation_scopes_and_language_share_snapshot_time_without_get(self):
         self.navigation_javascript(r"""
-session.platform_admin=true;await dualBoot();$('tab-compute').click();await baselineFetch();const baselineSnapshot=dbBaseline.record,count=calls.length;
+session.platform_admin=true;await dualBoot();$('tab-compute').click();await baselineFetch();$('tab-bears').click();for(let i=0;i<50;i++)await tick();$('tab-compute').click();const baselineSnapshot=dbBaseline.record,count=calls.length;
 for(const locale of ['ja','en','ja','en']){setLanguage(locale);$('tab-bears').click();for(const kind of ['sre','policy']){$('bear-tab-'+kind).click();scope(kind);assert.equal($('observation-'+kind+'-baseline-panel').hidden,false);assert.ok(baselineText('observation-'+kind+'-baseline-').includes(baselineSnapshot.observed_at));scope(kind,'database');assert.equal($('observation-'+kind+'-baseline-panel').hidden,true);} $('tab-warehouse').click();$('tab-compute').click();assert.equal(dbBaseline.record,baselineSnapshot);assert.ok(baselineText().includes(baselineSnapshot.observed_at));assert.equal(calls.length,count);}
 await dbBaselineRefreshAuth();assert.equal(baselineCalls().length,1);assert.equal(dbBaseline.record,baselineSnapshot);
 """)
@@ -153,7 +149,7 @@ await dbBaselineRefreshAuth();assert.equal(calls.length,count);dbAdminSession(se
 
     def test_late_reauth_cannot_revoke_new_capture_current_bad_parse_purges(self):
         self.javascript(r"""
-await baselineBoot();await baselineFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbBaselineRefreshAuth();await tick();activeTab='compute';dbControls();await baselineFetch();const current=dbBaseline.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbBaseline.record,current);assert.equal(dbAdmin.platform,true);
+await baselineBoot();await baselineFetch();const wait=deferred();sessionRoute=()=>wait.promise;const pending=dbBaselineRefreshAuth();await tick();dbAISettings.autoOpened=true;activeTab='compute';dbControls();await baselineFetch();const current=dbBaseline.record;wait.resolve({http:403,body:null});await pending;assert.equal(dbBaseline.record,current);assert.equal(dbAdmin.platform,true);
 sessionRoute=async()=>({malformed:true});await dbBaselineRefreshAuth();allBaselineEmpty();assert.equal(dbAdmin.platform,true);
 """)
 
@@ -185,8 +181,9 @@ sessionRoute=null;dbAdminSession(session);const body=deferred(),entered=deferred
 
     def test_scope_specific_css_and_human_labels(self):
         harness = resources_ui.compute_ui.platform_ui.observations.harness
-        self.assertIn('#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel', harness.HTML)
-        self.assertIn('white-space:normal;overflow-wrap:anywhere', harness.HTML)
+        css = WorkbenchSource(harness.HTML).css
+        self.assertIn('#observation-baseline-panel,#observation-sre-baseline-panel,#observation-policy-baseline-panel', css)
+        self.assertIn('white-space:normal;overflow-wrap:anywhere', css)
         for label in ['宣言基準に一致', '宣言不足・不一致', '確認不可']:
             self.assertIn(label, harness.HTML)
 

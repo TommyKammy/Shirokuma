@@ -14,8 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experi
 import control_store
 import data_management as dm
 import dataops_service as ds
+import database_inventory as inv
 import db_stages as stages
 import manual_export
+import manual_ingest as manual
 import query_service as qs
 from query_context import QueryError, resolve_context
 import request_auth
@@ -84,6 +86,13 @@ class StageFixture:
         file = stages.list_files(self.p, self.c, stage['id'])['files'][0]
         return stages.preview(self.p, self.c, stage['id'], key=key, expected_revision=stage['revision'],
                               file=file['name'], version=file['version']), file
+
+    def target(self, name, rows=5):
+        ref = self.b.existing(name)
+        key = next(key for key in self.b.objects if key[2] == name and key[3] == 'tables')
+        self.b.objects[key].update({'current-snapshot-id': 42,
+            'snapshots': [{'snapshot-id': 42, 'summary': {'total-records': str(rows)}}]})
+        return ref
 
     def submit(self, stage=None, key='import', **changes):
         stage = stage or self.save()
@@ -508,6 +517,55 @@ class StageStateTests(StageFixture, unittest.TestCase):
             captured = db.execute('SELECT input,operation_id FROM db_stage_runs').fetchone()
             self.assertEqual(captured['operation_id'], run['operation_id'])
             self.assertIn(b'001', captured['input'])
+
+    def test_stage_preview_impact_reads_existing_rows_for_append_and_replace(self):
+        for mode, after in (('append', 8), ('replace', 3)):
+            ref = self.target('stage_' + mode + '_target', 5)
+            directory = self.root / ('incoming-' + mode)
+            directory.mkdir()
+            (directory / 'data.csv').write_bytes(self.path.read_bytes())
+            definition = self.definition(name='daily_' + mode, directory=str(directory), mode=mode)
+            definition.pop('destination')
+            definition['target'] = asdict(ref)
+            stage = self.save(key='save-' + mode, definition=definition)
+            preview, _ = self.preview(stage, key='preview-' + mode)
+            self.assertEqual(preview['preview']['impact'], dict(mode=mode, incoming_rows=3,
+                existing_rows=5, after_rows=after))
+
+    def test_stage_preview_impact_catalog_failure_is_null_and_preview_succeeds(self):
+        ref = self.target('stage_catalog_target', 5)
+        definition = self.definition(mode='append')
+        definition.pop('destination')
+        definition['target'] = asdict(ref)
+        stage = self.save(key='save-catalog', definition=definition)
+        with patch.object(inv, 'catalog_api', side_effect=inv.InventoryError(
+                'CATALOG_UNAVAILABLE', 502, 'catalog unavailable')):
+            preview, _ = self.preview(stage, key='preview-catalog')
+        self.assertEqual(preview['preview']['total_rows'], 3)
+        self.assertIsNone(preview['preview']['impact']['existing_rows'])
+        self.assertIsNone(preview['preview']['impact']['after_rows'])
+
+    def test_stage_preview_catalog_read_does_not_hold_a_write_transaction(self):
+        ref = self.target('stage_transaction_target', 5)
+        definition = self.definition(mode='append')
+        definition.pop('destination')
+        definition['target'] = asdict(ref)
+        stage = self.save(key='save-transaction', definition=definition)
+        probes = []
+
+        def read_outside(*args, **kwargs):
+            with sqlite3.connect(control_store.root() / 'jobs.sqlite3', timeout=0.05) as probe:
+                probe.execute('BEGIN IMMEDIATE')
+                probe.execute('ROLLBACK')
+            probes.append(True)
+            return 5
+
+        with patch.object(manual, '_existing_rows', side_effect=read_outside):
+            preview, _ = self.preview(stage, key='preview-transaction')
+        self.assertEqual(preview['preview']['impact']['existing_rows'], 5)
+        self.assertEqual(probes, [True])
+        replay, _ = self.preview(stage, key='preview-transaction')
+        self.assertEqual(replay['preview']['impact']['existing_rows'], 5)
 
     def test_captured_input_is_immutable_after_admission_and_one_parent(self):
         run = self.submit()

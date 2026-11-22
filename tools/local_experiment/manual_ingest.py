@@ -202,7 +202,88 @@ def preview_fingerprint(context, **options):
     return _preview_request(context, **options)[-1]
 
 
-def input_preview(context, **options):
+def _existing_rows(principal, context, target):
+    """Read the current Iceberg snapshot row count from catalog metadata only.
+
+    Preview must not execute SQL or wake compute. Missing metadata, a stale
+    target, or an unreadable catalog produces None; it never fails the preview.
+    """
+    if principal is None or type(target) is not registry.ResourceRef:
+        return None
+    if target.database_id != context.database_id:
+        return None
+    try:
+        import database_inventory as inventory
+        with control_store.connect() as db:
+            obj = registry.get_object(db, target.object_id)
+        if (obj is None or obj.kind != 'TABLE' or obj.schema_id != target.schema_id
+                or obj.incarnation != target.incarnation):
+            return None
+        schema, database, binding, _ = inventory._schema(
+            principal, context.selected_role, obj.schema_id, target.database_id)
+        if (binding.desired_revision != context.binding_revision
+                or binding.applied_generation_id != context.generation_id):
+            return None
+        with inventory.catalog_api(database, binding) as api:
+            metadata = inventory._metadata(api, schema, 'TABLE', obj.physical_name)
+        if metadata.get('table-uuid') != obj.backend_identity:
+            return None
+        snapshot_id = metadata.get('current-snapshot-id')
+        if snapshot_id is None or type(snapshot_id) is int and snapshot_id == -1:
+            return 0 if not metadata.get('snapshots') else None
+        if type(snapshot_id) is not int or snapshot_id < 0:
+            return None
+        snapshots = [snapshot for snapshot in metadata.get('snapshots') or ()
+                     if snapshot.get('snapshot-id') == snapshot_id]
+        if len(snapshots) != 1:
+            return None
+        summary = snapshots[0].get('summary')
+        if not isinstance(summary, dict):
+            return None
+        total = summary.get('total-records')
+        if type(total) is int and not isinstance(total, bool) and total >= 0:
+            return total
+        if isinstance(total, str) and re.fullmatch(r'[0-9]+', total):
+            return int(total)
+    except Exception:
+        # A preview discloses only what the catalog could confirm.
+        return None
+    return None
+
+
+def _impact(mode, incoming, existing):
+    if mode == 'create':
+        existing, after = 0, incoming
+    elif existing is None:
+        after = None
+    elif mode == 'append':
+        after = existing + incoming
+    elif mode == 'replace':
+        after = incoming
+    else:
+        after = None
+    return dict(mode=mode, incoming_rows=incoming, existing_rows=existing, after_rows=after)
+
+
+def preview_existing_rows(principal, context, target):
+    """Best-effort display-only row count; callers must not hold a write transaction."""
+    return _existing_rows(principal, context, target)
+
+
+def apply_existing_rows(preview, existing):
+    """Rebuild only the impact of an already validated preview."""
+    if not isinstance(preview, dict) or not isinstance(preview.get('impact'), dict):
+        return preview
+    result = dict(preview)
+    result['impact'] = _impact(preview['impact']['mode'],
+        preview.get('total_rows', preview['impact'].get('incoming_rows', 0)), existing)
+    return result
+
+
+_UNSET = object()
+
+
+def input_preview(context, *, principal=None, existing_rows=_UNSET, **options):
     """Input-only preview; existing target types are validated at ingestion time."""
     raw, detected, codec, delimiter, hints, payload, fingerprint = _preview_request(context, **options)
     columns, rows = _read(raw, detected, codec, delimiter, hints)
@@ -213,9 +294,17 @@ def input_preview(context, **options):
             sample.append([str(v) if v is not None and type(v) is not bool else v for v in converted])
     if payload['mode'] == 'upsert' and (not payload['key_columns'] or set(payload['key_columns']) - {n for n, _ in columns}):
         raise ValueError('upsert requires input key columns')
+    mode = payload['mode']
+    target = None if mode == 'create' else registry.ResourceRef(**payload['target'])
+    if target is None:
+        existing = 0
+    elif existing_rows is _UNSET:
+        existing = _existing_rows(principal, context, target)
+    else:
+        existing = existing_rows
     return dict(input_fingerprint=payload['input_sha256'], request_fingerprint=fingerprint,
         format=detected, encoding=codec, columns=[dict(name=n, type=t) for n, t in columns],
-        rows=sample, total_rows=len(rows))
+        rows=sample, total_rows=len(rows), impact=_impact(mode, len(rows), existing))
 
 
 def ingest(principal, context, *, idempotency_key, mode, destination=None, target=None,
@@ -399,7 +488,20 @@ def _ingest(principal, context, *, idempotency_key, mode, destination=None, targ
                 receipt = observed['result']
             receipt['error'] = getattr(error, 'code', type(error).__name__)
             if observed['state'] == 'ACTIVE':
-                if stage is not None and not (
+                if (stage is not None and not observed['committed']
+                        and execution._row()['route'] == 'manual-ingest'):
+                    try:
+                        # Persist the primary failure before cleanup takes receipt ownership.
+                        _persist(execution, receipt)
+                    except Exception:
+                        return execution._inspect()
+                    try:
+                        execution.cleanup_failed_ingest_stage(stage)
+                    except Exception:
+                        pass
+                    # Never overwrite a durable SENT/ACK with the pre-cleanup receipt.
+                    receipt = execution._inspect()['result']
+                elif stage is not None and not (
                         observed['committed'] and execution._row()['route'] == 'manual-ingest'):
                     try:
                         execution.cleanup(stage, step='failure-cleanup')

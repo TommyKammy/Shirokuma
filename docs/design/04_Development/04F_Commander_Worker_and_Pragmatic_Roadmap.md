@@ -4,13 +4,146 @@ doc_id: "DEV-04F"
 title: "Commander-Worker Governance & Pragmatic Core Roadmap"
 status: accepted
 created: 2026-10-16
-updated: 2026-11-12
-version: "1.74"
+updated: 2026-11-15
+version: "1.103"
 area: development
 tags: [shirokuma, governance, roadmap, commander-worker, codex-cli]
 ---
 
 # DEV-04F: 司令塔×実装ワーカー体制と実用コア再起動ロードマップ
+
+2026-11-20 JST、[Workbench Atlas 見本の採用](../../guides/workbench-atlas-adoption-plan-2026-11-18.md)（UX-A0〜A7）を完了した。共通の画面枠、ホーム、データ探索・SQL、取り込み・データ変換、DB管理、ジョブ・監査・AI Bears・コンピュートを見本の並びと日英文言にそろえた。
+要APIは承認済みの3件（DB横断検索、プレビューの影響行数、`databases.team`）だけを追加した。旧 Pawprints・旧履歴・ジョブ3タブなどの旧UIを撤去し、Database モードの全画面が /api/v1 だけを使う。
+Workbenchテスト1502件、`make verify-local-experiment` 6131件、設計整合が成功し、オーナーが4シナリオ（1440/390/320px・日英・キーボード）を確認して受け入れた。
+休止を妨げる処理名は他利用者の処理・DB作成が件数のみ、Catalog Curator の受け渡しとお気に入りは未実装。詳細は[機能対応表](../../guides/workbench-atlas-feature-map-2026-11-18.md)に記録する。
+
+2026-11-15 JST、[SF0.1 scale・計測器characterization](../../guides/performance-scale-meter-2026-11-15.md)を完了した。新24表/1,175,873行、fresh Spark reference 14件/1,113行、24表全部と288,464行large resultを直接/公開all-resultsで照合した。
+stage400のcoordinator/worker peakは3.59GB/4.04GB、OOM/restart 0。復元後は設定bytes・UID・CM/Deployment template・worker identity・59表pins・fenced UNKNOWN 5件を保持し、doctor healthy 46。
+初回計測はunsampled guard・不完全baseline等で不採用。corrected production guardでも最大global scan約332ms（median302ms/p95 316ms）、1M行offline checked/no-op per-pair overhead median約155.7%（ratio-of-medians158.9%）でobserver-readinessは不合格。計測器再設計まで大規模性能の判断に使わない。後続のcapacity scan最適化で`os.scandir`化しmax393.7→170.6ms、offline overhead median150.7→78.4%としたが10% screenは未達。Make162群は再実行し5,876成功・74 skip・失敗0。[bulk属性取得prototype](performance-capacity-bulk-2026-11-15.md)は33 root同一scope（Python 3.12.12）でper-scan 39.3ms、offline overhead median19.99%まで改善したが10%未達のためnative helperをproductionへ入れず、`allocated`は`os.scandir`のまま。
+[subtree work queue試験](performance-capacity-subtree-2026-11-15.md)はそのpassの初期prototypeの混合batch会計bugとdescriptor cleanup欠陥を修正し、35 root同一scopeでbest 18.62%（baseline 79.59%、per-scan 32.55ms）まで下げたが10%は未達。先行bulk記録のv3と19.99%は有効なまま。attribute削減は利得が無く不採用。[syscall分解pass](performance-capacity-syscall-2026-11-15.md)は37 root scopeでopen 57.5%/`getattrlistbulk` 37.3%と分解し、新候補17.35%・control 16.55%で10%未達。[dispatch/merge分解pass](performance-capacity-dispatch-2026-11-15.md)は39 rootで新候補なしのcontrolを再測定し、baseline 84.89% / control 15.54%で10%未達。[内部コスト調査pass](performance-capacity-internal-2026-11-15.md)は41 rootでbaseline 83.17% / control 18.28%と再測定し、10%未達のまま。kernel内部のper-call内訳は、本taskで利用可能なtoolでは観測できていない。 計測器の追加チューニングはここで打ち切り、10%未達は保持したまま探索的性能テストのgateから外した。[性能探索](performance-exploratory-2026-11-15.md)は既存TPC-DSデータで5 case×2経路を実測した（40成功run = initial 10 + warm 30）。288k行のbackend elapsedは15.55秒（direct）/19.73秒（public）でpublicのfollow-upヘッダ待ち4.51秒、LIMIT-100は1.94–2.96秒（guard・照合込みCLI wall）。本体への追加修正は行っておらず、10%未達は保持したまま探索gateから外している。その後、公開APIページ受渡の二重deepcopyを1回に削減し（[記録](performance-public-pages-2026-11-15.md)）、C6 publicのfollowup header_waitが4.449→3.297秒（warm 3回・別phase）と観測したが、wall改善は未確認。続いて返却copyをJSON経路化し（[記録](performance-page-transport-2026-11-16.md)）、47 rootでC6 public header_wait 3.344→2.814秒（−0.530秒/−15.85%、warm 3・別phase）、`_remember_full` 27.1→11.8ms/page（profile未較正）。wallはC6 public 84.163→83.454秒、direct 79.843→80.585秒で因果・一般改善は未確認。次の優先はtransport内部の限定診断で、計測器tuningは再開しない。その診断に基づきfull-result follow-up GETのHTTPS接続を1本再利用し（[記録](performance-transport-phases-2026-11-16.md)）、同じ49 rootでC6 public header_wait 2.655→2.409秒（−9.3%、warm 3・別phase）、実診断handshake 40→2回、変更後診断2.296秒。wallは84.643秒で一般改善は未確認。最初の38/40 phaseは不採用として保持。その後99/4 native coverage、別scale・同時実行。L1/guest拡張・100GB pilot・SLOは後続。
+
+2026-11-15 JST、[coordinator stage上限の正式適用](../../guides/performance-stage-limit-2026-11-15.md)を完了した。任意の `max_stage_count=400` をcoordinatorだけに適用し、14a standaloneと承認14件suiteを直接Trino/公開APIの両経路で再検証した。
+14aは両経路100行、正式14件は各14/14・903行が固定参照と一致。適用/復元でDeployment UIDを保持し、設定bytes・59表pins・fenced UNKNOWN 5件・worker/資源を維持した。OOM/再起動0、doctor healthy 46項目。
+Make162群は5,874成功・74 skip・失敗0、source unchanged。計測はqualificationでありSLO・大規模性能ではない。次は別scale・計測器負荷。L1/guest拡張・100GB pilotは後続とする。
+
+2026-11-15 JST、[TPC-DS承認variant14件の由来・方言・結果照合](../../guides/performance-tpcds-approved-variants-2026-11-15.md)を整備した。固定Spark sourceと原実行profileを記録し、元functional query全般との同値性とは分けてdatasetごとの資格確認を必須にした。
+原Spark/DuckDBは14本/903行、直接Trino/公開APIの個別監査は各13本/803行が一致した。14aは348 stagesが現上限150を超え、正式14本suite全体は未受入のまま失敗・未実行証拠を保持した。
+版管理exporterとmaterialized成功証拠をbind/新規runで検査するgateを追加し、既存の復旧・99/4契約と元59表・履歴・資源を維持した。Make162群は5,866成功・74 skip・失敗0、native OOM/再起動0・doctor healthy 46項目。
+当時の次項目はcoordinator stage上限の正式設定・復元と14a/正式suite再検証、その後に別scale・計測器負荷。L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
+
+2026-11-14 JST、[TPC-DSの対応範囲と計測器負荷](../../guides/performance-tpcds-variants-instrumentation-2026-11-14.md)を整備した。既存99を維持し、固定Flink4 iteration補完を別suiteで準備・bindし、承認variant14件は別の未受入対象として明示した。
+既存24表pinsの4本/28行が参照・直接Trino・公開APIで一致。synthetic数値経路も別caseで確認し、runnerは全callbackの期限/local peakを維持して全体容量走査を200ms samplingし、attemptに負荷を記録する。
+200,006行の型・全値・重複が両経路で一致し、比較込み約18.6秒/21.6秒を観測した。これは検証器改善でありengine性能の実績に使わない。既存99contract bytesと既存テストを保持した。
+Make160群は5,806成功・69 skip・失敗0。最終の試験出力先2箇所修正も対象17件を再確認し、元59表/履歴/資源・OOM/再起動0・doctor healthy 46項目を保持した。
+次は承認variantの由来/方言/oracle受入、別scaleと観測負荷を確認する。L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
+
+2026-11-14 JST、[Parquet分割生成・複数ファイル登録](../../guides/performance-parquet-shards-2026-11-14.md)を整備した。既存format 1を維持し、format 2の明示file一覧、source系譜、全内容照合と表単位1回commitを追加した。
+TPC-H SF0.01の8表/28file/22 SQL、TPC-DSの24表/65file/99 SQLの参照方言照合が成功。後者の300秒期限切れは保持し、別の600秒検証枠で再確認した。
+実機で2表/5file/200,006行を登録・固定し、直接Trino/公開全件APIで全値・型・重複が一致。元57表/履歴/資源を保持し、OOM/再起動0・doctor healthy 46項目を確認。Make159群は5,781成功・67 skip・失敗0、実SDK91件と分割27件も全件成功した。
+次は残るvariant/scaleと計測器負荷を整える。資源設定・容量予算を維持し、L1/guest拡張・100GB pilot・大規模性能の合否は後続とする。
+
+2026-11-14 JST、[性能試験のbulk取込と公開全件取得](../../guides/performance-bulk-results-2026-11-14.md)を整備した。DB限定OAuth/STSによるParquet登録、明示all/null/read-only APIと2ページ保持、native UUID/snapshot照合を追加した。
+54MB/200,006行と既存73,049行の全値・型・重複が直接/公開で一致し、取消・旧打切りも確認。初回の比較timeoutを保持し、200ms samplingへ修正後に同じ600秒期限で再検証した。
+Make定義158群をソース固定で4並列実行し、5,731成功・51 skip・失敗0。元56表/履歴と資源設定を保持し、新1表pins・OOM/再起動0・doctor healthy 46項目を確認した。
+次は1ファイル104.86GB制約に対するParquet分割/複数file、残るvariant/scaleと計測器負荷。L1/VM拡張・大規模性能の合否は後続。
+
+2026-11-14 JST、[coordinatorの正式資源設定](../../guides/performance-coordinator-profile-2026-11-14.md)を整備した。任意のCPU/memory/heap設定とPod更新digest、ACTIVE資源照合、旧登録証拠との互換性を追加し、未指定時のrender bytesを維持した。
+heap8GiB／limit12GiB・CPU request1／limit4を適用し、元構成への復元、再適用、停止中Workbench再起動と通常APIの停止再開を確認。worker/VM設定、既存32表pins、旧query履歴を保持した。
+新しい隔離prefixの取込43操作と全24表・277,976行の内容照合、直接/公開各99 SQL・3,928行が一致した。OOM/自動再起動0、重点56件成功。全体Make157群・5,645成功・既定39 skip・失敗0、設計整合も成功した。
+次はbulk取込／公開全結果取得とG1残件を整える。L1／VM拡張・大規模性能の合否は未実施。
+
+2026-11-14 JST、[旧取込の復旧と失敗時清掃](../../guides/performance-ingest-recovery-2026-11-14.md)を整備した。fresh分散fenceで旧親をFAILEDへ明示放棄し、元queryのUNKNOWN・receipt・claimを保持、所有stageだけを非purge解除した。
+公開APIで1行load後の既知SQL拒否、cleanup ACK204、同じ対象名への通常再取込成功を確認。採用24表pins・旧target・基準構成を保持し、Workbenchの正確な起動環境とdoctor healthy 46項目を確認した。
+復旧17件・失敗cleanup14件、v24移行と既存query/dbt/logical復旧の重点回帰を通過した。全体Makeは157群・5,626成功・既定39 skip・失敗0。設計整合も成功した。
+次は正式なcoordinator資源profile、bulk取込／公開全結果取得とG1残件を整える。L1／VM拡張・大規模性能の合否は未実施。
+
+2026-11-14 JST、[TPC-DS照合契約と計測境界](../../guides/performance-tpcds-timings-2026-11-14.md)を整備した。24表・277,976行の全内容と、直接／公開各99 SQL・3,928行がDuckDB参照と一致し、ORDER／LIMITと前後pinsを検証した。
+送信・取得・行観測・artifact・検証・復旧とengine報告値を分離し、空27件ずつも実機確認した。Q72の日付演算と重複preflightを修正し、最終重点203件全件成功。先行全体Makeは154群・5,577成功・37 skipで、その後の差分も再検証した。
+旧heap 2GiBのOOM／UNKNOWNは履歴と実行終了証拠を保持し、一時coordinator heap8GiBの新campaignで通常APIを検証した。完了後は基準2GiB／4GiBへ復元し、context・全24表pins・doctor healthyを確認した。
+G1全体の受入は旧UNKNOWN復旧・正式な資源profile・bulk／全結果API・残るvariant等を後続に残す。L1／VM拡張・大規模性能の合否は未実施。
+
+2026-11-14 JST、[TPC-H実データの隔離登録・snapshot固定・22 SQL照合](../../guides/performance-tpch-2026-11-14.md)を整備した。SF0.01の8表・86,805行を通常公開APIで登録し、固定snapshotの全値がParquet参照と一致した。
+直接Trinoと公開APIで全22本・各932行を照合し、ORDER／LIMIT tieと前後の不変性を検証した。別表のhead変更では旧snapshotの読取とdrift拒否を実証した。
+実機で見つかった検証callbackの負荷とscalar FROMの権限検査を修正し、元の失敗・補足拒否証拠を保持した。G1のTPC-DS／全結果API／計測と、P2以降の資源適用・大規模負荷を後続に残す。
+最終Makeは149群・5,514件成功・既定36 skip・失敗0件。両Pythonの重点126件、実データ23件、関連権限130件、設計整合・doctor healthyを確認した。
+
+2026-11-14 JST、[性能試験P1の実Trino・公開API接続と照合](../../guides/performance-connections-2026-11-13.md)を整備した。9 SQL・各4,111行がDuckDB参照と一致し、公開打切り・応答喪失後の取消・ロール分離を実機確認した。
+全pageでcontext・schema・状態を確認し、POSTの再送を避けて未確定を保持する。実機で検出したtimestamp精度低下をcapability指定で修正し、両Pythonの重点70件を確認した。
+最終Makeは単一実行で145群・5,456件成功・既定34 skip・失敗0件。設計整合とdoctor healthyを確認した。
+永続TPC snapshot・22 SQL／TPC-DS variant・全結果API拡張と計測をG1後続に残す。VM・資源profile・大規模負荷は変更していない。
+
+2026-11-13 JST、[ローカル性能試験P0／P1の初期基盤](../../guides/performance-preparation-2026-11-13.md)を整備した。host空き約3.105TBを再確認し、追加物理占有2TBと次のL1（VM24 vCPU／192GiB）を固定した。
+専用環境で生成・全結果検証・共通runnerと復旧を実装し、Python 3.9／3.12で重点45件、TPC-H SF0.01／0.1の8表・22 query再実行／配布済み期待結果との照合が成功。TPC-DSは24表生成・99 SQL列挙まで確認した。
+回帰は新HTTPの3.12互換性を修正後に影響範囲と後続を再確認し、既存139群＋追加5群の合算5,430成功・既定34 skipを確認した。
+G1全体の受入は実Trino・公開API・TPC-DS全variant等の後続を残す。VM変更・大規模負荷は未実施で、P2のprofile適用・guest拡張へ進む前に残る接続・照合を整える。
+
+2026-11-13 JST、所有者の方針変更に基づき、[性能試験計画](../../guides/performance-comparison-plan-2026-11-13.md)をMac Studio M3 Ultra／512GB／4TB内の大規模・同時実行・24時間試験へ改訂した。
+空きが許す検証用host資源利用は承認済み。試験の追加物理占有2TBを上限に、100GB→300GB→1TB→容量内の上限を探索し、VM拡張と単一worker profileを先行する。
+Snowflake／Databricksの有償・直接実測と3TB／10TBを対象から外し、公開値の粗い参考比較へ変更。計画改訂時点ではローカルprotocol・dataset／oracle／runnerが次の作業で、負荷投入・構成変更は行っていなかった。
+
+2026-11-13 JST、[追加調査に基づく第3巡](../../guides/refactoring-followups-2026-11-13.md#追加調査に基づく第3巡)の2項目を完了した。
+LogicalRegistry系fixtureの設定失敗時の解放と、Platform6 moduleのstdout読込を整理し、子の早期解放・認可・期限・cleanupの所有者を維持した。
+ソース`a44672f`でMake139群（5,385成功・既定34 skip）と設計整合を通過。追加7試験・旧実装比較・完了監査を確認し、既存のローカル構成差分を保持した。
+
+2026-11-13 JST、[追加調査に基づく第2巡](../../guides/refactoring-followups-2026-11-13.md#追加調査に基づく第2巡)の4項目を完了した。
+Queryのfixture7か所、Origin／Exportの依存、4 CLIのHTTP正常系、Platformの入力検査を整理し、例外・権限・検査順を維持した。
+ソース`2b02f7d`でMake139群（5,378成功・既定34 skip）と設計整合を通過。設定失敗時の解放と旧実装の契約を照合し、既存のローカル構成差分を保持した。
+
+2026-11-13 JST、fixture改善に続く[推奨リファクタリングの後続4項目](../../guides/refactoring-followups-2026-11-13.md)を完了した。
+Platform HTTP adapter、通常JSON共通部品、Saved LineageとResult Exportの状態・操作を独立させ、認可・入力・初期化順序を維持した。
+ソース`ec1340ab`でMake138群（5,361成功・既定34 skip）と設計整合を通過。通常Workbenchの日英・権限往復・320/390px・再読込、実CSV3行とSQL再送なしを確認した。
+
+2026-11-12 JST、追加調査の最優先として、Dbt／Manual WAP／DataOpsの入れ子fixtureのcleanup所有権を小さな共通helperへ集約した。
+設定失敗時の即時解放と成功時の親への移譲を明示し、既存の属性・補助処理・LIFO順序を維持した。
+新規5試験・旧版比較3段階・Python 3.9でのhelper4試験、最終Make137群（5,335成功・既定34 skip）と設計整合を確認し、この作業単位を完了した。[追加改善の記録](../../guides/refactoring-2026-11-12.md#追加改善-入れ子fixtureの寿命管理2026-11-12-jst)。
+
+2026-11-12 JST、[推奨リファクタリングの完了確認](../../guides/refactoring-2026-11-12.md)で全項目の実装・証拠を照合し、今回の整理を完了した。
+最終Makeはソース`8a6c1668`を固定し、DataOps venvで136群を完走（5,330件成功・既定34件skip）。別環境roleの対象集合と23重複を維持し、不要な同一環境実行1件を除いた。
+設計整合、旧実装比較、通常Workbenchの日英・320/390px・深い経路からの再読込とキーボードfocusを確認した。権限・取消・UNKNOWN・公開履歴の契約と既存ローカル構成を維持した。
+
+2026-11-12 JST、native audit・公開のSQL準備、intent保存、receipt構築をdbt側APIへ集約し、DataOpsには送信・commit保持・観測を残した。
+pending保存・source検査、target claim・intent・送信、commit後の権限確認とquery ID参照の順序を維持し、生のpublication recordをDataOpsへ渡さない境界にした。
+一時SQLite・SDKと模擬SQL／catalogで新規5試験、旧実装比較5件が通過した。全推奨項目の変更を揃え、最終Make回帰と完了監査へ進む。
+
+2026-11-12 JST、同じPYTHON環境で二重選択されていたWorkbench管理試験の明示実行1行を除いた。異なる環境roleの重複23件は維持した。
+core／verify両targetのdry-runを同じtestfile集合へ展開し、環境role別の対象集合、他コマンドの内容・順序、非unittest確認が同一であることを確認した。
+探索コマンド数はcore136→135、verify137→136となった。全変更後の最終Make実行は今回の統合確認で扱う。
+
+2026-11-12 JST、Platform ResourcesとWorkload Baselineの同一な固定deployment収集を、stdlibのみの共通helperへ移した。
+8秒の総期限・出力上限・例外とkill／wait／close順序を維持し、権限・parser・DTOは機能側に残した。移動したprocess blockは引数名を戻すと旧ASTと一致する。
+backend42件・関連UI36件が通過した。試験は模擬processと一時SQLiteで行った。
+
+2026-11-12 JST、WorkbenchのCSSと基本翻訳辞書を固定assetへ分離し、classic scriptの宣言・翻訳登録順と早期language bootstrapを維持した。
+両サーバーモードの認証・MIME・bytes・no-store、共通CSS読込を整え、期待値を変えずCSS参照テストを移行した。逆変換したHTMLは旧版と完全一致した。
+Workbench回帰1,379件・認証11件が通過し、通常画面の日英・320/390px・深い経路からの再読込を確認した。同じruntime profileと起動環境でサーバーを更新した。
+
+2026-11-12 JST、dbt継続scopeを名前付き不変recordと読取・bind APIへ移行し、DataOps外のraw ContextVar・位置番号参照を除いた。
+owner pinの先頭5項目・子操作の3項目、actor／context照合、継承優先順、例外・thread分離を新規4試験で固定し、認可・受付・送信guardを維持した。
+SQL/WAP・native・graph・公開・復旧の関連回帰459件が通過した。検証は一時SQLiteと模擬SQL transport／catalogで行った。
+[今回の実装順と完了条件](../../guides/refactoring-2026-11-12.md)を固定し、残る境界・asset・収集・テスト定義の整理と最終全体回帰を続ける。
+
+2026-11-12 JST、SQL/WAPの保存済み品質テストのSQL準備と実行後VIEW確認をdbt側の専用APIへ集約し、入力pinを内部に閉じた。
+DataOpsはSQL送信とCOUNTの形式・型・非負確認を担当する。SQL失敗時は実行後確認を省略し、成功時はVIEW確認をCOUNT確認より先に行う順序を維持した。
+SQL/WAP・DataOps・復旧の重点回帰316件、旧実装比較6件、4通りのimportと設計整合を確認した。検証は一時SQLiteと模擬SQL transport／catalogで行った。
+残る課題として、継続scopeをtupleの位置番号で参照する依存を次に整理する。
+
+2026-11-12 JST、dbt／DataOps境界整理の第一歩として、保存済みVIEWの検証・コンパイル・定義digest保存をdbt側の明示APIへ集約した。
+DataOpsは固定の準備結果を受け取り、SANDBOX確認・SQL送信・commit receipt・UUID観測・所有登録を維持する。native graphの追加plan確認と取消保持を旧実装比較5件で固定した。
+dbt／DataOps・graph／公開／復旧の重点回帰449件、4通りのimportと設計整合を確認した。検証は一時SQLiteと模擬SQL transport／catalogで行った。
+
+2026-11-12 JST、SQL提案・カタログ提案・保存済み計画の再説明の保存・所有者確認・取得・履歴を共通化した。機能別の権限・確定・取消処理は維持した。
+actor／全context／種別の照合、履歴の可視50件・日時とIDの降順・最終権限再確認、所有権消失時のUNKNOWNと呼出側transactionを追加13試験で固定した。
+AI領域308件、関連UI189件・セキュリティ11件、旧実装との比較13件、4通りのimportと設計整合を確認した。検証は一時SQLiteと模擬provider／catalogで行った。
+
+2026-11-12 JST、Platform観測・リソース設定・HTTP応答確認の3機能（4状態）で、要求のtoken／epoch／scope判定・解除と権限更新を共通化した。
+401／403・500・通信失敗時の機能別処理、応答サイズ制限、画面・言語による無効化条件を維持した。
+権限往復と古いfinally／新しい待機要求の競合を追加試験で固定し、追加8試験が旧実装でも通過することを確認した。
+Workbench回帰1,376件と設計整合を通過。通常画面の権限切替・日英・320／390px・再読み込みで互換性を確認した。
+
+2026-11-12 JST、WorkbenchのUIテスト読込を共通化し、body内のinline／外部classic scriptを文書順に扱えるようにした。
+チャート描画2関数を独立JSへ移し、既存認証を通る固定経路で配信する。起動順・イベント登録・API・権限判断は維持した。
+通常Workbenchで3行の描画が分割前と同一であること、日英・キーボード・320／390px・画面復元を確認した。
+既定回帰136コマンド分（5,301件成功・34件スキップ）と設計整合を確認した。標準PythonのPyYAML不足は既存DataOps環境で継続検証した。
 
 2026-11-12 JST、所有者本人が通常Workbenchで手順11までの確認完了と受入可能な品質を表明し、合意済みの固定LOCALの範囲でM1を本人受入済みとした。[受入記録](../../guides/database-p6-7-integrated-acceptance-2026-11-04.md#m1本人受入の完了2026-11-12-jst)。起動失敗・実行中停止の専用環境証拠を照合し、未確定履歴は保持する。DB-P7〜9と別拡張は後続のまま、以下の過去日付の進捗は当時の状態として保持する。
 

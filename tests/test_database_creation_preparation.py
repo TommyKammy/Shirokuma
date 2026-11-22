@@ -37,7 +37,7 @@ class PreparationFixture(CreationFixture):
         self.private = private_input_from_bundle(self.base)
         with control_store.connect() as db:
             for key,entry in value['databases'].items():
-                db.execute('INSERT INTO databases VALUES (?,?,?,?,?,?,?)',
+                db.execute('INSERT INTO databases (id,sql_catalog,display_name,description,managed_by,state,revision,team) VALUES (?,?,?,?,?,?,?,NULL)',
                     (key,entry['sql_catalog'],key,'','user','retired' if key=='opaque_0' else 'READY',1))
                 dm.create_binding(db,key,**{k:v for k,v in entry['binding'].items() if k!='desired_revision'})
                 db.execute('UPDATE catalog_bindings SET applied_revision=desired_revision WHERE database_id=?',(key,))
@@ -1117,7 +1117,7 @@ class ManagedPreparationTests(PreparationFixture):
             for role in ('workbench','native'):
                 self.assertNotEqual(old.config.owner(role)['owner_instance_id'],managed.config.owner(role)['owner_instance_id'])
                 self.assertFalse((Path(candidate[4][role]['directory'])/'activations').exists())
-            self.ack = creations.create(self.alice,'admin',dict(sql_catalog='revision'+str(revision)),
+            self.ack = creations.create(self.alice,'admin',dict(sql_catalog='revision'+str(revision),team='Data Team'),
                 'create-revision-'+str(revision))[0]
             self.root_id = self.ack['creation_id']
             with control_store.connect() as db:
@@ -1625,7 +1625,7 @@ class ManagedPreparationTests(PreparationFixture):
         with self.assertRaises(ValueError):
             worker.applied_material(managed.config)
         operator.save_private(record_path,record)
-        self.ack = creations.create(self.alice,'admin',dict(sql_catalog='second'),'second-create')[0]
+        self.ack = creations.create(self.alice,'admin',dict(sql_catalog='second',team='Data Team'),'second-create')[0]
         self.root_id = self.ack['creation_id']
         with control_store.connect() as db:
             self.new_id = db.execute('SELECT database_id FROM db_creations WHERE id=?',(self.root_id,)).fetchone()[0]
@@ -2164,16 +2164,16 @@ class DesiredGrantCancellationTests(PreparationFixture):
         # A historical bootstrap is unrelated to full verified authority.
         self.change_unrelated('bi_viewer',2,'extra-active')
         with self.assertRaisesRegex(core.OperationError,'UNAPPLIED_CHANGES'):
-            creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase'),'next-create')
+            creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase',team='Data Team'),'next-create')
         self.assertEqual(self.change_unrelated('revoked',3,'cancel-extra')['state'],'CANCELED')
         with control_store.connect() as db:
             db.execute("UPDATE operation_steps SET evidence_ref='' WHERE operation_id=? AND step='verify'",(applied['id'],))
         with self.assertRaisesRegex(core.OperationError,'UNAPPLIED_CHANGES'):
-            creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase'),'next-create')
+            creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase',team='Data Team'),'next-create')
         with control_store.connect() as db:
             db.execute("UPDATE operation_steps SET evidence_ref='full:verified' WHERE operation_id=? AND step='verify'",(applied['id'],))
             second_held = grant_management.effective(db,'bob','opaque_1')
-        ack, created = creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase'),'next-create')
+        ack, created = creations.create(self.alice,'admin',dict(sql_catalog='nextdatabase',team='Data Team'),'next-create')
         self.assertTrue(created)
         self.assertNotEqual(ack['creation_id'],self.root_id)
         with control_store.connect() as db:

@@ -2,12 +2,13 @@
 import unittest
 import json
 import test_workbench_database_ui as database_ui
+from workbench_source import WorkbenchSource
 from test_workbench_dataops_ui import SETUP as DATAOPS_SETUP
 from test_workbench_lineage_database_ui import catalog_markup
 
 SETUP = DATAOPS_SETUP + 'const removalMarkup='+json.dumps(catalog_markup.root)+r''';
 function mountRemovalMarkup(spec){
- const a=spec.attrs,n=a['data-inspect']?inspectorTabs.find(b=>b.dataset.inspect===a['data-inspect']):a.id?$(a.id):document.createElement(spec.tag);
+ const a=spec.attrs,n=a['data-inspect']?(inspectorTabs.find(b=>b.dataset.inspect===a['data-inspect'])||document.createElement('button')):a.id?$(a.id):document.createElement(spec.tag);
  n.tagName=spec.tag.toUpperCase();
  for(const [k,v] of Object.entries(a)){
   if(k==='class')n.className=v;else if(k==='hidden')n.hidden=true;
@@ -236,7 +237,8 @@ dropConfirm(name.toLowerCase());assert.equal($('db-drop-submit').disabled,true);
 dropConfirm(name);assert.equal($('db-drop-submit').disabled,false);
 $('db-drop-ack').checked=false;dbDropControls();assert.equal($('db-drop-submit').disabled,true);
 ''')
-        self.assertIn('#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;', database_ui.HTML)
+        css = WorkbenchSource(database_ui.HTML).css
+        self.assertIn('#db-drop-panel :is(p,div,label,button){overflow-wrap:anywhere;', css)
 
     def test_verified_platform_bootstrap_null_context_and_source_gone_recovery(self):
         self.javascript(r'''

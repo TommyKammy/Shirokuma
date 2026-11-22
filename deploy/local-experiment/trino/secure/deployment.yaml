@@ -5,9 +5,23 @@ metadata:
 spec:
   template:
     spec:
+      # Restates the base Deployment's security context so this patch is safe
+      # when scanned or applied on its own; the merged result is unchanged.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: trino
           command: [/usr/lib/trino/bin/run-trino]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           ports:
             - name: https
               containerPort: 8443

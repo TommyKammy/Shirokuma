@@ -41,10 +41,11 @@ SECRET_PATTERNS = (
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,255}\b"),
 )
-SECRET_MARKERS = (
-    "-----BEGIN " + "PRIVATE KEY-----",
-    "-----BEGIN " + "RSA PRIVATE KEY-----",
-    "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
+# A private key header followed by a base64 body. A bare header string, as used
+# by PEM format checks and synthetic test data, is not key material.
+PRIVATE_KEY_BLOCK = re.compile(
+    r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?" + r"PRIVATE KEY-----"
+    r"(?:\\[rn]|\s)*(?:[A-Za-z0-9+/=](?:\\[rn]|\s)*){40,}"
 )
 SECRET_FILENAME = re.compile(
     r"(^|/)(\.env|[^/]+\.(?:pem|key|p12|pfx|token|secret))$", re.IGNORECASE
@@ -414,8 +415,8 @@ def scan_secrets(repository: Path) -> None:
         content = read_tracked_text(repository, relative)
         if content is None:
             continue
-        if any(pattern.search(content) for pattern in SECRET_PATTERNS) or any(
-            marker in content for marker in SECRET_MARKERS
+        if any(pattern.search(content) for pattern in SECRET_PATTERNS) or (
+            PRIVATE_KEY_BLOCK.search(content)
         ):
             findings.append(f"{relative}: secret-like content")
 

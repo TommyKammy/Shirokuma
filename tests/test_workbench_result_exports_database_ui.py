@@ -1,5 +1,9 @@
 """Server byte result saves and stale authorization/download guards."""
 import unittest
+import json
+import subprocess
+
+from workbench_source import WorkbenchSource
 import test_workbench_database_ui as harness
 
 SETUP = r"""
@@ -19,6 +23,46 @@ async function ready(){await boot();inspectRoute=async()=>inspection(dbRuns.get(
 class ResultExportsDatabaseUI(unittest.TestCase):
     def javascript(self, body):
         harness.DatabaseUI.javascript(self, SETUP + body)
+
+    def test_isolated_factory_uses_adapters_without_load_or_construction_io(self):
+        asset = WorkbenchSource().asset_sources['/assets/result_export.js']
+        script = r"""
+'use strict';
+const assert=require('node:assert/strict');
+const create=new Function(ASSET+'\nreturn createResultExportController;')();
+let touched=0;
+const blocked=new Proxy({}, {get(){touched++;throw Error('unexpected adapter IO');}});
+const controller=create({host:blocked,authority:blocked,http:blocked,view:blocked,browser:blocked});
+assert.equal(touched,0);assert.ok(Object.isFrozen(controller));
+const run={saveBusy:{},saveNotice:{},exportUnavailable:true,receivedPages:['retained'],rows:[[1]]};
+controller.clearRun(run);
+assert.deepEqual(run,{receivedPages:['retained'],rows:[[1]]});
+controller.markUnavailable(run);assert.equal(run.exportUnavailable,true);
+controller.invalidateBoundary();assert.equal(touched,0);
+assert.equal(controller.revision,undefined);
+// A separate instance receives live state through its supplied host, even when
+// the harness has no lexical Workbench globals.
+let pane='worksheet';
+const observed=create({host:{current:()=>null,get activeTab(){return 'warehouse';},get workspacePane(){return pane;},worksheetId:'a'},authority:{role:'admin',maximumRole:'admin',principal:'owner',epoch:1,authorizationVersion:2,roleVersion:()=>3},http:blocked,view:blocked,browser:blocked});
+const before=observed.scope();pane='details';assert.notEqual(observed.scope(),before);
+pane='worksheet';assert.notEqual(observed.scope(),before);
+const stable=observed.scope();observed.invalidateBoundary();assert.notEqual(observed.scope(),stable);
+assert.equal(observed.ready(null),false);assert.equal(touched,0);
+""".replace('ASSET', json.dumps(asset))
+        result = subprocess.run(['node'], input=script, text=True, capture_output=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_download_click_failure_cleans_browser_url_and_busy(self):
+        self.javascript(r"""
+const run=await ready(),revoked=[];route=async()=>exported(run);
+URL.revokeObjectURL=url=>revoked.push(url);
+Node.prototype.click=function(){if(this.tagName==='A')throw Error('download failed');};
+await download('csv');
+assert.deepEqual(revoked,['blob:test']);assert.equal(blobs.length,1);
+assert.equal(run.saveBusy,undefined);assert.equal(downloads.length,0);
+assert.match(run.saveNotice.key,/Refresh context/);
+assert.deepEqual(run.receivedPages,['page-1']);assert.deepEqual(run.rows,[[1]]);
+""")
 
     def test_saved_status_relocalizes_without_changing_download_or_capture(self):
         self.javascript(r"""
@@ -79,7 +123,7 @@ for(const format of ['csv','json','tsv']){
  assert.equal(await blobs.at(-1).text(),'"n"\r\n"9007199254740993"\r\n');
  assert.equal(downloads.at(-1),'query-result-query-uuid.'+format);
 }
-assert.equal($('copy-tsv').hidden,true);assert.equal($('export-tsv').hidden,false);
+assert.equal($('copy-tsv').hidden,false);assert.equal($('copy-tsv').disabled,false);assert.equal($('export-tsv').hidden,false);
 assert.match($('result-action-state').textContent,/Saved 1 rows/);
 for(const locale of ['en','ja']){setLanguage(locale);assert.equal($('request-provenance').children[0].textContent,t(dbExportHelp));}
 assert.equal(calls.filter(c=>c.path==='/api/v1/queries'&&c.options?.method==='POST').length,1);

@@ -1,0 +1,2 @@
+# Official PyPI distribution; no pandas/Arrow dependency.
+duckdb==1.4.3

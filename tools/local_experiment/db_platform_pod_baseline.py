@@ -1,9 +1,10 @@
 """Bounded namespace-wide actual Pod SPEC declarations, advisory only."""
 import json
 import re
-import selectors
 import subprocess
 import time
+
+from db_platform_collect import read_bounded_stdout
 
 from db_platform_observations import _authority, _now, SOURCE_ERRORS
 from db_platform_foundation_baseline import _foundation
@@ -100,23 +101,9 @@ def _collect(foundation, check):
     deadline = time.monotonic() + 8
     process = subprocess.Popen(argv + ['get', 'pods', '--chunk-size=0', '-o', JSONPATH],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, shell=False)
-    raw = b''
     try:
-        with selectors.DefaultSelector() as selector:
-            selector.register(process.stdout, selectors.EVENT_READ)
-            while True:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0 or not selector.select(remaining):
-                    raise subprocess.TimeoutExpired(argv, 8)
-                chunk = process.stdout.read1(MAX_STDOUT_BYTES + 1 - len(raw))
-                if not chunk:
-                    break
-                raw += chunk
-                if len(raw) > MAX_STDOUT_BYTES:
-                    raise ValueError()
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or process.wait(timeout=remaining) != 0:
-            raise ValueError()
+        raw = read_bounded_stdout(process, deadline=deadline,
+            max_stdout_bytes=MAX_STDOUT_BYTES, timeout_argv=argv)
     finally:
         if process.poll() is None:
             process.kill()

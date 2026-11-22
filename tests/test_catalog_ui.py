@@ -1,21 +1,17 @@
 """Catalog inspector behavior in Node VM, without a server or browser."""
 import json
-from pathlib import Path
-import re
 import subprocess
 import unittest
 
-HTML = (Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench/index.html').read_text()
-SCRIPT = re.search(r'<script>([\s\S]*?)</script>', HTML)[1]
+from workbench_source import INDEX, WorkbenchSource, function as source_function
+
+HTML = INDEX.read_text()
+SOURCE = WorkbenchSource(HTML)
+SCRIPT = SOURCE.source
 
 
 def function(name):
-    start = SCRIPT.index('function ' + name + '(')
-    if SCRIPT[max(0, start - 6):start] == 'async ':
-        start -= 6
-    end = re.search(r'\n(?:async )?function ', SCRIPT[start + 1:])
-    source = SCRIPT[start:start + 1 + end.start()] if end else SCRIPT[start:]
-    return source.split("\n$('", 1)[0]
+    return source_function(name, SOURCE.sources)
 
 
 class CatalogUI(unittest.TestCase):
@@ -55,7 +51,7 @@ const session={username:'owner',authenticated:true,maximum_role:'admin',role:'ad
 catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
 """ + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
         runner = "require('node:vm').runInNewContext(" + json.dumps(source) + ", {require,console,process,setImmediate});"
-        result = subprocess.run(['node', '-e', runner], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=runner, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_lazy_tabs_and_validated_cached_reselection(self):
@@ -120,11 +116,11 @@ catalogSession='first';const key=catalogKey('raw.a','columns');catalogSession='s
         self.javascript(r"""
 selectedTable='raw.a';activeInspector='preview';let load=loadCatalog();
 pending.shift().resolve({metadata:{raw:[['a']]}});await tick();assert.match(pending[0].path,/detail=preview$/);
-pending.shift().resolve(detail());await tick();pending.shift().resolve({metadata:{lineage:{}}});await load;
+pending.shift().resolve(detail());await load;
 load=loadCatalog();pending.shift().resolve({metadata:{raw:[]}});await tick();
-assert.equal(selectedTable,null);assert.equal(pending[0].path,'/api/lineage');pending.shift().resolve({metadata:{lineage:{}}});await load;
+assert.equal(selectedTable,null);await load;
 const old=loadCatalog(),oldRequest=pending.shift();load=loadCatalog();pending.shift().resolve({metadata:{raw:[['b']]}});await tick();
-pending.shift().resolve({metadata:{lineage:{}}});await load;oldRequest.reject(Error('late'));await old;
+await load;oldRequest.reject(Error('late'));await old;
 assert.deepEqual(catalogMetadata,{raw:[['b']]});assert.equal($('catalog-error').textContent,'');
 load=loadCatalog();const stale=pending.shift();invalidateCatalogDetails();stale.resolve({metadata:{raw:[['stale']]}});await load;
 assert.deepEqual(catalogMetadata,{raw:[['b']]});assert.equal(pending.length,0);
@@ -159,7 +155,7 @@ for(const reject of [false,true])for(const fence of ['request','role']){
  if(reject)list.reject(Error('old error'));else list.resolve({metadata:{raw:[['old']]}});await old;
  assert.equal($('catalog-tree').textContent,'current tree');assert.equal($('worksheet-tree').textContent,'current worksheet');
  assert.deepEqual(catalogMetadata,{});assert.equal($('catalog-error').textContent,'');
- if(fresh){pending.shift().resolve({metadata:{}});await tick();pending.shift().resolve({metadata:{lineage:{}}});await fresh;}
+ if(fresh){pending.shift().resolve({metadata:{}});await fresh;}
 }
 """)
 
@@ -189,7 +185,7 @@ for(const [path,body,make] of [
 selectedTable='raw.a';let load=cloneTable('raw.a');
 pending.shift().resolve({table:'sandbox.copy',audit:{quality_passed:false}});await tick();
 pending.shift().resolve({metadata:{raw:[['a']]}});await tick();
-pending.shift().resolve(detail());await tick();pending.shift().resolve({metadata:{lineage:{}}});await load;
+pending.shift().resolve(detail());await load;
 assert.equal($('catalog-error').textContent,'Clone audit needs review');assert.equal($('catalog-error').hidden,false);
 """)
 
@@ -250,8 +246,7 @@ for(const change of [{username:'other'},{maximum_role:'bi_viewer',role:'bi_viewe
  assert.equal(catalogPending.size,0);assert.equal($('table-columns').rows,undefined);
  assert.equal(pending[0].path,'/api/catalog');
  if(change.maximum_role){assert.equal(calls.at(-1).options.headers['X-Shirokuma-Role'],'bi_viewer');assert.equal(currentRole,'bi_viewer');assert.equal($('role-selector').value,'bi_viewer');assert.equal($('role-selector').options[2].disabled,true);}
- pending.shift().resolve({metadata:{marts:[['authorized']]}});await tick();
- pending.shift().resolve({metadata:{lineage:{}}});await load;
+ pending.shift().resolve({metadata:{marts:[['authorized']]}});await load;
  assert.deepEqual(catalogMetadata,{marts:[['authorized']]});assert.equal(selectedTable,null);
 }
 """)

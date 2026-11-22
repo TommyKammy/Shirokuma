@@ -16,7 +16,7 @@ import math
 import re
 import secrets
 import threading
-from typing import Optional
+from typing import NamedTuple, Optional
 import uuid
 
 import control_store
@@ -43,10 +43,34 @@ _mart = ContextVar('dataops_mart', default=None)
 _dbt = ContextVar('dataops_dbt', default=None)
 
 
+class DbtContinuation(NamedTuple):
+    principal: request_auth.AuthenticatedPrincipal
+    context: ResolvedQueryContext
+    parent: object
+    frozen: object
+    credential_ref: str
+    run_id: str
+    phase: str
+    node_id: str
+
+    @property
+    def owner_pin(self):
+        return self[:5]
+
+    @property
+    def child_key(self):
+        return self.run_id, self.phase, self.node_id
+
+
+def current_dbt_continuation() -> Optional[DbtContinuation]:
+    """Return the current server-owned dbt continuation, if any."""
+    return _dbt.get()
+
+
 @contextmanager
-def _dbt_scope(principal, context, parent, frozen, credential_ref, run_id, phase, node_id):
+def dbt_child_scope(principal, context, parent, frozen, credential_ref, run_id, phase, node_id):
     """Private continuation of one durable dbt node, never request supplied."""
-    token = _dbt.set((principal, context, parent, frozen, credential_ref, run_id, phase, node_id))
+    token = _dbt.set(DbtContinuation(principal, context, parent, frozen, credential_ref, run_id, phase, node_id))
     try:
         yield
     finally:
@@ -691,32 +715,14 @@ class Execution:
     def _dbt_create_view(self):
         """One saved private action, no caller SQL, locator or security argument."""
         import db_dbt
-        from manual_wap import _compile_model
-        run, node, locator = db_dbt._view_node(self)
-        native_graph = run.get('executor') == 'native_graph'
-        if native_graph:
-            import database_dbt_graph
-            with control_store.connect() as db:
-                plan = db_dbt._check_plan(db, run)
-            _, normalized = database_dbt_graph.bindings_for(plan, run, node)
-        else:
-            normalized = db_dbt._normalized(run, node)
-        inputs = db_dbt._pinned(self, normalized['sources'])
-        if any(m.get('kind') == 'VIEW' for m in inputs.values()):
-            raise QueryError('UNSUPPORTED_VIEW_DEPENDENCY', 409)
-        generated = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
-        import database_dbt
-        canonical = database_dbt._sql_tree(generated).sql(dialect='trino')
-        with control_store.connect() as db:
-            _, saved_run = db_dbt._row(db, run['id'])
-            next(m for m in saved_run['models'] if m['unique_id'] == node['unique_id'])['_view_definition_digest'] = hashlib.sha256(canonical.encode()).hexdigest()
-            db_dbt._write(db, saved_run)
+        creation = db_dbt.prepare_view_creation(self)
+        locator, select_sql, native_graph = creation.locator, creation.select_sql, creation.native_graph
         name = self._locator(locator)
         if locator.schema_id != self._context().schema_id or self._schema(locator.schema_id).sql_name != 'sandbox':
             raise QueryError('SANDBOX_REQUIRED', 409)
         self._absent(locator)
         receipt = json.loads(self._row()['result'] or '{}') if native_graph else {}
-        self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + generated, 'view',
+        self._execute('dbt_view_create', 'CREATE VIEW ' + name + ' SECURITY INVOKER AS ' + select_sql, 'view',
             commit_result=dict(receipt, view_created=True, _view_locator=asdict(locator)))
         schema = self._schema(locator.schema_id, write=True)
         database, binding = self._catalog()
@@ -804,14 +810,8 @@ class Execution:
     def _dbt_test(self):
         """Execute only the saved test node of this durable private child."""
         import db_dbt
-        from manual_wap import _compile_model
-        normalized = db_dbt._test_select(self)
-        inputs = db_dbt._pinned(self, normalized['sources'])
-        sql = _compile_model(normalized['sql'], normalized['sources'], execution=self, measurements=inputs)
-        rows = self._execute('dbt_test', 'SELECT COUNT(*) FROM (' + sql + ') AS dbt_failures', 'test')['data']
-        for alias, ref in normalized['sources'].items():
-            if inputs[alias].get('kind') == 'VIEW':
-                db_dbt._view_binding(self, ref, expected=inputs[alias])
+        with db_dbt.saved_test_query(self) as sql:
+            rows = self._execute('dbt_test', sql, 'test')['data']
         if len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0:
             raise QueryError('INVALID_DBT_TEST_RESULT', 502)
         return rows[0][0]
@@ -820,58 +820,21 @@ class Execution:
     def _dbt_native_audit(self):
         """Audit only the candidate in this accepted native publication."""
         import db_dbt
-        publication = db_dbt._native_execution_intent(self, 'audit')
-        intent = publication['_native_intent']
-        receipt_id = str(uuid.uuid4())
-        pending = dict(origin=publication['origin'], audit_id=receipt_id, intent=intent)
-        with control_store.connect() as db:
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(pending), self.id))
-        candidate = intent['candidate']
-        source = self._ref(registry.ResourceRef(**candidate['ref']))
-        snapshot = candidate['snapshot']
-        if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
-            raise QueryError('DBT_CANDIDATE_CHANGED', 409)
-        page = self._execute('wap_audit', 'SELECT COUNT(*) FROM ' + source + ' FOR VERSION AS OF ' + snapshot, 'audit')
-        rows = page['data']
-        if (len(rows) != 1 or len(rows[0]) != 1 or type(rows[0][0]) is not int or rows[0][0] < 0):
-            raise QueryError('INVALID_AUDIT_RESULT', 502)
-        receipt = dict(id=receipt_id, origin=publication['origin'], publication_id=publication['id'], intent=intent,
-            operation_id=self.id, query_id=page['id'], count=rows[0][0], passed=rows[0][0] >= intent['audit_policy']['min_rows'])
-        return dict(audit_id=receipt_id, audit=receipt)
+        query = db_dbt.prepare_native_audit(self)
+        page = self._execute('wap_audit', query.sql, 'audit')
+        return db_dbt.native_audit_result(query, page)
 
     @_serialized
     def _dbt_native_publish(self):
         """One PARQUET CTAS/CRTA from an accepted, positively audited snapshot."""
         import db_dbt
-        publication = db_dbt._native_execution_intent(self, 'publish')
-        intent = publication['_native_intent']
-        candidate = intent['candidate']
-        target = db_dbt._native_target(intent['expected_target']['destination'])
-        locator = self.wap_claim(target)
-        if type(target) is registry.ResourceRef:
-            name, prefix = self._ref(target, write=True, admin=True), 'CREATE OR REPLACE TABLE '
-        else:
-            name, prefix = self._locator(target, admin=True), 'CREATE TABLE '
-        source = self._ref(registry.ResourceRef(**candidate['ref']))
-        snapshot = candidate['snapshot']
-        if not isinstance(snapshot, str) or not re.fullmatch('[0-9]+', snapshot):
-            raise QueryError('DBT_CANDIDATE_CHANGED', 409)
-        columns = ', '.join(_column(c['name']) for c in candidate['columns'])
-        result = db_dbt._native_publish_intent(publication, self.id)
-        with control_store.connect() as db:
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(result), self.id))
-        page = self._execute('wap_publish', prefix + name + " WITH (format='PARQUET') AS SELECT " + columns
-            + ' FROM ' + source + ' FOR VERSION AS OF ' + snapshot, 'publish', commit_result=result)
+        query = db_dbt.prepare_native_publication(self)
+        page = self._execute('wap_publish', query.sql, 'publish', commit_result=json.loads(query.commit_json))
         # Query completion already committed the write marker. Observation failure
         # must retain it, and cannot turn table existence into publication proof.
-        ref = self._observe(locator)
+        ref = self._observe(query.locator)
         measured = self.wap_measure(ref)
-        receipt = dict(result, id=publication['id'], actor=self.principal.principal_id,
-            context=asdict(self._context()), query_id=page['id'], target=measured)
-        result = dict(result, publication=receipt)
-        with control_store.connect() as db:
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (_json(result), self.id))
-        return result
+        return db_dbt.record_native_publication(self, query, page, measured)
 
     @_serialized
     def wap_audit(self, build, not_null, *, step):
@@ -1150,13 +1113,33 @@ class Execution:
 
     @_serialized
     def cleanup_committed_ingest_stage(self, ref):
+        return self._cleanup_ingest_stage(ref, committed=True)
+
+    @_serialized
+    def cleanup_failed_ingest_stage(self, ref):
+        return self._cleanup_ingest_stage(ref, committed=False)
+
+    def _cleanup_ingest_stage(self, ref, *, committed):
         row = self._row()
         receipt = json.loads(row['result']) if row['result'] else {}
-        if (row['route'] != 'manual-ingest' or not row['committed']
+        if (row['route'] != 'manual-ingest' or bool(row['committed']) != committed
                 or receipt.get('operation_id') != self.id or receipt.get('atomic') is not True
                 or receipt.get('cleanup') != 'pending' or 'cleanup_phase' in receipt
-                or 'cleanup_mode' in receipt):
+                or 'cleanup_mode' in receipt or (not committed and not receipt.get('error'))):
             raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
+
+        def settled(db):
+            if not committed:
+                children = db.execute('''SELECT q.state,a.state AS admission_state
+                    FROM dataops_queries d LEFT JOIN query_records q ON q.id=d.query_id
+                    LEFT JOIN warehouse_admissions a ON a.kind='query' AND a.subject_id=q.id
+                        AND a.warehouse_id=q.warehouse_id WHERE d.operation_id=?''', (self.id,))
+                if any(c['state'] not in queries._TERMINAL or
+                       c['admission_state'] not in admission.TERMINAL for c in children):
+                    raise QueryError('UNRESOLVED_CHILD_QUERIES', 409)
+
+        with control_store.connect() as db:
+            settled(db)
 
         def save(db, previous, *, status, phase, error=None):
             result = dict(receipt, cleanup=status, cleanup_phase=phase,
@@ -1165,8 +1148,8 @@ class Execution:
                 result['cleanup_ack'] = 204
             encoded = _json(result)
             changed = db.execute("""UPDATE dataops_operations SET result=?,cleanup_error=?
-                WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=1 AND result=?""",
-                (encoded, error, self.id, previous)).rowcount
+                WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=? AND result=?""",
+                (encoded, error, self.id, int(committed), previous)).rowcount
             if changed != 1:
                 raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
             return encoded
@@ -1176,6 +1159,8 @@ class Execution:
             context = self._context()
             if type(ref) is not registry.ResourceRef or ref.database_id != context.database_id:
                 raise QueryError('CROSS_DATABASE_TARGET', 409)
+            if isinstance(receipt.get('target'), dict) and receipt['target'].get('object_id') == ref.object_id:
+                raise QueryError('OBJECT_NOT_OWNED', 403)
             schema = self._ingest_schema(ref.schema_id)
             if schema.sql_name != 'sandbox' or schema.purpose != 'sandbox':
                 raise QueryError('SQL_PERMISSION_DENIED', 403)
@@ -1192,6 +1177,7 @@ class Execution:
                     raise QueryError('STALE_RESOURCE', 409)
                 with control_store.connect() as db:
                     db.execute('BEGIN IMMEDIATE')
+                    settled(db)
                     if self._registered_ingest_stage(db, ref, schema) != obj:
                         raise QueryError('STALE_RESOURCE', 409)
                     marker = save(db, row['result'], status='unknown', phase='SENT',

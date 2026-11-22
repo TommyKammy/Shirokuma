@@ -1,5 +1,6 @@
 """HTTP-only CLI, frozen selection, private credentials and atomic export."""
 import hashlib
+import http.client
 import io
 import json
 from pathlib import Path
@@ -7,10 +8,15 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+from urllib.error import HTTPError, URLError
+from urllib.request import Request
 from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 import dataops_client as cli
+import stages_client as stages
+import dbt_client as dbt
+import marts_client as marts
 import lake_ingest
 import runtime_profile
 
@@ -92,7 +98,10 @@ class ClientTests(unittest.TestCase):
     def test_profile_rejects_unknown_mode_and_invalid_client_reference(self):
         for value in (dict(mode='unknown', client_auth_file=str(self.auth)),
                       dict(mode='logical_v1'), dict(mode='logical_v1', client_auth_file=7)):
-            with self.subTest(value=value), patch.object(cli.runtime_profile, 'private_json', return_value=value), \
+            # Name the profile explicitly so the check never depends on local runtime state.
+            with self.subTest(value=value), \
+                    patch.dict('os.environ', SHIROKUMA_RUNTIME_PROFILE=str(self.root/'profile.json')), \
+                    patch.object(cli.runtime_profile, 'private_json', return_value=value), \
                     patch.object(cli.runtime_profile, 'load', side_effect=AssertionError('backend profile')), \
                     self.assertRaises(ValueError):
                 cli.configured_profile()
@@ -208,6 +217,179 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(caught.exception.reply['operation']['id'], 'op')
         self.assertFalse(output.exists())
         client.get.assert_not_called()
+
+
+class MemoryResponse:
+    def __init__(self, data, length=None, error=None):
+        self.data = data
+        self.headers = {} if length is None else {'Content-Length': length}
+        self.error = error
+        self.entered = self.closed = self.reads = 0
+
+    def __enter__(self):
+        self.entered += 1
+        return self
+
+    def __exit__(self, *args):
+        self.closed += 1
+
+    def read(self):
+        self.reads += 1
+        if self.error is not None:
+            raise self.error
+        return self.data
+
+
+class RequestCharacterizationTests(unittest.TestCase):
+    def clients(self):
+        return (cli.Client, stages.StageClient, dbt.DbtClient, marts.MartClient)
+
+    def client(self, kind, response=None, error=None):
+        # Exercise each real request method without credentials/files or sockets.
+        client = object.__new__(kind)
+        client.base = 'http://127.0.0.1:8888'
+        client.headers = {'Authorization': 'Basic YWxpY2U6c2VjcmV0',
+                          'X-Shirokuma-Role': 'data_engineer'}
+        client.context = None
+        client.opener = Mock()
+        client.opener.open.return_value = response
+        client.opener.open.side_effect = error
+        return client
+
+    def assert_closed_once(self, client, response):
+        self.assertEqual(client.opener.open.call_count, 1)
+        self.assertEqual((response.entered, response.reads, response.closed), (1, 1, 1))
+
+    def test_request_url_body_auth_key_timeout_and_header_copy(self):
+        for kind in self.clients():
+            for method in ('GET', 'POST'):
+                with self.subTest(client=kind.__name__, method=method):
+                    response = MemoryResponse(b'{"ok": true}')
+                    client = self.client(kind, response)
+                    original = dict(client.headers)
+                    body = {'sql': 'select 1', 'values': [1, '雪']} if method == 'POST' else None
+                    self.assertEqual(client.request(method, '/api/test', params={'q': 'a b&雪'},
+                                                   body=body, key='once'), {'ok': True})
+                    request = client.opener.open.call_args.args[0]
+                    self.assertIsInstance(request, Request)
+                    self.assertEqual(request.full_url, client.base + '/api/test?q=a+b%26%E9%9B%AA')
+                    self.assertEqual(request.get_method(), method)
+                    self.assertEqual(request.data, None if body is None else json.dumps(body).encode())
+                    expected = {k.lower(): v for k, v in original.items()}
+                    expected['x-idempotency-key' if kind is marts.MartClient else 'idempotency-key'] = 'once'
+                    if body is not None:
+                        expected['content-type'] = 'application/json'
+                    self.assertEqual({k.lower(): v for k, v in request.header_items()}, expected)
+                    self.assertEqual(client.headers, original)
+                    self.assertEqual(client.opener.open.call_args.kwargs,
+                                     {'timeout': 60 if kind is dbt.DbtClient else 3600})
+                    self.assert_closed_once(client, response)
+
+    def test_response_framing_and_json_failures(self):
+        for kind in self.clients():
+            for method in ('GET', 'POST'):
+                for data, length, failure in ((b'{"ok":1}', None, None),
+                        (b'{"ok":1}', '8', None), (b'[]', None, None),
+                        (b'null', None, None), (b'{}', '3', 'short'),
+                        (b'{}', 'bad', 'length'), (b'{', None, 'json')):
+                    with self.subTest(client=kind.__name__, method=method, failure=failure, data=data):
+                        response = MemoryResponse(data, length)
+                        client = self.client(kind, response)
+                        if failure is None:
+                            self.assertEqual(client.request(method, '/test'), json.loads(data))
+                        else:
+                            expected = dbt.RequestUncertain if kind is dbt.DbtClient and method == 'POST' else ValueError
+                            with self.assertRaises(expected) as caught:
+                                client.request(method, '/test')
+                            if kind is dbt.DbtClient:
+                                if method == 'GET':
+                                    self.assertEqual(str(caught.exception), 'DBT_REQUEST_FAILED')
+                            elif failure == 'short':
+                                self.assertEqual(str(caught.exception), 'incomplete response' if kind is marts.MartClient else 'incomplete HTTP response')
+                            elif failure == 'json':
+                                self.assertIsInstance(caught.exception, json.JSONDecodeError)
+                            else:
+                                self.assertIn('invalid literal', str(caught.exception))
+                        self.assert_closed_once(client, response)
+
+    def test_binary_support_is_client_specific(self):
+        for kind in self.clients():
+            for data in (b'{"ok":1}', b'\x00\xff'):
+                with self.subTest(client=kind.__name__, data=data):
+                    response = MemoryResponse(data, str(len(data)))
+                    client = self.client(kind, response)
+                    if kind in (cli.Client, stages.StageClient):
+                        self.assertEqual(client.request('GET', '/test', binary=True), data)
+                    elif data.startswith(b'{'):
+                        self.assertEqual(client.request('GET', '/test', binary=True), {'ok': 1})
+                    else:
+                        with self.assertRaises(ValueError):
+                            client.request('GET', '/test', binary=True)
+                    self.assert_closed_once(client, response)
+
+    def test_transport_failures_send_once_and_close_entered_response(self):
+        for kind in self.clients():
+            for method in ('GET', 'POST'):
+                for error in (URLError('offline'), OSError('offline'), http.client.IncompleteRead(b'x', 3)):
+                    for during_read in (False, True):
+                        with self.subTest(client=kind.__name__, method=method,
+                                          error=type(error).__name__, during_read=during_read):
+                            response = MemoryResponse(b'', error=error)
+                            client = self.client(kind, response, None if during_read else error)
+                            if isinstance(error, http.client.HTTPException) and kind is not dbt.DbtClient:
+                                expected, message = type(error), None
+                            elif kind is dbt.DbtClient:
+                                expected = dbt.RequestUncertain if method == 'POST' else ValueError
+                                message = None if method == 'POST' else 'DBT_REQUEST_FAILED'
+                            elif kind is stages.StageClient:
+                                expected, message = stages.StageError, 'HTTP_REQUEST_FAILED'
+                            elif kind is marts.MartClient:
+                                expected, message = cli.ClientError, 'MART_REQUEST_FAILED'
+                            else:
+                                expected, message = ValueError, 'HTTP_REQUEST_FAILED'
+                            with self.assertRaises(expected) as caught:
+                                client.request(method, '/test', body={} if method == 'POST' else None)
+                            if message is not None:
+                                self.assertEqual(str(caught.exception), message)
+                            if during_read:
+                                self.assert_closed_once(client, response)
+                            else:
+                                self.assertEqual(client.opener.open.call_count, 1)
+                                self.assertEqual(response.closed, 0)
+
+    def test_dbt_http_rejection_and_uncertainty_boundaries_offline(self):
+        reviewed = ('DBT_PUBLICATION_REVIEW_CHANGED',
+                    'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_VIEW_CHANGED')
+        cases = [('GET', 409, {}, {}, dbt.RequestRejected, 'DBT_REQUEST_FAILED'),
+                 ('POST', 403, {}, {}, dbt.RequestRejected, 'DBT_REQUEST_FAILED'),
+                 ('POST', 409, {}, {}, dbt.RequestUncertain, ''),
+                 ('POST', 500, {}, {}, dbt.RequestUncertain, ''),
+                 ('POST', 403, {'expected_target': {}}, {}, dbt.RequestUncertain, ''),
+                 ('POST', 409, {'expected_target': {}}, {'code': 'OTHER'}, dbt.RequestUncertain, '')]
+        for code in reviewed:
+            for payload in ({'code': code}, {'error': {'code': code}}):
+                cases.append(('POST', 409, {'expected_target': {}}, payload, dbt.RequestRejected, code))
+        for method, status, body, payload, expected, message in cases:
+            with self.subTest(method=method, status=status, body=body, payload=payload):
+                error = HTTPError('http://127.0.0.1:8888/test', status, 'failure', {},
+                                  io.BytesIO(json.dumps(payload).encode()))
+                client = self.client(dbt.DbtClient, error=error)
+                with self.assertRaises(expected) as caught:
+                    client.request(method, '/test', body=body)
+                self.assertEqual(str(caught.exception), message)
+                self.assertEqual(client.opener.open.call_count, 1)
+
+    def test_circular_json_fails_before_send_without_uncertainty(self):
+        body = {}
+        body['self'] = body
+        for kind in self.clients():
+            with self.subTest(client=kind.__name__):
+                client = self.client(kind)
+                original = dict(client.headers)
+                with self.assertRaisesRegex(ValueError, 'Circular reference detected'):
+                    client.request('POST', '/test', body=body, key='once')
+                client.opener.open.assert_not_called()
+                self.assertEqual(client.headers, original)
 
 
 if __name__ == '__main__':

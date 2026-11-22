@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -23,6 +24,9 @@ import control_store
 import runtime_profile
 import warehouse_admission as admission
 from warehouse_operations import OperationError
+
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
 
 
 class ComputeHarness(providers.Harness):
@@ -88,7 +92,7 @@ def prepared_config(root):
 
 class StoppedProofTests(unittest.TestCase):
     def setUp(self):
-        temp = tempfile.TemporaryDirectory(dir='/private/tmp')
+        temp = tempfile.TemporaryDirectory(dir=SHORT_TMP)
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
         self.root.chmod(0o700)
@@ -252,12 +256,12 @@ class LogicalLifecycleTests(creations.LogicalFixture):
                 self.assertEqual(status, 200)
                 self.assertEqual(caps['warehouse_state'], 'STOPPED')
                 self.assertEqual(caps['blocker'], 'WAREHOUSE_START_REQUIRED')
-            status, error, _ = self.request(body=dict(sql_catalog='sleeping_create'))
+            status, error, _ = self.request(body=dict(sql_catalog='sleeping_create',team='Data Team'))
             self.assertEqual((status, error['error']), (409, 'WAREHOUSE_START_REQUIRED'))
             self.assertFalse(value._opened)
             children = len(h.children)
             h.stopped = False  # External verified Wake; coordinator never scales.
-            status, ack, _ = self.request(body=dict(sql_catalog='after_wake'))
+            status, ack, _ = self.request(body=dict(sql_catalog='after_wake',team='Data Team'))
             self.assertEqual(status, 202)
             self.assertTrue(value.bound_alive())
             self.assertEqual(len(h.children), children+3)
