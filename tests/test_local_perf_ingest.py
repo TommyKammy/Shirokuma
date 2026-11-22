@@ -14,6 +14,7 @@ from benchmarks.local_perf.capacity import Campaign, write_json
 from benchmarks.local_perf.ingest import (digest, dumps, file_hash, hints_for, load_public,
                                           operation, prepare_ingest, simple, target_name)
 from benchmarks.local_perf.public import PublicAdapter
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 CTX = dict(database_id='db', schema_id='schema', warehouse_id='LOCAL', sql_catalog='iceberg',
            sql_schema='raw', selected_role='data_engineer', binding_revision=1,

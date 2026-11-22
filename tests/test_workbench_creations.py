@@ -611,7 +611,7 @@ const dbCreation={environment_id:'envA'};function dbCreationSave(){}
 ''' + admin.harness.function('dbCreationURL') + '\n' + admin.harness.function('dbCreationRememberURL') + '''
 dbCreationRememberURL('creation');console.log(location.href);
 '''
-        result = subprocess.run(['node','-e',source],capture_output=True,text=True)
+        result = subprocess.run(['node', '-'], input=source,capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
         generated = result.stdout.strip()
         self.assertEqual(generated,'http://localhost/#databases/create?creation=creation&creation_environment=envA')

@@ -11,6 +11,7 @@ from benchmarks.local_perf.protocol import GIB, LIMIT, plan, protocol, settings,
 from benchmarks.local_perf.results import Writer, compare
 from benchmarks.local_perf.runner import select_only
 from unittest.mock import patch
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class ProtocolTests(unittest.TestCase):

@@ -188,7 +188,7 @@ initializeSession().then(()=>{
  if(JSON.stringify(calls)!==JSON.stringify(['/api/session','apply','restore','restored','status:bi_viewer','catalog:bi_viewer']))throw Error('API called before identity or restoration');
 }).catch(error=>{console.error(error);process.exit(1);});
 """
-        result = subprocess.run(['node', '-e', script], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=script, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_engineer_endpoint_write_scope(self):

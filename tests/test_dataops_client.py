@@ -98,7 +98,10 @@ class ClientTests(unittest.TestCase):
     def test_profile_rejects_unknown_mode_and_invalid_client_reference(self):
         for value in (dict(mode='unknown', client_auth_file=str(self.auth)),
                       dict(mode='logical_v1'), dict(mode='logical_v1', client_auth_file=7)):
-            with self.subTest(value=value), patch.object(cli.runtime_profile, 'private_json', return_value=value), \
+            # Name the profile explicitly so the check never depends on local runtime state.
+            with self.subTest(value=value), \
+                    patch.dict('os.environ', SHIROKUMA_RUNTIME_PROFILE=str(self.root/'profile.json')), \
+                    patch.object(cli.runtime_profile, 'private_json', return_value=value), \
                     patch.object(cli.runtime_profile, 'load', side_effect=AssertionError('backend profile')), \
                     self.assertRaises(ValueError):
                 cli.configured_profile()

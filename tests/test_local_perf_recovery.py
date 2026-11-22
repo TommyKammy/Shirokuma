@@ -13,6 +13,7 @@ from benchmarks.local_perf import runner
 from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.public import PublicAdapter
 from tests.test_local_perf_runner import ScriptedTrino
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 PUBLIC_CONTEXT = dict(database_id="db", schema_id="schema", warehouse_id="LOCAL",

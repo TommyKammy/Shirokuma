@@ -11,6 +11,7 @@ from unittest.mock import patch
 from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.results import Writer
 from benchmarks.local_perf.runner import TrinoAdapter, reconcile, run, sql_identity
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class Server:

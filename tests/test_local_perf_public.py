@@ -15,6 +15,7 @@ from benchmarks.local_perf import runner
 from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.public import PublicAdapter, PublicError, client_auth_path, private_auth
 from benchmarks.local_perf.results import Reader, Writer
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 CONTEXT = dict(database_id="db", schema_id="schema", warehouse_id="LOCAL", sql_catalog="catalog",

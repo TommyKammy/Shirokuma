@@ -16,6 +16,7 @@ from benchmarks.local_perf import tpcds_approved_variants as approved, tpcds_sql
 from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.results import Reader, Writer, column, decoded
 from test_local_perf_tpcds_sql import pins_for
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 def synthetic():

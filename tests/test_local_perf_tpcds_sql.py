@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 from benchmarks.local_perf import tpcds_sql as ds
 from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.results import Reader, Writer, compare
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 def source_manifest():

@@ -12,6 +12,7 @@ from benchmarks.local_perf.capacity import Campaign
 from benchmarks.local_perf.results import Writer, compare, validate_order
 from benchmarks.local_perf.runner import (DuckDBAdapter, TrinoAdapter, reconcile, result_metadata,
                                           run, sql_identity)
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class Local(DuckDBAdapter):

@@ -10,6 +10,7 @@ from benchmarks.local_perf.capacity import Campaign, write_json
 from benchmarks.local_perf.results import Writer
 from benchmarks.local_perf.snapshots import freeze_snapshots, verify_snapshots, table_manifest
 from test_local_perf_ingest import CTX, REF, FakePublic
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class SnapshotPublic(FakePublic):

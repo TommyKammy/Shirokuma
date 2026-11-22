@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 from benchmarks.local_perf import tpch_sql as tpch
 from benchmarks.local_perf.capacity import Campaign
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 def synthetic_manifest():

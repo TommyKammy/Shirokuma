@@ -13,6 +13,7 @@ from unittest.mock import Mock, patch
 from benchmarks.local_perf import tpcds_sql as ds, tpcds_variants as variants
 from benchmarks.local_perf.capacity import Campaign
 from test_local_perf_tpcds_sql import pins_for
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 def synthetic():

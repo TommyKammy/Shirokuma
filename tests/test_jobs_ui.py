@@ -34,7 +34,7 @@ class JobsUIContracts(unittest.TestCase):
     def javascript(self, body, *names):
         definitions = SCRIPT[SCRIPT.index('const i18n'):SCRIPT.index('function ui(')]
         source = definitions + '\nlet currentRole="admin",stageEpoch=0;\n' + '\n'.join(function(name) for name in names) + '\n' + body
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_schedule_inputs_start_disabled_and_off(self):

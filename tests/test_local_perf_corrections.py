@@ -19,6 +19,7 @@ from benchmarks.local_perf.protocol import LIMIT, plan, protocol, settings, vali
 from benchmarks.local_perf.results import Writer, cell, column, compare
 from benchmarks.local_perf.runner import DuckDBAdapter, TrinoAdapter, reconcile, run, sql_identity
 from tests.test_local_perf_runner import ScriptedTrino
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class ReviewTests(TestCase):

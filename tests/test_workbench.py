@@ -511,7 +511,7 @@ eval(SHARED+JOBS+`
 })().catch(error=>{console.error(error);process.exitCode=1;});`);
 """
         source = 'const SHARED=' + json.dumps(shared) + ';const JOBS=' + json.dumps(jobs) + ';const BUSY=' + json.dumps(busy_handler) + ';' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('calendar schedule behavior complete', result.stdout)
 
@@ -812,7 +812,7 @@ eval(HANDLERS+`
  assert.equal($('clone-table-btn').disabled,true);
 })().catch(error=>{console.error(error);process.exitCode=1;});`);
 """
-        result = subprocess.run(['node', '-e', 'const HANDLERS=' + json.dumps(handlers) + ';' + harness],
+        result = subprocess.run(['node', '-'], input='const HANDLERS=' + json.dumps(handlers) + ';' + harness,
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -882,7 +882,7 @@ b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.select().chil
 b.nodes.sql.value='編集 SQL';b.answer(false);b.select().value='c';b.select().onchange();b.action().click();assert.match(b.confirmations.at(-1),/SQL が削除/);assert.equal(b.focus(),b.action());
 const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.select().value=c.run('worksheets[0].id');c.select().onchange();c.action().click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
 '''
-        result = subprocess.run(['node', '-e', 'const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input='const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
@@ -931,7 +931,7 @@ async function check(scenario){
 (async()=>{for(const scenario of ['active','inactive','deleted','edited active','edited inactive'])await check(scenario);})().catch(error=>{console.error(error);process.exitCode=1;});
 '''
         source = 'const HELPERS=' + json.dumps(helpers) + ',HANDLERS=' + json.dumps(handlers) + ';\n' + harness
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @patch.object(wb.bears_resident, 'load_ai_config')
@@ -1228,7 +1228,7 @@ assert.deepEqual(visibleRows().map(row=>row[1]),['zz_match','aa_match','mm_match
 assert.deepEqual(charts.at(-1).map(row=>row[1]),['zz_match','aa_match','mm_match']);
 assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"1","mm_match"');
 '''
-        result = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=harness, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_narrow_form_controls_use_readable_text_and_contain_page_overflow(self):
@@ -1517,8 +1517,8 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         additions = re.findall(
             r'const (?:dbCreationGuidance|dbPlanHelp|dbWorkflowHelp|dbExplanation(?:Help|Lead|Instruction|ContextStep|Fence))=[^\n]*;'
             r'|Object\.assign\(i18n\.ja,\{[\s\S]*?\}\);', script)
-        result = subprocess.run(['node', '-e', dictionary + '\n' + '\n'.join(additions)
-                                 + '\nprocess.stdout.write(JSON.stringify(i18n.ja));'],
+        result = subprocess.run(['node', '-'], input=dictionary + '\n' + '\n'.join(additions)
+                                 + '\nprocess.stdout.write(JSON.stringify(i18n.ja));',
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         translations = json.loads(result.stdout)

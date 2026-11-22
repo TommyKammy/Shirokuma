@@ -51,7 +51,7 @@ const session={username:'owner',authenticated:true,maximum_role:'admin',role:'ad
 catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
 """ + '\n(async()=>{\n' + body + '\n})().catch(error=>{console.error(error);process.exitCode=1;});'
         runner = "require('node:vm').runInNewContext(" + json.dumps(source) + ", {require,console,process,setImmediate});"
-        result = subprocess.run(['node', '-e', runner], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=runner, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_lazy_tabs_and_validated_cached_reselection(self):

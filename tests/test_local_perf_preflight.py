@@ -12,6 +12,7 @@ from test_local_perf_bindings import Local, bound
 from test_local_perf_runner import ScriptedTrino
 import test_local_perf_public as public_tests
 from test_local_perf_public import ScriptedPublic
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class PreflightTests(unittest.TestCase):

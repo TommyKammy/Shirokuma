@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 from benchmarks.local_perf import runner
 from benchmarks.local_perf.capacity import Campaign, CapacitySampler
 from benchmarks.local_perf.public import PublicAdapter
+from tests.local_perf_host import setUpModule, tearDownModule  # noqa: F401
 
 
 class Clock:

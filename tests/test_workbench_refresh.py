@@ -24,7 +24,7 @@ const pruneUIBindings=()=>{},table=(node,columns,rows)=>{node.replaceChildren();
 const workbenchRenderAlerts=()=>{},workbenchSyncMobileNav=()=>{};
 const settle=()=>new Promise(resolve=>setImmediate(resolve));
 ''' + '\n(async()=>{\n' + '\n'.join(function(name) for name in names) + '\n' + body + '\n})().catch(e=>{console.error(e);process.exitCode=1;});'
-        result = subprocess.run(['node', '-e', source], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def jobs_identity_javascript(self, body):
@@ -341,5 +341,5 @@ const $=id=>({click(){calls.push(id);}});
 TIMER
 (async()=>{await callback();assert.deepEqual(calls,['status']);document.hidden=true;await callback();assert.equal(calls.length,1);})().catch(e=>{console.error(e);process.exitCode=1;});
 '''
-        result = subprocess.run(['node', '-e', harness.replace('TIMER', timer)], capture_output=True, text=True)
+        result = subprocess.run(['node', '-'], input=harness.replace('TIMER', timer), capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
