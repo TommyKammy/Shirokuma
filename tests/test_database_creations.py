@@ -26,6 +26,9 @@ import request_auth
 import warehouse_operations as operations
 from tests.test_database_generation import spec
 
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
+
 
 class Probe:
     def __init__(self):
@@ -39,7 +42,7 @@ class Probe:
 
 class CreationFixture(unittest.TestCase):
     def setUp(self):
-        directory = tempfile.TemporaryDirectory(dir='/private/tmp')
+        directory = tempfile.TemporaryDirectory(dir=SHORT_TMP)
         self.addCleanup(directory.cleanup)
         self.directory = Path(directory.name).resolve()
         self.account_file = self.directory/'accounts.json'

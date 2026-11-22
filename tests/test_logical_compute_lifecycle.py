@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import tempfile
@@ -23,6 +24,9 @@ import control_store
 import runtime_profile
 import warehouse_admission as admission
 from warehouse_operations import OperationError
+
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
 
 
 class ComputeHarness(providers.Harness):
@@ -88,7 +92,7 @@ def prepared_config(root):
 
 class StoppedProofTests(unittest.TestCase):
     def setUp(self):
-        temp = tempfile.TemporaryDirectory(dir='/private/tmp')
+        temp = tempfile.TemporaryDirectory(dir=SHORT_TMP)
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name).resolve()
         self.root.chmod(0o700)

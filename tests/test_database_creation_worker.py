@@ -24,6 +24,9 @@ import database_creations as creations
 import warehouse_operations as core
 from warehouse_operator import Operator,save_private
 
+# A short, real temporary root: /private/tmp on macOS, /tmp elsewhere.
+SHORT_TMP = '/private/tmp' if os.path.isdir('/private/tmp') else '/tmp'
+
 
 class WorkerTests(CreationFixture):
     def test_private_observe_does_not_rewrite_old_approval_and_public_completes(self):
@@ -379,7 +382,7 @@ class CallbackDiagnosticsTests(unittest.TestCase):
         from contextlib import ExitStack
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir='/private/tmp'))).resolve()
+        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(dir=SHORT_TMP))).resolve()
         self.root.chmod(0o700)
         self.log = self.root/'callback-failures.jsonl'
         self.profile = SimpleNamespace(state_dir=str(self.root))
