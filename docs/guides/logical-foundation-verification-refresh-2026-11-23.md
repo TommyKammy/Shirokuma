@@ -44,12 +44,13 @@ python3 tools/local_experiment/logical_creations.py refresh-verification \
 
 ## 比較と更新の境界
 
-- 比較するのは `foundation_id` / `revision`、`readiness`、`hashes`、`incarnation.node`、および `_stable_pins`（namespace / PVC / Service / Deployment / ConfigMap / PV の UID）。
+- 比較するのは `foundation_id` / `revision`、`readiness`、`incarnation.node`、および `_stable_pins`（namespace / PVC / Service / Deployment / ConfigMap / PV の UID）。
 - 許容する差分は `spi_sha256` と、Trino rollout で変わる `incarnation.compute` / `incarnation.images` / `incarnation.tunnels` のみ。`images` は Trino compute Pod の UID に対する差分だけを許し、SeaweedFS / Postgres / Polaris の image digest 集合が変われば拒否する。Trino compute Pod の UID 変更や `tunnels` だけの差分は no-op とし、Trino image digest または `spi_sha256` が変われば新しい receipt を作る。
-- stable pin、node、runtime file hash、generation/revision の差分は `FOUNDATION_BINDING_MISMATCH` または `FOUNDATION_NOT_READY` で拒否する。
+- runtime file hash（credentials / password.db / rules / guard）は DB 作成の publication で正当に変わり、各 publication が自身の expected_hashes で検証するため比較しない。形式（64 桁 hex、4 ファイル）のみ確認する。
+- stable pin、node、generation/revision の差分は `FOUNDATION_BINDING_MISMATCH` または `FOUNDATION_NOT_READY` で拒否する。
 - 成功時は `_receipt` で**新しい** 0600 receipt を作り、`supersedes` に元の receipt パスを記録する。`logical_foundations.verification_ref` だけを CAS で更新する。
 - 元の receipt ファイルは削除・上書きしない。`warehouse_config_generations.configuration_refs`、`database_revisions`、`grant_revisions`、generation row、`logical_foundations.revision` は変更しない。
-- `warehouse_resident` の provenance fence は、`configuration_refs` の元 receipt を `supersedes` で参照し、stable pin / node / hash が一致する後継 receipt だけを許容する。これにより immutable な generation provenance を書き換えずに現在の probe を進められる。
+- `warehouse_resident` の provenance fence は、`configuration_refs` の元 receipt を `supersedes` で参照し、stable pin / node が一致する後継 receipt だけを許容する。これにより immutable な generation provenance を書き換えずに現在の probe を進められる。
 
 ## 更新後
 

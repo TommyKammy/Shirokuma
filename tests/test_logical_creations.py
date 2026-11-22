@@ -1557,13 +1557,22 @@ class FoundationVerificationRefreshTests(LogicalFixture):
         self.assertEqual(caught.exception.code, 'FOUNDATION_BINDING_MISMATCH')
         self.assertEqual(self.foundation(), before)
 
-    def test_runtime_hash_change_is_rejected(self):
+    def test_published_runtime_hashes_do_not_block_spi_refresh(self):
+        # Database publications legitimately rewrite runtime files after bootstrap.
+        before = self.foundation()
+        observed = dict(self.provider.probe(), spi_sha256='c' * 64)
+        observed['hashes'] = {key: 'd' * 64 for key in observed['hashes']}
+        result = self.refresh(observed)
+        self.assertTrue(result['changed'])
+        saved = json.loads(Path(self.foundation()['verification_ref']).read_text())
+        self.assertEqual(saved['supersedes'], before['verification_ref'])
+        self.assertEqual(saved['result']['hashes'], observed['hashes'])
+
+    def test_runtime_hash_change_alone_is_noop(self):
         before = self.foundation()
         observed = self.provider.probe()
         observed['hashes'] = dict(observed['hashes'], **{'target.password.db': 'd' * 64})
-        with self.assertRaises(OperationError) as caught:
-            self.refresh(observed)
-        self.assertEqual(caught.exception.code, 'FOUNDATION_BINDING_MISMATCH')
+        self.assertFalse(self.refresh(observed)['changed'])
         self.assertEqual(self.foundation(), before)
 
     def test_generation_or_revision_mismatch_is_rejected(self):

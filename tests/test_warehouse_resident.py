@@ -193,9 +193,11 @@ class LogicalSharedWarehouseTests(unittest.TestCase):
         from warehouse_operations import OperationError
         new_path = str(Path(self.temp.name) / 'verification-new.json')
         logical_foundation.save_private(new_path, json.dumps(dict(self.saved,
-            supersedes=self.proof_path, result=dict(self.expected, spi_sha256='c' * 64))))
+            supersedes=self.proof_path, result=dict(self.expected, spi_sha256='c' * 64,
+                hashes={key: 'd' * 64 for key in self.expected['hashes']}))))
         with control_store.connect() as db:
             db.execute('UPDATE logical_foundations SET verification_ref=?', (new_path,))
+        # Published runtime hashes may differ from the bootstrap receipt.
         self.assertEqual(w._logical_foundation()['warehouse_id'], 'LOCAL')
         bad_path = str(Path(self.temp.name) / 'verification-bad.json')
         logical_foundation.save_private(bad_path, json.dumps(dict(self.saved,

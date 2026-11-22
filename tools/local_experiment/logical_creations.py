@@ -412,7 +412,9 @@ def _foundation_probe_diff(saved, observed, foundation):
         raise OperationError('FOUNDATION_NOT_READY', 503)
     if not _probe_result_valid(observed, c['foundation_generation_id'], c['foundation_revision']):
         raise OperationError('FOUNDATION_NOT_READY', 503)
-    if (saved['readiness'] != observed['readiness'] or saved['hashes'] != observed['hashes']
+    # Runtime file hashes follow each database publication, which verifies them
+    # against its own expected_hashes; bind_registered never pins them either.
+    if (saved['readiness'] != observed['readiness']
             or saved['incarnation'].get('node') != observed['incarnation'].get('node')):
         raise OperationError('FOUNDATION_BINDING_MISMATCH', 409)
     saved_pins = _stable_pins(saved['incarnation'], foundation)
@@ -460,8 +462,7 @@ def foundation_verification_matches(registered, generation, foundation, *, node_
             return False
         base_result, current_result = base.get('result'), current.get('result')
         if (not _probe_result_valid(base_result, generation_id, revision, node_uids)
-                or not _probe_result_valid(current_result, generation_id, revision, node_uids)
-                or base_result['hashes'] != current_result['hashes']):
+                or not _probe_result_valid(current_result, generation_id, revision, node_uids)):
             return False
         pvc_names = ('trino-runtime', 'trino-catalogs', foundation['prefix'] + '-seaweed-data',
                      foundation['prefix'] + '-postgres-data')
