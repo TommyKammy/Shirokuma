@@ -1874,6 +1874,7 @@ class HistoricalQueryRecoveryTests(unittest.TestCase):
             self.apply(completed)
         self.operator.adapter.assert_not_called()
 
+    @requires_birthtime
     def test_original_sql_actor_and_late_file_are_rejected_before_reads(self):
         plan = self.historical()
         original = self.original_intent.read_bytes()
