@@ -17,7 +17,7 @@ func newDatabaseCreationCommand(runner commandRunner) *cobra.Command {
 	parent := &cobra.Command{Use: "creation", Short: "Create databases and inspect creation progress"}
 	for _, action := range []string{"create", "principals", "list", "show", "plan", "approve", "replan", "reconcile", "withdraw", "resume", "retry"} {
 		action := action
-		var name, base, phase, display, description, retryAction string
+		var name, base, phase, team, display, description, retryAction string
 		var grants []string
 		var machine, recovery bool
 		cmd := &cobra.Command{Use: action, Args: cobra.NoArgs}
@@ -29,6 +29,8 @@ func newDatabaseCreationCommand(runner commandRunner) *cobra.Command {
 		if action == "create" {
 			cmd.Flags().StringVar(&name, "sql-catalog", "", "SQL database name")
 			cmd.MarkFlagRequired("sql-catalog")
+			cmd.Flags().StringVar(&team, "team", "", "Owning team")
+			cmd.MarkFlagRequired("team")
 			cmd.Flags().StringArrayVar(&grants, "grant", nil, "Existing principal:role (repeatable)")
 			cmd.Flags().StringVar(&display, "display-name", "", "Display name")
 			cmd.Flags().StringVar(&description, "description", "", "Description")
@@ -58,6 +60,9 @@ func newDatabaseCreationCommand(runner commandRunner) *cobra.Command {
 			}
 			if action != "list" && action != "principals" && name == "" {
 				return fmt.Errorf("SQL database name required")
+			}
+			if action == "create" && strings.TrimSpace(team) == "" {
+				return fmt.Errorf("team required")
 			}
 			if base != "" {
 				u, e := url.Parse(base)
@@ -90,7 +95,7 @@ func newDatabaseCreationCommand(runner commandRunner) *cobra.Command {
 			if action == "create" {
 				flag = "sql-catalog"
 			}
-			for _, item := range []struct{ k, v string }{{flag, name}, {"base-url", base}, {"phase", phase}, {"display-name", display}, {"description", description}, {"action", retryAction}} {
+			for _, item := range []struct{ k, v string }{{flag, name}, {"base-url", base}, {"phase", phase}, {"team", team}, {"display-name", display}, {"description", description}, {"action", retryAction}} {
 				if item.v != "" {
 					args = append(args, "--"+item.k, item.v)
 				}
