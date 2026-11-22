@@ -1001,11 +1001,10 @@ class Operator:
         return obj
 
     def expected_resource(self, health):
-        import yaml
         matches = []
         for name, data in self.files.items():
             if name.endswith(('.yaml', '.yml')):
-                for obj in yaml.safe_load_all(data):
+                for obj in database_generation.yaml_load_all(data):
                     if (isinstance(obj, dict) and obj.get('kind') == health['kind'] and
                             obj.get('metadata', {}).get('name') == health['name'] and
                             obj['metadata'].get('namespace', health['namespace']) == health['namespace']):
@@ -1028,7 +1027,7 @@ class Operator:
                         for path, data in self.files.items():
                             if Path(path).name not in ('kustomization.yaml', 'kustomization.yml', 'Kustomization'):
                                 continue
-                            document = yaml.safe_load(data)
+                            document = database_generation.yaml_load(data)
                             for generator in document.get('configMapGenerator', []):
                                 if generator['name'] != base:
                                     continue

@@ -19,6 +19,7 @@ import database_creation_auth as auth
 import database_creation_bridge as bridge
 import database_creation_recovery as recovery
 import database_creations as creations
+import database_generation
 import runtime_profile
 import request_auth
 import warehouse_operations as core
@@ -668,7 +669,7 @@ class FullSecretContinuityTests(preparation_tests.PreparationFixture):
                 return ''
             if 'apply' in argv:
                 import yaml
-                for obj in yaml.safe_load_all(kwargs['payload']):
+                for obj in database_generation.yaml_load_all(kwargs['payload']):
                     self.put_object(obj)
                     if obj['kind']=='Kustomization':
                         self.health_objects(instance,obj)
@@ -749,12 +750,12 @@ class FullSecretContinuityTests(preparation_tests.PreparationFixture):
             self.put_object(obj)
         for path, content in bound.files.items():
             if path.endswith(('.yaml','.yml')):
-                for obj in yaml.safe_load_all(content):
+                for obj in database_generation.yaml_load_all(content):
                     if isinstance(obj,dict) and obj.get('kind')=='ConfigMap':
                         self.put_object(obj)
             if Path(path).name != 'kustomization.yaml':
                 continue
-            for config in yaml.safe_load(content).get('configMapGenerator',[]):
+            for config in database_generation.yaml_load(content).get('configMapGenerator',[]):
                 data = {}
                 for item in config.get('files',[]):
                     key, filename = item.split('=',1) if '=' in item else (Path(item).name,item)

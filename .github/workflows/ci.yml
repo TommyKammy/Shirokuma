@@ -11,9 +11,23 @@ permissions:
 
 jobs:
   verify:
-    name: Verify
+    name: Verify (${{ matrix.target }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
+    strategy:
+      # Run every shard to completion so one push reports all failures.
+      fail-fast: false
+      matrix:
+        target:
+          - verify-static
+          - test-resident-core-1
+          - test-resident-core-2
+          - test-resident-core-3
+          - test-resident-core-4
+          - test-resident-core-5
+          - test-resident-core-6
+          - test-resident-core-7
+          - test-resident-core-8
 
     steps:
       - name: Checkout
@@ -170,4 +184,19 @@ jobs:
           echo "${bin_dir}" >> "${GITHUB_PATH}"
 
       - name: Run repo-owned checks
-        run: make verify PYTHON=tools/local_experiment/dataops/.venv/bin/python3
+        env:
+          TARGET: ${{ matrix.target }}
+        run: make "${TARGET}" PYTHON=tools/local_experiment/dataops/.venv/bin/python3
+
+  verify-summary:
+    # One overall result for the PR; together the shards equal `make verify`.
+    name: Verify
+    needs: verify
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every verify shard to pass
+        env:
+          RESULT: ${{ needs.verify.result }}
+        run: test "${RESULT}" = success
