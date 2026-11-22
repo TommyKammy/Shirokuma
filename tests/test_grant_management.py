@@ -262,6 +262,38 @@ class ApplyAndMigrationTests(unittest.TestCase):
             self.assertEqual([tuple(r) for r in db.execute("SELECT * FROM grant_audit WHERE principal_id='unrelated'")], audits)
             self.assertEqual(grants.inspect(db, canceled['id'], 'admin')['state'], 'CANCELED')
 
+    def test_redelivery_keeps_historical_provenance_and_cancellation(self):
+        f = self.fixture
+        prepared, full = f.applied_full()
+        old = f.old_delivery()
+        f.install_delivery(old, full=full, prepared=prepared)
+        redelivery = operations.create_plan('admin', '/warehouse/configuration', 'redelivery-grants',
+            f.bundle, f.observations, phase='full', predecessor_id=prepared['id'])
+        self.assertEqual(f.apply(redelivery)['state'], 'APPLIED')
+        with store.connect() as db:
+            spec, proofs = grants._verified_snapshot(db, redelivery['generation_id'])
+            self.assertEqual(spec['generation_id'], redelivery['generation_id'])
+            full_digest = operations.inspect(full['id'], actor='admin')['delivery_digest']
+            self.assertIn(full_digest, {proof['delivery_digest'] for proof in proofs})
+        admin = auth.AuthenticatedPrincipal('admin', 'admin', True)
+        grants.mutate(admin, 'admin', 'opaque_0',
+            dict(principal_id='new', maximum_role='bi_viewer', expected_revision=0), 'new-pending')
+        new_cancel = grants.mutate(admin, 'admin', 'opaque_0',
+            dict(principal_id='new', maximum_role='revoked', expected_revision=1), 'new-cancel')
+        self.assertEqual(new_cancel['state'], 'CANCELED')
+        with store.connect() as db:
+            new_grant = dict(db.execute("SELECT * FROM grants WHERE principal_id='new'").fetchone())
+            self.assertTrue(grants._canceled(db, new_grant))
+        # A well-formed but unrecorded delivery in a historical payload fails closed.
+        with store.connect() as db:
+            payload = json.loads(db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',
+                                            (full['id'],)).fetchone()[0])
+            payload['manifest']['delivery_digest'] = 'f' * 64
+            db.execute('UPDATE operation_requests SET payload=? WHERE operation_id=?',
+                       (json.dumps(payload), full['id']))
+            with self.assertRaises(ValueError):
+                grants._verified_snapshot(db, redelivery['generation_id'])
+
     def same_generation_cancellation(self):
         f = self.fixture
         base = f.apply(f.plan())

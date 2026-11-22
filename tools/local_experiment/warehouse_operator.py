@@ -483,7 +483,10 @@ class Operator:
         self.receipt['verify_declaration'] = dict(state='DECLARING',operation_id=plan['id'],binding=self.binding,
             sql={k:'UNSENT' for k in sql})
         self.receipt['verify_http'] = {}
-        self.declare_activations(plan)
+        if plan.get('redelivery') == 1:
+            self.receipt['verify_declaration']['redelivery'] = True
+        else:
+            self.declare_activations(plan)
         for key in self.read_auth_identities():
             self.receipt['verify_http'][key] = dict(state='UNSENT')
         self.receipt['verify_declaration']['state'] = 'SEALED'
@@ -533,6 +536,9 @@ class Operator:
         self.save()
 
     def activate_runtimes(self, plan):
+        if plan.get('redelivery') == 1:
+            # A template-only redelivery reuses the sealed runtime activation.
+            return
         handoff = self.config.get('managed_handoff')
         if not handoff:
             return
@@ -1444,6 +1450,7 @@ class Operator:
             observed = self.http(urllib.request.Request(origin+'/api/v1/runtime', headers=headers))
             if observed != expected:
                 raise RuntimeError('Both restarted runtimes must match the frozen generation')
+        redelivery = plan.get('redelivery') == 1
         handoff = self.config.get('managed_handoff')
         if handoff:
             import database_creations
@@ -1457,21 +1464,22 @@ class Operator:
                         owner_role=role,owner_instance_id=owner['owner_instance_id'],
                         runtime_instance_id=owner['candidate_runtime_instance_id'],runtime_attestation=expected):
                     raise RuntimeError('Actual managed runtime instance differs')
-                saved = self.receipt.get('runtime_activations',{}).get(role,{})
-                if saved.get('state') != 'ACK' or saved.get('owner') != owner:
-                    raise RuntimeError('Private activation acknowledgement unavailable')
-                import database_creation_worker as worker
-                managed = bridge.current()
-                original_request_id = self.receipt['verify_declaration']['original_request_id']
-                original_request,root,original,ignored = worker.resolve(managed,original_request_id)
-                owner_journal = worker.activation_journal(managed,original_request,root,original,self,role)
-                if owner_journal['state'] != 'ACK':
-                    raise RuntimeError('Private owner activation completion unavailable')
-                for leaf in ('stop','start','readiness'):
-                    value = bridge.exact(owner_journal[leaf],{'state','intent_id'})
-                    bridge.request_id(value['intent_id'])
-                    if value['state'] != 'ACK':
-                        raise RuntimeError('Private owner leaf acknowledgement unavailable')
+                if not redelivery:
+                    saved = self.receipt.get('runtime_activations',{}).get(role,{})
+                    if saved.get('state') != 'ACK' or saved.get('owner') != owner:
+                        raise RuntimeError('Private activation acknowledgement unavailable')
+                    import database_creation_worker as worker
+                    managed = bridge.current()
+                    original_request_id = self.receipt['verify_declaration']['original_request_id']
+                    original_request,root,original,ignored = worker.resolve(managed,original_request_id)
+                    owner_journal = worker.activation_journal(managed,original_request,root,original,self,role)
+                    if owner_journal['state'] != 'ACK':
+                        raise RuntimeError('Private owner activation completion unavailable')
+                    for leaf in ('stop','start','readiness'):
+                        value = bridge.exact(owner_journal[leaf],{'state','intent_id'})
+                        bridge.request_id(value['intent_id'])
+                        if value['state'] != 'ACK':
+                            raise RuntimeError('Private owner leaf acknowledgement unavailable')
                 readbacks[role] = observed
             return readbacks
 

@@ -169,7 +169,8 @@ class OperationTests(unittest.TestCase):
         with self.assertRaises(operations.OperationError):
             operations.create_plan('admin', '/other', 'other', changed, observations)
         self.assertEqual(set(plan), {'id', 'actor', 'action', 'state', 'revision', 'generation_id',
-            'delivery_digest', 'warehouse_id', 'manifest', 'secret_observations', 'steps', 'phase', 'predecessor_id'})
+            'delivery_digest', 'warehouse_id', 'manifest', 'secret_observations', 'steps', 'phase',
+            'predecessor_id', 'redelivery'})
         with self.assertRaises(operations.OperationError):
             operations.inspect(plan['id'], actor='other')
         self.assertEqual(operations.inspect(plan['id'], actor='other', is_admin=True), plan)
@@ -1264,6 +1265,33 @@ print(r['state'])
         applied = self.apply(redelivery)
         self.assertEqual(applied['state'], 'APPLIED')
         self.assertEqual(operations.inspect(full['id'], actor='admin')['delivery_digest'], old['delivery_digest'])
+
+    def test_redelivery_reuses_own_reservation_after_reconcile_not_executed(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        redelivery = operations.create_plan('admin', '/warehouse/configuration', 'redelivery-retry',
+                                            self.bundle, self.observations, phase='full',
+                                            predecessor_id=prepared['id'])
+
+        def fail_trino(step, plan):
+            if step == 'reconcile_trino':
+                raise OSError('synthetic redelivery failure')
+            return dict(evidence_ref='ack:' + step)
+
+        failed = self.apply(redelivery, execute_step=fail_trino)
+        self.assertEqual(failed['state'], 'UNKNOWN')
+        with store.connect() as db:
+            control = admission.control(db)
+            self.assertEqual((control['state'], control['operation_id']), ('UNKNOWN', redelivery['id']))
+        reconciled = operations.reconcile(redelivery['id'], actor='admin',
+            evidence=operations.ReconciliationEvidence('reconcile_trino', 'NOT_EXECUTED',
+                'not-dispatched:redelivery', 'confirmed_not_dispatched'))
+        self.assertEqual(reconciled['state'], 'AWAITING_APPLY')
+        with store.connect() as db:
+            control = admission.control(db)
+            self.assertEqual((control['state'], control['operation_id']), ('UNKNOWN', redelivery['id']))
+        self.assertEqual(self.apply(reconciled)['state'], 'APPLIED')
 
     def test_template_only_redelivery_rejects_scope_drift(self):
         prepared, full = self.applied_full()

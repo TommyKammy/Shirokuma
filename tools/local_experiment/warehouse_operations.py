@@ -361,7 +361,7 @@ def _view(db, operation_id, actor, is_admin=False):
     if type(is_admin) is not bool:
         raise OperationError('INVALID_ADMIN_FLAG', 400)
     row = db.execute('''SELECT o.id,o.actor,o.action,o.state,r.revision,r.generation_id,r.payload,
-                       r.secret_observations,r.phase,r.predecessor_id
+                       r.secret_observations,r.phase,r.predecessor_id,r.redelivery
                        FROM operations o JOIN operation_requests r ON r.operation_id=o.id WHERE o.id=?''',
                      (operation_id,)).fetchone()
     if row is None or row['actor'] != actor and not is_admin:
@@ -458,13 +458,15 @@ def _prepared_reservation(db, prior, manifest, actor, *, operation_id=None, allo
     """Validate a prepared reservation without transferring its closed gate."""
     validate_prepared_handoff(prior, manifest, allow_template_change=allow_template_change)
     control = admission.control(db, prior['warehouse_id'])
+    if operation_id is not None and control['operation_id'] == operation_id:
+        # The same operation may resume its own reservation after an explicit
+        # NOT_EXECUTED reconciliation; initial admission still requires OPEN.
+        return control
     if applied_redelivery:
         # An APPLIED generation has no closed reservation to transfer; the
         # predecessor only proves the physical databases and Secret identities.
         if control['state'] != 'OPEN':
             raise OperationError('INVALID_PREPARED_PREDECESSOR')
-        return control
-    if operation_id is not None and control['operation_id'] == operation_id:
         return control
     if control['state'] not in ('APPLYING', 'UNKNOWN'):
         raise OperationError('INVALID_PREPARED_PREDECESSOR')
