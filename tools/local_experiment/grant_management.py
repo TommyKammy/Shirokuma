@@ -184,8 +184,8 @@ def _verified_snapshot(db, generation_id):
         # Each operation carries the head delivery or one recorded in the append-only plan history.
         if op_manifest != manifest:
             recorded = db.execute('SELECT manifest FROM generation_plan_history WHERE generation_id=? AND delivery_digest=?',
-                                  (generation_id, op_manifest['delivery_digest'])).fetchone()
-            if recorded is None or json.loads(recorded['manifest']) != op_manifest:
+                                  (generation_id, op_manifest['delivery_digest'])).fetchall()
+            if not any(json.loads(row['manifest']) == op_manifest for row in recorded):
                 raise ValueError('Invalid operation delivery')
         if op['predecessor_id'] is not None:
             try:

@@ -1293,6 +1293,57 @@ print(r['state'])
             self.assertEqual((control['state'], control['operation_id']), ('UNKNOWN', redelivery['id']))
         self.assertEqual(self.apply(reconciled)['state'], 'APPLIED')
 
+    def test_redelivery_initial_admission_requires_unowned_open_control(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        with store.connect() as db:
+            db.execute("INSERT INTO warehouse_config_generations VALUES ('other-gen','LOCAL','other-gen','[]','[]','[]','APPLIED')")
+            db.execute("INSERT INTO generation_plans VALUES ('other-gen','{}','other-digest','[]')")
+            db.execute("INSERT INTO operations VALUES ('other','other','WAREHOUSE_CONFIG_APPLY','[]',NULL,"
+                       "'PREPARING','[]','other-gen','{}','{}')")
+            db.execute("INSERT INTO operation_requests (operation_id,actor,route,idempotency_key,payload,revision,"
+                       "generation_id,initial_database_states,phase,predecessor_id,secret_observations) "
+                       "VALUES ('other','other','/route','other-key','{}',1,'other-gen','{}','full',NULL,'[]')")
+            db.execute("INSERT INTO operation_steps VALUES ('other','publish_snapshot','RUNNING',NULL,'now')")
+            db.execute("UPDATE warehouse_controls SET state='OPEN',operation_id='other',revision=revision+1 "
+                       "WHERE warehouse_id='LOCAL'")
+        with self.assertRaises(operations.OperationError) as error:
+            operations.create_plan('admin', '/warehouse/configuration', 'redelivery-owned-open',
+                                   self.bundle, self.observations, phase='full',
+                                   predecessor_id=prepared['id'])
+        self.assertEqual(error.exception.code, 'INVALID_PREPARED_PREDECESSOR')
+
+    def test_same_digest_manifest_variants_are_retained_for_provenance(self):
+        import grant_management as grants
+        prepared, full = self.applied_full()
+        base = copy.deepcopy(self.bundle['manifest'])
+        variant = copy.deepcopy(base)
+        variant['spec']['profile']['template_fingerprint'] = 'f' * 64
+        variant['file_digests']['deploy/local-experiment/trino/deployment.yaml'] = 'e' * 64
+        self.assertEqual(variant['delivery_digest'], base['delivery_digest'])
+        with store.connect() as db:
+            def current():
+                row = db.execute('SELECT manifest,secret_observations FROM generation_plans WHERE generation_id=?',
+                                 (full['generation_id'],)).fetchone()
+                manifest = json.loads(row[0])
+                return dict(delivery_digest=manifest['delivery_digest'], manifest=row[0],
+                            secret_observations=row[1])
+            operations._record_redelivery(db, full['generation_id'], current(), variant, self.observations)
+            operations._record_redelivery(db, full['generation_id'], current(), base, self.observations)
+            payload = json.loads(db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',
+                                            (full['id'],)).fetchone()[0])
+            payload['manifest'] = variant
+            db.execute('UPDATE operation_requests SET payload=?,redelivery=1 WHERE operation_id=?',
+                       (json.dumps(payload, sort_keys=True), full['id']))
+            grants._verified_snapshot(db, full['generation_id'])
+            variants = {json.loads(row[0])['spec']['profile']['template_fingerprint']
+                        for row in db.execute('''SELECT manifest FROM generation_plan_history
+                            WHERE generation_id=? AND delivery_digest=?''',
+                            (full['generation_id'], base['delivery_digest']))}
+            self.assertEqual(variants, {base['spec']['profile']['template_fingerprint'],
+                                        variant['spec']['profile']['template_fingerprint']})
+
     def test_template_only_redelivery_rejects_scope_drift(self):
         prepared, full = self.applied_full()
         base = self.old_delivery()

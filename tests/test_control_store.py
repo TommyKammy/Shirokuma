@@ -112,6 +112,31 @@ class ControlStoreTests(unittest.TestCase):
             foreign_keys = db.execute('PRAGMA foreign_key_list(warehouse_admissions)').fetchall()
         return schema, history, columns, foreign_keys
 
+    def test_v26_history_variant_repair_preserves_rows(self):
+        with store.connect() as db:
+            db.execute("INSERT INTO warehouse_config_generations VALUES ('g','LOCAL','g','[]','[]','[]','APPLIED')")
+        with sqlite3.connect(self.root / 'jobs.sqlite3') as db:
+            db.execute('PRAGMA foreign_keys=OFF')
+            db.execute('DROP TABLE generation_plan_history')
+            db.execute('''CREATE TABLE generation_plan_history (
+                generation_id TEXT NOT NULL REFERENCES warehouse_config_generations(id),
+                delivery_digest TEXT NOT NULL, manifest TEXT NOT NULL, secret_observations TEXT NOT NULL,
+                recorded_at TEXT NOT NULL, PRIMARY KEY (generation_id, delivery_digest))''')
+            db.execute('INSERT INTO generation_plan_history VALUES (?,?,?,?,?)',
+                       ('g', 'd', '{"variant":1}', '[]', 'old'))
+            db.execute('PRAGMA user_version=26')
+        with store.connect() as db:
+            columns = db.execute('PRAGMA table_info(generation_plan_history)').fetchall()
+            self.assertIn('manifest_sha256', {row[1] for row in columns})
+            primary = [row[1] for row in sorted((row for row in columns if row[5]), key=lambda row: row[5])]
+            self.assertEqual(primary, ['generation_id', 'delivery_digest', 'manifest_sha256'])
+            db.execute('INSERT INTO generation_plan_history VALUES (?,?,?,?,?,?)',
+                       ('g', 'd', 'b' * 64, '{"variant":2}', '[]', 'new'))
+            rows = {row[0] for row in db.execute(
+                'SELECT manifest FROM generation_plan_history WHERE generation_id=? AND delivery_digest=?', ('g', 'd'))}
+            self.assertEqual(rows, {'{"variant":1}', '{"variant":2}'})
+            self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(), [])
+
     def test_v24_team_migration_preserves_existing_database_rows_as_null(self):
         import data_management as dm
         with store.connect() as db:

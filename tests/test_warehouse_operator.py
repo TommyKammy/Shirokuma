@@ -2129,3 +2129,27 @@ class SavedPlanLeafTests(unittest.TestCase):
                 self.assertNotIn('private-secret', str(error.exception))
                 self.assertIsNone(error.exception.__cause__)
                 self.assertEqual(run.call_count, 1)
+
+
+class RedeliveryPreparationTests(unittest.TestCase):
+    def test_redelivery_predecessor_uses_admitted_flag_after_observed_unavailable(self):
+        from test_warehouse_operations import OperationTests
+        import control_store as store
+        import warehouse_operations as core
+        fixture = OperationTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        prepared, full = fixture.applied_full()
+        old = fixture.old_delivery()
+        fixture.install_delivery(old, full=full, prepared=prepared)
+        redelivery = core.create_plan('admin', '/warehouse/configuration', 'redelivery-observed',
+            fixture.bundle, fixture.observations, phase='full', predecessor_id=prepared['id'])
+        with store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET state='OBSERVED_UNAVAILABLE' WHERE id=?",
+                       (redelivery['generation_id'],))
+        operator = worker.Operator.__new__(worker.Operator)
+        operator.predecessor_id = prepared['id']
+        operator.binding = {'generation_id': redelivery['generation_id']}
+        with patch.object(worker, 'private_file', return_value=b'{}'), \
+                patch.object(worker, 'validate_bootstrap_receipt', return_value={'ok': True}):
+            self.assertEqual(operator.prepared_predecessor(redelivery), {'ok': True})

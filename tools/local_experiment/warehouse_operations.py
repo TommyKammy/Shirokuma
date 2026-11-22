@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 import copy
 import fcntl
+import hashlib
 import json
 import re
 import time
@@ -97,8 +98,9 @@ def _record_redelivery(db, generation_id, saved, manifest, observations):
             (saved['delivery_digest'], saved['manifest'], saved['secret_observations']),
             (manifest['delivery_digest'], _json(manifest), _json(observations))):
         db.execute('''INSERT OR IGNORE INTO generation_plan_history
-            (generation_id,delivery_digest,manifest,secret_observations,recorded_at)
-            VALUES (?,?,?,?,?)''', (generation_id, delivery_digest, stored, secrets, recorded_at))
+            (generation_id,delivery_digest,manifest_sha256,manifest,secret_observations,recorded_at)
+            VALUES (?,?,?,?,?,?)''', (generation_id, delivery_digest,
+            hashlib.sha256(stored.encode()).hexdigest(), stored, secrets, recorded_at))
     db.execute('''UPDATE generation_plans SET manifest=?,delivery_digest=?,secret_observations=?
                   WHERE generation_id=?''',
                (_json(manifest), manifest['delivery_digest'], _json(observations), generation_id))
@@ -465,7 +467,8 @@ def _prepared_reservation(db, prior, manifest, actor, *, operation_id=None, allo
     if applied_redelivery:
         # An APPLIED generation has no closed reservation to transfer; the
         # predecessor only proves the physical databases and Secret identities.
-        if control['state'] != 'OPEN':
+        # A new redelivery may not steal another operation's OPEN reservation.
+        if control['state'] != 'OPEN' or control['operation_id'] is not None:
             raise OperationError('INVALID_PREPARED_PREDECESSOR')
         return control
     if control['state'] not in ('APPLYING', 'UNKNOWN'):

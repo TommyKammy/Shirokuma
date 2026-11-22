@@ -1308,9 +1308,11 @@ class Operator:
         """Validate prior private credentials against their own frozen public ledger."""
         import warehouse_operations as core
         prior = core.inspect(self.predecessor_id, actor=plan['actor'])
-        with core.control_store.connect() as db:
-            allow_template_change = core.template_change_permitted(
-                db, self.binding['generation_id'], plan['manifest'])
+        allow_template_change = bool(plan.get('redelivery'))
+        if not allow_template_change:
+            with core.control_store.connect() as db:
+                allow_template_change = core.template_change_permitted(
+                    db, self.binding['generation_id'], plan['manifest'])
         core.validate_prepared_handoff(prior, plan['manifest'], allow_template_change=allow_template_change)
         previous = json.loads(private_file(core.control_store.root().resolve() /
             'warehouse-operator-receipts' / (prior['id']+'.json')))
