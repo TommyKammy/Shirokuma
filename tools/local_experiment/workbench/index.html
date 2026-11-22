@@ -7194,9 +7194,11 @@ function dbExplorerDenied(error){
  dbHideRows(run=>run.origin.context.database_id===database);dbClearExplorer();
  message('catalog-context-state',error.message);
 }
+function dbQuoteIdentifier(value){
+ return '"'+String(value).replaceAll('"','""')+'"';
+}
 function dbQualifiedObject(database,schema,object){
- const quote=value=>'"'+String(value).replaceAll('"','""')+'"';
- return [database.sql_catalog,schema.sql_name,object.physical_name].map(quote).join('.');
+ return [database.sql_catalog,schema.sql_name,object.physical_name].map(dbQuoteIdentifier).join('.');
 }
 function dbSyncWorkspaceNavigation(){
  if(activeTab!=='warehouse')return;
@@ -7660,7 +7662,8 @@ async function dbExploreOpenItem(item,mode){
  try{
   let object=item;
   if(!item?.id||!item?.ref){
-   const params=new URLSearchParams({database_id:database.id,schema_id:schema.id,name:item.name||item.physical_name||''});
+   const literal=item.name||item.physical_name||'';
+   const params=new URLSearchParams({database_id:database.id,schema_id:schema.id,name:literal?dbQuoteIdentifier(literal):''});
    const resolved=await dbAPI('/api/v1/objects/resolve?'+params,role);
    if(identity!==dbIdentity()||role!==currentRole)return;
    object=resolved?.object;
@@ -7728,7 +7731,7 @@ async function dbRestoreExplore(value){
   if(!schema)return dbExploreCannotOpen();
   Object.assign(dbExplorer,{database_id:database.id,schema_id:schema.id,binding_revision:database.binding_revision,
    generation_id:database.generation_id,grant_revision:database.grant_revision??null,schemas,schemaScope:dbSchemaKey(role,database.id),invalid:false});
-  const params=new URLSearchParams({database_id:database.id,schema_id:schema.id,name:parsed.name});
+  const params=new URLSearchParams({database_id:database.id,schema_id:schema.id,name:dbQuoteIdentifier(parsed.name)});
   const resolved=await dbAPI('/api/v1/objects/resolve?'+params,role);
   if(identity!==dbIdentity()||role!==currentRole)return;
   if(!resolved?.object?.id||!resolved?.ref)return dbExploreCannotOpen();
@@ -12302,7 +12305,7 @@ Object.assign(i18n.ja,{
  'Saved Jobs':'保存済みジョブ','New Job':'新しいジョブ','Load Job':'ジョブを読み込む','Save Job':'ジョブを保存','Run Job':'ジョブを実行',
  'Job name':'ジョブ名','Job description':'ジョブの説明','Parameters JSON':'パラメーター JSON','Ordered steps JSON':'実行順のステップ JSON','Arguments JSON':'引数 JSON',
  'Input name':'入力名','Input file':'入力ファイル','Add named input':'名前付き入力を追加','Observe run':'実行を照会','Cancel run':'実行を取り消す','Reconcile unknown run':'不明な実行を照合',
- 'Job history':'ジョブの履歴','Refresh Jobs':'ジョブを更新','Saved role':'保存ロール','Revision':'リビジョン',
+ 'Job history':'ジョブの履歴','Current definition, revision {revision}; this run used revision {run}':'現在の定義（リビジョン {revision}）。この実行はリビジョン {run}','Refresh Jobs':'ジョブを更新','Saved role':'保存ロール','Revision':'リビジョン',
  'SQL and alert are available to engineers. Ingest, WAP refresh and table export require admin. Steps run in array order.':'SQL と alert はエンジニアが利用できます。ingest・wap_refresh・table_export は admin が必要です。配列の順に実行します。',
  'Provide parameter definitions and typed arguments as JSON. Files use the input name referenced by an ingest step.':'パラメーター定義と型付き引数を JSON で指定します。ファイル名付き入力には ingest ステップが参照する入力名を使います。',
  'SQL: sql and mode. Alert: read-only Boolean sql. Ingest: input, mode and target or destination. WAP refresh: model_id and version. Table export: source and format (csv/jsonl).':'SQL: sql と mode。Alert: 読取専用の真偽値 SQL。Ingest: input・mode と target または destination。WAP refresh: model_id と version。Table export: source と format (csv/jsonl)。',
@@ -12740,6 +12743,9 @@ function dbJobsStepFacts(step){
  if(step?.summary?.partial===true)parts.push(t('Partially completed'));
  return parts.join(' · ');
 }
+function dbJobsRunIsHistorical(run,job=dbJobs.job){
+ return !!(run&&job&&Number.isInteger(run.revision)&&run.revision!==job.revision);
+}
 function dbJobsRenderFacts(run){
  const host=$('db-jobs-facts');if(!host)return;
  host.replaceChildren();
@@ -12751,7 +12757,7 @@ function dbJobsRenderFacts(run){
  add('Duration',dbJobsRunDuration(run));
  add('Executor',dbJobsSafeName(run?.owner||job.owner));
  add('Execution role',dbRoleDisplayLabel(run?.selected_role||job.selected_role));
- add('Revision','v'+job.revision);
+ add('Revision','v'+(Number.isInteger(run?.revision)?run.revision:job.revision));
  const context=run?.context||job.context;
  if(context&&(context.sql_catalog||context.sql_schema))add('Execution context',[context.sql_catalog,context.sql_schema].filter(Boolean).join(' / '));
 }
@@ -12778,7 +12784,10 @@ function dbJobsRenderCode(){
  if(!Array.isArray(steps)||!steps.length){node.textContent=t('No definition loaded.');return;}
  const sql=steps.filter(step=>['sql','alert'].includes(step?.action)&&typeof step.sql==='string').map(step=>'-- '+(step.name||'')+'\n'+step.sql).join('\n\n');
  node.textContent=sql||JSON.stringify(steps,null,2);
- if(note){if(dbJobs.job)ui(note,'Revision {revision}',{revision:dbJobs.job.revision});else ui(note,'Definition');}
+ if(!note)return;
+ const run=dbJobsActiveRun();
+ if(dbJobsRunIsHistorical(run))ui(note,'Current definition, revision {revision}; this run used revision {run}',{revision:dbJobs.job.revision,run:run.revision});
+ else if(dbJobs.job)ui(note,'Revision {revision}',{revision:dbJobs.job.revision});else ui(note,'Definition');
 }
 function dbJobsContextReason(allowed){
  const p=dbJobs;
@@ -12970,9 +12979,13 @@ function dbJobsRenderSteps(){
  try{steps=JSON.parse($('db-jobs-steps').value||'[]');}catch{const note=document.createElement('p');note.className='callout warn';ui(note,'Step JSON is invalid. Fix it before saving.');list.append(note);return;}
  if(!Array.isArray(steps)||!steps.length){const empty=document.createElement('p');empty.className='empty';ui(empty,'No steps yet.');list.append(empty);return;}
  const run=dbJobsActiveRun();
+ // A run of another revision executed other steps; show what it recorded.
+ const historical=dbJobsRunIsHistorical(run);
+ if(historical)steps=(run.steps||[]).map(item=>({name:item.name,action:item.action}));
+ if(!steps.length){const empty=document.createElement('p');empty.className='empty';ui(empty,'No steps yet.');list.append(empty);return;}
  steps.forEach((step,index)=>{
   const row=document.createElement('div');row.className='step';
-  const executed=(run?.steps||[]).find(item=>item.name===step.name)||(run?.steps||[])[index]||null;
+  const executed=historical?run.steps[index]:(run?.steps||[]).find(item=>item.name===step.name)||null;
   const glyph=document.createElement('span');glyph.className='step-icon';glyph.setAttribute('aria-hidden','true');
   const status=executed?.status||'';
   if(status==='succeeded')glyph.className+=' success';

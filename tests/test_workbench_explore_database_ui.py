@@ -76,12 +76,36 @@ assert.equal(dbWorkspacePane,'details');assert.equal($('explore-page').hidden,tr
 assert.equal(dbObject.id,'orders');
 const resolve=calls.filter(c=>c.path.startsWith('/api/v1/objects/resolve?')).at(-1);
 const params=new URLSearchParams(resolve.path.split('?')[1]);
-assert.equal(params.get('database_id'),'db');assert.equal(params.get('schema_id'),'schema');assert.equal(params.get('name'),'orders');
+assert.equal(params.get('database_id'),'db');assert.equal(params.get('schema_id'),'schema');assert.equal(params.get('name'),'"orders"');
 route=async path=>{if(path.startsWith('/api/v1/objects/resolve?'))throw Object.assign(Error('not found'),{code:'NOT_FOUND',status:404});return {};};
 await dbRestoreExplore('sales.marts.missing');
 assert.equal(dbObject,null);assert.equal($('explore-page').hidden,false);assert.equal($('explore-back').hidden,true);
 assert.equal($('explore-notice').hidden,false);assert.equal($('explore-notice').textContent,t('This object cannot be opened.'));
 assert.equal($('catalog-error').hidden,true);assert.equal($('catalog-error').textContent,'');
+''')
+
+    def test_literal_names_are_resolved_as_one_quoted_identifier(self):
+        # Catalog names are literal; resolve parses SQL identifier paths.
+        self.javascript(r'''
+await boot();
+$('catalog-database').value='';await $('catalog-database').onchange();dbExplorerControls();
+const names=['order.items','space name','MixedCase','say "hi"'];
+const search={items:names.map(name=>({database_id:'db',sql_catalog:'sales',database_display_name:'Sales',schema_id:'schema',schema_sql_name:'marts',name,kind:'TABLE'})),truncated:false,unavailable_databases:[]};
+route=async path=>path.startsWith('/api/v1/objects/search?')?search:path.startsWith('/api/v1/objects/resolve?')?
+ {object:stable('orders','schema'),ref:stable('orders','schema').ref}:{};
+$('explore-search').value='a';await dbExploreLoad();await tick();
+const resolvedName=()=>new URLSearchParams(calls.filter(c=>c.path.startsWith('/api/v1/objects/resolve?')).at(-1).path.split('?')[1]).get('name');
+const expected=['"order.items"','"space name"','"MixedCase"','"say ""hi"""'];
+for(let index=0;index<names.length;index++){
+ if(index===0)await $('explore-results').children[0].onclick({preventDefault(){},button:0});
+ else await dbExploreOpenSearchItem(search.items[index]);
+ await tick();
+ assert.equal(resolvedName(),expected[index]);
+}
+for(let index=0;index<names.length;index++){
+ await dbRestoreExplore(dbExplorePath({sql_catalog:'sales'},{sql_name:'marts'},{physical_name:names[index]}));
+ assert.equal(resolvedName(),expected[index]);
+}
 ''')
 
     def test_deep_link_route_restores_on_reload(self):

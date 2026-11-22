@@ -38,7 +38,7 @@ route=async(path,options)=>{
  if(url.pathname==='/api/v1/jobs/job-1/runs'&&body){
   if(runGate)await runGate.promise;
   if(runFailure)throw Error('response lost');
-  const run={id:'run-1',job_id:'job-1',job_name:'daily',revision:body.expected_revision,owner:'owner',selected_role:context.selected_role,context,status:'running',steps:[{name:'q',action:'sql',status:'running',operation_ids:['child-1'],summary:{count:1}}]};jobRuns=[run];return {context,run};
+  const run={id:'run-1',job_id:'job-1',job_name:'daily',revision:body.expected_revision,owner:'owner',selected_role:context.selected_role,context,status:'running',steps:[{name:savedJobs.find(j=>j.id==='job-1')?.definition?.steps?.[0]?.name||'q',action:'sql',status:'running',operation_ids:['child-1'],summary:{count:1}}]};jobRuns=[run];return {context,run};
  }
  if(url.pathname.startsWith('/api/v1/jobs/runs/')){
   const run=structuredClone(jobRuns[0]);

@@ -311,6 +311,31 @@ assert.equal($('db-jobs-status').hidden,true);
 assert.equal($('db-jobs-run-status').hidden,true);
 ''')
 
+    def test_historical_run_shows_its_own_steps_and_revision(self):
+        self.javascript(JOBS_SETUP + CONTEXT + r'''
+const edited=structuredClone(job);edited.revision=2;
+edited.definition.steps=[{name:'load',action:'sql',sql:'SELECT 2',mode:'read-only'},{name:'check',action:'sql',sql:'SELECT 1',mode:'read-only'}];
+savedJobs=[edited];jobRuns=[structuredClone(run)];await openJobs();
+await dbJobsSelectRun(structuredClone(run));
+const steps=$('db-jobs-steps-list').children;
+assert.equal(steps.length,1);
+assert.equal(steps[0].children[1].children[0].textContent,'check');assert.equal(steps[0].children[0].textContent,'✓');
+assert.equal(visibleText($('db-jobs-steps-list')).includes('load'),false);
+assert.match(visibleText($('db-jobs-facts')),/v1/);
+assert.equal($('db-jobs-code-note').textContent,t('Current definition, revision {revision}; this run used revision {run}',{revision:2,run:1}));
+setLanguage('ja');assert.match($('db-jobs-code-note').textContent,/現在の定義（リビジョン 2）。この実行はリビジョン 1/);
+''')
+
+    def test_same_revision_run_never_borrows_status_by_position(self):
+        self.javascript(JOBS_SETUP + CONTEXT + r'''
+const renamed=structuredClone(run);renamed.steps=[{name:'other',action:'sql',status:'succeeded'}];
+savedJobs=[structuredClone(job)];jobRuns=[renamed];await openJobs();
+await dbJobsSelectRun(structuredClone(renamed));
+const step=$('db-jobs-steps-list').children[0];
+assert.equal(step.children[1].children[0].textContent,'check');assert.equal(step.children[0].textContent,'·');
+assert.equal(step.children[2].textContent,t('No status'));
+''')
+
     def test_step_icons_use_one_small_neutral_class_and_mark(self):
         self.assertIn('.step-icon{display:inline-flex', COMPACT_CSS)
         self.javascript(JOBS_SETUP + r'''
