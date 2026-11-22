@@ -79,6 +79,23 @@ class Arm64CompatibilityMatrixTests(unittest.TestCase):
         self.assertIn("No dependency artifact was published", trino_decision)
         self.assertIn("later sequence are unauthorized", trino_decision)
 
+    def test_trino_484_official_image_is_recorded(self) -> None:
+        row = self.rows["Trino 484"]
+        self.assertIn("`484` (2026-10-15)", row["Upstream release"])
+        self.assertIn(
+            "sha256:2704eb53935af5e582d63d6033e9bf99d20c325e9b0e30b1016ef59a4773979f",
+            row["Image or build path"],
+        )
+        self.assertIn(
+            "sha256:62dc5ad850a11fc95637b0e7aa9da46031145093cb0456cd099c3519298f268c",
+            row["linux/arm64 evidence"],
+        )
+        self.assertIn("ADR-0036", row["Image or build path"])
+        self.assertIn("/usr/lib/trino/bin/launcher run --etc-dir /etc/trino", row["linux/arm64 evidence"])
+        self.assertIn("run-trino", row["linux/arm64 evidence"])
+        self.assertTrue(row["v0.2 decision"].startswith("mainline"))
+        self.assertGreaterEqual(row["Primary sources"].count("https://"), 2)
+
     def test_document_metadata_matches_latest_verification(self) -> None:
         front_matter = self.matrix_text.split("---", 2)[1]
         self.assertIn("\nupdated: 2026-09-01\n", front_matter)

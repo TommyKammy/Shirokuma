@@ -1439,7 +1439,7 @@ def reconcile_query(principal, query_id, *, selected_role, observer):
 
 
 def observe_query_backend(expected):
-    """GET-only Trino 483 metadata observation using INTERNAL admin authority."""
+    """GET-only Trino 484 metadata observation using INTERNAL admin authority."""
     global _origin
     known_id = expected.get('backend_query_id')
     if known_id is not None and not _backend_id(known_id):

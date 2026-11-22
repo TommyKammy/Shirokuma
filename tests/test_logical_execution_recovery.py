@@ -854,7 +854,7 @@ class ForeignFixture:
         labels = dict(zip(recovery.MANAGED_LABELS, ('foreign-pod', 'other-ns', 'standalone-pod', 'trino')))
         self.process = 'PID COMMAND ARGS\n2 java java -Dconfig=/etc/trino/config.properties io.trino.server.TrinoServer'
         spec = dict(nodeName='node', hostNetwork=False, containers=[dict(name='trino', image=self.image,
-            command=['/usr/lib/trino/bin/run-trino'], args=None,
+            command=list(recovery.TRINO_LAUNCHER), args=None,
             volumeMounts=[dict(name='config', mountPath='/etc/trino', readOnly=True)])],
             volumes=[dict(name='config', configMap=dict(name='foreign-config'))])
         self.pod = dict(metadata=dict(uid='foreign-pod', name='standalone-pod', namespace='other-ns', labels={'app': 'standalone'},
@@ -872,8 +872,9 @@ class ForeignFixture:
         self.objects = {('pod', 'standalone-pod'): self.pod, ('replicaset', 'standalone-rs'): self.rs,
             ('deployment', 'standalone'): self.deployment, ('configmap', 'foreign-config'): self.cm,
             ('namespace', 'other-ns'): dict(metadata=dict(name='other-ns', uid='foreign-namespace'))}
-        self.row = dict(Id=self.cid, Image='resolved-image', Path='/usr/lib/trino/bin/run-trino', Args=[],
-            Config=dict(Labels=labels, Image='sha256:'+'a'*64, Entrypoint=['/usr/lib/trino/bin/run-trino'], Cmd=None, Env=[]),
+        self.row = dict(Id=self.cid, Image='resolved-image', Path=recovery.TRINO_LAUNCHER[0],
+            Args=list(recovery.TRINO_LAUNCHER[1:]),
+            Config=dict(Labels=labels, Image='sha256:'+'a'*64, Entrypoint=list(recovery.TRINO_LAUNCHER), Cmd=None, Env=[]),
             HostConfig=dict(RestartPolicy=dict(Name='no'), NetworkMode='container:'+self.sandbox_id),
             State=dict(Running=True, StartedAt='2026-10-29T00:00:00Z'),
             Mounts=[dict(Type='bind', Destination='/etc/trino', RW=False,
@@ -888,6 +889,21 @@ class ForeignFixture:
         a._archive = Mock(side_effect=lambda cid: config_archive(self.content.encode()))
         a._docker = Mock(side_effect=self.docker)
         a._run = Mock(side_effect=self.command)
+
+    def use_image_cmd(self):
+        """Leave the Deployment without command so Docker reports the image CMD."""
+        for spec in (self.pod['spec'], self.rs['spec']['template']['spec'],
+                     self.deployment['spec']['template']['spec']):
+            spec['containers'][0].pop('command')
+        self.row['Config']['Entrypoint'] = None
+        self.row['Config']['Cmd'] = list(recovery.TRINO_LAUNCHER)
+        return self
+
+    def set_command(self, command):
+        for spec in (self.pod['spec'], self.rs['spec']['template']['spec'],
+                     self.deployment['spec']['template']['spec']):
+            spec['containers'][0]['command'] = list(command)
+        return self
 
     def docker(self, *args):
         if args[0] == 'image':
@@ -992,6 +1008,54 @@ class ForeignStandaloneTests(unittest.TestCase):
             f.content = f.cm['data']['config.properties'] = content
             with self.assertRaises(QueryError):
                 f.inventory()
+
+    def test_foreign_accepts_explicit_command_and_image_cmd_launcher_forms(self):
+        ForeignFixture().inventory()
+        ForeignFixture().use_image_cmd().inventory()
+
+    def test_foreign_rejects_mixed_or_partial_launcher_forms(self):
+        launcher = list(recovery.TRINO_LAUNCHER)
+
+        def command_spec_with_cmd_docker(f):
+            # Kubernetes command is present but Docker reports the image CMD shape.
+            f.use_image_cmd().set_command(launcher)
+
+        def no_command_spec_with_entrypoint_docker(f):
+            # Deployment relies on the image CMD but Docker reports Entrypoint.
+            f.use_image_cmd()
+            f.row['Config']['Entrypoint'] = list(launcher)
+            f.row['Config']['Cmd'] = None
+
+        def entrypoint_and_cmd_both_present(f):
+            f.row['Config']['Cmd'] = list(launcher)
+
+        def short_args(f):
+            f.row['Args'] = launcher[1:-1]
+
+        def extra_args(f):
+            f.row['Args'] = launcher[1:] + ['--extra']
+
+        def wrong_entrypoint(f):
+            f.row['Config']['Entrypoint'] = launcher[:-1]
+
+        def wrong_path(f):
+            f.use_image_cmd()
+            f.row['Path'] = '/usr/lib/trino/bin/run-trino'
+
+        def image_cmd_with_pod_args(f):
+            f.use_image_cmd()
+            for spec in (f.pod['spec'], f.rs['spec']['template']['spec'],
+                         f.deployment['spec']['template']['spec']):
+                spec['containers'][0]['args'] = ['--etc-dir', '/other']
+
+        for change in (command_spec_with_cmd_docker, no_command_spec_with_entrypoint_docker,
+                       entrypoint_and_cmd_both_present, short_args, extra_args,
+                       wrong_entrypoint, wrong_path, image_cmd_with_pod_args):
+            with self.subTest(change=change.__name__):
+                f = ForeignFixture()
+                change(f)
+                with self.assertRaises(QueryError):
+                    f.inventory()
 
     def test_archive_requires_one_bounded_fixed_regular_file(self):
         for raw in (b'bad', b'x'*262145, config_archive(b'x', extra=True), config_archive(b'x', name='../config.properties'),

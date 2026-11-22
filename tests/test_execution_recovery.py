@@ -2162,7 +2162,7 @@ class RenderedAdapterTests(unittest.TestCase):
         self.assertEqual(secure['resources'], ['../deployment.yaml', '../service.yaml', '../networkpolicy.yaml'])
         trino = next(c for c in adapter.expected['spec']['template']['spec']['containers'] if c['name'] == 'trino')
         self.assertIn('@sha256:', trino['image'])
-        self.assertEqual(trino['command'], ['/usr/lib/trino/bin/run-trino'])
+        self.assertEqual(trino['command'], list(recovery.TRINO_LAUNCHER))
         mount = next(m for m in trino['volumeMounts'] if m['mountPath'] == '/etc/trino')
         volume = next(v for v in adapter.expected['spec']['template']['spec']['volumes'] if v['name'] == mount['name'])
         generator = next(g for g in secure['configMapGenerator'] if g['name'] == volume['configMap']['name'])
@@ -2233,7 +2233,7 @@ class DockerAdapterTests(unittest.TestCase):
         self.properties = 'coordinator=true\nnode-scheduler.include-coordinator=true\ndiscovery.uri=http://localhost:8080\n'
         self.bundle = dict(files={'deploy/local-experiment/trino/config.properties':self.properties})
         self.image = 'trinodb/trino@sha256:' + 'd' * 64
-        container = dict(name='trino', image=self.image, command=['/usr/lib/trino/bin/run-trino'],
+        container = dict(name='trino', image=self.image, command=list(recovery.TRINO_LAUNCHER),
                          volumeMounts=[dict(name='config', mountPath='/etc/trino')])
         self.deployment = dict(metadata=dict(uid='deployment-uid',name='trino-local',namespace='shirokuma-dev', annotations={'shirokuma.dev/database-generation':'g1'}),
             spec=dict(replicas=1, selector=dict(matchLabels={'app':'trino-local'}),
@@ -2529,7 +2529,7 @@ class HistoricalAdapterTests(unittest.TestCase):
         self.namespace = 'shirokuma-dev'
         self.cm_name = 'trino-local-config-589cfhfttm'
         self.properties = 'coordinator=true\nnode-scheduler.include-coordinator=true\ndiscovery.uri=http://localhost:8080\n'
-        container = dict(name='trino', image=self.image, command=['/usr/lib/trino/bin/run-trino'],
+        container = dict(name='trino', image=self.image, command=list(recovery.TRINO_LAUNCHER),
                          volumeMounts=[dict(name='config', mountPath='/etc/trino', readOnly=True)])
         canonical_volumes = [dict(name='config', configMap=dict(name='trino-local-config',
             items=[dict(key='config.properties', path='config.properties')]))]

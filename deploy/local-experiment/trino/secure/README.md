@@ -14,9 +14,13 @@ backend identity; application audit records retain the authenticated person.
 
 ## Image supply and database guard
 
-The active supply is the full official Trino 483 linux/arm64 image, pinned
-directly in this overlay. It uses `/usr/lib/trino/bin/run-trino` and includes
-password and OPA plugins. The local `Dockerfile` and
+The active supply is the full official Trino 484 linux/arm64 image, pinned
+directly in this overlay. It starts `/usr/lib/trino/bin/launcher run --etc-dir
+/etc/trino` (Trino 484 removed the `run-trino` wrapper) and includes password
+and OPA plugins. The hardened Red Hat base image keeps bash, coreutils, `curl`,
+`tar`, `less`, and the bundled JDK, but ships no `grep`, `dnf`, or `useradd`.
+`node.id` is set explicitly in `../node.properties`, so the image does
+not need to derive it from `HOSTNAME`. The local `Dockerfile` and
 `tools/local_experiment/trino_auth_image.py` restoration recipe are historical;
 password plugin restoration is not needed for this image. The parent preloads
 the pinned image into the node; `imagePullPolicy: Never` remains required.
@@ -89,7 +93,7 @@ existing `kubectl port-forward --address 127.0.0.1` path. Service port 8080 maps
 to the pod's HTTPS port 8443. Clients must use `https://127.0.0.1:<forwarded-port>`
 and verify the generated certificate using `backend_ssl_context()`. SQL over the
 pod's HTTP port is rejected; existing public `/v1/info` health probes still work.
-Do not set `allow-insecure-over-http=true`: Trino 483 selects its insecure
+Do not set `allow-insecure-over-http=true`: Trino 484 selects its insecure
 authenticator for HTTP in that mode, permitting claimed usernames and rejecting
 passwords. It does not enable password authentication over plaintext HTTP.
 This certificate covers localhost only. Use a properly issued certificate with
@@ -104,7 +108,7 @@ both application entrypoints with their three authenticated users. Verify marts
 views only expose intentionally published data. These checks are required before
 asserting the backend boundary is active.
 
-Trino 483 references: [password hashes and authenticator](https://github.com/trinodb/trino/blob/483/docs/src/main/sphinx/security/password-file.md),
-[HTTP properties and shared secret](https://github.com/trinodb/trino/blob/483/docs/src/main/sphinx/admin/properties-http-server.md),
-[secure authentication selection](https://github.com/trinodb/trino/blob/483/core/trino-main/src/main/java/io/trino/server/security/AuthenticationFilter.java),
-[ACL semantics and impersonation](https://github.com/trinodb/trino/blob/483/docs/src/main/sphinx/security/file-system-access-control.md).
+Trino 484 references: [password hashes and authenticator](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/security/password-file.md),
+[HTTP properties and shared secret](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/admin/properties-http-server.md),
+[secure authentication selection](https://github.com/trinodb/trino/blob/484/core/trino-main/src/main/java/io/trino/server/security/AuthenticationFilter.java),
+[ACL semantics and impersonation](https://github.com/trinodb/trino/blob/484/docs/src/main/sphinx/security/file-system-access-control.md).
