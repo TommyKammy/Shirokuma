@@ -222,9 +222,13 @@ class PolarisAdoptionTests(unittest.TestCase):
             block = catalog.split(f'resource "kubernetes_secret_v1" "{resource}"')[1].split('\nresource ')[0]
             flat = ' '.join(block.split())
             each = flat.split('for_each = ', 1)[1].split(' metadata {', 1)[0]
+            # Generation mode creates a consumer Secret only when its own ref is
+            # expected in the current phase, matching the data validation above.
+            ref = f'local.generation_databases[key].{principal}_secret'
             self.assertEqual(each,
                 '{ for key, database in local.polaris_databases : key => database '
-                'if local.generation_mode ? var.warehouse_generation_phase == "full" : try(nonsensitive( '
+                'if local.generation_mode ? contains(local.generation_expected_ids, '
+                f'"${{{ref}.namespace}}/${{{ref}.name}}@${{{ref}.version}}") : try(nonsensitive( '
                 f'var.polaris_database_credentials[key].{principal}_client_id != null && '
                 f'var.polaris_database_credentials[key].{principal}_client_secret != null ), false) }}')
             role = 'trino_secret' if principal == 'trino' else 'bootstrap_secret'
