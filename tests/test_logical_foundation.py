@@ -159,6 +159,17 @@ class FoundationTests(unittest.TestCase):
             with self.subTest(config=c), self.assertRaises(f.ConfigError):
                 f.validate(c)
 
+    def test_seaweedfs_requires_untagged_digest(self):
+        c = settings(self.root)
+        c['images']['seaweedfs'] = 'docker.io/chrislusf/seaweedfs@sha256:'+'a'*64
+        f.validate(c)
+        for image in ('docker.io/chrislusf/seaweedfs:4.51@sha256:'+'a'*64,
+                      'chrislusf/seaweedfs:4.51@sha256:'+'a'*64):
+            c = settings(self.root)
+            c['images']['seaweedfs'] = image
+            with self.subTest(image=image), self.assertRaises(f.ConfigError):
+                f.validate(c)
+
     def test_supported_profile_rejects_other_accounts_without_rewriting(self):
         for account in ('123456789012', '111111111111', '', 0, None):
             c = settings(self.root)
@@ -572,7 +583,7 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
             with self.assertRaises(f.ConfigError):
                 f.apply(self.c)
 
-    def prepare_fixture(self):
+    def prepare_fixture(self, *, seaweed_image='docker.io/chrislusf/seaweedfs@sha256:'+'a'*64):
         target = self.root/'prepared'
         jar = self.root/'input.jar'
         jar.write_bytes(b'product-code')
@@ -591,8 +602,14 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
             return b''
         c = f.prepare(private_dir=target, kubeconfig=self.root/'kubeconfig', context='lab', node_name='lab-node',
             foundation_id='registered-core-wcg', revision=5, environment_id='lab', warehouse_id='warehouse',
-            seaweed_image='docker.io/chrislusf/seaweedfs@sha256:'+'a'*64, jar=jar, command=command)
+            seaweed_image=seaweed_image, jar=jar, command=command)
         return target, c, calls
+
+    def test_prepare_rejects_tagged_seaweedfs_before_writing(self):
+        with self.assertRaises(f.ConfigError):
+            self.prepare_fixture(
+                seaweed_image='docker.io/chrislusf/seaweedfs:4.51@sha256:'+'a'*64)
+        self.assertFalse((self.root/'prepared').exists())
 
     def test_prepare_mints_private_material_and_captures_real_supplied_pins(self):
         target, c, calls = self.prepare_fixture()
@@ -1403,6 +1420,24 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         with self.assertRaises(ValueError):
             builder.build(self.root/'failure.jar', command=lambda *args, **kwargs: subprocess.CompletedProcess(args, 1))
         self.assertFalse((self.root/'failure.jar').exists())
+
+
+class FoundationCliTests(unittest.TestCase):
+    def test_apply_prints_both_register_and_refresh_next_steps(self):
+        output = io.StringIO()
+        with patch.object(f, 'load', return_value={}), patch.object(f, 'apply') as apply, \
+                patch('sys.stdout', output):
+            self.assertEqual(f.main(['apply', '--settings', 'synthetic.json', '--apply']), 0)
+        apply.assert_called_once_with({}, apply=True)
+        text = output.getvalue()
+        self.assertIn('register-foundation', text)
+        self.assertIn('refresh-verification', text)
+
+    def test_cli_reports_invalid_foundation_settings(self):
+        output = io.StringIO()
+        with patch.object(f, 'load', side_effect=f.ConfigError()), patch('sys.stderr', output):
+            self.assertEqual(f.main(['apply', '--settings', 'synthetic.json', '--apply']), 1)
+        self.assertEqual(output.getvalue().strip(), 'INVALID_FOUNDATION_SETTINGS')
 
 
 if __name__ == '__main__':

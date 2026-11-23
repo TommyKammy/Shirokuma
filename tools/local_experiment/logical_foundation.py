@@ -16,6 +16,7 @@ import re
 import secrets
 import stat
 import subprocess
+import sys
 import time
 
 import yaml
@@ -187,7 +188,8 @@ def validate(config):
         _require(isinstance(k['node_uids'], dict) and set(k['node_uids']) == {k['node_name']})
         _require(bool(ID.fullmatch(k['node_uids'][k['node_name']])))
         _require(all(isinstance(v, str) and IMAGE.fullmatch(v) for v in c['images'].values()))
-        _require(re.fullmatch(r'(?:docker.io/)?chrislusf/seaweedfs(?::4\.51)?@sha256:[0-9a-f]{64}', c['images']['seaweedfs']) is not None)
+        # The namespace admission policy requires an untagged repository@sha256.
+        _require(re.fullmatch(r'(?:docker.io/)?chrislusf/seaweedfs@sha256:[0-9a-f]{64}', c['images']['seaweedfs']) is not None)
         _require(c['storage']['account_id'] == '000000000000')
         _require(bool(DNS.fullmatch(c['storage']['bucket'])) and len(c['storage']['bucket']) >= 3)
         native = f"{k['namespace']}.svc.cluster.local"
@@ -703,9 +705,13 @@ def main(argv=None):
             save_private(Path(c['private_dir']) / 'render-secrets.yaml', yaml.safe_dump_all(private))
         print('FOUNDATION_DOCUMENTS_READY')
         if action == 'apply':
-            print('NEXT: stop Workbench and the 8080 endpoint, then run:')
-            print('  python3 tools/local_experiment/logical_creations.py refresh-verification --confirm-workbench-stopped')
+            print('NEXT: stop Workbench and the 8080 endpoint, then run one of:')
+            print('  new foundation: python3 tools/local_experiment/logical_creations.py register-foundation --confirm-workbench-stopped')
+            print('  updated foundation: python3 tools/local_experiment/logical_creations.py refresh-verification --confirm-workbench-stopped')
         return 0
+    except ConfigError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except Exception:
         print('FOUNDATION_OPERATION_FAILED')
         return 1

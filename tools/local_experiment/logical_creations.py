@@ -95,6 +95,19 @@ def config():
     return _config
 
 
+def _require_platform_admin(foundation):
+    """Publication rewrites password.db, so the internal admin must stay the provisioner."""
+    try:
+        provisioner = runtime_profile.private_json(foundation['trino']['provisioner_credentials_file'])
+        admin = registry.platform_admin_credentials()
+        if (not isinstance(provisioner, dict)
+                or provisioner.get('username') != admin['username']
+                or provisioner.get('password') != admin['password']):
+            raise ValueError()
+    except Exception:
+        raise OperationError('PLATFORM_ADMIN_MISMATCH', 503) from None
+
+
 @contextmanager
 def lifetime(*, register=False, refresh_interval=2):
     """One provider/tunnel owner per normal HTTP process, never per database."""
@@ -107,6 +120,7 @@ def lifetime(*, register=False, refresh_interval=2):
             ('environment_id', 'environment_id'), ('warehouse_id', 'warehouse_id'),
             ('foundation_id', 'foundation_generation_id'), ('revision', 'foundation_revision'))):
         raise ValueError('Logical foundation differs')
+    _require_platform_admin(foundation)
     executor = value['executor_id']
     previous = _provider, _config, _executor_id, _verifier_cache
     provider = Provider(foundation)
@@ -1766,9 +1780,13 @@ def check_environment(headers):
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Explicit logical foundation operator')
     sub = parser.add_subparsers(dest='action', required=True)
-    refresh = sub.add_parser('refresh-verification',
-        help='create a superseding foundation probe receipt after an image/SPI update')
-    refresh.add_argument('--confirm-workbench-stopped', action='store_true')
+    for action, help_text in (
+            ('refresh-verification',
+             'create a superseding foundation probe receipt after an image/SPI update'),
+            ('register-foundation',
+             'register a new empty foundation through lifetime(register=True)')):
+        command = sub.add_parser(action, help=help_text)
+        command.add_argument('--confirm-workbench-stopped', action='store_true')
     args = parser.parse_args(argv)
     if not args.confirm_workbench_stopped:
         print('Stop Workbench and the 8080 endpoint, then pass --confirm-workbench-stopped',
@@ -1778,13 +1796,21 @@ def main(argv=None):
         if not runtime_profile.configure_process():
             print('SHIROKUMA_RUNTIME_PROFILE is required', file=sys.stderr)
             return 2
-        with refresh_lifetime():
-            result = refresh_foundation_verification()
+        if args.action == 'register-foundation':
+            with lifetime(register=True):
+                pass
+            value = runtime_profile.logical_config()
+            result = dict(registered=True, generation_id=value['foundation_generation_id'],
+                          revision=value['foundation_revision'])
+        else:
+            with refresh_lifetime():
+                result = refresh_foundation_verification()
     except OperationError as error:
         print(json.dumps({'error': error.code, 'status': error.status}), file=sys.stderr)
         return 1
     except Exception as error:
-        print(json.dumps({'error': getattr(error, 'code', 'REFRESH_FAILED')}), file=sys.stderr)
+        fallback = 'REGISTER_FAILED' if args.action == 'register-foundation' else 'REFRESH_FAILED'
+        print(json.dumps({'error': getattr(error, 'code', fallback)}), file=sys.stderr)
         return 1
     print(json.dumps(result, sort_keys=True))
     return 0
