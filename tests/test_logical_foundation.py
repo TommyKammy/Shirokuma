@@ -246,7 +246,8 @@ class FoundationTests(unittest.TestCase):
         sw = deployments['owned-seaweed']['spec']['template']['spec']['containers'][0]
         self.assertIn('-volume.max=32', sw['args'])
         self.assertIn('-ip=$(POD_IP)', sw['args'])
-        self.assertEqual(sw['env'], [{'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}}])
+        self.assertEqual(sw['env'], [{'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}},
+            {'name': 'WEED_JWT_FILER_SIGNING_KEY', 'valueFrom': {'secretKeyRef': {'name': 'owned-private', 'key': 'filer_signing_key'}}}])
         for pvc in (d for d in public if d['kind'] == 'PersistentVolumeClaim'):
             self.assertEqual(pvc['metadata']['annotations'], {'volumeType': 'local'})
             self.assertEqual(pvc['spec']['storageClassName'], 'local-path')
@@ -516,7 +517,7 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         public, private = f.render(self.c)
         secrets = {d['metadata']['name']: set(d['stringData']) for d in private}
         allowed = {
-            ('owned-seaweed', 'seaweedfs'): ({'s3.json', 'iam.json', 'filer.toml'}, set()),
+            ('owned-seaweed', 'seaweedfs'): ({'s3.json', 'iam.json', 'filer.toml'}, {'filer_signing_key'}),
             ('owned-seaweed', 'seaweedfs-data-init'): (set(), set()),
             ('owned-postgres', 'postgres'): (set(), {'pg_password'}),
             ('owned-bootstrap', 'schema'): (set(), {'pg_password'}),
@@ -565,8 +566,23 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
                 self.assertEqual((files, envkeys), allowed[key], key)
                 if key[0].startswith('trino'):
                     self.assertFalse((files | envkeys) & {'s3.json', 'iam.json', 'pg_password',
-                        'credentials.json', 'private.pem', 'public.pem', 'issuer_access', 'issuer_secret'})
+                        'credentials.json', 'private.pem', 'public.pem', 'issuer_access', 'issuer_secret', 'filer_signing_key'})
         self.assertEqual(seen, set(allowed))
+
+    def test_seaweed_filer_signing_key_is_derived_private_and_stable(self):
+        self.fixture()
+        public, private = f.render(self.c)
+        key = next(d['stringData']['filer_signing_key'] for d in private if d['metadata']['name'] == 'owned-private')
+        self.assertEqual(len(base64.b64decode(key, validate=True)), 32)
+        self.assertEqual(key, next(d['stringData']['filer_signing_key'] for d in f.render(self.c)[1]
+                                   if d['metadata']['name'] == 'owned-private'))
+        state = json.loads((self.root / 'foundation-private.json').read_text())
+        self.assertNotEqual(key, state['signer'])
+        self.assertNotIn(key, json.dumps(public))
+        seaweed = next(d for d in public if d['kind'] == 'Deployment' and d['metadata']['name'] == 'owned-seaweed')
+        container = next(x for x in seaweed['spec']['template']['spec']['containers'] if x['name'] == 'seaweedfs')
+        self.assertIn({'name': 'WEED_JWT_FILER_SIGNING_KEY', 'valueFrom': {'secretKeyRef': {
+            'name': 'owned-private', 'key': 'filer_signing_key'}}}, container['env'])
 
     def test_private_files_exclusive_and_render_jar_limit(self):
         self.save('exclusive', 'secret')
@@ -1046,10 +1062,11 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertNotIn('coordinator', validated['trino'])
         baseline = f.render(self.c)
         # Recorded from the pre-coordinator renderer using this existing fixture;
-        # refreshed once for the Trino 484 node.id=${ENV:HOSTNAME} property.
+        # refreshed for the Trino 484 node.id=${ENV:HOSTNAME} property and for
+        # the SeaweedFS filer signing key (private key + env reference).
         serialized = json.dumps(baseline, sort_keys=True).replace(str(self.root), '<PRIVATE_DIR>')
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '72f1727a4d08d5f698ab6a33eec602669169aaa40d1a06da6a35b591cc3cafb1')
+                         '7c64b22f65647e3f4960a71a1840ea46834e2d1a745006b186ce3559aae2f6a7')
         self.assertNotIn('shirokuma.dev/coordinator-resources', serialized)
         self.c['trino']['coordinator'] = self.coordinator_profile()
         explicit = f.render(self.c)
