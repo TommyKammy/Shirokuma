@@ -9,6 +9,7 @@ import argparse
 import base64
 import copy
 import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
@@ -434,7 +435,12 @@ def render(config):
     iamconfig = json.dumps({'sts': {'signingKey': state['signer'], 'issuer': c['foundation_id'],
         'accountId': c['storage']['account_id'], 'tokenDuration': '1h', 'maxSessionLength': '12h'},
         'policy': {'defaultEffect': 'Deny', 'storeType': 'filer'}, 'roleStore': {'storeType': 'filer'}})
-    secret_data = {'s3.json': s3config, 'iam.json': iamconfig,
+    # SeaweedFS 4.55 leaves the filer IAM gRPC service unauthenticated without
+    # jwt.filer_signing.key. Derive it from the existing signer so existing
+    # foundations need no new private state.
+    filer_signing = base64.b64encode(hmac.new(state['signer'].encode(),
+        b'shirokuma/seaweedfs/jwt.filer_signing/v1', hashlib.sha256).digest()).decode()
+    secret_data = {'s3.json': s3config, 'iam.json': iamconfig, 'filer_signing_key': filer_signing,
         'filer.toml': '[leveldb2]\nenabled = true\ndir = "/data/filer"\n',
         'pg_password': state['pg_password'], 'shared': state['shared'],
         'issuer_access': state['issuer']['access_key'], 'issuer_secret': state['issuer']['secret_key'],
@@ -458,7 +464,8 @@ def render(config):
         '-ip=$(POD_IP)', '-ip.bind=0.0.0.0', '-master.volumeSizeLimitMB=1024', '-volume.max='+str(state['volume_max']),
         '-s3.port=8333', '-s3.config=/etc/seaweedfs/s3.json', '-s3.iam.readOnly=false', '-s3.iam.config=/etc/seaweedfs/iam.json'],
         [mount('data', '/data', False), mount('private', '/etc/seaweedfs')],
-        envs=[{'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}}])
+        envs=[{'name': 'POD_IP', 'valueFrom': {'fieldRef': {'fieldPath': 'status.podIP'}}},
+              env('WEED_JWT_FILER_SIGNING_KEY', secret_key='filer_signing_key')])
     swc['workingDir'] = '/data'
     swinit = container('seaweedfs-data-init', c['images']['seaweedfs'],
         ['-c', 'mkdir -p /data/master /data/filer'], [mount('data', '/data', False)])
