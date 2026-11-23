@@ -47,7 +47,7 @@ colima -p mac-studio-solo ssh -- sudo k3s crictl images \
 Trino は `logical_foundation.py:296` の pin
 （`docker.io/trinodb/trino@sha256:62dc5ad8...`）を使う。SeaweedFS は
 **タグなしの digest**（`docker.io/chrislusf/seaweedfs@sha256:...`）を使う。
-`:4.51@sha256:...` のようなタグ付き参照は、foundation の admission policy が
+`:4.55@sha256:...` のようなタグ付き参照は、foundation の admission policy が
 拒否するため `prepare` の時点で `INVALID_FOUNDATION_SETTINGS` になる。
 
 ## 2. 作業ディレクトリ
@@ -102,7 +102,7 @@ PATH="$ROOT/tools/local_experiment/dataops/.venv/bin:$PATH" python3 \
   --revision "$REVISION" \
   --environment-id "$ENVIRONMENT_ID" \
   --warehouse-id LOCAL \
-  --seaweed-image 'docker.io/chrislusf/seaweedfs@sha256:7e68a388de0806ed8d96f30cb7e927182a3d80d42920cb87d97d23311a7a1a77' \
+  --seaweed-image 'docker.io/chrislusf/seaweedfs@sha256:1d857dc0ff7f0829e5f0228c7dd8d6907b4d1e7b01b553eb5c05c17c9a9a7b49' \
   --jar "$DIR/logical-secrets.jar" \
   --namespace shirokuma-logical \
   --workers 1
@@ -387,7 +387,7 @@ rm -rf "$DIR"
 | 症状 | 確認と対処 |
 |---|---|
 | `PLATFORM_ADMIN_MISMATCH` | `runtime/credentials/platform-admin.json` の username/password を `foundation/provisioner.json` と一致させる。DB 作成後に誤った状態で公開した場合は、`password.db` から provisioner が消えているため、使い捨て環境なら namespace と control store を作り直すのが確実。 |
-| `INVALID_FOUNDATION_SETTINGS`（prepare） | SeaweedFS が `:4.51@sha256:...` のタグ付きになっていないか。untagged `.../seaweedfs@sha256:...` にする。 |
+| `INVALID_FOUNDATION_SETTINGS`（prepare） | SeaweedFS が `:4.55@sha256:...` のタグ付きになっていないか。untagged `.../seaweedfs@sha256:...` にする。 |
 | `FOUNDATION_NOT_READY` | bootstrap Job、PVC、Pod、foundation receipt を確認する。image/SPI 更新後は `refresh-verification --confirm-workbench-stopped` を使う。 |
 | `OPERATOR_UNAVAILABLE` | `SHIROKUMA_RUNTIME_PROFILE` が正しいか、profile が `mode=logical_v1` か確認する。 |
 | `WAREHOUSE_START_REQUIRED` | compute が停止している。Workbench の lifecycle で起動するか、Trino Deployment を確認する。 |
