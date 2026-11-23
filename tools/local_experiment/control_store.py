@@ -1,11 +1,12 @@
 """Transactional bootstrap for the local control ledger (historically jobs.sqlite3)."""
 from contextlib import contextmanager
+import hashlib
 import os
 from pathlib import Path
 import sqlite3
 
 
-VERSION = 25
+VERSION = 26
 
 _CREATION_SCHEMA = '''
 CREATE TABLE db_creations (
@@ -376,7 +377,8 @@ def _version(connection):
 
 
 def _bootstrap(connection):
-    if _version(connection) == VERSION and not _v14_repairs(connection):
+    if (_version(connection) == VERSION and not _v14_repairs(connection)
+            and not _v26_repairs(connection)):
         return
     # The admissions rebuild has inbound and self-referencing foreign keys.
     # SQLite only changes this setting outside a transaction.
@@ -634,6 +636,27 @@ def _migrate(connection):
         if 'team' not in columns:
             connection.execute('ALTER TABLE databases ADD COLUMN team TEXT')
         connection.execute('PRAGMA user_version=25')
+    if _version(connection) == 25:
+        # ADR-0039: keep every delivery of a generation. generation_plans stays
+        # the current head for existing readers; this table is append-only.
+        connection.execute('''CREATE TABLE IF NOT EXISTS generation_plan_history (
+            generation_id TEXT NOT NULL REFERENCES warehouse_config_generations(id),
+            delivery_digest TEXT NOT NULL, manifest_sha256 TEXT NOT NULL,
+            manifest TEXT NOT NULL, secret_observations TEXT NOT NULL, recorded_at TEXT NOT NULL,
+            PRIMARY KEY (generation_id, delivery_digest, manifest_sha256))''')
+        for row in connection.execute('''SELECT generation_id,delivery_digest,manifest,secret_observations
+                                         FROM generation_plans''').fetchall():
+            connection.execute('''INSERT OR IGNORE INTO generation_plan_history
+                (generation_id,delivery_digest,manifest_sha256,manifest,secret_observations,recorded_at)
+                VALUES (?,?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))''',
+                (row[0], row[1], hashlib.sha256(row[2].encode()).hexdigest(), row[2], row[3]))
+        columns = {row['name'] for row in connection.execute('PRAGMA table_info(operation_requests)')}
+        if 'redelivery' not in columns:
+            connection.execute('''ALTER TABLE operation_requests ADD COLUMN redelivery INTEGER NOT NULL DEFAULT 0
+                CHECK(redelivery IN (0,1))''')
+        connection.execute('PRAGMA user_version=26')
+    if _version(connection) >= 26:
+        _repair_generation_plan_history(connection)
 
 
 def _migrate_admission_closures(db):
@@ -782,6 +805,40 @@ def _v14_repairs(connection, *, details=False):
     values = (roles is not None and "'admin'" not in roles[0],
               binding is not None and 'json_extract' not in binding[0])
     return values if details else any(values)
+
+
+def _v26_repairs(connection):
+    """Detect the pre-repair v26 history schema; the version number is unchanged."""
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='generation_plan_history'").fetchone() is None:
+        return True
+    columns = connection.execute('PRAGMA table_info(generation_plan_history)').fetchall()
+    names = {row[1] for row in columns}
+    primary = [row[1] for row in sorted((row for row in columns if row[5]), key=lambda row: row[5])]
+    return 'manifest_sha256' not in names or primary != ['generation_id', 'delivery_digest', 'manifest_sha256']
+
+
+def _repair_generation_plan_history(connection):
+    """Rebuild old v26 history in place, preserving every row."""
+    if not _v26_repairs(connection):
+        return
+    exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='generation_plan_history'").fetchone()
+    rows = (connection.execute('''SELECT generation_id,delivery_digest,manifest,secret_observations,recorded_at
+                                  FROM generation_plan_history''').fetchall() if exists else [])
+    if exists:
+        connection.execute('DROP TABLE IF EXISTS generation_plan_history_v26_old')
+        connection.execute('ALTER TABLE generation_plan_history RENAME TO generation_plan_history_v26_old')
+    connection.execute('''CREATE TABLE generation_plan_history (
+        generation_id TEXT NOT NULL REFERENCES warehouse_config_generations(id),
+        delivery_digest TEXT NOT NULL, manifest_sha256 TEXT NOT NULL,
+        manifest TEXT NOT NULL, secret_observations TEXT NOT NULL, recorded_at TEXT NOT NULL,
+        PRIMARY KEY (generation_id, delivery_digest, manifest_sha256))''')
+    for row in rows:
+        connection.execute('''INSERT OR IGNORE INTO generation_plan_history
+            (generation_id,delivery_digest,manifest_sha256,manifest,secret_observations,recorded_at)
+            VALUES (?,?,?,?,?,?)''',
+            (row[0], row[1], hashlib.sha256(row[2].encode()).hexdigest(), row[2], row[3], row[4]))
+    if exists:
+        connection.execute('DROP TABLE generation_plan_history_v26_old')
 
 
 @contextmanager

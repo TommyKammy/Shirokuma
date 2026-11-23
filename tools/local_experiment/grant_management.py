@@ -2,6 +2,7 @@
 
 No connection or backend is opened at import time. Epoch tombstones survive deletes.
 """
+import copy
 import hashlib
 import json
 import uuid
@@ -127,6 +128,20 @@ def migration_proof(db, grant):
 _CANCEL = 'desired_grant_cancellation_v1'
 
 
+def _sha256(value):
+    return isinstance(value, str) and len(value) == 64 and all(c in '0123456789abcdef' for c in value)
+
+
+def _without_template_manifest(manifest, template_paths):
+    value = copy.deepcopy(manifest)
+    value['spec']['profile'].pop('template_fingerprint', None)
+    value.pop('profile_fingerprint', None)
+    value.pop('delivery_digest', None)
+    for path in template_paths:
+        value['file_digests'].pop(path, None)
+    return value
+
+
 def _verified_snapshot(db, generation_id):
     """Canonical full-apply provenance; no registry equality or admission side effects."""
     import database_generation
@@ -136,11 +151,21 @@ def _verified_snapshot(db, generation_id):
     if row is None or plan is None or row['state'] != 'APPLIED' or row['apply_id'] != generation_id:
         raise ValueError('Unverified generation')
     manifest = json.loads(plan['manifest'])
-    bundle = database_generation.render(manifest['spec'])
-    spec = manifest['spec']
-    if (bundle['manifest'] != manifest or manifest['generation_id'] != generation_id
-            or spec['generation_id'] != generation_id or spec['warehouse_id'] != row['warehouse_id']
-            or manifest['delivery_digest'] != plan['delivery_digest']
+    spec = manifest.get('spec') if isinstance(manifest, dict) else None
+    if (type(spec) is not dict or type(spec.get('profile')) is not dict
+            or type(spec.get('version')) is not int
+            or type(manifest.get('file_digests')) is not dict):
+        raise ValueError('Invalid generation identity')
+    current_spec = copy.deepcopy(spec)
+    current_spec['profile']['template_fingerprint'] = database_generation.profile_fingerprint(
+        version=current_spec['version'])
+    bundle = database_generation.render(current_spec)
+    if (set(manifest['file_digests']) != set(bundle['manifest']['file_digests'])
+            or _without_template_manifest(manifest, core.TEMPLATE_ONLY_DELIVERY_PATHS) !=
+               _without_template_manifest(bundle['manifest'], core.TEMPLATE_ONLY_DELIVERY_PATHS)
+            or manifest.get('generation_id') != generation_id
+            or spec.get('generation_id') != generation_id or spec.get('warehouse_id') != row['warehouse_id']
+            or manifest.get('delivery_digest') != plan['delivery_digest']
             or json.loads(row['database_revisions']) != [[k, v['binding']['desired_revision']] for k,v in sorted(spec['databases'].items())]
             or json.loads(row['grant_revisions']) != [[g['principal_id'],g['database_id'],g['revision']] for g in spec['grant_revisions']]
             or json.loads(row['configuration_refs']) != sorted(bundle['files'])):
@@ -158,20 +183,42 @@ def _verified_snapshot(db, generation_id):
                 or op['operation_actor'] != op['actor'] or op['operation_expected_revision'] is not None
                 or op['apply_id'] != generation_id):
             raise ValueError('Invalid operation identity')
-        payload = json.loads(op['payload'])
-        if payload != dict(manifest=manifest, secret_observations=json.loads(op['secret_observations']),
-                phase='full',predecessor_id=op['predecessor_id']):
+        try:
+            payload = json.loads(op['payload'])
+        except (TypeError, ValueError):
+            raise ValueError('Invalid operation payload') from None
+        if (type(payload) is not dict or set(payload) !=
+                {'manifest', 'secret_observations', 'phase', 'predecessor_id'}
+                or type(payload['manifest']) is not dict or payload['phase'] != 'full'
+                or payload['predecessor_id'] != op['predecessor_id']
+                or payload['secret_observations'] != json.loads(op['secret_observations'])):
             raise ValueError('Invalid operation payload')
+        op_manifest = payload['manifest']
+        if (op_manifest.get('generation_id') != generation_id
+                or type(op_manifest.get('spec')) is not dict
+                or op_manifest['spec'].get('generation_id') != generation_id
+                or op_manifest['spec'].get('warehouse_id') != row['warehouse_id']
+                or not _sha256(op_manifest.get('delivery_digest'))
+                or type(op_manifest.get('file_digests')) is not dict
+                or any(not _sha256(value) for value in op_manifest['file_digests'].values())):
+            raise ValueError('Invalid operation delivery')
+        # Each operation carries the head delivery or one recorded in the append-only plan history.
+        if op_manifest != manifest:
+            recorded = db.execute('SELECT manifest FROM generation_plan_history WHERE generation_id=? AND delivery_digest=?',
+                                  (generation_id, op_manifest['delivery_digest'])).fetchall()
+            if not any(json.loads(row['manifest']) == op_manifest for row in recorded):
+                raise ValueError('Invalid operation delivery')
         if op['predecessor_id'] is not None:
             try:
                 prior = core._view(db, op['predecessor_id'], op['actor'])
-                core.validate_prepared_handoff(prior, manifest)
+                core.validate_prepared_handoff(prior, op_manifest,
+                    allow_template_change=bool(op['redelivery']))
             except core.OperationError as error:
                 raise ValueError('Invalid operation predecessor') from error
         steps = {r['step']: dict(r) for r in db.execute('SELECT * FROM operation_steps WHERE operation_id=?', (op['id'],))}
         if set(steps) != set(core._ALL_STEPS) or any(r['state'] != 'SUCCEEDED' or not _receipt(r['evidence_ref']) for r in steps.values()):
             raise ValueError('Incomplete full operation')
-        proofs.append(dict(generation_id=generation_id,delivery_digest=plan['delivery_digest'],
+        proofs.append(dict(generation_id=generation_id,delivery_digest=op_manifest['delivery_digest'],
             operation_id=op['id'],verify_ref=steps['verify']['evidence_ref']))
     return spec, proofs
 

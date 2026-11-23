@@ -1497,7 +1497,13 @@ class FullSecretContinuityTests(preparation_tests.PreparationFixture):
         generation_id = current['generation_id']
         with control_store.connect() as db:
             original_after = db.execute('SELECT secret_after FROM operation_requests WHERE operation_id=?',(operation_id,)).fetchone()[0]
+            original_payload = db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',(operation_id,)).fetchone()[0]
             proof = db.execute("SELECT evidence_ref FROM operation_steps WHERE operation_id=? AND step='apply_secrets'",(operation_id,)).fetchone()[0]
+        payload = json.loads(original_payload)
+        foreign_delivery = copy.deepcopy(payload)
+        foreign_delivery['manifest']['delivery_digest'] = 'foreign'
+        foreign_manifest = copy.deepcopy(payload)
+        foreign_manifest['manifest']['generation_id'] = 'foreign'
         rows = json.loads(original_after)
         wrong_uid = copy.deepcopy(rows)
         wrong_uid[0]['uid'] = 'recreated-before-capture'
@@ -1525,8 +1531,8 @@ class FullSecretContinuityTests(preparation_tests.PreparationFixture):
             ('generation','operation_requests','generation_id',prior_generation,generation_id),
             ('phase','operation_requests','phase','bootstrap','full'),
             ('predecessor','operation_requests','predecessor_id',None,current['predecessor_id']),
-            ('delivery','generation_plans','delivery_digest','foreign',current['delivery_digest']),
-            ('manifest','generation_plans','manifest','{}',json.dumps(self.bound.bundle['manifest'])),
+            ('delivery','operation_requests','payload',json.dumps(foreign_delivery),original_payload),
+            ('manifest','operation_requests','payload',json.dumps(foreign_manifest),original_payload),
         ]
         for name,table,column,value,original in cases:
             key,identity = ('generation_id',generation_id) if table=='generation_plans' else (

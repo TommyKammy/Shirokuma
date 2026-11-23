@@ -65,6 +65,43 @@ class OperatorTests(unittest.TestCase):
             server.server_close()
             thread.join()
 
+    def redelivery_operator(self):
+        operator = worker.Operator.__new__(worker.Operator)
+        operator.receipt = {}
+        operator.binding = {}
+        operator.config = {'managed_handoff': {'owners': {}}}
+        operator.bundle = {'manifest': {'spec': {'version': 1}}, 'tofu': {'databases': {}}}
+        operator.save = Mock()
+        operator.read_auth_identities = Mock(return_value=[])
+        return operator
+
+    def test_redelivery_managed_verify_does_not_require_creation_permit(self):
+        operator = self.redelivery_operator()
+        permit = Mock()
+        permit.get.return_value = None
+        with patch('database_creation_auth._permit', permit), \
+                patch('database_creation_recovery.active', return_value=False), \
+                patch('database_creation_bridge.current', return_value=Mock()):
+            operator.declare_verify({'id': 'operation', 'redelivery': 1})
+        self.assertEqual(operator.receipt['verify_declaration']['state'], 'SEALED')
+        self.assertNotIn('runtime_activations', operator.receipt)
+
+    def test_redelivery_activate_runtimes_does_not_require_creation_permit(self):
+        operator = self.redelivery_operator()
+        permit = Mock()
+        permit.get.return_value = None
+        with patch('database_creation_auth._permit', permit), \
+                patch('database_creation_recovery.active', return_value=False), \
+                patch('database_creation_bridge.current', return_value=Mock()):
+            operator.activate_runtimes({'id': 'operation', 'redelivery': 1})
+
+    def test_non_redelivery_declare_verify_still_requires_activation_declaration(self):
+        operator = self.redelivery_operator()
+        operator.declare_activations = Mock(side_effect=RuntimeError('creation permit required'))
+        with self.assertRaises(RuntimeError):
+            operator.declare_verify({'id': 'operation', 'redelivery': 0})
+        operator.declare_activations.assert_called_once()
+
     @contextlib.contextmanager
     def readonly_fixture(self):
         """Real core claims/auth and HTTP sends; only lab resources are synthetic."""
@@ -2092,3 +2129,27 @@ class SavedPlanLeafTests(unittest.TestCase):
                 self.assertNotIn('private-secret', str(error.exception))
                 self.assertIsNone(error.exception.__cause__)
                 self.assertEqual(run.call_count, 1)
+
+
+class RedeliveryPreparationTests(unittest.TestCase):
+    def test_redelivery_predecessor_uses_admitted_flag_after_observed_unavailable(self):
+        from test_warehouse_operations import OperationTests
+        import control_store as store
+        import warehouse_operations as core
+        fixture = OperationTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        prepared, full = fixture.applied_full()
+        old = fixture.old_delivery()
+        fixture.install_delivery(old, full=full, prepared=prepared)
+        redelivery = core.create_plan('admin', '/warehouse/configuration', 'redelivery-observed',
+            fixture.bundle, fixture.observations, phase='full', predecessor_id=prepared['id'])
+        with store.connect() as db:
+            db.execute("UPDATE warehouse_config_generations SET state='OBSERVED_UNAVAILABLE' WHERE id=?",
+                       (redelivery['generation_id'],))
+        operator = worker.Operator.__new__(worker.Operator)
+        operator.predecessor_id = prepared['id']
+        operator.binding = {'generation_id': redelivery['generation_id']}
+        with patch.object(worker, 'private_file', return_value=b'{}'), \
+                patch.object(worker, 'validate_bootstrap_receipt', return_value={'ok': True}):
+            self.assertEqual(operator.prepared_predecessor(redelivery), {'ok': True})

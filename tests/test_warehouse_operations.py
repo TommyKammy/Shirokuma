@@ -169,7 +169,8 @@ class OperationTests(unittest.TestCase):
         with self.assertRaises(operations.OperationError):
             operations.create_plan('admin', '/other', 'other', changed, observations)
         self.assertEqual(set(plan), {'id', 'actor', 'action', 'state', 'revision', 'generation_id',
-            'delivery_digest', 'warehouse_id', 'manifest', 'secret_observations', 'steps', 'phase', 'predecessor_id'})
+            'delivery_digest', 'warehouse_id', 'manifest', 'secret_observations', 'steps', 'phase',
+            'predecessor_id', 'redelivery'})
         with self.assertRaises(operations.OperationError):
             operations.inspect(plan['id'], actor='other')
         self.assertEqual(operations.inspect(plan['id'], actor='other', is_admin=True), plan)
@@ -1208,6 +1209,175 @@ print(r['state'])
                 self.assertEqual(self.apply(observed)['state'], 'APPLIED')
                 self.assertEqual(self.calls[calls_before:], ['reconcile_polaris', 'reconcile_trino'])
                 self.assertNotIn(b'do-not-persist-private-error-body', (self.directory/'jobs.sqlite3').read_bytes())
+
+    def old_delivery(self, mutate=None):
+        old = copy.deepcopy(self.bundle['manifest'])
+        old['spec']['profile']['template_fingerprint'] = 'f' * 64
+        old['file_digests']['deploy/local-experiment/trino/deployment.yaml'] = 'e' * 64
+        old['delivery_digest'] = 'd' * 64
+        if mutate is not None:
+            mutate(old)
+        return old
+
+    def applied_full(self):
+        prepared = self.bootstrap()
+        self.observations[0]['resource_version'] = '2'
+        full = operations.create_plan('admin', '/warehouse/configuration', 'full', self.bundle,
+                                      self.observations, phase='full', predecessor_id=prepared['id'])
+        self.assertEqual(self.apply(full)['state'], 'APPLIED')
+        return prepared, full
+
+    def install_delivery(self, old, *, state='APPLIED', operation_state=None, full=None, prepared=None):
+        with store.connect() as db:
+            db.execute('UPDATE generation_plans SET manifest=?,delivery_digest=? WHERE generation_id=?',
+                       (json.dumps(old, sort_keys=True), old['delivery_digest'], old['generation_id']))
+            db.execute('UPDATE warehouse_config_generations SET state=? WHERE id=?', (state, old['generation_id']))
+            if operation_state is not None:
+                db.execute('UPDATE operations SET state=? WHERE id=?', (operation_state, full['id']))
+            for operation in (prepared, full):
+                if operation is None:
+                    continue
+                payload = json.loads(db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',
+                                                (operation['id'],)).fetchone()[0])
+                payload['manifest'] = old
+                db.execute('UPDATE operation_requests SET payload=? WHERE operation_id=?',
+                           (json.dumps(payload, sort_keys=True), operation['id']))
+
+    def test_template_only_redelivery_is_accepted_and_keeps_operation_delivery(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        redelivery = operations.create_plan('admin', '/warehouse/configuration', 'redelivery', self.bundle,
+                                            self.observations, phase='full', predecessor_id=prepared['id'])
+        self.assertEqual(redelivery['delivery_digest'], self.bundle['manifest']['delivery_digest'])
+        self.assertEqual(operations.inspect(full['id'], actor='admin')['delivery_digest'], old['delivery_digest'])
+        with store.connect() as db:
+            self.assertEqual(db.execute('SELECT delivery_digest FROM generation_plans WHERE generation_id=?',
+                                        (full['generation_id'],)).fetchone()[0],
+                             self.bundle['manifest']['delivery_digest'])
+            history = {row[0] for row in db.execute(
+                'SELECT delivery_digest FROM generation_plan_history WHERE generation_id=?', (full['generation_id'],))}
+            self.assertEqual(history, {old['delivery_digest'], self.bundle['manifest']['delivery_digest']})
+            self.assertEqual(db.execute('SELECT redelivery FROM operation_requests WHERE operation_id=?',
+                                        (redelivery['id'],)).fetchone()[0], 1)
+            self.assertTrue(operations.template_change_permitted(
+                db, full['generation_id'], self.bundle['manifest']))
+        applied = self.apply(redelivery)
+        self.assertEqual(applied['state'], 'APPLIED')
+        self.assertEqual(operations.inspect(full['id'], actor='admin')['delivery_digest'], old['delivery_digest'])
+
+    def test_redelivery_reuses_own_reservation_after_reconcile_not_executed(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        redelivery = operations.create_plan('admin', '/warehouse/configuration', 'redelivery-retry',
+                                            self.bundle, self.observations, phase='full',
+                                            predecessor_id=prepared['id'])
+
+        def fail_trino(step, plan):
+            if step == 'reconcile_trino':
+                raise OSError('synthetic redelivery failure')
+            return dict(evidence_ref='ack:' + step)
+
+        failed = self.apply(redelivery, execute_step=fail_trino)
+        self.assertEqual(failed['state'], 'UNKNOWN')
+        with store.connect() as db:
+            control = admission.control(db)
+            self.assertEqual((control['state'], control['operation_id']), ('UNKNOWN', redelivery['id']))
+        reconciled = operations.reconcile(redelivery['id'], actor='admin',
+            evidence=operations.ReconciliationEvidence('reconcile_trino', 'NOT_EXECUTED',
+                'not-dispatched:redelivery', 'confirmed_not_dispatched'))
+        self.assertEqual(reconciled['state'], 'AWAITING_APPLY')
+        with store.connect() as db:
+            control = admission.control(db)
+            self.assertEqual((control['state'], control['operation_id']), ('UNKNOWN', redelivery['id']))
+        self.assertEqual(self.apply(reconciled)['state'], 'APPLIED')
+
+    def test_redelivery_initial_admission_requires_unowned_open_control(self):
+        prepared, full = self.applied_full()
+        old = self.old_delivery()
+        self.install_delivery(old, full=full, prepared=prepared)
+        with store.connect() as db:
+            db.execute("INSERT INTO warehouse_config_generations VALUES ('other-gen','LOCAL','other-gen','[]','[]','[]','APPLIED')")
+            db.execute("INSERT INTO generation_plans VALUES ('other-gen','{}','other-digest','[]')")
+            db.execute("INSERT INTO operations VALUES ('other','other','WAREHOUSE_CONFIG_APPLY','[]',NULL,"
+                       "'PREPARING','[]','other-gen','{}','{}')")
+            db.execute("INSERT INTO operation_requests (operation_id,actor,route,idempotency_key,payload,revision,"
+                       "generation_id,initial_database_states,phase,predecessor_id,secret_observations) "
+                       "VALUES ('other','other','/route','other-key','{}',1,'other-gen','{}','full',NULL,'[]')")
+            db.execute("INSERT INTO operation_steps VALUES ('other','publish_snapshot','RUNNING',NULL,'now')")
+            db.execute("UPDATE warehouse_controls SET state='OPEN',operation_id='other',revision=revision+1 "
+                       "WHERE warehouse_id='LOCAL'")
+        with self.assertRaises(operations.OperationError) as error:
+            operations.create_plan('admin', '/warehouse/configuration', 'redelivery-owned-open',
+                                   self.bundle, self.observations, phase='full',
+                                   predecessor_id=prepared['id'])
+        self.assertEqual(error.exception.code, 'INVALID_PREPARED_PREDECESSOR')
+
+    def test_same_digest_manifest_variants_are_retained_for_provenance(self):
+        import grant_management as grants
+        prepared, full = self.applied_full()
+        base = copy.deepcopy(self.bundle['manifest'])
+        variant = copy.deepcopy(base)
+        variant['spec']['profile']['template_fingerprint'] = 'f' * 64
+        variant['file_digests']['deploy/local-experiment/trino/deployment.yaml'] = 'e' * 64
+        self.assertEqual(variant['delivery_digest'], base['delivery_digest'])
+        with store.connect() as db:
+            def current():
+                row = db.execute('SELECT manifest,secret_observations FROM generation_plans WHERE generation_id=?',
+                                 (full['generation_id'],)).fetchone()
+                manifest = json.loads(row[0])
+                return dict(delivery_digest=manifest['delivery_digest'], manifest=row[0],
+                            secret_observations=row[1])
+            operations._record_redelivery(db, full['generation_id'], current(), variant, self.observations)
+            operations._record_redelivery(db, full['generation_id'], current(), base, self.observations)
+            payload = json.loads(db.execute('SELECT payload FROM operation_requests WHERE operation_id=?',
+                                            (full['id'],)).fetchone()[0])
+            payload['manifest'] = variant
+            db.execute('UPDATE operation_requests SET payload=?,redelivery=1 WHERE operation_id=?',
+                       (json.dumps(payload, sort_keys=True), full['id']))
+            grants._verified_snapshot(db, full['generation_id'])
+            variants = {json.loads(row[0])['spec']['profile']['template_fingerprint']
+                        for row in db.execute('''SELECT manifest FROM generation_plan_history
+                            WHERE generation_id=? AND delivery_digest=?''',
+                            (full['generation_id'], base['delivery_digest']))}
+            self.assertEqual(variants, {base['spec']['profile']['template_fingerprint'],
+                                        variant['spec']['profile']['template_fingerprint']})
+
+    def test_template_only_redelivery_rejects_scope_drift(self):
+        prepared, full = self.applied_full()
+        base = self.old_delivery()
+
+        def other_file(old):
+            old['file_digests']['deploy/gitops/dev/deployment.yaml'] = 'a' * 64
+
+        def secret_ref(old):
+            old['spec']['databases']['opaque_0']['secret_refs']['jwt']['name'] = 'changed-jwt-v1'
+
+        for label, old, state, operation_state in (
+                ('other-file', self.old_delivery(other_file), 'APPLIED', None),
+                ('secret-ref', self.old_delivery(secret_ref), 'APPLIED', None),
+                ('not-applied', base, 'PLANNED', None),
+                ('active', base, 'APPLIED', 'APPLYING')):
+            with self.subTest(label=label):
+                self.install_delivery(old, state=state, operation_state=operation_state, full=full)
+                with self.assertRaises(operations.OperationError):
+                    operations.create_plan('admin', '/warehouse/configuration', 'reject-'+label, self.bundle,
+                                           self.observations, phase='full')
+        added = self.old_delivery()
+        added['spec']['databases']['opaque_2'] = copy.deepcopy(added['spec']['databases']['opaque_1'])
+        self.assertFalse(operations.template_only_manifest_change(base, added))
+
+    def test_prepared_handoff_allows_only_validated_template_change(self):
+        old = self.old_delivery()
+        prior = dict(phase='bootstrap', state='PREPARED', manifest=old)
+        with self.assertRaises(operations.OperationError):
+            operations.validate_prepared_handoff(prior, self.bundle['manifest'])
+        operations.validate_prepared_handoff(prior, self.bundle['manifest'], allow_template_change=True)
+        changed = copy.deepcopy(self.bundle['manifest'])
+        changed['spec']['databases']['opaque_0']['binding']['polaris_catalog'] = 'db_changed'
+        with self.assertRaises(operations.OperationError):
+            operations.validate_prepared_handoff(prior, changed, allow_template_change=True)
 
     def test_import_is_stdlib_only_and_python39_syntax(self):
         script = ('import sys\n'

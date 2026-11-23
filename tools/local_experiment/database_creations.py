@@ -732,8 +732,8 @@ def _attach_plan(db, config, creation_id, operation_id, *, private_ref, public_s
     if (op is None or op['actor'] != root['actor'] or purpose not in ('APPLY','VERIFY_RECOVERY')
             or purpose == 'APPLY' and op['attempt_id'] is not None):
         raise OperationError('STALE_PLAN')
-    public = db.execute('SELECT delivery_digest,manifest FROM generation_plans WHERE generation_id=?', (op['generation_id'],)).fetchone()
-    spec = json.loads(public['manifest'])['spec']
+    public = json.loads(op['payload'])['manifest']
+    spec = public['spec']
     if root['database_id'] not in spec['databases'] or spec['warehouse_id'] != config.warehouse_id:
         raise OperationError('STALE_PLAN')
     if op['phase'] == 'full' and not db.execute('''SELECT 1 FROM db_creation_phase_plans p JOIN operations o ON o.id=p.operation_id

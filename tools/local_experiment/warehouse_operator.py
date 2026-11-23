@@ -483,7 +483,10 @@ class Operator:
         self.receipt['verify_declaration'] = dict(state='DECLARING',operation_id=plan['id'],binding=self.binding,
             sql={k:'UNSENT' for k in sql})
         self.receipt['verify_http'] = {}
-        self.declare_activations(plan)
+        if plan.get('redelivery') == 1:
+            self.receipt['verify_declaration']['redelivery'] = True
+        else:
+            self.declare_activations(plan)
         for key in self.read_auth_identities():
             self.receipt['verify_http'][key] = dict(state='UNSENT')
         self.receipt['verify_declaration']['state'] = 'SEALED'
@@ -533,6 +536,9 @@ class Operator:
         self.save()
 
     def activate_runtimes(self, plan):
+        if plan.get('redelivery') == 1:
+            # A template-only redelivery reuses the sealed runtime activation.
+            return
         handoff = self.config.get('managed_handoff')
         if not handoff:
             return
@@ -1302,7 +1308,12 @@ class Operator:
         """Validate prior private credentials against their own frozen public ledger."""
         import warehouse_operations as core
         prior = core.inspect(self.predecessor_id, actor=plan['actor'])
-        core.validate_prepared_handoff(prior, plan['manifest'])
+        allow_template_change = bool(plan.get('redelivery'))
+        if not allow_template_change:
+            with core.control_store.connect() as db:
+                allow_template_change = core.template_change_permitted(
+                    db, self.binding['generation_id'], plan['manifest'])
+        core.validate_prepared_handoff(prior, plan['manifest'], allow_template_change=allow_template_change)
         previous = json.loads(private_file(core.control_store.root().resolve() /
             'warehouse-operator-receipts' / (prior['id']+'.json')))
         return validate_bootstrap_receipt(previous, prior)
@@ -1441,6 +1452,7 @@ class Operator:
             observed = self.http(urllib.request.Request(origin+'/api/v1/runtime', headers=headers))
             if observed != expected:
                 raise RuntimeError('Both restarted runtimes must match the frozen generation')
+        redelivery = plan.get('redelivery') == 1
         handoff = self.config.get('managed_handoff')
         if handoff:
             import database_creations
@@ -1454,21 +1466,22 @@ class Operator:
                         owner_role=role,owner_instance_id=owner['owner_instance_id'],
                         runtime_instance_id=owner['candidate_runtime_instance_id'],runtime_attestation=expected):
                     raise RuntimeError('Actual managed runtime instance differs')
-                saved = self.receipt.get('runtime_activations',{}).get(role,{})
-                if saved.get('state') != 'ACK' or saved.get('owner') != owner:
-                    raise RuntimeError('Private activation acknowledgement unavailable')
-                import database_creation_worker as worker
-                managed = bridge.current()
-                original_request_id = self.receipt['verify_declaration']['original_request_id']
-                original_request,root,original,ignored = worker.resolve(managed,original_request_id)
-                owner_journal = worker.activation_journal(managed,original_request,root,original,self,role)
-                if owner_journal['state'] != 'ACK':
-                    raise RuntimeError('Private owner activation completion unavailable')
-                for leaf in ('stop','start','readiness'):
-                    value = bridge.exact(owner_journal[leaf],{'state','intent_id'})
-                    bridge.request_id(value['intent_id'])
-                    if value['state'] != 'ACK':
-                        raise RuntimeError('Private owner leaf acknowledgement unavailable')
+                if not redelivery:
+                    saved = self.receipt.get('runtime_activations',{}).get(role,{})
+                    if saved.get('state') != 'ACK' or saved.get('owner') != owner:
+                        raise RuntimeError('Private activation acknowledgement unavailable')
+                    import database_creation_worker as worker
+                    managed = bridge.current()
+                    original_request_id = self.receipt['verify_declaration']['original_request_id']
+                    original_request,root,original,ignored = worker.resolve(managed,original_request_id)
+                    owner_journal = worker.activation_journal(managed,original_request,root,original,self,role)
+                    if owner_journal['state'] != 'ACK':
+                        raise RuntimeError('Private owner activation completion unavailable')
+                    for leaf in ('stop','start','readiness'):
+                        value = bridge.exact(owner_journal[leaf],{'state','intent_id'})
+                        bridge.request_id(value['intent_id'])
+                        if value['state'] != 'ACK':
+                            raise RuntimeError('Private owner leaf acknowledgement unavailable')
                 readbacks[role] = observed
             return readbacks
 
@@ -1514,10 +1527,9 @@ class Operator:
             db.execute('PRAGMA query_only=ON')
             try:
                 row = db.execute('''SELECT o.id,o.actor,r.actor AS request_actor,
-                    r.generation_id,g.delivery_digest,g.manifest,r.phase,r.predecessor_id,
+                    r.generation_id,r.payload,r.phase,r.predecessor_id,
                     r.secret_after,s.state,s.evidence_ref
                     FROM operations o JOIN operation_requests r ON r.operation_id=o.id
-                    JOIN generation_plans g ON g.generation_id=r.generation_id
                     JOIN operation_steps s ON s.operation_id=o.id AND s.step='apply_secrets'
                     WHERE o.id=?''', (plan['id'],)).fetchone()
             except sqlite3.OperationalError as error:
@@ -1527,6 +1539,11 @@ class Operator:
                     return None
                 raise
             saved = dict(row) if row is not None else None
+            if saved is not None:
+                # ADR-0039: an operation keeps its own delivery after a redelivery.
+                payload = json.loads(saved.pop('payload'))
+                saved['manifest'] = json.dumps(payload['manifest'], sort_keys=True)
+                saved['delivery_digest'] = payload['manifest']['delivery_digest']
         finally:
             db.close()
         # Ordinary/legacy receipts still use their initial identities. Only the
