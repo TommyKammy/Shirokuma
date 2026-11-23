@@ -31,7 +31,7 @@ kubectl --context colima-mac-studio-solo get nodes
 - リポジトリと Python 環境。
 
 ```sh
-cd /Users/jp.infra/Dev/Shirokuma/main
+cd "$(git rev-parse --show-toplevel)"   # このリポジトリのルートで実行する
 cd tools/local_experiment/dataops
 uv sync --frozen
 cd -
@@ -55,8 +55,8 @@ Trino は `logical_foundation.py:296` の pin
 `var/` は Git 管理外である。作業ディレクトリは 0700、秘密ファイルは 0600 にする。
 
 ```sh
-ROOT="$PWD"
-DIR="$ROOT/var/shirokuma/local-20261123"
+export ROOT="$PWD"
+export DIR="$ROOT/var/shirokuma/local-20261123"
 FOUNDATION_ID="foundation-20261123"
 REVISION=1
 ENVIRONMENT_ID="local-20261123"
@@ -142,7 +142,6 @@ image/SPI 更新なら `refresh-verification` を案内する。新規構築で�
 （既定 `admin`）に置き換えてよい。
 
 ```sh
-export DIR="$PWD/var/shirokuma/local-20261123"
 export FOUNDATION_ID="foundation-20261123"
 export REVISION=1
 export ENVIRONMENT_ID="local-20261123"
