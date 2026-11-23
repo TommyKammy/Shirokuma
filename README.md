@@ -80,13 +80,9 @@ flowchart TB
 
 ### Quick Start
 
-#### 1. Start the Resident Lakehouse Lab
-```bash
-# Boot Colima (mac-studio-solo), unsuspend Flux/Polaris/SeaweedFS/Trino/ClickHouse/Loki, and verify health
-make lab-up
-make lab-status
-go run ./cmd/shirokuma doctor --profile local-experiment
-```
+#### 1. Start the Logical Lab
+
+See [Clean-cluster bootstrap of a local logical_v1 instance](docs/guides/logical-local-bootstrap-2026-11-23.md) for the current clean-cluster procedure (Trino 484 foundation, Workbench `:8888`, SQL endpoint `:8080`). The old `make lab-up` / `shirokuma-dev` Flux path is retired.
 
 #### 2. Seed Sample TPC-H Data & Build dbt Marts
 ```bash
@@ -179,12 +175,11 @@ Snowflake や Databricks の巨大機能をすべて模倣するのではなく�
 
 ### クイックスタート（主要コマンド）
 
-```bash
-# 1. ローカル Lakehouse ラボの起動・ヘルスチェック
-make lab-up
-make lab-status
-go run ./cmd/shirokuma doctor --profile local-experiment
+現在のクリーンクラスタ手順は
+[logical_v1 起動ガイド](docs/guides/logical-local-bootstrap-2026-11-23.md) を参照してください。
+旧 `make lab-up` / `shirokuma-dev` 経路は廃止されています。
 
+```bash
 # 2. サンプルデータ (TPC-H) のシードと常設 dbt パイプラインのビルド・検証
 make lake-seed
 make lake-build

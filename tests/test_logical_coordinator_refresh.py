@@ -278,7 +278,8 @@ class CoordinatorRefreshTests(LogicalFixture):
                 self._startup_verified = False
                 closed.append(True)
         foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
-                          foundation_id='foundation-real', revision=1)
+                          foundation_id='foundation-real', revision=1,
+                          trino=dict(provisioner_credentials_file=str(self.provisioner_file)))
         with patch.object(logical_provider, 'Provider', LifetimeProvider), patch('logical_foundation.load', return_value=foundation):
             with logical.lifetime(refresh_interval=0.01) as provider:
                 self.assertTrue(provider.bound_alive())

@@ -12,6 +12,7 @@ import logging
 import os
 from pathlib import Path
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -2014,7 +2015,12 @@ def main():
                 result = query(args.warehouse, args.sql, args.catalog, args.schema,
                                args.no_auto_wake, args.max_rows, mode=args.mode)
         elif args.action == 'endpoint':
-            result = serve_endpoint(args.port, args.bind, args.warehouse, args.once)
+            # SIGTERM unwinds like Ctrl-C so owned port-forwards and atexit cleanup run.
+            signal.signal(signal.SIGTERM, signal.default_int_handler)
+            try:
+                result = serve_endpoint(args.port, args.bind, args.warehouse, args.once)
+            except KeyboardInterrupt:
+                return 0
         else:
             result = transition(args.action, args.warehouse)
         print(json.dumps(result))

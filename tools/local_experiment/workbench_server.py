@@ -8,6 +8,7 @@ import json
 import database_http_json
 from pathlib import Path
 import re
+import signal
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -870,6 +871,8 @@ def main(argv=None):
     parser.add_argument("--host", default="127.0.0.1")
     args = parser.parse_args(argv)
     request_auth.validate_bind(args.host)
+    # SIGTERM unwinds like Ctrl-C so owned port-forwards and atexit cleanup run.
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     with HTTPServer((args.host, args.port), WorkbenchHandler) as server:
         import logical_creations
         if logical_creations.enabled():

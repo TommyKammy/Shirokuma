@@ -244,7 +244,10 @@ class LogicalLifecycleTests(creations.LogicalFixture):
         with patch('logical_provider.Provider', return_value=value), \
                 patch('logical_foundation.load', return_value=c), \
                 patch.object(logical, 'enabled', return_value=True), \
-                patch.object(logical, 'dispatch_async'):
+                patch.object(logical, 'dispatch_async'), \
+                patch.object(logical_registry, 'platform_admin_credentials',
+                             return_value=dict(username='logical_provisioner',
+                                               password='provisioner-password')):
             with logical.lifetime(refresh_interval=10):
                 yield value, h, saved
 

@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import threading
@@ -153,6 +154,10 @@ class LogicalFixture(CreationFixture):
         super().setUp()
         self.credentials = self.directory/'credentials'
         self.credentials.mkdir(mode=0o700)
+        self.provisioner_file = self.directory/'provisioner.json'
+        self.provisioner_file.write_text(json.dumps(dict(version=1, username='shirokuma_admin',
+                                                         password='private-admin-password')))
+        self.provisioner_file.chmod(0o600)
         self.provider = Provider()
         self.logical_config = dict(version=1, environment_id='test-environment', warehouse_id='LOCAL',
             foundation_generation_id='foundation-real', foundation_revision=1,
@@ -1336,6 +1341,26 @@ class AccountRefreshPendingTests(LogicalFixture):
 
 
 class StartupBindingTests(LogicalFixture):
+    def test_lifetime_rejects_platform_admin_mismatch_before_provider(self):
+        provisioner = self.directory/'provisioner-mismatch.json'
+        provisioner.write_text(json.dumps(dict(version=1, username='logical_provisioner',
+                                               password='private-provisioner')))
+        provisioner.chmod(0o600)
+        foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
+                          foundation_id='foundation-real', revision=1,
+                          trino=dict(provisioner_credentials_file=str(provisioner)))
+        with patch('logical_foundation.load', return_value=foundation), \
+                patch('logical_provider.Provider') as provider:
+            with self.assertRaises(OperationError) as error:
+                with logical.lifetime():
+                    self.fail('mismatch must fail before yielding')
+        self.assertEqual(error.exception.code, 'PLATFORM_ADMIN_MISMATCH')
+        provider.assert_not_called()
+
+    def test_platform_admin_matches_foundation_provisioner(self):
+        logical._require_platform_admin(dict(trino=dict(
+            provisioner_credentials_file=str(self.provisioner_file))))
+
     def test_lifetime_clears_cache_when_startup_binding_fails(self):
         caches = []
         constructor = logical._VerifierCache
@@ -1380,7 +1405,8 @@ class StartupBindingTests(LogicalFixture):
         def opened(config):
             return self.provider
         foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
-                          foundation_id='foundation-real', revision=1)
+                          foundation_id='foundation-real', revision=1,
+                          trino=dict(provisioner_credentials_file=str(self.provisioner_file)))
         with patch('logical_provider.Provider', opened), patch('logical_foundation.load', return_value=foundation):
             with logical.lifetime(register=register, refresh_interval=0.01):
                 yield
@@ -1402,7 +1428,8 @@ class StartupBindingTests(LogicalFixture):
                 if not logical._verifier_cache._closed and logical._verifier_cache._records:
                     exited.set()
         foundation = dict(environment_id='test-environment', warehouse_id='LOCAL',
-                          foundation_id='foundation-real', revision=1)
+                          foundation_id='foundation-real', revision=1,
+                          trino=dict(provisioner_credentials_file=str(self.provisioner_file)))
         with patch('logical_provider.Provider', opened), patch('logical_foundation.load', return_value=foundation), \
                 patch.object(logical, '_account_refresh_loop', side_effect=refresh):
             with logical.lifetime():
@@ -1479,6 +1506,23 @@ class StartupBindingTests(LogicalFixture):
 class FoundationVerificationRefreshTests(LogicalFixture):
     def test_cli_requires_explicit_stopped_confirmation(self):
         self.assertEqual(logical.main(['refresh-verification']), 2)
+        self.assertEqual(logical.main(['register-foundation']), 2)
+
+    def test_register_foundation_cli_uses_register_lifetime(self):
+        calls = []
+        @contextmanager
+        def fake_lifetime(*, register=False, refresh_interval=2):
+            calls.append(register)
+            yield self.provider
+        output = io.StringIO()
+        with patch.object(logical, 'lifetime', side_effect=fake_lifetime), \
+                patch.object(runtime_profile, 'configure_process', return_value=True), \
+                patch('sys.stdout', output):
+            self.assertEqual(logical.main(
+                ['register-foundation', '--confirm-workbench-stopped']), 0)
+        self.assertEqual(calls, [True])
+        result = json.loads(output.getvalue())
+        self.assertEqual(result, dict(registered=True, generation_id='foundation-real', revision=1))
 
     def foundation(self):
         with control_store.connect() as db:
