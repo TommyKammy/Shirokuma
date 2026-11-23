@@ -15,11 +15,26 @@ from dataops_client import Client, configured_profile, saved_context
 
 
 class RequestUncertain(Exception):
-    pass
+    def __init__(self, *args, status=None, server_code=None):
+        super().__init__(*args)
+        self.status, self.server_code = status, server_code
 
 
 class RequestRejected(ValueError):
-    pass
+    def __init__(self, *args, status=None, server_code=None):
+        super().__init__(*args)
+        self.status, self.server_code = status, server_code
+
+
+def _server_code(error):
+    """Return the server's error code only when it is a plain identifier."""
+    try:
+        payload = json.loads(error.read())
+    except (ValueError, OSError):
+        return None
+    code = payload.get('error', payload.get('code')) if isinstance(payload, dict) else None
+    code = code.get('code') if isinstance(code, dict) else code
+    return code if isinstance(code, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', code) else None
 
 
 class DbtClient(Client):
@@ -42,19 +57,17 @@ class DbtClient(Client):
         try:
             return self._read_response(method, path, raw=raw, headers=headers, timeout=60, incomplete_message='incomplete response')
         except HTTPError as error:
+            # The status and server code are reported only; they never change
+            # whether a POST is treated as possibly accepted.
+            code, seen = _server_code(error), dict(status=error.code)
+            seen['server_code'] = code
             if method == 'POST' and body and 'expected_target' in body:
-                try:
-                    payload = json.loads(error.read())
-                    code = payload.get('error', payload.get('code')) if isinstance(payload, dict) else None
-                    code = code.get('code') if isinstance(code, dict) else code
-                except (ValueError, OSError):
-                    code = None
                 if error.code == 409 and code in ('DBT_PUBLICATION_REVIEW_CHANGED', 'DBT_GRAPH_VIEW_PUBLICATION_UNSUPPORTED', 'DBT_VIEW_CHANGED'):
-                    raise RequestRejected(code) from None
-                raise RequestUncertain() from None
+                    raise RequestRejected(code, **seen) from None
+                raise RequestUncertain(**seen) from None
             if method == 'POST' and (error.code == 409 or error.code >= 500):
-                raise RequestUncertain() from None
-            raise RequestRejected('DBT_REQUEST_FAILED') from None
+                raise RequestUncertain(**seen) from None
+            raise RequestRejected('DBT_REQUEST_FAILED', **seen) from None
         except (URLError, OSError, http.client.HTTPException, ValueError):
             if method == 'POST':
                 raise RequestUncertain() from None
@@ -618,11 +631,15 @@ def main(argv=None, *, profile=None):
             return validate_reply(reply, context, kind, expected, args, client.principal)
         except RequestRejected:
             raise
-        except (RequestUncertain, ValueError):
+        except (RequestUncertain, ValueError) as error:
             # A POST may already be accepted even when its response is unusable.
-            # Withhold that response and retain only the original safe intent.
-            return dict(request_uncertain=True, retry=dict(action=action, method='POST', path=path,
+            # Withhold that response and retain only the original safe intent,
+            # plus the HTTP status and server error code when one was returned.
+            result = dict(request_uncertain=True, retry=dict(action=action, method='POST', path=path,
                 idempotency_key=key, context=context, intent=body, body=dict(body, context=context)))
+            if getattr(error, 'status', None) is not None:
+                result['server_error'] = dict(status=error.status, code=error.server_code)
+            return result
     else:
         reply = client.get(path, **params)
     result = validate_reply(reply, context, kind, expected, args, client.principal)
@@ -631,9 +648,25 @@ def main(argv=None, *, profile=None):
     return result
 
 
+def failure_message(error):
+    """One stderr line: rejection codes and HTTP status only, never server text."""
+    if isinstance(error, RequestRejected):
+        detail = f' (HTTP {error.status}, {error.server_code or "no code"})' if error.status is not None else ''
+        return f'DBT request rejected: {error}{detail}.'
+    return 'DBT request failed (details withheld). Retain the original context and idempotency key.'
+
+
+def rejection_result(error):
+    """A definitive rejection as JSON, the same channel as request_uncertain.
+    The Go CLI turns it into a non-zero exit naming only these fields."""
+    return dict(request_rejected=True, code=str(error), http_status=error.status, server_code=error.server_code)
+
+
 if __name__ == '__main__':
     try:
         print(json.dumps(main(), ensure_ascii=False))
-    except Exception:
-        print('DBT request failed (details withheld). Retain the original context and idempotency key.', file=sys.stderr)
+    except RequestRejected as error:
+        print(json.dumps(rejection_result(error)))
+    except Exception as error:
+        print(failure_message(error), file=sys.stderr)
         sys.exit(1)

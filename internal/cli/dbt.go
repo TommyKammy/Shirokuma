@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -139,6 +141,9 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 			if runErr != nil {
 				return fmt.Errorf("dbt HTTP request failed (details withheld)")
 			}
+			if rejected := dbtRejection(data); rejected != "" {
+				return fmt.Errorf("dbt request rejected: %s", rejected)
+			}
 			if len(data) > 0 {
 				_, err = fmt.Fprint(cmd.OutOrStdout(), string(data))
 			}
@@ -147,4 +152,32 @@ func newDbtCommand(runner commandRunner) *cobra.Command {
 		parent.AddCommand(cmd)
 	}
 	return parent
+}
+
+var dbtErrorCode = regexp.MustCompile(`^[A-Z][A-Z0-9_]{0,63}$`)
+
+// dbtRejection reports a definitive rejection that dbt_client.py returned as
+// JSON. Only identifier-shaped codes and the HTTP status are echoed.
+func dbtRejection(data []byte) string {
+	var reply struct {
+		Rejected   bool    `json:"request_rejected"`
+		Code       string  `json:"code"`
+		Status     *int    `json:"http_status"`
+		ServerCode *string `json:"server_code"`
+	}
+	if json.Unmarshal(data, &reply) != nil || !reply.Rejected {
+		return ""
+	}
+	code := "DBT_REQUEST_FAILED"
+	if dbtErrorCode.MatchString(reply.Code) {
+		code = reply.Code
+	}
+	if reply.Status == nil || *reply.Status < 100 || *reply.Status > 599 {
+		return code
+	}
+	server := "no code"
+	if reply.ServerCode != nil && dbtErrorCode.MatchString(*reply.ServerCode) {
+		server = *reply.ServerCode
+	}
+	return fmt.Sprintf("%s (HTTP %d, %s)", code, *reply.Status, server)
 }
