@@ -40,7 +40,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: polaris
-          image: docker.io/apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce
+          image: docker.io/apache/polaris@sha256:14bcb2f3f59980cd72dbbdcbc58f51c15753780d1a0d3bf54164fa32e74d91e3
           imagePullPolicy: IfNotPresent
           env:
             - name: POLARIS_AUTHENTICATION_TOKEN_BROKER_TYPE

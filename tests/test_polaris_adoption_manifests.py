@@ -8,8 +8,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SERVER = "docker.io/apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce"
-ADMIN = "docker.io/apache/polaris-admin-tool@sha256:9f85ebe1fdfa9eb1214c4d5d343de29f76fef3dda7b4eb11c6767acc7e6c4fa4"
+SERVER = "docker.io/apache/polaris@sha256:14bcb2f3f59980cd72dbbdcbc58f51c15753780d1a0d3bf54164fa32e74d91e3"
+ADMIN = "docker.io/apache/polaris-admin-tool@sha256:d89e2bc14d66511c685e13f7bd75928a22bb7d6712a32e1cc5a369510a3da50d"
 
 
 def command(*args, text=None):

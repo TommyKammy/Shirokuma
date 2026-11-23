@@ -38,8 +38,8 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.data.GenericRecord;
 import org.apache.iceberg.data.Record;
-import org.apache.iceberg.data.avro.DataReader;
 import org.apache.iceberg.data.avro.DataWriter;
+import org.apache.iceberg.data.avro.PlannedDataReader;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.rest.RESTCatalog;
@@ -388,7 +388,7 @@ public final class IcebergBootstrap {
         try (CloseableIterable<Record> records =
             Avro.read(table.io().newInputFile(task.file().location()))
                 .project(SCHEMA)
-                .createReaderFunc(fileSchema -> DataReader.create(SCHEMA, fileSchema))
+                .createResolvingReader(PlannedDataReader::create)
                 .build()) {
           for (Record record : records) {
             actual.add(
