@@ -164,7 +164,7 @@ def main():
         os.dup2(quiet.fileno(), sys.stderr.fileno())
     request = json.loads(sys.stdin.readline())
     import database_dbt_native as native
-    for package, version in (('dbt-core', '1.12.5'), ('dbt-trino', '1.10.3'), ('sqlglot', '28.0.0')):
+    for package, version in (('dbt-core', '1.12.7'), ('dbt-trino', '1.12.0'), ('sqlglot', '28.0.0')):
         if native.importlib.metadata.version(package) != version:
             raise ValueError('SDK version')
 

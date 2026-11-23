@@ -7,8 +7,8 @@ dependencies = [
   "boto3==1.43.114",
   "sqlglot==28.0.0",
   "dagster==1.13.22",
-  "dbt-core==1.12.5",
-  "dbt-trino==1.10.3",
+  "dbt-core==1.12.7",
+  "dbt-trino==1.12.0",
   "opentelemetry-sdk==1.44.0",
 ]
 

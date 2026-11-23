@@ -897,7 +897,7 @@ def materialize(principal, context, *, plan_id, node_id, key):
     try:
         if admission.current() is not None:
             _reject('DBT_NATIVE_PROCESS_NOT_ISOLATED')
-        for package, version in (('dbt-core', '1.12.5'), ('dbt-trino', '1.10.3'), ('sqlglot', '28.0.0')):
+        for package, version in (('dbt-core', '1.12.7'), ('dbt-trino', '1.12.0'), ('sqlglot', '28.0.0')):
             if importlib.metadata.version(package) != version:
                 _reject('DBT_NATIVE_VERSION')
         with admission.lifecycle_gate(exclusive=True):
