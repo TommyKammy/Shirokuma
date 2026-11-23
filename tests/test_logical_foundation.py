@@ -584,6 +584,28 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertIn({'name': 'WEED_JWT_FILER_SIGNING_KEY', 'valueFrom': {'secretKeyRef': {
             'name': 'owned-private', 'key': 'filer_signing_key'}}}, container['env'])
 
+    def test_seaweed_ingress_is_limited_to_s3_and_allows_precede_default_deny(self):
+        self.fixture()
+        public, _ = f.render(self.c)
+        policies = [d for d in public if d['kind'] == 'NetworkPolicy']
+        self.assertEqual([d['metadata']['name'] for d in policies], ['owned-ingress', 'owned-seaweed-ingress', 'owned-isolation'])
+        spec = {d['metadata']['name']: d['spec'] for d in policies}
+        self.assertEqual(spec['owned-isolation']['podSelector'], {})
+        self.assertEqual(spec['owned-isolation']['policyTypes'], ['Ingress', 'Egress'])
+        self.assertEqual(spec['owned-isolation']['ingress'], [])
+        not_seaweed = {'matchExpressions': [{'key': 'app.kubernetes.io/name', 'operator': 'NotIn', 'values': ['owned-seaweed']}]}
+        self.assertEqual(spec['owned-isolation']['egress'][:2], [{'to': [{'podSelector': not_seaweed}]},
+            {'to': [{'podSelector': {'matchLabels': {'app.kubernetes.io/name': 'owned-seaweed'}}}], 'ports': [{'protocol': 'TCP', 'port': 8333}]}])
+        self.assertNotIn({'to': [{'podSelector': {}}]}, spec['owned-isolation']['egress'])
+        self.assertEqual(spec['owned-ingress']['podSelector'], {'matchExpressions': [
+            {'key': 'app.kubernetes.io/name', 'operator': 'NotIn', 'values': ['owned-seaweed']}]})
+        self.assertEqual(spec['owned-ingress']['ingress'], [{'from': [{'podSelector': {}}]}])
+        self.assertEqual(spec['owned-seaweed-ingress']['podSelector'], {'matchLabels': {'app.kubernetes.io/name': 'owned-seaweed'}})
+        self.assertEqual(spec['owned-seaweed-ingress']['ingress'], [{'from': [{'podSelector': {}}],
+            'ports': [{'protocol': 'TCP', 'port': 8333}]}])
+        seaweed = next(d for d in public if d['kind'] == 'Deployment' and d['metadata']['name'] == 'owned-seaweed')
+        self.assertEqual(seaweed['spec']['template']['metadata']['labels']['app.kubernetes.io/name'], 'owned-seaweed')
+
     def test_private_files_exclusive_and_render_jar_limit(self):
         self.save('exclusive', 'secret')
         self.assertEqual(stat.S_IMODE((self.root/'exclusive').stat().st_mode), 0o600)
@@ -1062,11 +1084,11 @@ sys.exit(int(os.environ['TEST_DDL_FAILURE']))
         self.assertNotIn('coordinator', validated['trino'])
         baseline = f.render(self.c)
         # Recorded from the pre-coordinator renderer using this existing fixture;
-        # refreshed for the Trino 484 node.id=${ENV:HOSTNAME} property and for
-        # the SeaweedFS filer signing key (private key + env reference).
+        # refreshed for the Trino 484 node.id=${ENV:HOSTNAME} property, the
+        # SeaweedFS filer signing key, and the SeaweedFS-limited NetworkPolicies.
         serialized = json.dumps(baseline, sort_keys=True).replace(str(self.root), '<PRIVATE_DIR>')
         self.assertEqual(hashlib.sha256(serialized.encode()).hexdigest(),
-                         '7c64b22f65647e3f4960a71a1840ea46834e2d1a745006b186ce3559aae2f6a7')
+                         'f149cabeb96cc806a0c7f22bd12cc5c0b6b700b0fe06f5202de0dfab5d9ae9dc')
         self.assertNotIn('shirokuma.dev/coordinator-resources', serialized)
         self.c['trino']['coordinator'] = self.coordinator_profile()
         explicit = f.render(self.c)

@@ -402,9 +402,25 @@ def render(config):
         'pod-security.kubernetes.io/enforce-version': 'latest', 'pod-security.kubernetes.io/audit': 'restricted',
         'pod-security.kubernetes.io/warn': 'restricted'})
     namespace['metadata']['labels']['shirokuma.dev/native-admission'] = 'logical-v1'
-    public = [namespace, doc('NetworkPolicy', prefix+'-isolation', spec={'podSelector': {},
-        'policyTypes': ['Ingress', 'Egress'], 'ingress': [{'from': [{'podSelector': {}}]}],
-        'egress': [{'to': [{'podSelector': {}}]}, {'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'kube-system'}}}],
+    # NetworkPolicies are additive. Default-deny ingress for every pod, then
+    # allow in-namespace ingress to all pods except SeaweedFS, which accepts
+    # only S3 (8333): its other filer/master/volume gRPC and HTTP ports stay
+    # unauthenticated in 4.55. Allow policies come first so apply never leaves
+    # a window with ingress denied. Egress mirrors the SeaweedFS limit:
+    # kube-router evaluates the namespace egress allow inside the destination
+    # pod's chain, so an any-port egress rule would reopen SeaweedFS.
+    seaweed_name = prefix+'-seaweed'
+    not_seaweed = {'matchExpressions': [{'key': 'app.kubernetes.io/name', 'operator': 'NotIn', 'values': [seaweed_name]}]}
+    is_seaweed = {'matchLabels': {'app.kubernetes.io/name': seaweed_name}}
+    s3_port = [{'protocol': 'TCP', 'port': 8333}]
+    public = [namespace, doc('NetworkPolicy', prefix+'-ingress', spec={'podSelector': not_seaweed,
+        'policyTypes': ['Ingress'], 'ingress': [{'from': [{'podSelector': {}}]}]}),
+        doc('NetworkPolicy', seaweed_name+'-ingress', spec={'podSelector': is_seaweed,
+        'policyTypes': ['Ingress'], 'ingress': [{'from': [{'podSelector': {}}], 'ports': s3_port}]}),
+        doc('NetworkPolicy', prefix+'-isolation', spec={'podSelector': {},
+        'policyTypes': ['Ingress', 'Egress'], 'ingress': [],
+        'egress': [{'to': [{'podSelector': not_seaweed}]}, {'to': [{'podSelector': is_seaweed}], 'ports': s3_port},
+            {'to': [{'namespaceSelector': {'matchLabels': {'kubernetes.io/metadata.name': 'kube-system'}}}],
             'ports': [{'protocol': 'UDP', 'port': 53}, {'protocol': 'TCP', 'port': 53}]}]})]
     # Reuse reviewed CEL expressions, with new names and exact namespace scope;
     # do not broaden or replace the existing shirokuma-dev policies.
