@@ -77,7 +77,7 @@ spec:
               mountPath: /tmp
       containers:
         - name: polaris-admin
-          image: docker.io/apache/polaris-admin-tool@sha256:9f85ebe1fdfa9eb1214c4d5d343de29f76fef3dda7b4eb11c6767acc7e6c4fa4
+          image: docker.io/apache/polaris-admin-tool@sha256:d89e2bc14d66511c685e13f7bd75928a22bb7d6712a32e1cc5a369510a3da50d
           imagePullPolicy: IfNotPresent
           args:
             - bootstrap

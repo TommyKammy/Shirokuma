@@ -35,7 +35,7 @@ class GitOpsBootstrapContractTests(unittest.TestCase):
             job = load_yaml_text((directory / filename).read_text())[0]
             self.assertEqual(job['metadata']['name'], job_name)
             container = job['spec']['template']['spec']['containers'][0]
-            self.assertEqual(container['image'], 'apache/polaris@sha256:74e6416c75f24563fc62f4ed52699d4fb872741b6a3e0af77fdc551b4ee72fce')
+            self.assertEqual(container['image'], 'apache/polaris@sha256:14bcb2f3f59980cd72dbbdcbc58f51c15753780d1a0d3bf54164fa32e74d91e3')
             self.assertEqual(container['args'][container['args'].index('--class-path') + 1], '/deployments/lib/main/*')
             source_index = container['args'].index('/opt/shirokuma/IcebergBootstrap.java')
             for setting in ('-Dshirokuma.catalog=' + catalog, '-Dshirokuma.namespace=smoke',

@@ -47,7 +47,8 @@ def _fail(code, message):
 
 _CONFIGS = {'pre-hook', 'post-hook', 'on-run-start', 'on-run-end', 'hooks',
             'grants', 'persist_docs', 'sql_header', 'store_failures',
-            'store_failures_as', 'incremental_strategy', 'full_refresh'}
+            'store_failures_as', 'incremental_strategy', 'full_refresh',
+            'client_tags', 'http_headers'}
 _TESTS = {'unique', 'not_null', 'relationships', 'accepted_values'}
 _SYSTEM = {'information_schema', 'system', 'sys', 'pg_catalog', 'dbt_test__audit'}
 

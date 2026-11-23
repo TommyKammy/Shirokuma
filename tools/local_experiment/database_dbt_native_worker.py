@@ -56,7 +56,7 @@ def main():
             self.aborted = True
             raise ValueError('unsupported SDK operation')
 
-    for package, version in (('dbt-core', '1.12.5'), ('dbt-trino', '1.10.3'), ('sqlglot', '28.0.0')):
+    for package, version in (('dbt-core', '1.12.7'), ('dbt-trino', '1.12.0'), ('sqlglot', '28.0.0')):
         if native.importlib.metadata.version(package) != version:
             raise ValueError('SDK version')
     artifacts = (None, request['manifest'], request['command'], dict(os.environ))
