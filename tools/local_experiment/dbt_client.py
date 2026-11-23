@@ -27,10 +27,12 @@ class RequestRejected(ValueError):
 
 
 def _server_code(error):
-    """Return the server's error code only when it is a plain identifier."""
+    """Return the server's error code only when it is a plain identifier.
+    Reading the body is diagnostic only: any failure (including a truncated
+    body) yields no code, so it can never disturb retry classification."""
     try:
         payload = json.loads(error.read())
-    except (ValueError, OSError):
+    except (ValueError, OSError, http.client.HTTPException):
         return None
     code = payload.get('error', payload.get('code')) if isinstance(payload, dict) else None
     code = code.get('code') if isinstance(code, dict) else code

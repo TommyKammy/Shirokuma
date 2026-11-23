@@ -393,6 +393,18 @@ class RequestCharacterizationTests(unittest.TestCase):
                     client.request('POST', '/test', body={})
                 self.assertEqual((caught.exception.status, caught.exception.server_code), (409, code))
 
+    def test_dbt_truncated_error_body_keeps_post_uncertain(self):
+        class Truncated(io.BytesIO):
+            def read(self, *args):
+                raise http.client.IncompleteRead(b'{"code": "DBT_')
+        for status, body in ((409, {}), (500, {}), (409, {'expected_target': {}})):
+            with self.subTest(status=status, body=body):
+                error = HTTPError('http://127.0.0.1:8888/test', status, 'failure', {}, Truncated())
+                client = self.client(dbt.DbtClient, error=error)
+                with self.assertRaises(dbt.RequestUncertain) as caught:
+                    client.request('POST', '/test', body=body)
+                self.assertEqual((caught.exception.status, caught.exception.server_code), (status, None))
+
     def test_circular_json_fails_before_send_without_uncertainty(self):
         body = {}
         body['self'] = body
