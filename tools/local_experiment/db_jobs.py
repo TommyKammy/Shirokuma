@@ -28,7 +28,7 @@ _TERMINAL = {'succeeded', 'failed', 'canceled'}
 
 
 def _json(value):
-    return ds._json(value)
+    return ds.canonical_json(value)
 
 
 def _access(principal, context):

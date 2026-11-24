@@ -102,7 +102,7 @@ def _identities(db, frozen):
         _require(row['id'] == record['id'] == original['id'] and record['kind'] == kind and
                  row['database_id'] == record['context']['database_id'] == p['context']['database_id'])
         for key in ('actor', 'context', 'source_digest', '_plan_digest'):
-            _require(ds._json(record[key]) == ds._json(original[key]), 'RECOVERY_GRAPH_CHANGED')
+            _require(ds.canonical_json(record[key]) == ds.canonical_json(original[key]), 'RECOVERY_GRAPH_CHANGED')
     _require(source['actor'] == plan['actor'] and source['context'] == plan['context'] and
              source['executor'] == 'native_graph' and source['plan_id'] == plan['id'])
     _require(next(m for m in source['models'] if m['unique_id'] == p['node_id']).get('publication_id') == p['id'],
@@ -122,7 +122,7 @@ def _closed(db, row, frozen):
     actual = _publication_snapshot(db, frozen['publication']['id'])
     expected = copy.deepcopy({k: frozen[k] for k in actual})
     expected['publication'][MARKER] = _marker(row)
-    expected['publication_row']['record'] = ds._json(expected['publication'])
+    expected['publication_row']['record'] = ds.canonical_json(expected['publication'])
     expected['operations'][0].update(state='FAILED', cleanup_error=_summary(operation_id))
     for index, a in enumerate(expected['admissions']):
         if a['kind'] == 'query':
@@ -256,8 +256,8 @@ class DbtAuditRecovery(LogicalQueryRecovery):
                  p.get('publication_id') is None and MARKER not in p)
         context = ResolvedQueryContext(**p['context'])
         _require(len(g['requests']) == 1 and g['requests'][0]['actor'] == self.actor and
-                 g['requests'][0]['payload'] == ds._json(dict(context=p['context'], node_id=p['node_id'],
-                     expected_target=p['expected_target'])) and g['requests'][0]['response'] == ds._json(dict(id=ident)))
+                 g['requests'][0]['payload'] == ds.canonical_json(dict(context=p['context'], node_id=p['node_id'],
+                     expected_target=p['expected_target'])) and g['requests'][0]['response'] == ds.canonical_json(dict(id=ident)))
         _require(context.warehouse_id == 'LOCAL' and context.selected_role == 'admin' and
                  g['publication_row']['id'] == p['id'] and g['publication_row']['database_id'] == context.database_id)
         _require(g['binding']['desired_revision'] == g['binding']['applied_revision'] == context.binding_revision and
@@ -270,14 +270,14 @@ class DbtAuditRecovery(LogicalQueryRecovery):
                  len(g['queries']) == len(g['executions']) == 1 and len(g['admissions']) == 3 and not g['owned_objects'])
         op, child, q, e = (g[k][0] for k in ('operations', 'query_links', 'queries', 'executions'))
         _require(g['links'] == [dict(run_id=ident, phase='audit', node_id=p['node_id'], operation_id=op['id'])])
-        payload = ds._json(dict(context=p['context'], payload=dbt._native_child_payload(p, 'audit')))
+        payload = ds.canonical_json(dict(context=p['context'], payload=dbt._native_child_payload(p, 'audit')))
         pending = json.loads(op['result'] or '{}')
         _require(set(pending) == {'origin', 'audit_id', 'intent'} and
                  isinstance(pending['audit_id'], str) and pending['audit_id'] and
-                 op['result'] == ds._json(dict(origin=p['origin'], audit_id=pending['audit_id'], intent=p['_native_intent'])))
+                 op['result'] == ds.canonical_json(dict(origin=p['origin'], audit_id=pending['audit_id'], intent=p['_native_intent'])))
         _require(op['route'] == 'dbt-native-audit' and op['idempotency_key'] == ident + ':audit' and
                  op['state'] == q['state'] == 'UNKNOWN' and op['actor'] == q['actor'] == self.actor and
-                 op['context'] == ds._json(p['context']) and op['payload'] == payload and
+                 op['context'] == ds.canonical_json(p['context']) and op['payload'] == payload and
                  op['fingerprint'] == hashlib.sha256(payload.encode()).hexdigest() and not op['committed'] and
                  child == dict(operation_id=op['id'], step='audit', query_id=q['id'], action='wap_audit', commit_result=None))
         _require(e['query_id'] == q['id'] and e['request_id'] == op['id'] and e['worksheet_id'] == 'audit' and
@@ -381,7 +381,7 @@ class DbtAuditRecovery(LogicalQueryRecovery):
                              state='FAILED', evidence_ref=operation_id)
         row = _one(db, 'SELECT * FROM execution_recovery_requests WHERE operation_id=?', (operation_id,))
         publication = dict(frozen['publication'], **{MARKER: _marker(row)})
-        db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(publication), publication['id']))
+        db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds.canonical_json(publication), publication['id']))
 
 
 def run(args):

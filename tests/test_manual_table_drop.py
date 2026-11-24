@@ -154,7 +154,7 @@ class DropTests(unittest.TestCase):
             receipt=json.loads(saved['result'])
             for field,value in (('ack',200),('ack_type','SQL'),('mode','DROP'),('retirement_closure','UNPROVEN')):
                 changed=dict(receipt,**{field:value})
-                db.execute('UPDATE dataops_operations SET result=? WHERE id=?',(ds._json(changed),ident))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?',(ds.canonical_json(changed),ident))
                 self.assertFalse(drop.pure_closed_proof(db,ident),field)
             db.execute('UPDATE dataops_operations SET result=? WHERE id=?',(saved['result'],ident))
             db.execute("UPDATE warehouse_admissions SET actor='other' WHERE subject_id=?",(ident,))
@@ -232,7 +232,7 @@ class DropTests(unittest.TestCase):
         with control_store.connect() as db:
             row=db.execute('SELECT result FROM dataops_operations WHERE id=?',(result['id'],)).fetchone()
             receipt=json.loads(row['result']);receipt['phase']='SENT'
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?',(ds._json(receipt),result['id']))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?',(ds.canonical_json(receipt),result['id']))
         with control_store.connect() as db:before=tuple(db.iterdump())
         with patch.object(ds.queries,'_acquire_query_owner',side_effect=AssertionError('lease')),patch.object(drop,'_settle',side_effect=AssertionError('settle')):
             found=drop.lookup_by_key(self.principal,self.context,'lost-worker')
@@ -350,10 +350,10 @@ class DropTests(unittest.TestCase):
                     context=json.loads(saved['context']);context[field]=epoch
                     payload=json.loads(saved['payload']);payload['context']=context
                     receipt=json.loads(saved['result']);receipt['guard']['context']=context
-                    payload['payload']['expected_preview_fingerprint']=drop.hashlib.sha256(ds._json(receipt['guard']).encode()).hexdigest()
-                    normalized=ds._json(payload)
+                    payload['payload']['expected_preview_fingerprint']=drop.hashlib.sha256(ds.canonical_json(receipt['guard']).encode()).hexdigest()
+                    normalized=ds.canonical_json(payload)
                     db.execute('UPDATE dataops_operations SET context=?,payload=?,fingerprint=?,result=? WHERE id=?',
-                        (ds._json(context),normalized,drop.hashlib.sha256(normalized.encode()).hexdigest(),ds._json(receipt),ident))
+                        (ds.canonical_json(context),normalized,drop.hashlib.sha256(normalized.encode()).hexdigest(),ds.canonical_json(receipt),ident))
                     self.assertFalse(drop.pure_closed_proof(db,ident),(field,epoch))
             db.execute('UPDATE dataops_operations SET context=?,payload=?,fingerprint=?,result=? WHERE id=?',
                 (saved['context'],saved['payload'],saved['fingerprint'],saved['result'],ident))

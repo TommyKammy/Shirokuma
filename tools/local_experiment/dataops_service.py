@@ -146,7 +146,8 @@ def _serialized(function):
     return execute
 
 
-def _json(value):
+def canonical_json(value):
+    """Canonical compact JSON used for stored records and digests."""
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False,
                       allow_nan=False)
 
@@ -214,7 +215,7 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
         raise ValueError('route and idempotency key are required')
     if type(context) is not ResolvedQueryContext or type(principal) is not request_auth.AuthenticatedPrincipal:
         raise QueryError('UNKNOWN_CONTEXT', 400)
-    normalized = _json({'payload': payload, 'context': asdict(context)})
+    normalized = canonical_json({'payload': payload, 'context': asdict(context)})
     fingerprint = hashlib.sha256(normalized.encode()).hexdigest()
     with _lock:
         # Replay lookup deliberately precedes new-operation admission/capture.
@@ -268,7 +269,7 @@ def begin(principal, context, *, route, idempotency_key, payload, _admission_hoo
                     (id,actor,route,idempotency_key,payload,fingerprint,context,backend_username,
                      credential_snapshot_ref,state,created_at) VALUES (?,?,?,?,?,?,?,?,?,'ACTIVE',?)''',
                     (operation_id, principal.principal_id, route, idempotency_key, normalized, fingerprint,
-                     _json(asdict(context)), frozen.headers['X-Trino-User'],
+                     canonical_json(asdict(context)), frozen.headers['X-Trino-User'],
                      inherited[4] if inherited else secrets.token_urlsafe(32), admission._now()))
                 if dbt_scope:
                     db.execute('INSERT INTO dbt_run_operations VALUES (?,?,?,?)',
@@ -416,7 +417,7 @@ class Execution:
         frozen, parent, _, lock = self._active()
         with lock, admission.accepted(parent):
             page = queries._submit_dataops(self.principal, _Statement(action, sql,
-                _json(commit_result) if commit_result is not None else None), frozen, parent, self.id, step)
+                canonical_json(commit_result) if commit_result is not None else None), frozen, parent, self.id, step)
             seen_projection = False
             def validate(page):
                 nonlocal seen_projection
@@ -528,9 +529,9 @@ class Execution:
             raise QueryError('SCHEMA_REQUIRED', 409)
         measured = dict(ref=asdict(ref), table_uuid=identity, snapshot=snapshot,
             schema_id=sid, columns=columns,
-            schema_fingerprint=hashlib.sha256(_json(schemas[0]).encode()).hexdigest(),
+            schema_fingerprint=hashlib.sha256(canonical_json(schemas[0]).encode()).hexdigest(),
             current_schema_id=current_sid,
-            current_schema_fingerprint=hashlib.sha256(_json(current_schemas[0]).encode()).hexdigest())
+            current_schema_fingerprint=hashlib.sha256(canonical_json(current_schemas[0]).encode()).hexdigest())
         if captured is not None:
             # Earlier completed artifacts used one schema for both guards.
             expected = dict(captured)
@@ -647,7 +648,7 @@ class Execution:
         if len({c['name'] for c in columns}) != len(columns):
             raise QueryError('SCHEMA_REQUIRED', 409)
         return dict(ref=asdict(ref), snapshot=str(snapshot), schema_id=schema_id,
-            columns=columns, schema_fingerprint=hashlib.sha256(_json(schemas[0]).encode()).hexdigest())
+            columns=columns, schema_fingerprint=hashlib.sha256(canonical_json(schemas[0]).encode()).hexdigest())
 
     def _dbt_measure_view(self, ref):
         """REST-only distinct VIEW head, including full metadata and metadata location."""
@@ -696,10 +697,10 @@ class Execution:
         canonical = database_dbt._sql_tree(reps[0]['sql']).sql(dialect='trino')
         return dict(kind='VIEW', ref=asdict(ref), view_uuid=identity, version=version,
             security=security, schema_id=schema_id, columns=columns,
-            schema_fingerprint=hashlib.sha256(_json(schemas[0]).encode()).hexdigest(),
+            schema_fingerprint=hashlib.sha256(canonical_json(schemas[0]).encode()).hexdigest(),
             _definition_digest=hashlib.sha256(reps[0]['sql'].encode()).hexdigest(),
             _canonical_definition_digest=hashlib.sha256(canonical.encode()).hexdigest(),
-            _head_digest=hashlib.sha256(_json(dict(metadata=metadata,
+            _head_digest=hashlib.sha256(canonical_json(dict(metadata=metadata,
                 metadata_location=pointer)).encode()).hexdigest())
 
     def _dbt_read_ref(self, ref, measurement=None):
@@ -1146,7 +1147,7 @@ class Execution:
                           cleanup_mode='CATALOG_UNREGISTER_KEEP_DATA')
             if phase == 'ACKNOWLEDGED':
                 result['cleanup_ack'] = 204
-            encoded = _json(result)
+            encoded = canonical_json(result)
             changed = db.execute("""UPDATE dataops_operations SET result=?,cleanup_error=?
                 WHERE id=? AND route='manual-ingest' AND state='ACTIVE' AND committed=? AND result=?""",
                 (encoded, error, self.id, int(committed), previous)).rowcount
@@ -1218,7 +1219,7 @@ class Execution:
         self._active()
         self._successful_work()
         with control_store.connect() as db:
-            db.execute('UPDATE dataops_operations SET committed=1,result=? WHERE id=?', (_json(result), self.id))
+            db.execute('UPDATE dataops_operations SET committed=1,result=? WHERE id=?', (canonical_json(result), self.id))
 
     @_serialized
     def complete(self, result=None, *, committed=False):
@@ -1229,7 +1230,7 @@ class Execution:
             admission.finish(db, parent, state='FINISHED')
             db.execute('''UPDATE dataops_operations SET state='FINISHED',
                 committed=MAX(committed,?),result=COALESCE(?,result) WHERE id=?''',
-                (int(committed), _json(result) if result is not None else None, self.id))
+                (int(committed), canonical_json(result) if result is not None else None, self.id))
         owner.close()
         return self._inspect()
 
@@ -1336,7 +1337,7 @@ class Execution:
                     if any(c['state'] not in queries._TERMINAL or
                             c['admission_state'] not in admission.TERMINAL for c in children):
                         raise QueryError('UNRESOLVED_CHILD_QUERIES', 409)
-                    evidence = hashlib.sha256(_json(dict(operation_id=self.id,
+                    evidence = hashlib.sha256(canonical_json(dict(operation_id=self.id,
                         context=json.loads(row['context']), fingerprint=row['fingerprint'],
                         children=children, outcome='FAILED')).encode()).hexdigest()
                     parent = admission.get_for_subject(db, kind='dataops', subject_id=self.id,

@@ -45,8 +45,8 @@ def pure_closed_proof(db, operation_id):
             return False
         normalized, context, result = (json.loads(row[k]) for k in ('payload', 'context', 'result'))
         if (set(normalized) != {'context', 'payload'} or normalized['context'] != context
-                or row['payload'] != ds._json(normalized) or row['context'] != ds._json(context)
-                or row['result'] != ds._json(result) or not row['actor']
+                or row['payload'] != ds.canonical_json(normalized) or row['context'] != ds.canonical_json(context)
+                or row['result'] != ds.canonical_json(result) or not row['actor']
                 or row['fingerprint'] != hashlib.sha256(row['payload'].encode()).hexdigest()):
             return False
         names = {f.name for f in fields(ResolvedQueryContext)}
@@ -70,7 +70,7 @@ def pure_closed_proof(db, operation_id):
                 or source['database_id'] != context['database_id'] or source['schema_id'] != context['schema_id']
                 or type(guard['name']) is not str or not guard['name'] or '\x00' in guard['name']
                 or payload['confirm_name'] != guard['name']
-                or payload['expected_preview_fingerprint'] != hashlib.sha256(ds._json(guard).encode()).hexdigest()):
+                or payload['expected_preview_fingerprint'] != hashlib.sha256(ds.canonical_json(guard).encode()).hexdigest()):
             return False
         uuid.UUID(guard['uuid'])
         schema = asdict(registry.Schema(**guard['schema']))
@@ -151,7 +151,7 @@ def _measure(principal, context, source, api=None, expected=None):
     guard = dict(principal=principal.principal_id, context=asdict(context), source=asdict(source),
         name=obj.physical_name, uuid=obj.backend_identity, head=head,
         schema=asdict(schema), metadata=metadata, metadata_location=raw.get('metadata-location'), mode=MODE)
-    fingerprint = hashlib.sha256(ds._json(guard).encode()).hexdigest()
+    fingerprint = hashlib.sha256(ds.canonical_json(guard).encode()).hexdigest()
     # Revalidate identity and authority after the external read. No observe writes.
     if _registered(principal, context, source) != (schema, database, binding, obj):
         raise QueryError('PREVIEW_CHANGED', 409)
@@ -302,7 +302,7 @@ def _settle(execution, state, result, *, ack=False):
                 raise
             result.update(retirement_closure='UNPROVEN', warning='CATALOG_REMOVED_RETIREMENT_UNPROVEN')
         db.execute('UPDATE dataops_operations SET state=?,committed=MAX(committed,?),result=? WHERE id=?',
-            (state, int(ack), ds._json(result), execution.id))
+            (state, int(ack), ds.canonical_json(result), execution.id))
     live = ds._live.get(execution.id)
     if live:
         live[2].close()
@@ -323,7 +323,7 @@ def _work(execution, context, source, expected, confirm_name):
             result = dict(guard=guard, phase='PREPARED')
             with control_store.connect() as db:
                 db.execute('UPDATE dataops_operations SET result=? WHERE id=? AND state=\'ACTIVE\'',
-                    (ds._json(result), execution.id))
+                    (ds.canonical_json(result), execution.id))
             schema, database, binding, obj = _registered(execution.principal, context, source)
             if (obj.physical_name != confirm_name or obj.backend_identity != guard['uuid']
                     or asdict(schema) != guard['schema']):
@@ -338,7 +338,7 @@ def _work(execution, context, source, expected, confirm_name):
                 with control_store.connect() as db:
                     db.execute('BEGIN IMMEDIATE')
                     changed = db.execute('UPDATE dataops_operations SET result=? WHERE id=? AND state=\'ACTIVE\'',
-                        (ds._json(result), execution.id)).rowcount
+                        (ds.canonical_json(result), execution.id)).rowcount
                     if changed != 1:
                         raise QueryError('OPERATION_OBSERVATION_ONLY', 409)
                 sent = True
@@ -363,13 +363,13 @@ def _work(execution, context, source, expected, confirm_name):
                 result.setdefault('warning', 'POST_ACK_OBSERVATION_UNAVAILABLE')
                 with control_store.connect() as db:
                     db.execute('UPDATE dataops_operations SET result=? WHERE id=? AND committed=1',
-                        (ds._json(result), execution.id))
+                        (ds.canonical_json(result), execution.id))
     except Exception as error:
         if execution._row()['committed']:
             result.setdefault('warning', 'POST_ACK_OBSERVATION_UNAVAILABLE')
             with control_store.connect() as db:
                 db.execute('UPDATE dataops_operations SET result=? WHERE id=? AND committed=1',
-                    (ds._json(result), execution.id))
+                    (ds.canonical_json(result), execution.id))
             return
         uncertain = sent and not (isinstance(error, inventory.TableDropTransportError) and not error.possible_send)
         result.pop('ack', None)
@@ -397,7 +397,7 @@ def submit(principal, context, *, key, source, mode, expected_preview_fingerprin
                 raise QueryError('PREVIEW_CHANGED', 409)
             with control_store.connect() as db:
                 db.execute('UPDATE dataops_operations SET result=? WHERE id=?',
-                    (ds._json(dict(guard=guard, phase='PREPARED')), execution.id))
+                    (ds.canonical_json(dict(guard=guard, phase='PREPARED')), execution.id))
             threading.Thread(target=_work, args=(execution, context, source,
                 expected_preview_fingerprint, confirm_name), daemon=True).start()
         except Exception as error:

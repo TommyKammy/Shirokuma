@@ -337,7 +337,7 @@ class _Bridge:
             # Safe metadata survives ACK loss or owner death; no raw SQL or paths.
             with control_store.connect() as db:
                 db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
-                           (ds._json(self.receipt), self.execution.id))
+                           (ds.canonical_json(self.receipt), self.execution.id))
             page = self.execution._execute('dbt_native_create', 'CREATE TABLE ' + self.execution._locator(self.locator)
                 + " WITH (format='PARQUET') AS " + generated, 'native-create', commit_result=self.receipt)
             self.candidate_ref = self.execution._observe(self.locator)
@@ -436,7 +436,7 @@ class _TestBridge(_Bridge):
             generated = manual_wap._compile_model(**self.approved, execution=self.execution, measurements=self.inputs)
             with control_store.connect() as db:
                 db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
-                           (ds._json(self.receipt), self.execution.id))
+                           (ds.canonical_json(self.receipt), self.execution.id))
             page = self.execution._execute('dbt_test', _test_wrapper(generated), 'native-test')
             self._scope()
             self._candidate()
@@ -785,7 +785,7 @@ def _replay(principal, context, plan_id, node_id, key):
         return None
     saved = json.loads(old['payload'])
     payload = dict(plan_id=plan_id, node_id=node_id, digest=saved['payload']['digest'], **_PROVENANCE)
-    if old['payload'] != ds._json(dict(payload=payload, context=asdict(context))):
+    if old['payload'] != ds.canonical_json(dict(payload=payload, context=asdict(context))):
         _reject('IDEMPOTENCY_CONFLICT')
     return ds.Execution(principal, old['id'], replayed=True).inspect()
 

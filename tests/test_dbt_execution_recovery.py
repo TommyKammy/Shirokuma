@@ -98,7 +98,7 @@ class DbtRecoveryTests(unittest.TestCase):
             for row in db.execute('SELECT id,record FROM dbt_runs').fetchall():
                 record = json.loads(row['record'])
                 record['context']['warehouse_id'] = 'LOCAL'
-                db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(record), row['id']))
+                db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds.canonical_json(record), row['id']))
         def context(database=None, schema='raw', principal=None, role='data_engineer'):
             database = database or self.f.b.databases[0]
             return queries.resolve_context(principal or self.f.b.principal, database,
@@ -310,7 +310,7 @@ class DbtRecoveryTests(unittest.TestCase):
             ("UPDATE dbt_run_operations SET phase='publish' WHERE run_id=?", (self.ident,)),
             ("UPDATE dataops_operations SET committed=1 WHERE id=?", (self.original['operations'][0]['id'],)),
             ("UPDATE dataops_operations SET result='{}' WHERE id=?", (self.original['operations'][0]['id'],)),
-            ("UPDATE dataops_operations SET result=? WHERE id=?", (ds._json(dict(audit=dict(count=1, passed=True))),
+            ("UPDATE dataops_operations SET result=? WHERE id=?", (ds.canonical_json(dict(audit=dict(count=1, passed=True))),
                 self.original['operations'][0]['id'])),
             ("UPDATE dbt_runs SET record=json_set(record,'$.kind','plan') WHERE id=?", (self.source_run['id'],)),
             ("UPDATE dbt_runs SET record=json_set(record,'$.actor','foreign') WHERE id=?", (self.source_run['plan_id'],)),
@@ -342,7 +342,7 @@ class DbtRecoveryTests(unittest.TestCase):
             row = self.original['publication_row']
             record = dict(self.original['publication'], id='orphan-publication')
             db.execute('INSERT INTO dbt_runs VALUES (?,?,?,NULL)',
-                ('orphan-publication', row['database_id'], ds._json(record)))
+                ('orphan-publication', row['database_id'], ds.canonical_json(record)))
             with self.assertRaises(QueryError):
                 self.operator.graph(db, self.ident)
             db.execute('ROLLBACK TO orphan')
@@ -474,7 +474,7 @@ class DbtRecoveryTests(unittest.TestCase):
         with self.assertRaises(QueryError):
             self.apply(closed)
         self.mutate('UPDATE dbt_runs SET record=? WHERE id=?',
-            (ds._json(dict(self.original['publication'], _execution_recovery=marker)), self.ident))
+            (ds.canonical_json(dict(self.original['publication'], _execution_recovery=marker)), self.ident))
         opened = self.apply(closed)
         self.mutate("UPDATE execution_recovery_requests SET proof='{}' WHERE operation_id=?", (plan['operation_id'],))
         with self.assertRaises(QueryError):
@@ -499,7 +499,7 @@ class DbtRecoveryTests(unittest.TestCase):
             changed_intent['scope']['members'][0]['container_id'] = 'f' * 64
             mutations = [
                 ('execution_recovery_requests', 'intent', execution_recovery._json(changed_intent)),
-                ('execution_recovery_requests', 'payload', ds._json(dict(publication_id='foreign'))),
+                ('execution_recovery_requests', 'payload', ds.canonical_json(dict(publication_id='foreign'))),
                 ('execution_recovery_requests', 'proof', '{}'),
                 ('execution_recovery_requests', 'route', 'recover-query'),
                 ('execution_recovery_requests', 'phase', 'PROVED'),
@@ -611,20 +611,20 @@ class UppercaseSchemaTests(unittest.TestCase):
             p['context']['sql_schema'] = 'SANDBOX'
             p['_native_intent']['context']['sql_schema'] = 'SANDBOX'
             db.execute("UPDATE schemas SET sql_name='SANDBOX' WHERE id=?", (self.context.schema_id,))
-            db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(p), self.ident))
+            db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds.canonical_json(p), self.ident))
             op = self.original['operations'][0]
-            payload = ds._json(dict(context=p['context'], payload=dbt._native_child_payload(p, 'audit')))
+            payload = ds.canonical_json(dict(context=p['context'], payload=dbt._native_child_payload(p, 'audit')))
             pending = json.loads(op['result'])
             pending['intent'] = p['_native_intent']
             db.execute('UPDATE dataops_operations SET context=?,payload=?,fingerprint=?,result=? WHERE id=?',
-                (ds._json(p['context']), payload, hashlib.sha256(payload.encode()).hexdigest(), ds._json(pending), op['id']))
+                (ds.canonical_json(p['context']), payload, hashlib.sha256(payload.encode()).hexdigest(), ds.canonical_json(pending), op['id']))
             sql = self.original['executions'][0]['sql'].replace('"sandbox".', '"SANDBOX".')
             db.execute("UPDATE query_execution_contexts SET sql_schema='SANDBOX',sql=? WHERE query_id=?", (sql, self.query_id))
             request = self.original['requests'][0]
             body = json.loads(request['payload'])
             body['context'] = p['context']
             db.execute('UPDATE dbt_requests SET payload=? WHERE actor=? AND route=? AND idempotency_key=?',
-                (ds._json(body), request['actor'], request['route'], request['idempotency_key']))
+                (ds.canonical_json(body), request['actor'], request['route'], request['idempotency_key']))
         queries._pins.pop(self.query_id, None)
         plan = self.operator.plan(self.ident, 'uppercase-schema')
         result = self.operator.apply(plan['operation_id'], plan['revision'],

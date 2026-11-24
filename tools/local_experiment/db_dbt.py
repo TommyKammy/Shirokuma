@@ -118,7 +118,7 @@ def _write(db, record):
         if record['state'] in _ACTIVE or record['state'] in ('READY', 'NATIVE_VERIFIED'):
             record['state'] = 'CANCELING'
     record['updated_at'] = admission._now()
-    db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(record), record['id']))
+    db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds.canonical_json(record), record['id']))
 
 
 def _authorized(db, principal, context, ident, kind=None):
@@ -190,7 +190,7 @@ def _public(db, record):
         if isinstance(value, list):
             return [safe(v) for v in value]
         return value
-    return json.loads(ds._json(safe(result)))
+    return json.loads(ds.canonical_json(safe(result)))
 
 
 def _cancel_owner(db, principal, context, ident):
@@ -234,7 +234,7 @@ def _request(db, principal, context, route, key, payload, *, cleanup=False):
 
 def _receipt(db, principal, route, key, payload, record):
     db.execute('INSERT INTO dbt_requests VALUES (?,?,?,?,?)',
-        (principal.principal_id, route, key, payload, ds._json(dict(id=record['id']))))
+        (principal.principal_id, route, key, payload, ds.canonical_json(dict(id=record['id']))))
 
 
 def _base(principal, context, kind, project):
@@ -260,7 +260,7 @@ def _schema(metadata, value):
 def submit_plan(principal, context, *, key, project_id, source_schema, target_schema, staging_materialization):
     metadata = _access(principal, context)
     route = '/api/v1/dbt/plans'
-    payload = ds._json(dict(context=asdict(context), project_id=project_id, source_schema=source_schema,
+    payload = ds.canonical_json(dict(context=asdict(context), project_id=project_id, source_schema=source_schema,
         target_schema=target_schema, staging_materialization=staging_materialization))
     with control_store.connect() as db:
         replay = _request(db, principal, context, route, key, payload)
@@ -284,7 +284,7 @@ def submit_plan(principal, context, *, key, project_id, source_schema, target_sc
             if replay:
                 owner.close()
                 return replay
-            db.execute('INSERT INTO dbt_runs VALUES (?,?,?,NULL)', (record['id'], context.database_id, ds._json(record)))
+            db.execute('INSERT INTO dbt_runs VALUES (?,?,?,NULL)', (record['id'], context.database_id, ds.canonical_json(record)))
             _receipt(db, principal, route, key, payload, record)
             ack = _public(db, record)
         _live[record['id']] = (principal, context, None, None, None, owner)
@@ -303,7 +303,7 @@ def _hash_plan(plan):
         fields += ('compatibility',)
     if '_native_tests' in plan:
         fields += ('_native_tests',)
-    return hashlib.sha256(ds._json({k: plan[k] for k in fields}).encode()).hexdigest()
+    return hashlib.sha256(ds.canonical_json({k: plan[k] for k in fields}).encode()).hexdigest()
 
 
 def _compile(ident, principal, context):
@@ -440,7 +440,7 @@ def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=
             intent.update(executor=executor, plan_digest=json.loads(old['payload']).get('plan_digest') if old else None)
             if executor == 'native_table':
                 intent['node_id'] = node_id
-        payload = ds._json(intent)
+        payload = ds.canonical_json(intent)
         replay = _request(db, principal, context, route, key, payload)
         if replay:
             return replay
@@ -463,13 +463,13 @@ def submit_run(principal, context, *, key, plan_id, executor='sql_wap', node_id=
                 for m in plan['models']],
             tests=[dict(unique_id=t['unique_id'], name=t['name'], test_type=t['test_type'],
                 state='QUEUED', failure_count=None, operation_id=None) for t in plan['tests']] if native_tests else [])
-        return _accept(principal, context, route, key, ds._json(intent), record)
+        return _accept(principal, context, route, key, ds.canonical_json(intent), record)
     if executor == 'native_table':
         import database_dbt_native as native
         plan, node, _, _ = native._plan(principal, context, plan_id, node_id)
         suite = native.suite(plan, node_id) if native_tests else []
         intent['plan_digest'] = plan['_plan_digest']
-        payload = ds._json(intent)
+        payload = ds.canonical_json(intent)
         record = _base(principal, context, 'run', plan)
         record.update(plan_id=plan_id, _plan_digest=plan['_plan_digest'], _pins=None, _phase=None, _node_id=None,
             executor=executor, selected_node_id=node_id, tests_status='NOT_RUN', publication_allowed=False,
@@ -519,7 +519,7 @@ def _accept(principal, context, route, key, payload, record, check=None):
             parent = admission.admit(db, warehouse_id=context.warehouse_id, actor=principal.principal_id,
                 kind='dbt', subject_id=record['id'], database_id=context.database_id, generation_id=context.generation_id)
             db.execute('INSERT INTO dbt_runs VALUES (?,?,?,?)',
-                (record['id'], context.database_id, ds._json(record), parent.id))
+                (record['id'], context.database_id, ds.canonical_json(record), parent.id))
             _receipt(db, principal, route, key, payload, record)
             ack = _public(db, record)
         _live[record['id']] = (principal, context, parent, frozen, secrets.token_urlsafe(32), owner)
@@ -606,7 +606,7 @@ def _check_operation(db, operation_id):
                 **(native._TEST_PROVENANCE if link['phase'] == 'test' else native._PROVENANCE))
             if link['phase'] == 'test':
                 expected['selected_node_id'] = run['selected_node_id']
-            if op['payload'] != ds._json(dict(payload=expected, context=run['context'])):
+            if op['payload'] != ds.canonical_json(dict(payload=expected, context=run['context'])):
                 raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
         if run.get('executor') == 'native_graph':
             import database_dbt_graph as graph
@@ -619,7 +619,7 @@ def _check_operation(db, operation_id):
                 _native_publisher(db, principal=live[0], context=live[1], run=source, node_id=run['node_id'])
                 if (link['phase'] not in ('audit', 'publish') or link['node_id'] != run['node_id']
                         or op['route'] != 'dbt-native-' + link['phase']
-                        or op['payload'] != ds._json(dict(payload=_native_child_payload(run, link['phase']), context=run['context']))):
+                        or op['payload'] != ds.canonical_json(dict(payload=_native_child_payload(run, link['phase']), context=run['context']))):
                     raise QueryError('DBT_NATIVE_CHILD_INVALID', 409)
                 if link['phase'] == 'publish' and _native_audit_saved(db, run) is None:
                     raise QueryError('AUDIT_MISMATCH', 409)
@@ -651,7 +651,7 @@ def _before_query(operation_id, principal, context):
     for binding in plan['source_bindings']:
         ref = registry.ResourceRef(**binding['ref'])
         current = metadata.wap_measure(ref)
-        saved = (source.get('_pins') or {}).get(ds._json(binding['ref']))
+        saved = (source.get('_pins') or {}).get(ds.canonical_json(binding['ref']))
         if saved is None or any(current[k] != saved[k] for k in ('ref', 'schema_id', 'schema_fingerprint', 'columns')):
             raise QueryError('SOURCE_SCHEMA_CHANGED', 409)
 
@@ -681,10 +681,10 @@ def _pinned(execution, sources):
     pins = dict(run['_pins'])
     for model in run['models']:
         if model['candidate']:
-            pins[ds._json(model['candidate']['ref'])] = model.get('_view_measurement', model.get('_measurement'))
+            pins[ds.canonical_json(model['candidate']['ref'])] = model.get('_view_measurement', model.get('_measurement'))
     inputs = {}
     for alias, ref in sources.items():
-        saved = pins.get(ds._json(asdict(ref)))
+        saved = pins.get(ds.canonical_json(asdict(ref)))
         if saved is None:
             raise QueryError('SOURCE_CHANGED', 409)
         if saved.get('kind') == 'VIEW':
@@ -725,7 +725,7 @@ def _view_node(execution):
             node = next((m for m in plan['models'] if m['unique_id'] == scope.node_id), None)
             selected = next(m for m in run['models'] if m['unique_id'] == scope.node_id)
             op = execution._row()
-            expected = ds._json(dict(payload=graph.payload(run, 'build', scope.node_id), context=run['context']))
+            expected = ds.canonical_json(dict(payload=graph.payload(run, 'build', scope.node_id), context=run['context']))
             if (node is None or node['materialized'] != 'view' or node.get('view_security') != 'INVOKER'
                     or selected['state'] != 'BUILDING' or run['_phase'] != 'build' or run['_node_id'] != scope.node_id
                     or op['route'] != 'dbt-graph-build' or op['payload'] != expected
@@ -735,7 +735,7 @@ def _view_node(execution):
         if run.get('_source_bindings') != plan['source_bindings'] or run.get('_models') != plan['models']:
             raise QueryError('DBT_PLAN_CHANGED', 409)
     operation = execution._row()
-    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=scope.node_id), context=run['context']))
+    expected = ds.canonical_json(dict(payload=dict(run_id=run['id'], node_id=scope.node_id), context=run['context']))
     if (operation['route'] != 'dbt-view-create' or operation['payload'] != expected
             or operation['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()):
         raise QueryError('DBT_CONTINUATION_REQUIRED', 409)
@@ -789,13 +789,13 @@ def _view_saved(db, run, model):
     child = db.execute('SELECT o.*,l.phase,l.node_id FROM dataops_operations o JOIN dbt_run_operations l '
         'ON l.operation_id=o.id WHERE l.run_id=? AND o.id=?',
         (run['id'], ids[0] if len(ids) == 1 else '')).fetchone()
-    expected = ds._json(dict(payload=dict(run_id=run['id'], node_id=model['unique_id']), context=run['context']))
+    expected = ds.canonical_json(dict(payload=dict(run_id=run['id'], node_id=model['unique_id']), context=run['context']))
     if (not saved or saved.get('kind') != 'VIEW' or model['state'] != 'BUILT' or child is None
             or child['phase'] != 'build' or child['node_id'] != model['unique_id']
             or child['route'] != 'dbt-view-create' or child['state'] != 'FINISHED' or not child['committed'] or child['cleanup_error']
             or child['actor'] != run['actor'] or json.loads(child['context']) != run['context']
             or child['payload'] != expected or child['fingerprint'] != hashlib.sha256(expected.encode()).hexdigest()
-            or json.loads(child['result'] or '{}').get('view_digest') != hashlib.sha256(ds._json(saved).encode()).hexdigest()
+            or json.loads(child['result'] or '{}').get('view_digest') != hashlib.sha256(ds.canonical_json(saved).encode()).hexdigest()
             or json.loads(child['result'] or '{}').get('view') != _view_public(saved)
             or model['candidate'] != _view_public(saved)):
         raise QueryError('DBT_VIEW_CHANGED', 409)
@@ -913,7 +913,7 @@ def _build_view(ident, principal, context, parent, frozen, credential, uid):
                 if measured['_canonical_definition_digest'] != selected['_view_definition_digest']:
                     raise QueryError('DBT_VIEW_CHANGED', 409)
                 execution.complete(dict(view=_view_public(measured),
-                    view_digest=hashlib.sha256(ds._json(measured).encode()).hexdigest()))
+                    view_digest=hashlib.sha256(ds.canonical_json(measured).encode()).hexdigest()))
                 with control_store.connect() as db:
                     _, run = _row(db, ident)
                     model = next(m for m in run['models'] if m['unique_id'] == uid)
@@ -1157,12 +1157,12 @@ def _native_descriptor(expected, destination):
     """Strict JSON descriptor; measurements are compared whole, without coercion."""
     if (not isinstance(expected, dict) or set(expected) != {'version', 'destination', 'target'}
             or type(expected['version']) is not int or expected['version'] != 1
-            or ds._json(expected['destination']) != ds._json(destination)):
+            or ds.canonical_json(expected['destination']) != ds.canonical_json(destination)):
         raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400)
     target = expected['target']
     if 'object_id' in destination:
         if (not isinstance(target, dict) or set(target) != {'ref', 'snapshot', 'schema_id', 'columns', 'schema_fingerprint'}
-                or ds._json(target['ref']) != ds._json(destination) or not isinstance(target['snapshot'], str)
+                or ds.canonical_json(target['ref']) != ds.canonical_json(destination) or not isinstance(target['snapshot'], str)
                 or not re.fullmatch('[0-9]+', target['snapshot']) or type(target['schema_id']) is not int
                 or target['schema_id'] < 0 or not isinstance(target['columns'], list) or not target['columns']
                 or not isinstance(target['schema_fingerprint'], str)
@@ -1174,7 +1174,7 @@ def _native_descriptor(expected, destination):
     elif target is not None:
         raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400)
     try:
-        ds._json(expected)
+        ds.canonical_json(expected)
     except (ValueError, TypeError):
         raise QueryError('DBT_PUBLICATION_REVIEW_REQUIRED', 400) from None
 
@@ -1239,7 +1239,7 @@ def _native_publication_live(metadata, publication):
         _, proof = _native_publication_gate(db, source, publication['node_id'], publication['id'])
         _native_publisher(db, metadata.principal, metadata._context(), source, publication['node_id'])
         destination = _check_plan(db, source)['_targets'][publication['node_id']]
-        if ds._json(publication['_native_intent']) != ds._json(_native_intent(source, publication['node_id'], proof,
+        if ds.canonical_json(publication['_native_intent']) != ds.canonical_json(_native_intent(source, publication['node_id'], proof,
                 publication['expected_target'], metadata._context(), metadata.principal.principal_id)):
             raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
     if source['executor'] == 'native_graph':
@@ -1256,7 +1256,7 @@ def submit_publication(principal, context, run_id, *, key, node_id, expected_tar
     body = dict(context=asdict(context), node_id=node_id)
     if expected_target is not _UNREVIEWED:
         body['expected_target'] = expected_target
-    payload = ds._json(body)
+    payload = ds.canonical_json(body)
     with control_store.connect() as db:
         run = _authorized(db, principal, context, run_id, 'run')
         replay = _request(db, principal, context, route, key, payload)
@@ -1303,7 +1303,7 @@ def submit_publication(principal, context, run_id, *, key, node_id, expected_tar
                 if _native_review(metadata, current_proof, destination) != expected_target:
                     raise QueryError('DBT_PUBLICATION_REVIEW_CHANGED', 409)
             _native_publisher(db, principal, context, current, node_id)
-            if ds._json(record['_native_intent']) != ds._json(_native_intent(current, node_id, current_proof,
+            if ds.canonical_json(record['_native_intent']) != ds.canonical_json(_native_intent(current, node_id, current_proof,
                     expected_target, context, principal.principal_id)):
                 raise QueryError('DBT_NATIVE_PUBLICATION_INVALID', 409)
         selected['publication_id'] = record['id']
@@ -1362,7 +1362,7 @@ def _native_saved(db, run, operation_id):
             return None
         payload = dict(plan_id=run['plan_id'], node_id=run['selected_node_id'],
                        digest=run['_plan_digest'], **native._PROVENANCE)
-        expected = ds._json(dict(payload=payload, context=run['context']))
+        expected = ds.canonical_json(dict(payload=payload, context=run['context']))
         child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
             (op['id'], run['context']['warehouse_id'])).fetchone()
         if (op['id'] != operation_id or op['phase'] != 'build' or op['node_id'] != run['selected_node_id']
@@ -1435,7 +1435,7 @@ def _native_test_saved(db, run, uid, build):
         receipt = json.loads(op['result'] or '{}')
         payload = dict(plan_id=run['plan_id'], node_id=uid, selected_node_id=run['selected_node_id'],
             digest=run['_plan_digest'], **native._TEST_PROVENANCE)
-        expected = ds._json(dict(payload=payload, context=run['context']))
+        expected = ds.canonical_json(dict(payload=payload, context=run['context']))
         child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
             (op['id'], run['context']['warehouse_id'])).fetchone()
         build_op = next(o for o in links if o['phase'] == 'build')
@@ -1461,9 +1461,9 @@ def _native_test_saved(db, run, uid, build):
         if any(pins[alias].get('ref') != asdict(ref) for alias, ref in approved['sources'].items()):
             return None
         originals = dict(run['_pins'])
-        originals[ds._json(build['candidate']['ref'])] = build['candidate']
+        originals[ds.canonical_json(build['candidate']['ref'])] = build['candidate']
         for pin in pins.values():
-            if not isinstance(pin, dict) or originals.get(ds._json(pin.get('ref'))) != pin:
+            if not isinstance(pin, dict) or originals.get(ds.canonical_json(pin.get('ref'))) != pin:
                 return None
         queries = list(db.execute('SELECT d.step,d.action,q.*,e.* FROM dataops_queries d '
             'LEFT JOIN query_records q ON q.id=d.query_id '
@@ -1518,7 +1518,7 @@ def _native_run(ident, principal, context, parent, frozen, credential):
     uid = run['selected_node_id']
     plan, node, bindings, approved = native._plan(principal, context, run['plan_id'], uid)
     metadata = _access(principal, context)
-    pins = {ds._json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref']))
+    pins = {ds.canonical_json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref']))
             for s in plan['source_bindings']}
     with control_store.connect() as db:
         _, run = _row(db, ident)
@@ -1597,7 +1597,7 @@ def _build_run(ident, principal, context, parent, frozen, credential):
     pins = {}
     for source in plan['source_bindings']:
         ref = registry.ResourceRef(**source['ref'])
-        identity = ds._json(source['ref'])
+        identity = ds.canonical_json(source['ref'])
         if identity not in pins:
             pins[identity] = metadata.wap_measure(ref)
     with control_store.connect() as db:
@@ -1713,7 +1713,7 @@ def prepare_native_audit(execution) -> NativeAuditQuery:
     receipt_id = str(uuid.uuid4())
     pending = dict(origin=publication['origin'], audit_id=receipt_id, intent=intent)
     with control_store.connect() as db:
-        pending_json = ds._json(pending)
+        pending_json = ds.canonical_json(pending)
         db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (pending_json, execution.id))
     candidate = intent['candidate']
     source = execution._ref(registry.ResourceRef(**candidate['ref']))
@@ -1752,7 +1752,7 @@ def prepare_native_publication(execution) -> NativePublicationQuery:
     columns = ', '.join(ds._column(c['name']) for c in candidate['columns'])
     result = _native_publish_intent(publication, execution.id)
     with control_store.connect() as db:
-        commit_json = ds._json(result)
+        commit_json = ds.canonical_json(result)
         db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (commit_json, execution.id))
     sql = (prefix + name + " WITH (format='PARQUET') AS SELECT " + columns
         + ' FROM ' + source + ' FOR VERSION AS OF ' + snapshot)
@@ -1765,7 +1765,7 @@ def record_native_publication(execution, query, page, measured_target) -> dict:
         context=asdict(execution._context()), query_id=page['id'], target=measured_target)
     result = dict(result, publication=receipt)
     with control_store.connect() as db:
-        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(result), execution.id))
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(result), execution.id))
     return result
 
 
@@ -1780,7 +1780,7 @@ def _native_child_saved(db, publication, phase, *, settle=True):
     if len(ops) != 1:
         return None
     op = ops[0]
-    payload = ds._json(dict(payload=_native_child_payload(publication, phase), context=publication['context']))
+    payload = ds.canonical_json(dict(payload=_native_child_payload(publication, phase), context=publication['context']))
     parent = _row(db, publication['id'])[0]
     child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=?", (op['id'],)).fetchone()
     if (op['route'] != 'dbt-native-' + phase or op['node_id'] != publication['node_id']
@@ -1871,7 +1871,7 @@ def _native_frozen_graph(db, publication, *, settle=True):
         if field == 'views' and not models and field in publication['_native_intent']:
             return None
         for entry in entries:
-            if ds._json(entry['dependency_snapshots']) != ds._json(entry['receipt']['pins']):
+            if ds.canonical_json(entry['dependency_snapshots']) != ds.canonical_json(entry['receipt']['pins']):
                 return None
             model = models[entry['node_id']]
             model.update(state='NATIVE_VERIFIED', native_receipt=entry['receipt'])
@@ -1880,7 +1880,7 @@ def _native_frozen_graph(db, publication, *, settle=True):
                     candidate=_view_public(entry['receipt']['candidate']),
                     dependency_snapshots=entry['dependency_snapshots'])
     _, proof = graph.publication_proof(db, source, publication['node_id'], historical=True, settle=settle)
-    if ds._json(publication['_native_intent']) != ds._json(_native_intent(source, publication['node_id'], proof,
+    if ds.canonical_json(publication['_native_intent']) != ds.canonical_json(_native_intent(source, publication['node_id'], proof,
             publication['expected_target'], ResolvedQueryContext(**publication['context']), publication['actor'])):
         return None
     return source, proof
@@ -1907,7 +1907,7 @@ def _native_publication_saved(db, publication, *, settle=True):
         intent = _native_publish_intent(publication, op['id'])
         receipt = result['publication']
         target = receipt['target']
-        if (result != dict(intent, publication=receipt) or query['commit_result'] != ds._json(intent)
+        if (result != dict(intent, publication=receipt) or query['commit_result'] != ds.canonical_json(intent)
                 or receipt != dict(intent, id=publication['id'], actor=publication['actor'],
                     context=publication['context'], query_id=query['id'], target=target)
                 or target['ref']['database_id'] != publication['context']['database_id']
@@ -1933,7 +1933,7 @@ def _native_publication_saved(db, publication, *, settle=True):
         # Once saved, the parent receipt anchors historical proof, including
         # JSON value types, even if this FQN is later recreated.
         if ('native_publication' in publication
-                and ds._json(publication['native_publication']) != ds._json(receipt)):
+                and ds.canonical_json(publication['native_publication']) != ds.canonical_json(receipt)):
             return None
         return receipt
     except (KeyError, TypeError, ValueError, AttributeError, StopIteration, QueryError):
@@ -2282,7 +2282,7 @@ def list_publications(principal, context):
 def cancel_run(principal, context, run_id, *, key):
     ds._cancel_account(principal)
     route = '/api/v1/dbt/runs/' + run_id + '/cancel'
-    payload = ds._json(dict(context=asdict(context)))
+    payload = ds.canonical_json(dict(context=asdict(context)))
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         run = _cancel_owner(db, principal, context, run_id)
@@ -2325,7 +2325,7 @@ def cancel_run(principal, context, run_id, *, key):
 def reconcile_run(principal, context, run_id, *, key):
     _access(principal, context)
     route = '/api/v1/dbt/runs/' + run_id + '/reconcile'
-    payload = ds._json(dict(context=asdict(context)))
+    payload = ds.canonical_json(dict(context=asdict(context)))
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         run = _authorized(db, principal, context, run_id, 'run')

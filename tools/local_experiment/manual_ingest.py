@@ -150,7 +150,7 @@ def _read(raw, detected, encoding, delimiter, hints, target_columns=None, *, all
 
 def _persist(execution, receipt):
     with control_store.connect() as db:
-        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (dataops._json(receipt), execution.id))
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (dataops.canonical_json(receipt), execution.id))
 
 
 def capture_input(*, filename, content, format='auto', encoding=None, delimiter=None):
@@ -194,7 +194,7 @@ def _preview_request(context, *, mode, destination=None, target=None, schema_hin
         format=detected, encoding=codec, delimiter=delimiter if detected == 'csv' else None,
         schema_hints=hints, mode=mode, key_columns=tuple(key_columns), batch_size=batch_size,
         atomic_append=atomic_append, target=asdict(chosen))
-    fingerprint = hashlib.sha256(dataops._json(dict(payload=payload, context=asdict(context))).encode()).hexdigest()
+    fingerprint = hashlib.sha256(dataops.canonical_json(dict(payload=payload, context=asdict(context))).encode()).hexdigest()
     return raw, detected, codec, delimiter, hints, payload, fingerprint
 
 

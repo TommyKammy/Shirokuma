@@ -155,7 +155,7 @@ def node_allowed(db, run, phase, uid):
 
 
 def check_operation(db, run, op, link):
-    expected = ds._json(dict(payload=payload(run, link['phase'], link['node_id']), context=run['context']))
+    expected = ds.canonical_json(dict(payload=payload(run, link['phase'], link['node_id']), context=run['context']))
     links = list(db.execute('SELECT phase,node_id FROM dbt_run_operations WHERE run_id=?', (run['id'],)))
     if (not node_allowed(db, run, link['phase'], link['node_id'])
             or len({(l['phase'], l['node_id']) for l in links}) != len(links)
@@ -243,7 +243,7 @@ class Bridge(native._Bridge):
             generated = manual_wap._compile_model(**self.approved, execution=self.execution, measurements=self.inputs)
             with control_store.connect() as db:
                 db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
-                    (ds._json(self.receipt), self.execution.id))
+                    (ds.canonical_json(self.receipt), self.execution.id))
             if self.phase == 'build' and self.node['materialized'] == 'view':
                 self.candidate_ref = self.execution._dbt_create_view()
                 self.receipt['candidate'] = self.execution._dbt_measure_view(self.candidate_ref)
@@ -252,7 +252,7 @@ class Bridge(native._Bridge):
                     reject('DBT_VIEW_CHANGED')
                 with control_store.connect() as db:
                     db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
-                        (ds._json(self.receipt), self.execution.id))
+                        (ds.canonical_json(self.receipt), self.execution.id))
                 self.response = dict(_message='CREATE VIEW', code='CREATE VIEW')
                 return self.response
             if self.phase == 'build':
@@ -266,7 +266,7 @@ class Bridge(native._Bridge):
                 self.receipt['candidate'] = self.execution.wap_measure(self.candidate_ref)
                 with control_store.connect() as db:
                     db.execute("UPDATE dataops_operations SET result=? WHERE id=? AND state='ACTIVE'",
-                        (ds._json(self.receipt), self.execution.id))
+                        (ds.canonical_json(self.receipt), self.execution.id))
                 self.response = dict(_message='CREATE TABLE', code='CREATE TABLE', rows_affected=page.get('update_count'))
                 self.response = {k: v for k, v in self.response.items() if v is not None}
                 return self.response
@@ -692,7 +692,7 @@ def child_proof(db, run, uid, phase, *, historical=False, settle=True):
             return None
         op = links[0]
         check_operation(db, run, op, op)
-        expected = ds._json(dict(payload=payload(run, phase, uid), context=run['context']))
+        expected = ds.canonical_json(dict(payload=payload(run, phase, uid), context=run['context']))
         receipt = json.loads(op['result'] or '{}')
         child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
             (op['id'], run['context']['warehouse_id'])).fetchone()
@@ -726,16 +726,16 @@ def child_proof(db, run, uid, phase, *, historical=False, settle=True):
         pins = receipt.get('pins')
         bindings, approved = bindings_for(plan, run, node)
         originals = dict(run['_pins'])
-        originals.update({ds._json(m['candidate']['ref']): m['_measurement'] for m in run['models']
+        originals.update({ds.canonical_json(m['candidate']['ref']): m['_measurement'] for m in run['models']
             if m.get('native_receipt', {}).get('native_verified') is True})
         if not isinstance(pins, dict) or set(pins) != set(approved['sources']):
             return None
         if any(not isinstance(pins[a], dict) or pins[a].get('ref') != asdict(ref)
                 or pins[a].get('kind') == 'VIEW' and not valid_view_measurement(pins[a])
-                or ds._json(originals.get(ds._json(asdict(ref)))) != ds._json(pins[a]) for a, ref in approved['sources'].items()):
+                or ds.canonical_json(originals.get(ds.canonical_json(asdict(ref)))) != ds.canonical_json(pins[a]) for a, ref in approved['sources'].items()):
             return None
         item = next(m for m in run['models' if phase == 'build' else 'tests'] if m['unique_id'] == uid)
-        if ds._json(item.get('native_receipt')) != ds._json(receipt):
+        if ds.canonical_json(item.get('native_receipt')) != ds.canonical_json(receipt):
             return None
         sdk = receipt.get('sdk_result')
         if not valid_result(sdk) or sdk['node_id'] != uid or sdk != item.get('_sdk_result'):
@@ -753,10 +753,10 @@ def child_proof(db, run, uid, phase, *, historical=False, settle=True):
             owned = db.execute('SELECT * FROM dataops_owned_objects WHERE operation_id=? AND object_id=?',
                 (op['id'], ref.object_id)).fetchone()
             locator = run['_graph_locators'][uid]
-            if (item['state'] != 'NATIVE_VERIFIED' or ds._json(item.get('candidate')) != ds._json(public)
+            if (item['state'] != 'NATIVE_VERIFIED' or ds.canonical_json(item.get('candidate')) != ds.canonical_json(public)
                     or item.get('materialized') != node['materialized']
-                    or ds._json(item.get('_measurement')) != ds._json(candidate) or item.get('operation_ids') != [op['id']]
-                    or ds._json(item.get('dependency_snapshots')) != ds._json(pins) or sdk['status'] != 'success'
+                    or ds.canonical_json(item.get('_measurement')) != ds.canonical_json(candidate) or item.get('operation_ids') != [op['id']]
+                    or ds.canonical_json(item.get('dependency_snapshots')) != ds.canonical_json(pins) or sdk['status'] != 'success'
                     or ref.database_id != run['context']['database_id'] or ref.schema_id != run['context']['schema_id']
                     or schema is None or schema.purpose != 'sandbox' or schema.database_id != ref.database_id
                     or obj is None or not historical and not obj.current or obj.kind != ('VIEW' if view else 'TABLE') or obj.schema_id != ref.schema_id
@@ -838,7 +838,7 @@ def _failed_build_child(db, run, op, *, settle=True):
     from db_marts import _closed_child
     check_operation(db, run, op, op)
     row, _ = dbt._row(db, run['id'])
-    expected = ds._json(dict(payload=payload(run, 'build', op['node_id']), context=run['context']))
+    expected = ds.canonical_json(dict(payload=payload(run, 'build', op['node_id']), context=run['context']))
     child = db.execute("SELECT * FROM warehouse_admissions WHERE kind='dataops' AND subject_id=? AND warehouse_id=?",
         (op['id'], run['context']['warehouse_id'])).fetchone()
     parent = db.execute('SELECT * FROM warehouse_admissions WHERE id=?', (row['admission_id'],)).fetchone()
@@ -1037,7 +1037,7 @@ def execute(ident, principal, context, parent, frozen, credential):
         plan = dbt._check_plan(db, run)
         native._saved_plan(db, principal, context, plan)
     validate(metadata, context, plan, tests=run['native_tests'])
-    pins = {ds._json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref'])) for s in plan['source_bindings']}
+    pins = {ds.canonical_json(s['ref']): metadata.wap_measure(registry.ResourceRef(**s['ref'])) for s in plan['source_bindings']}
     locators = {m['unique_id']: dict(database_id=context.database_id, schema_id=context.schema_id,
         physical_name='g_' + secrets.token_hex(8)) for m in plan['models'] if m['materialized'] in ('table', 'view')}
     with control_store.connect() as db:

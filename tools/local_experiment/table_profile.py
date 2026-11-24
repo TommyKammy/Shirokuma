@@ -195,7 +195,7 @@ def profile(principal, context, *, key, source, snapshot_id):
         frozen = _guard(ObservationExecution(principal, execution.id), context, source, snapshot_id=snapshot_id)
         with control_store.connect() as db:
             db.execute('UPDATE dataops_operations SET result=? WHERE id=?',
-                (ds._json(dict(source=frozen)), execution.id))
+                (ds.canonical_json(dict(source=frozen)), execution.id))
         if not _slots.acquire(blocking=False):
             raise QueryError('PROFILE_WORKER_BUSY', 409)
         try:

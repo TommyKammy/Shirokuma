@@ -61,7 +61,7 @@ def _access(principal, context, *, write=False, admin=False):
 @contextmanager
 def _model_lock(database_id, model_id):
     # A scoped cross-process lock; no background worker or TTL-based takeover.
-    key = hashlib.sha256(ds._json([database_id, model_id]).encode()).hexdigest()
+    key = hashlib.sha256(ds.canonical_json([database_id, model_id]).encode()).hexdigest()
     with (control_store.root() / ('wap-' + key + '.lock')).open('a') as stream:
         fcntl.flock(stream, fcntl.LOCK_EX)
         try:
@@ -233,7 +233,7 @@ def save_model(principal, context, *, model_id, sql, sources, target,
                 if cursor.rowcount != 1:
                     raise QueryError('MODEL_VERSION_CONFLICT', 409)
             db.execute('INSERT INTO wap_model_versions VALUES (?,?,?,?,?)',
-                (context.database_id, model_id, version, principal.principal_id, ds._json(record)))
+                (context.database_id, model_id, version, principal.principal_id, ds.canonical_json(record)))
         return record
 
 
@@ -297,17 +297,17 @@ def _store_artifact(table, record):
     with control_store.connect() as db:
         db.execute('INSERT INTO ' + table + ' VALUES (?,?,?,?,?,?)',
             (record['id'], record['database_id'], record['model_id'], record['version'],
-             record['operation_id'], ds._json(record)))
+             record['operation_id'], ds.canonical_json(record)))
         if table == 'wap_publications':
             db.execute('UPDATE wap_models SET materialized_ref=?,current_publication_id=? WHERE database_id=? AND model_id=?',
-                (ds._json(record['target']['ref']), record['id'], record['database_id'], record['model_id']))
+                (ds.canonical_json(record['target']['ref']), record['id'], record['database_id'], record['model_id']))
 
 
 def _receipt_intent(execution, result):
     # Proposed artifact IDs are useful on UNKNOWN too. committed remains false
     # until the child's existing atomic commit_result marker proves the write.
     with control_store.connect() as db:
-        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(result), execution.id))
+        db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(result), execution.id))
 
 
 def _settle_definite(execution, context, error):
