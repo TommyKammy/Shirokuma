@@ -42,7 +42,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: seaweedfs
-          image: ghcr.io/tommykammy/shirokuma-seaweedfs@sha256:d1339701907587c93c6af8740388226ac2277cbbfd3df581c0e85d815c90e421
+          # Official SeaweedFS 4.55 linux/arm64 image (ADR-0036). Args start with
+          # a flag, so /entrypoint.sh execs /usr/bin/weed with them unchanged.
+          image: docker.io/chrislusf/seaweedfs@sha256:1d857dc0ff7f0829e5f0228c7dd8d6907b4d1e7b01b553eb5c05c17c9a9a7b49
           imagePullPolicy: IfNotPresent
           args:
             - -logtostderr=true
