@@ -64,6 +64,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
                            ('base_i18n.js', 'application/javascript; charset=utf-8'),
                            ('saved_lineage.js', 'application/javascript; charset=utf-8'),
                            ('result_export.js', 'application/javascript; charset=utf-8'),
+                           ('db_admin.js', 'application/javascript; charset=utf-8'),
                            ('workbench.css', 'text/css; charset=utf-8')):
             path, asset = '/assets/' + name, wb.INDEX.with_name(name)
             for role in (None, 'admin', 'data_engineer', 'bi_viewer'):
@@ -86,7 +87,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
                     self.assertEqual(handler.wfile.getvalue(), asset.read_bytes())
 
     def test_chart_asset_rejects_query_body_and_unknown_paths(self):
-        for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/workbench.css'):
+        for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/workbench.css'):
             with self.subTest(path=path):
                 for suffix in ('?x=1', '?role=admin', '?x=1&x=2'):
                     self.assertEqual(self.request(path + suffix, roles=())[0], 400)
