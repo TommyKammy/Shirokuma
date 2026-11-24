@@ -1012,7 +1012,7 @@ print(json.dumps(dict(op='done', status='success')), flush=True)
             mutate(receipt)
             with control_store.connect() as db:
                 db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (saved_run, run['id']))
-                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), op_id))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), op_id))
             with self.subTest(receipt=receipt), patch.object(db_dbt, '_access', side_effect=AssertionError('no metadata')):
                 db_dbt._settle(run['id'])
             observed = db_dbt._row_run(run['id'])
@@ -1103,7 +1103,7 @@ print(json.dumps(dict(op='done', status='success')), flush=True)
             child = materialize(*args, **kwargs)
             receipt = dict(child['result'], digest='changed')
             with control_store.connect() as db:
-                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child['id']))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child['id']))
             return child
         with patch.object(native, 'materialize_accepted', side_effect=tamper):
             run = self.normal_run()
@@ -1329,7 +1329,7 @@ class NativeQualityTests(unittest.TestCase):
                                       ('candidate', {}), ('test_verified', False)]:
                 tampered = json.loads(op_result)
                 tampered[field] = replacement
-                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(tampered), op_id))
+                db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(tampered), op_id))
                 self.assertIsNone(db_dbt._native_test_saved(db, saved, uid, build))
             db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (op_result, op_id))
             tampered = deepcopy(saved)

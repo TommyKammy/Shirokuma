@@ -272,7 +272,7 @@ class ManualWapTests(unittest.TestCase):
     def test_model_read_keeps_snapshot_during_concurrent_head_update(self):
         source = self.existing()
         original_connect = control_store.connect
-        original_json = ds._json
+        original_json = ds.canonical_json
         for version in (None, 1):
             with self.subTest(version=version):
                 model_id = 'read-race-' + str(version)
@@ -303,7 +303,7 @@ class ManualWapTests(unittest.TestCase):
                                     callback_errors.append(exc)
                         db.set_trace_callback(trace)
                         yield db
-                with ThreadPoolExecutor(max_workers=1) as pool, patch.object(ds, '_json', side_effect=hold_update), \
+                with ThreadPoolExecutor(max_workers=1) as pool, patch.object(ds, 'canonical_json', side_effect=hold_update), \
                         patch.object(control_store, 'connect', connect):
                     try:
                         read = wap.get_model(self.principal, self.context, model_id=model_id, version=version)

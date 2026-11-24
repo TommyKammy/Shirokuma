@@ -116,7 +116,7 @@ class NativePublicationBoundaryTests(unittest.TestCase):
                 expected = dict(origin=publication['origin'], publication_id=ack['id'],
                     audit_id=publication['audit_id'], operation_id=execution.id, intent=publication['_native_intent'])
                 self.assertEqual(kwargs, {'commit_result': expected})
-                self.assertEqual(self.operation(execution.id)['result'], ds._json(expected))
+                self.assertEqual(self.operation(execution.id)['result'], ds.canonical_json(expected))
                 candidate = expected['intent']['candidate']
                 destination = publication['expected_target']['destination']
                 target = fixtures.dm.ResourceRef(**destination) if replace else fixtures.dm.DestinationLocator(**destination)
@@ -195,7 +195,7 @@ class NativePublicationBoundaryTests(unittest.TestCase):
         self.assertEqual(len(captured), 1)
         child = self.operation(captured[0][0])
         self.assertTrue(child['committed'])
-        self.assertEqual(child['result'], ds._json(captured[0][1]))
+        self.assertEqual(child['result'], ds.canonical_json(captured[0][1]))
         self.assertNotIn('publication', json.loads(child['result']))
 
 

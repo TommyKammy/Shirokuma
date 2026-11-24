@@ -117,8 +117,8 @@ class IngestRecovery(LogicalQueryRecovery):
                  (isinstance(p["delimiter"], str) and len(p["delimiter"]) == 1 if p["format"] == "csv"
                   else p["delimiter"] is None))
         _require(op["route"] == "manual-ingest" and op["state"] == "UNKNOWN" and op["actor"] == self.actor and
-                 not op["committed"] and op["context"] == ds._json(context_data) and
-                 op["payload"] == ds._json(dict(context=context_data, payload=p)) and payload["context"] == context_data and
+                 not op["committed"] and op["context"] == ds.canonical_json(context_data) and
+                 op["payload"] == ds.canonical_json(dict(context=context_data, payload=p)) and payload["context"] == context_data and
                  op["fingerprint"] == hashlib.sha256(op["payload"].encode()).hexdigest() and
                  isinstance(op["credential_snapshot_ref"], str) and bool(op["credential_snapshot_ref"]))
         _require(p["mode"] in ("create", "replace", "append", "upsert") and

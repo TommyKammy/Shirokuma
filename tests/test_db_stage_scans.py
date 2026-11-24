@@ -369,7 +369,7 @@ try:
     with control_store.connect() as db:
         db.execute('BEGIN IMMEDIATE')
         db.execute('INSERT INTO db_stage_runs VALUES (?,?,?,?,?,?,?)',
-            (run_id, p['stage'], p['operation'], ds._json(record), ds._json(p['definition']), 'test', raw))
+            (run_id, p['stage'], p['operation'], ds.canonical_json(record), ds.canonical_json(p['definition']), 'test', raw))
         scans.reserve(db, ResolvedQueryContext(**p['context']), p['stage'], p['definition'], 'data.csv', raw, run_id)
     print('reserved')
 except scans._Duplicate:
@@ -477,7 +477,7 @@ except scans._Duplicate:
         for index, (state, result) in enumerate((('FINISHED', dict(mode='append', atomic=False, accepted_rows=1001, committed_rows=500)),
                                                ('UNKNOWN', json.loads(complete)))):
             with control_store.connect() as db:
-                db.execute('UPDATE dataops_operations SET state=?,result=? WHERE id=?', (state, ds._json(result), run['operation_id']))
+                db.execute('UPDATE dataops_operations SET state=?,result=? WHERE id=?', (state, ds.canonical_json(result), run['operation_id']))
             for _ in range(2):
                 self.code('STAGE_CONTENT_HELD', lambda: self.submit(self.stage, key='held-' + str(index)))
             with control_store.connect() as db:

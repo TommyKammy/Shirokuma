@@ -231,7 +231,7 @@ class StageStateTests(StageFixture, unittest.TestCase):
         with control_store.connect() as db:
             changed = dict(asdict(self.c), schema_id=self.b.schemas[self.c.database_id]['sandbox'])
             with self.assertRaises(sqlite3.IntegrityError):
-                db.execute('UPDATE db_stages SET context=? WHERE id=?', (ds._json(changed), stage['id']))
+                db.execute('UPDATE db_stages SET context=? WHERE id=?', (ds.canonical_json(changed), stage['id']))
 
     def test_admitted_ingest_keeps_original_definition_after_cas_edit(self):
         stage = self.save()
@@ -671,7 +671,7 @@ class StageStateTests(StageFixture, unittest.TestCase):
         self.assertNotEqual(first['request_fingerprint'], renamed_file['request_fingerprint'])
         normalized = manual_ingest._preview_request(self.c, **stages._options(stage['definition'], 'data.csv', raw))[5]
         expected = {k: v for k, v in normalized.items() if k not in ('input_sha256', 'input_length')}
-        self.assertEqual(first['configuration_fingerprint'], stages._hash(ds._json(expected).encode()))
+        self.assertEqual(first['configuration_fingerprint'], stages._hash(ds.canonical_json(expected).encode()))
         renamed = self.save(key='display-name', stage_id=stage['id'], expected_revision=1,
                             definition=self.definition(name='display_changed'))
         same = other_run(renamed, 'same-config')
@@ -1076,7 +1076,7 @@ class StageExportTests(StageFixture, unittest.TestCase):
                             (str(uuid.uuid4()), str(uuid.uuid4()), parent.id, self.c.generation_id, admission._now()))
                     elif variant == 'mismatched-artifact':
                         altered = dict(json.loads(artifact['record']), sha256='0' * 64)
-                        db.execute('UPDATE export_artifacts SET record=? WHERE export_id=?', (ds._json(altered), artifact['export_id']))
+                        db.execute('UPDATE export_artifacts SET record=? WHERE export_id=?', (ds.canonical_json(altered), artifact['export_id']))
                 output = self.directory / 'exports' / run['file']
                 if variant == 'missing-file':
                     output.unlink()

@@ -61,7 +61,7 @@ def _request(db, principal, route, key, payload):
 
 def _receipt(db, principal, route, key, payload, response):
     db.execute('INSERT INTO db_mart_requests VALUES (?,?,?,?,?)',
-        (principal.principal_id, route, key, payload, ds._json(response)))
+        (principal.principal_id, route, key, payload, ds.canonical_json(response)))
 
 
 def _revision(value, create=False):
@@ -73,7 +73,7 @@ def _definition(principal, context, definition, current=None):
     if not isinstance(definition, dict):
         raise ValueError('Mart definition required')
     common._keys(definition, {'name', 'model_id', 'version', 'source_refs', 'target'})
-    definition = json.loads(ds._json(definition))
+    definition = json.loads(ds.canonical_json(definition))
     if not isinstance(definition['name'], str) or not re.fullmatch('[a-z][a-z0-9_-]{0,47}', definition['name']):
         raise ValueError('invalid Mart name')
     if type(definition['version']) is not int or definition['version'] < 1:
@@ -82,10 +82,10 @@ def _definition(principal, context, definition, current=None):
     if wap._head(context, model['model_id'])['version'] != model['version']:
         raise QueryError('MODEL_VERSION_CHANGED', 409)
     metadata = _access(principal, context)
-    sources = {ds._json(r): r for r in model['sources'].values()}
+    sources = {ds.canonical_json(r): r for r in model['sources'].values()}
     if not isinstance(definition['source_refs'], list):
         raise ValueError('source_refs list required')
-    watched = {ds._json(asdict(common.reference(r))): r for r in definition['source_refs']}
+    watched = {ds.canonical_json(asdict(common.reference(r))): r for r in definition['source_refs']}
     if watched and set(watched) != set(sources):
         raise QueryError('WATCH_SOURCES_MISMATCH', 409)
     definition['source_refs'] = [sources[k] for k in sorted(watched)]
@@ -118,7 +118,7 @@ def save_mart(principal, context, *, key, expected_revision, definition, mart_id
     if (mart_id is None) != (expected_revision == 0):
         raise ValueError('create requires revision zero; update requires Mart ID')
     route = '/api/v1/marts' + ('/' + mart_id if mart_id else '')
-    payload = ds._json(dict(context=asdict(context), expected_revision=expected_revision, definition=definition))
+    payload = ds.canonical_json(dict(context=asdict(context), expected_revision=expected_revision, definition=definition))
     with _lock:
         with control_store.connect() as db:
             old = _public(_mart(db, principal, context, mart_id)) if mart_id else None
@@ -148,10 +148,10 @@ def save_mart(principal, context, *, key, expected_revision, definition, mart_id
             record.update(updated_at=admission._now(), quality=dict(min_rows=model['min_rows'], not_null=model['not_null']))
             if old is None:
                 db.execute('INSERT INTO db_marts VALUES (?,?,?,?,?,?,?)', (mart_id, context.database_id,
-                    principal.principal_id, 1, ds._json(asdict(context)), ds._json(normalized), ds._json(record)))
+                    principal.principal_id, 1, ds.canonical_json(asdict(context)), ds.canonical_json(normalized), ds.canonical_json(record)))
             else:
                 db.execute('UPDATE db_marts SET revision=revision+1,context=?,definition=?,record=? WHERE id=?',
-                    (ds._json(asdict(context)), ds._json(normalized), ds._json(record), mart_id))
+                    (ds.canonical_json(asdict(context)), ds.canonical_json(normalized), ds.canonical_json(record), mart_id))
             _receipt(db, principal, route, key, payload, dict(mart_id=mart_id))
             return _public(_mart(db, principal, context, mart_id))
 
@@ -196,7 +196,7 @@ def _run_row(db, run_id):
 
 
 def _write_run(db, run):
-    db.execute('UPDATE db_mart_runs SET record=? WHERE id=?', (ds._json(run), run['id']))
+    db.execute('UPDATE db_mart_runs SET record=? WHERE id=?', (ds.canonical_json(run), run['id']))
 
 
 def _public_run(run):
@@ -236,7 +236,7 @@ def _pinned(execution, sources, run_id):
 
 
 def _comparison(model, measurements):
-    refs = {ds._json(v['ref']): dict(ref=v['ref'], snapshot=v['snapshot']) for v in measurements.values()}
+    refs = {ds.canonical_json(v['ref']): dict(ref=v['ref'], snapshot=v['snapshot']) for v in measurements.values()}
     return dict(model_id=model['model_id'], version=model['version'], sources=[refs[k] for k in sorted(refs)])
 
 
@@ -246,7 +246,7 @@ def submit(principal, context, mart_id, *, key, expected_revision, kind='refresh
     if kind not in ('check', 'refresh') or type(check_changes) is not bool:
         raise ValueError('invalid Mart action')
     route = '/api/v1/marts/' + mart_id + ('/checks' if kind == 'check' else '/refreshes')
-    payload = ds._json(dict(context=asdict(context), expected_revision=expected_revision, kind=kind, check_changes=check_changes))
+    payload = ds.canonical_json(dict(context=asdict(context), expected_revision=expected_revision, kind=kind, check_changes=check_changes))
     with _lock:
         with control_store.connect() as db:
             _mart(db, principal, context, mart_id)
@@ -285,11 +285,11 @@ def submit(principal, context, mart_id, *, key, expected_revision, kind='refresh
                     error=None, start_measurements=None, comparison=None, check_changes=check_changes,
                     created_at=admission._now(), publication=None, baseline_saved=False,
                     _backend_username=frozen.headers['X-Trino-User'], _credential_snapshot_ref=credential)
-                db.execute('INSERT INTO db_mart_runs VALUES (?,?,?,?)', (ident, mart_id, ds._json(run), parent.id))
+                db.execute('INSERT INTO db_mart_runs VALUES (?,?,?,?)', (ident, mart_id, ds.canonical_json(run), parent.id))
                 _receipt(db, principal, route, key, payload, dict(run_id=ident))
                 # Freeze the authenticated ACK before a worker can write. The
                 # admission transaction is this first return's authority boundary.
-                accepted = _public_run(json.loads(ds._json(run)))
+                accepted = _public_run(json.loads(ds.canonical_json(run)))
             _live[ident] = (principal, context, parent, frozen, credential, owner)
             _start(ident)
         except BaseException:
@@ -329,7 +329,7 @@ def _execute(run_id):
             metadata = wap._Metadata(principal, context)
             measurements, observed = {}, {}
             for alias, value in run['model']['sources'].items():
-                identity = ds._json(value)
+                identity = ds.canonical_json(value)
                 if identity not in observed:
                     observed[identity] = metadata.wap_measure(registry.ResourceRef(**value))
                 measurements[alias] = observed[identity]
@@ -517,7 +517,7 @@ def _save_baseline(run_id, publication, *, authority=None):
             transition = definition['target'] != publication['target']['ref']
             definition['target'] = publication['target']['ref']
             cursor = db.execute('UPDATE db_marts SET record=?,definition=?,revision=revision+? WHERE id=? AND revision=?',
-                (ds._json(record), ds._json(definition), int(transition), run['mart_id'], run['mart_revision']))
+                (ds.canonical_json(record), ds.canonical_json(definition), int(transition), run['mart_id'], run['mart_revision']))
             if cursor.rowcount != 1:
                 raise QueryError('MART_REVISION_CONFLICT', 409)
 
@@ -541,7 +541,7 @@ def _finalize(run_id, publication, *, authority=None):
         record = json.loads(row[0])
         if record.get('blocked_run_id') == run_id:
             record.update(reconciliation_required=False, blocked_run_id=None)
-            db.execute('UPDATE db_marts SET record=? WHERE id=?', (ds._json(record), run['mart_id']))
+            db.execute('UPDATE db_marts SET record=? WHERE id=?', (ds.canonical_json(record), run['mart_id']))
 
 
 def _block(run_id, *, committed, closed):
@@ -551,7 +551,7 @@ def _block(run_id, *, committed, closed):
         _write_run(db, run)
         record = json.loads(db.execute('SELECT record FROM db_marts WHERE id=?', (run['mart_id'],)).fetchone()[0])
         record.update(reconciliation_required=True, blocked_run_id=run_id)
-        db.execute('UPDATE db_marts SET record=? WHERE id=?', (ds._json(record), run['mart_id']))
+        db.execute('UPDATE db_marts SET record=? WHERE id=?', (ds.canonical_json(record), run['mart_id']))
 
 
 def _settle(principal, context, run_id):
@@ -624,7 +624,7 @@ def list_runs(principal, context, mart_id):
     with control_store.connect() as db:
         _mart(db, principal, context, mart_id)
         ids = [r[0] for r in db.execute("SELECT id FROM db_mart_runs WHERE mart_id=? "
-            "AND json_extract(record,'$.context')=? ORDER BY rowid DESC", (mart_id, ds._json(asdict(context))))]
+            "AND json_extract(record,'$.context')=? ORDER BY rowid DESC", (mart_id, ds.canonical_json(asdict(context))))]
     for ident in ids:
         get_run(principal, context, mart_id, ident)
     with control_store.connect() as db:

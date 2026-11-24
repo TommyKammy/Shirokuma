@@ -183,11 +183,11 @@ def _publish(execution, receipt, *, _defer_finalization=False):
             db.execute('BEGIN IMMEDIATE')
             changed = db.execute("UPDATE dataops_operations SET state=?,result=? WHERE id=? AND state='ACTIVE'",
                 ('ACTIVE' if _defer_finalization else 'FINISHED',
-                 ds._json(dict(export_id=receipt['export_id'], receipt=receipt)), execution.id))
+                 ds.canonical_json(dict(export_id=receipt['export_id'], receipt=receipt)), execution.id))
             if changed.rowcount != 1:
                 raise QueryError('ADMISSION_CONFLICT', 409)
             changed = db.execute("UPDATE export_artifacts SET state='COMPLETE',record=? WHERE operation_id=? AND state='INTENT'",
-                       (ds._json(receipt), execution.id))
+                       (ds.canonical_json(receipt), execution.id))
             if changed.rowcount != 1:
                 raise QueryError('EXPORT_NOT_COMPLETE', 409)
             if not _defer_finalization:
@@ -234,16 +234,16 @@ def _export_table(principal, context, *, key, source, format='csv',
                 expected_count=None, written_count=None, byte_count=None, sha256=None)
             with control_store.connect() as db:
                 db.execute('INSERT INTO export_artifacts VALUES (?,?,?,?,?,?,?,?)',
-                    (export_id, execution.id, principal.principal_id, ds._json(asdict(context)),
-                     ds._json(receipt), 'INTENT', relative_name, _profile_ref()))
+                    (export_id, execution.id, principal.principal_id, ds.canonical_json(asdict(context)),
+                     ds.canonical_json(receipt), 'INTENT', relative_name, _profile_ref()))
                 db.execute('UPDATE dataops_operations SET result=? WHERE id=?',
-                           (ds._json(dict(export_id=export_id)), execution.id))
+                           (ds.canonical_json(dict(export_id=export_id)), execution.id))
             measurement = execution.export_measure(source)
             for column in measurement['columns']:
                 _supported(column['type'])
             receipt['source'] = measurement
             with control_store.connect() as db:
-                db.execute('UPDATE export_artifacts SET record=? WHERE export_id=?', (ds._json(receipt), export_id))
+                db.execute('UPDATE export_artifacts SET record=? WHERE export_id=?', (ds.canonical_json(receipt), export_id))
             counted = execution.export_query(source, measurement, count=True)['data']
             if (len(counted) != 1 or len(counted[0]) != 1 or
                     type(counted[0][0]) is not int or counted[0][0] < 0):
@@ -308,7 +308,7 @@ def _authorized(principal, context, export_id, *, _execution=None):
     with control_store.connect() as db:
         row = db.execute('SELECT * FROM export_artifacts WHERE export_id=?', (export_id,)).fetchone()
     if (row is None or row['owner'] != principal.principal_id or
-            row['context'] != ds._json(asdict(context)) or row['state'] != 'COMPLETE' or
+            row['context'] != ds.canonical_json(asdict(context)) or row['state'] != 'COMPLETE' or
             row['profile_ref'] != _profile_ref()):
         raise QueryError('EXPORT_NOT_FOUND', 404)
     if _execution is not None and (type(_execution) is not ds.Execution or

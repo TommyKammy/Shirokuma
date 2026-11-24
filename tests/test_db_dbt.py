@@ -348,10 +348,10 @@ class DbtTests(unittest.TestCase):
             dbt._verify_views(metadata, self.record(run['id']), complete=True)
         self.assertEqual(asdict(observe.call_args.args[0]), saved['ref'])
         self.assertEqual(metadata.principal, self.admin)
-        for field, value in (('actor', self.admin.principal_id), ('context', ds._json(asdict(self.admin_context))),
-                ('result', ds._json({'view_created': True})),
-                ('result', ds._json(dict(view=dict(dbt._view_public(saved), version=999),
-                    view_digest=hashlib.sha256(ds._json(saved).encode()).hexdigest()))),
+        for field, value in (('actor', self.admin.principal_id), ('context', ds.canonical_json(asdict(self.admin_context))),
+                ('result', ds.canonical_json({'view_created': True})),
+                ('result', ds.canonical_json(dict(view=dict(dbt._view_public(saved), version=999),
+                    view_digest=hashlib.sha256(ds.canonical_json(saved).encode()).hexdigest()))),
                 ('state', 'UNKNOWN')):
             with self.subTest(field=field):
                 child_id = self.record(run['id'])['models'][1]['operation_ids'][0]
@@ -1467,7 +1467,7 @@ class DbtTests(unittest.TestCase):
         first = dbt.submit_run(self.engineer, self.context, key='old-key', plan_id=plan['id'])
         with control_store.connect() as db:
             payload = db.execute("SELECT payload FROM dbt_requests WHERE route='/api/v1/dbt/runs'").fetchone()[0]
-        self.assertEqual(payload, ds._json(dict(context=asdict(self.context), plan_id=plan['id'])))
+        self.assertEqual(payload, ds.canonical_json(dict(context=asdict(self.context), plan_id=plan['id'])))
         with patch.object(qs, '_capture_dataops', side_effect=AssertionError('capture')):
             explicit = dbt.submit_run(self.engineer, self.context, key='old-key', plan_id=plan['id'], executor='sql_wap')
         self.assertEqual(first, explicit)
@@ -1775,7 +1775,7 @@ class NativePublicationTests(unittest.TestCase):
                 with control_store.connect() as db:
                     current = dbt._row(db, run['id'])[1]
                     self.assertFalse(dbt._public(db, current)['publication_allowed'])
-                    db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds._json(saved), run['id']))
+                    db.execute('UPDATE dbt_runs SET record=? WHERE id=?', (ds.canonical_json(saved), run['id']))
         target = self.preview(run)['expected_target']['destination']
         with control_store.connect() as db:
             db.execute("UPDATE schemas SET purpose='raw' WHERE id=?", (target['schema_id'],))
@@ -1897,10 +1897,10 @@ class NativePublicationTests(unittest.TestCase):
             receipt = json.loads(db.execute('SELECT result FROM dataops_operations WHERE id=?', (child_id,)).fetchone()[0])
             original_ref = receipt['publication']['target']['ref']
             receipt['publication']['target']['ref'] = asdict(other)
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child_id))
             self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
             receipt['publication']['target']['ref'] = original_ref
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child_id))
             publication = self.record(ack['id'])
             publication['native_publication']['target']['schema_id'] = float(receipt['publication']['target']['schema_id'])
             self.assertIsNone(dbt._native_publication_saved(db, publication))
@@ -1909,10 +1909,10 @@ class NativePublicationTests(unittest.TestCase):
                 'TABLE', str(uuid.uuid4()), original.display_name)
             receipt['publication']['target']['ref'] = asdict(dm.ResourceRef(
                 original_ref['database_id'], original_ref['schema_id'], recreated.id, recreated.incarnation))
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child_id))
             self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
             receipt['publication']['target']['ref'] = original_ref
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child_id))
             self.assertEqual(dbt._native_publication_saved(db, self.record(ack['id'])), result['native_publication'])
             query_id = receipt['publication']['query_id']
             sql = db.execute('SELECT sql FROM query_execution_contexts WHERE query_id=?', (query_id,)).fetchone()[0]
@@ -1920,7 +1920,7 @@ class NativePublicationTests(unittest.TestCase):
             self.assertIsNone(dbt._native_publication_saved(db, self.record(ack['id'])))
             db.execute('UPDATE query_execution_contexts SET sql=? WHERE query_id=?', (sql, query_id))
             receipt['publication']['origin'] = 'sql_wap'
-            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), child_id))
+            db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), child_id))
         dbt._settle(ack['id'])
         self.assertEqual(self.record(ack['id'])['state'], 'COMMITTED_RECORDING_FAILED')
         self.assertEqual(len(self.w.posts), before)

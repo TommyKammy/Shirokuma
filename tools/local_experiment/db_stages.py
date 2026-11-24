@@ -100,7 +100,7 @@ def _public_stage(row):
 
 
 def _payload(context, **values):
-    return ds._json(dict(context=asdict(context), **values))
+    return ds.canonical_json(dict(context=asdict(context), **values))
 
 
 def _request(db, principal, route, key, payload):
@@ -116,7 +116,7 @@ def _request(db, principal, route, key, payload):
 
 def _receipt(db, principal, route, key, payload, response):
     db.execute('INSERT INTO db_stage_requests VALUES (?,?,?,?,?)',
-               (principal.principal_id, route, key, payload, ds._json(response)))
+               (principal.principal_id, route, key, payload, ds.canonical_json(response)))
 
 
 def _revision(value, *, create=False):
@@ -147,7 +147,7 @@ def _definition(context, definition):
         raise ValueError('Stage definition required')
     common._keys(definition, {'name', 'directory', 'mode', 'format'},
         {'destination', 'target', 'encoding', 'delimiter', 'schema_hints', 'key_columns', 'batch_size', 'atomic_append'})
-    definition = json.loads(ds._json(definition))
+    definition = json.loads(ds.canonical_json(definition))
     if not isinstance(definition['name'], str) or not re.fullmatch('[a-z][a-z0-9_-]{0,47}', definition['name']):
         raise ValueError('invalid Stage name')
     definition['directory'] = str(_directory(definition['directory']))
@@ -215,7 +215,7 @@ def save_stage(principal, context, *, key, expected_revision, definition, stage_
                         raise QueryError('STAGE_DIRECTORY_CLAIMED', 409)
                 db.execute('INSERT INTO db_stages VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                     (stage_id, context.database_id, principal.principal_id, context.selected_role,
-                     value['name'], value['directory'], 1, ds._json(asdict(context)), ds._json(value), now, now))
+                     value['name'], value['directory'], 1, ds.canonical_json(asdict(context)), ds.canonical_json(value), now, now))
                 db.execute('INSERT INTO db_stage_claims VALUES (?,?)', (value['directory'], stage_id))
             else:
                 with _fresh_input():
@@ -223,7 +223,7 @@ def save_stage(principal, context, *, key, expected_revision, definition, stage_
                     if old['directory'] != value['directory']:
                         raise QueryError('STAGE_DIRECTORY_IMMUTABLE', 409)
                 db.execute('UPDATE db_stages SET name=?,definition=?,context=?,revision=revision+1,updated_at=? WHERE id=?',
-                           (value['name'], ds._json(value), ds._json(asdict(context)), now, stage_id))
+                           (value['name'], ds.canonical_json(value), ds.canonical_json(asdict(context)), now, stage_id))
         except sqlite3.IntegrityError:
             raise QueryError('STAGE_NAME_CONFLICT', 409) from None
         result = _public_stage(_stage(db, principal, context, stage_id))
@@ -301,7 +301,7 @@ def _options(definition, filename, raw):
 
 def _confirmation(context, row, filename, raw):
     typed = manual_ingest.preview_fingerprint(context, **_options(json.loads(row['definition']), filename, raw))
-    return _hash(ds._json(dict(stage_id=row['id'], revision=row['revision'], typed=typed,
+    return _hash(ds.canonical_json(dict(stage_id=row['id'], revision=row['revision'], typed=typed,
                               file=filename, version=_hash(raw), context=asdict(context))).encode())
 
 
@@ -341,7 +341,7 @@ def preview(principal, context, stage_id, *, key, expected_revision, file, versi
                 db.execute('BEGIN IMMEDIATE')
                 db.execute('UPDATE db_stage_requests SET response=? WHERE actor=? AND route=? '
                     'AND idempotency_key=? AND payload=?',
-                    (ds._json(result), principal.principal_id, route, key, payload))
+                    (ds.canonical_json(result), principal.principal_id, route, key, payload))
         except Exception:
             # The first response still carries the count; a later replay may
             # return the previously saved null count.
@@ -366,7 +366,7 @@ def _write_run(db, run_id, **changes):
         db.execute('BEGIN IMMEDIATE')
     record = json.loads(db.execute('SELECT record FROM db_stage_runs WHERE id=?', (run_id,)).fetchone()[0])
     record.update(changes)
-    db.execute('UPDATE db_stage_runs SET record=? WHERE id=?', (ds._json(record), run_id))
+    db.execute('UPDATE db_stage_runs SET record=? WHERE id=?', (ds.canonical_json(record), run_id))
     return record
 
 
@@ -428,7 +428,7 @@ def _submit(principal, context, stage_id, *, key, expected_revision, kind, file,
                 definition = json.loads(current['definition'])
                 normalized = manual_ingest._preview_request(context, **_options(definition, file, raw))[5]
                 configuration = {k: v for k, v in normalized.items() if k not in ('input_sha256', 'input_length')}
-                record['configuration_fingerprint'] = _hash(ds._json(configuration).encode())
+                record['configuration_fingerprint'] = _hash(ds.canonical_json(configuration).encode())
                 if definition['mode'] == 'create':
                     record['destination_intent'] = definition['destination']
                 else:
@@ -436,7 +436,7 @@ def _submit(principal, context, stage_id, *, key, expected_revision, kind, file,
             else:
                 record.update(target_ref=asdict(source), publication_state='reserved')
             db.execute('INSERT INTO db_stage_runs VALUES (?,?,?,?,?,?,?)',
-                (run_id, stage_id, operation_id, ds._json(record), current['definition'],
+                (run_id, stage_id, operation_id, ds.canonical_json(record), current['definition'],
                  _hash(current['definition'].encode()), raw))
             if kind == 'ingest' and definition['mode'] in ('append', 'upsert'):
                 import db_stage_scans as scans
@@ -643,7 +643,7 @@ def _fsync_directory(directory):
 
 def _publication_ledger(db, run_id, receipt):
     db.execute("UPDATE db_stage_publications SET state='published',receipt=? WHERE run_id=? AND state='intent'",
-               (ds._json(receipt), run_id))
+               (ds.canonical_json(receipt), run_id))
     operation = db.execute('''SELECT o.state,o.result FROM dataops_operations o
         JOIN db_stage_runs r ON r.operation_id=o.id WHERE r.id=?''', (run_id,)).fetchone()
     terminal = dict(status='succeeded', summary=json.loads(operation['result']), finished_at=admission._now())
@@ -677,7 +677,7 @@ def _publish(run_id, execution, export_id):
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             db.execute("UPDATE db_stage_publications SET state='intent',receipt=? WHERE run_id=? AND state='reserved'",
-                       (ds._json(receipt), run_id))
+                       (ds.canonical_json(receipt), run_id))
             _write_run(db, run_id, publication_state='intent', export_id=export_id)
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -724,7 +724,7 @@ def _publication_proof(db, principal, context, run):
     if (claim is None or claim['state'] not in ('intent', 'published') or not claim['receipt']
             or claim['stage_id'] != run['stage_id'] or claim['filename'] != run['file']
             or operation is None or operation['state'] not in ('UNKNOWN', 'FINISHED')
-            or operation['actor'] != principal.principal_id or operation['context'] != ds._json(asdict(context))
+            or operation['actor'] != principal.principal_id or operation['context'] != ds.canonical_json(asdict(context))
             or artifact is None or artifact['state'] != 'COMPLETE'
             or artifact['owner'] != principal.principal_id or artifact['context'] != operation['context']
             or artifact['profile_ref'] != manual_export._profile_ref()):
@@ -785,7 +785,7 @@ def _publication_proof(db, principal, context, run):
         return
     evidence = dict(run=run, receipt=receipt, operation=operation['id'],
                     children=[dict(c) for c in children], config_fingerprint=saved['config_fingerprint'])
-    return receipt, original, stage['directory'], parent, _hash(ds._json(evidence).encode())
+    return receipt, original, stage['directory'], parent, _hash(ds.canonical_json(evidence).encode())
 
 
 def _proof_bytes(path, receipt):

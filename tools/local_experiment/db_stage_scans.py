@@ -27,13 +27,13 @@ class _Duplicate(Exception):
 def configuration(context, definition, filename, raw):
     payload = manual_ingest._preview_request(context, **stages._options(definition, filename, raw))[5]
     config = {k: v for k, v in payload.items() if k not in ('input_sha256', 'input_length')}
-    fingerprint = stages._hash(ds._json(config).encode())
+    fingerprint = stages._hash(ds.canonical_json(config).encode())
     return fingerprint, payload
 
 
 def content_key(context, stage_id, definition, filename, raw):
     fingerprint, payload = configuration(context, definition, filename, raw)
-    return stages._hash(ds._json(dict(database_id=context.database_id, stage_id=stage_id,
+    return stages._hash(ds.canonical_json(dict(database_id=context.database_id, stage_id=stage_id,
         configuration_fingerprint=fingerprint, digest=payload['input_sha256'], length=payload['input_length'])).encode())
 
 
@@ -143,7 +143,7 @@ def _scan(db, principal, context, stage_id, scan_id):
 def _update(db, table, ident, **changes):
     record = json.loads(db.execute('SELECT record FROM ' + table + ' WHERE id=?', (ident,)).fetchone()[0])
     record.update(changes)
-    db.execute('UPDATE ' + table + ' SET record=? WHERE id=?', (ds._json(record), ident))
+    db.execute('UPDATE ' + table + ' SET record=? WHERE id=?', (ds.canonical_json(record), ident))
     return record
 
 
@@ -246,7 +246,7 @@ def submit(principal, context, stage_id, *, key, expected_revision):
                 record = dict(id=scan_id, stage_id=stage_id, stage_revision=expected_revision,
                     context=asdict(context), owner=principal.principal_id, status='queued', committed=False)
                 db.execute('INSERT INTO db_stage_scans VALUES (?,?,?,?,?,0)',
-                    (scan_id, stage_id, ds._json(record), row['definition'], parent.id))
+                    (scan_id, stage_id, ds.canonical_json(record), row['definition'], parent.id))
                 for position, (filename, raw) in enumerate(files):
                     ident = str(uuid.uuid4())
                     content, prior_run, prior = lookup(db, context, stage_id, definition, filename, raw)
@@ -257,7 +257,7 @@ def submit(principal, context, stage_id, *, key, expected_revision):
                         if prior['retryable']:
                             item.update(_failed_link(db, prior_run))
                     db.execute('INSERT INTO db_stage_scan_items VALUES (?,?,?,?,?,?)',
-                        (ident, scan_id, position, ds._json(item), raw, content))
+                        (ident, scan_id, position, ds.canonical_json(item), raw, content))
                 stages._receipt(db, principal, route, key, payload, dict(scan_id=scan_id))
             _launch(scan_id, principal, context, parent, frozen, owner)
         except BaseException:
@@ -289,7 +289,7 @@ def _admit_file(scan_id, item_id, *, retry=False):
             operation_id=operation_id, committed=False, file=item['file'], created_at=admission._now(),
             input_fingerprint=stages._hash(raw), configuration_fingerprint=fingerprint, target_ref=definition['target'])
         db.execute('INSERT INTO db_stage_runs VALUES (?,?,?,?,?,?,?)',
-            (run_id, current['id'], operation_id, ds._json(record), scan['definition'], stages._hash(scan['definition'].encode()), raw))
+            (run_id, current['id'], operation_id, ds.canonical_json(record), scan['definition'], stages._hash(scan['definition'].encode()), raw))
         reserve(db, context, current['id'], definition, item['file'], raw, run_id,
                 expected_run_id=item.get('_retry_run_id'))
         _update(db, 'db_stage_scan_items', item_id, status='running', attempt=attempt,
@@ -503,12 +503,12 @@ def retry(principal, context, stage_id, scan_id, *, key, expected_revision, item
                     context=asdict(context), owner=principal.principal_id, status='queued', committed=False,
                     source_scan_id=scan_id, source_item_id=item_id)
                 db.execute('INSERT INTO db_stage_scans VALUES (?,?,?,?,?,0)',
-                    (new_id, stage_id, ds._json(record), current['definition'], parent.id))
+                    (new_id, stage_id, ds.canonical_json(record), current['definition'], parent.id))
                 retry_item = dict(id=new_item_id, file=item['file'], input_fingerprint=item['input_fingerprint'],
                     status='pending', attempt=expected_attempt + 1, committed=False, retryable=False,
                     _retry_run_id=prior_run)
                 db.execute('INSERT INTO db_stage_scan_items VALUES (?,?,?,?,?,?)',
-                    (new_item_id, new_id, 0, ds._json(retry_item), raw, row['content_key']))
+                    (new_item_id, new_id, 0, ds.canonical_json(retry_item), raw, row['content_key']))
                 stages._receipt(db, principal, route, key, payload, dict(scan_id=new_id))
             _live[new_id] = (principal, context, parent, frozen, secrets.token_urlsafe(32), owner)
             try:

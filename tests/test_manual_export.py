@@ -198,9 +198,9 @@ class ManualExportTests(unittest.TestCase):
         receipt['source'].pop('current_schema_id')
         receipt['source'].pop('current_schema_fingerprint')
         with control_store.connect() as db:
-            db.execute('UPDATE export_artifacts SET record=? WHERE operation_id=?', (ds._json(receipt), operation['id']))
+            db.execute('UPDATE export_artifacts SET record=? WHERE operation_id=?', (ds.canonical_json(receipt), operation['id']))
             db.execute('UPDATE dataops_operations SET result=? WHERE id=?',
-                (ds._json(dict(export_id=receipt['export_id'], receipt=receipt)), operation['id']))
+                (ds.canonical_json(dict(export_id=receipt['export_id'], receipt=receipt)), operation['id']))
         result = self.read(operation)
         self.assertEqual(result['receipt'], receipt)
         self.assertEqual(result['content'], b'"id"\n"9007199254740993"\n')

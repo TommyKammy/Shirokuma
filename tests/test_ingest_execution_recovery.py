@@ -51,7 +51,7 @@ class IngestRecoveryTests(unittest.TestCase):
                 with control_store.connect() as db:
                     receipt = json.loads(db.execute('SELECT result FROM dataops_operations WHERE id=?', (execution.id,)).fetchone()[0])
                     receipt['cleanup'] = 'unknown'
-                    db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), execution.id))
+                    db.execute('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), execution.id))
         with patch.object(ds.Execution, 'cleanup_failed_ingest_stage', historical_cleanup):
             mode = getattr(self, 'mode', 'create')
             result = self.f.run_ingest(context=self.context, mode=mode, batch_size=1,
@@ -318,7 +318,7 @@ class IngestRecoveryTests(unittest.TestCase):
         self.physical.membership = True
         receipt = json.loads(self.original['operation']['result'])
         receipt['error'] = 'concurrent bookkeeping'
-        self.mutate('UPDATE dataops_operations SET result=? WHERE id=?', (ds._json(receipt), self.ident))
+        self.mutate('UPDATE dataops_operations SET result=? WHERE id=?', (ds.canonical_json(receipt), self.ident))
         with self.assertRaises(QueryError) as error:
             self.apply(self.operator.inspect(plan['operation_id']))
         self.assertEqual(error.exception.code, 'RECOVERY_GRAPH_CHANGED')
