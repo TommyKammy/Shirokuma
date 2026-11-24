@@ -59,8 +59,8 @@ class WorkbenchHTML(HTMLParser):
         return WorkbenchSource(self.html).source
 
 
-class HistoryHandlerTests(unittest.TestCase):
-    """Run authorization and GET dispatch together without opening a socket."""
+class RouteParameterTests(unittest.TestCase):
+    """Reject unknown query parameters before any retained backend dispatch."""
 
     def get(self, path, headers=None):
         handler = object.__new__(wb.WorkbenchHandler)
@@ -74,53 +74,14 @@ class HistoryHandlerTests(unittest.TestCase):
         self.assertEqual(len(replies), 1)
         return replies[0]
 
-    def test_runtime_and_default_history_through_role_authorization(self):
-        report = dict(runtime_queries={'rows': []}, query_history=[], load_history=[])
+    def test_unknown_route_parameters_precede_backend(self):
         with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
-             patch.object(wb.bears_resident, 'activity_history', return_value=report) as history:
-            for role in ('admin', 'data_engineer', 'bi_viewer'):
-                for headers, suffix in (({'X-Shirokuma-Role': role}, ''), ({}, '&role=' + role)):
-                    with self.subTest(role=role, headers=headers):
-                        history.reset_mock()
-                        self.assertEqual(self.get('/api/history?mode=runtime' + suffix, headers), (200, report))
-                        history.assert_called_once_with(mode='runtime')
-                history.reset_mock()
-                self.assertEqual(self.get('/api/history?role=' + role), (200, report))
-                history.assert_called_once_with()
-
-    def test_invalid_mode_and_route_parameters_precede_backend(self):
-        with patch.object(wb.request_auth, 'authenticate', return_value=('alice', 'admin')), \
-             patch.object(wb.bears_resident, 'activity_history') as history, \
              patch.object(wb.bears_resident, 'models_inventory') as models:
-            for query in ('mode=', 'mode', 'mode=all', 'mode=true', 'mode=runtime&mode=runtime',
-                          'mode=runtime&mode=', 'mode=runtime%ZZ'):
-                with self.subTest(query=query):
-                    self.assertEqual(self.get('/api/history?' + query)[0], 400)
-            for path in ('/api/history?mode=runtime&unknown=x', '/api/history?unknown=x',
-                         '/api/models?mode=runtime', '/api/catalog?mode=runtime',
+            for path in ('/api/models?mode=runtime', '/api/catalog?mode=runtime',
                          '/api/session?mode=runtime'):
                 with self.subTest(path=path):
                     self.assertEqual(self.get(path), (403, {'error': 'Unknown query parameter'}))
-            history.assert_not_called()
             models.assert_not_called()
-
-    def test_runtime_mode_preserves_authentication_and_role_limits(self):
-        with patch.object(wb.bears_resident, 'activity_history', return_value={}) as history:
-            with patch.object(wb.request_auth, 'authenticate', side_effect=wb.request_auth.AuthenticationError('sign in')):
-                self.assertEqual(self.get('/api/history?mode=runtime')[0], 401)
-            with patch.object(wb.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')):
-                for role in ('admin', 'data_engineer', '', 'unknown'):
-                    self.assertEqual(self.get('/api/history?mode=runtime&role=' + role)[0], 403)
-                history.assert_not_called()
-                self.assertEqual(self.get('/api/history?mode=runtime&role=bi_viewer')[0], 200)
-                history.assert_called_once_with(mode='runtime')
-            history.reset_mock()
-            with patch.object(wb.request_auth, 'authenticate', return_value=None), \
-                 patch.dict(os.environ, {'SHIROKUMA_DEFAULT_ROLE': 'bi_viewer'}):
-                self.assertEqual(self.get('/api/history?mode=runtime&role=admin')[0], 403)
-                history.assert_not_called()
-                self.assertEqual(self.get('/api/history?mode=runtime')[0], 200)
-                history.assert_called_once_with(mode='runtime')
 
 
 class WorkbenchTests(unittest.TestCase):
@@ -601,17 +562,6 @@ eval(SHARED+JOBS+`
             catalog.assert_not_called()
             self.assertEqual(self.json_request('/api/catalog?role=bi_viewer&table=marts.orders')[0], 200)
 
-    def test_decimal_json_preview_serializes_exactly(self):
-        for extension, content in (
-                ('json', '[{"amount":12.34},{"amount":9007199254740993.25}]'),
-                ('jsonl', '{"amount":12.34}\n{"amount":9007199254740993.25}')):
-            with self.subTest(extension=extension):
-                code, result = self.json_request('/api/lake/preview', {
-                    'filename': 'orders.' + extension, 'content': content})
-                self.assertEqual(code, 200, result)
-                self.assertIn('12.34', json.dumps(result))
-                self.assertIn('9007199254740993.25', json.dumps(result))
-
     def test_ai_routes_are_admin_only(self):
         with patch.object(wb.bears_resident, 'load_ai_config', return_value={}) as load, \
              patch.object(wb.bears_resident, 'save_ai_config', return_value={}) as save, \
@@ -639,22 +589,6 @@ eval(SHARED+JOBS+`
                         drop.assert_called_with(table)
             for table in ('marts.summary', 'iceberg.marts.summary'):
                 self.assertEqual(self.json_request('/api/catalog/drop?role=admin', {'table': table})[0], 200)
-
-    def test_autochill_configuration_requires_admin(self):
-        with patch.object(wb.warehouse_resident, 'configure_auto_chill', return_value={}) as configure, \
-             patch.object(wb.warehouse_resident, 'auto_chill_status', return_value={}) as status, \
-             patch.object(wb.warehouse_resident, 'check_auto_chill', return_value={}) as check:
-            for role in ('data_engineer', 'bi_viewer'):
-                for body in ({'minutes': 10}, {'minutes': 10, 'check': True}):
-                    self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, body)[0], 403)
-            configure.assert_not_called()
-            for role, expected in (('admin', 200), ('data_engineer', 200), ('bi_viewer', 403)):
-                self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, {'check': False})[0], expected)
-                self.assertEqual(self.json_request('/api/warehouse/autochill?role=' + role, {'check': True})[0], expected)
-            self.assertEqual(status.call_count, 4)
-            self.assertEqual(check.call_count, 2)
-            self.assertEqual(self.json_request('/api/warehouse/autochill?role=admin', {'minutes': 10})[0], 200)
-            configure.assert_called_once_with(10)
 
     def test_ai_key_isolation_when_endpoint_changes(self):
         active = dict(provider='openai', api_url='https://old.example/v1', api_key='old-secret')
@@ -700,11 +634,10 @@ eval(SHARED+JOBS+`
     def test_role_endpoint_permissions_before_dispatch(self):
         routes = ['/api/catalog/drop', '/api/models/build', '/api/lake/ingest',
                   '/api/catalog/clone', '/api/ai/config', '/api/ai/test',
-                  '/api/lake/preview', '/api/lake/export', '/api/warehouse/chill']
+                  '/api/lake/export', '/api/warehouse/chill']
         with patch.object(wb.bears_resident, 'save_ai_config') as save, \
              patch.object(wb.bears_resident, 'drop_table') as drop, \
              patch.object(wb.lake_ingest, 'ingest') as ingest, \
-             patch.object(wb.lake_ingest, 'preview') as preview, \
              patch.object(wb.lake_ingest, 'export_table') as export, \
              patch.object(wb.warehouse_resident, 'transition') as transition:
             for route in routes:
@@ -716,7 +649,6 @@ eval(SHARED+JOBS+`
             save.assert_not_called()
             drop.assert_not_called()
             ingest.assert_not_called()
-            preview.assert_not_called()
             export.assert_not_called()
             transition.assert_not_called()
 
@@ -1337,46 +1269,11 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             export.side_effect = RuntimeError('unavailable')
             self.assertEqual(self.json_request('/api/lake/export', {'table': 'raw.t'})[0], 502)
 
-    def test_auto_chill_routes_and_status(self):
+    def test_status_reports_auto_chill_configuration(self):
         auto = dict(auto_chill_minutes=5, idle_seconds=0)
-        with patch.object(wb.warehouse_resident, 'configure_auto_chill', return_value=auto) as configure, \
-             patch.object(wb.warehouse_resident, 'check_auto_chill', return_value=dict(chilled=True, **auto)) as check:
-            self.assertEqual(self.json_request('/api/warehouse/autochill', {'minutes': 5}), (200, auto))
-            configure.assert_called_once_with(5)
-            check.assert_not_called()
-            self.assertTrue(self.json_request('/api/warehouse/autochill', {'check': True})[1]['chilled'])
-            check.assert_called_once_with('LOCAL')
-            self.assertEqual(self.json_request('/api/warehouse/autochill', {'minutes': 0, 'check': True})[0], 200)
-            configure.assert_called_with(0)
-            configure.reset_mock()
-            check.reset_mock()
-            self.assertEqual(self.json_request('/api/warehouse/autochill', {'check': False})[0], 200)
-            for body in ({}, {'check': 1}, {'minutes': True}, {'minutes': -1},
-                         {'minutes': 1441}, {'minutes': '1'}, {'minutes': 1, 'check': 'true'}):
-                self.assertEqual(self.json_request('/api/warehouse/autochill', body)[0], 400)
-            configure.assert_not_called()
-            check.assert_not_called()
         with patch.object(wb.warehouse_resident, 'auto_chill_status', return_value=auto), \
              patch.object(wb.warehouse_resident, 'status', return_value={}), patch.object(wb, 'components', return_value={}):
             self.assertEqual(self.json_request('/api/status')[1]['auto_chill'], auto)
-
-    def test_activity_history_route_and_failure(self):
-        report = dict(runtime_queries={'rows': []}, query_history=[], load_history=[])
-        with patch.object(wb.bears_resident, 'activity_history', return_value=report) as history:
-            self.assertEqual(self.json_request('/api/history'), (200, report))
-            history.assert_called_once_with()
-            history.side_effect = RuntimeError('unavailable')
-            self.assertEqual(self.json_request('/api/history')[0], 502)
-
-    def test_history_runtime_mode_validated_for_all_roles(self):
-        with patch.object(wb.bears_resident, 'activity_history', return_value={'runtime_queries': {}}) as history:
-            for role in ('admin', 'data_engineer', 'bi_viewer'):
-                self.assertEqual(self.json_request('/api/history?mode=runtime&role=' + role)[0], 200)
-                history.assert_called_with(mode='runtime')
-            history.reset_mock()
-            for query in ('mode=', 'mode=all', 'mode=true', 'mode=runtime&mode=runtime', 'mode=runtime&mode=', 'mode=runtime%ZZ'):
-                self.assertEqual(self.json_request('/api/history?' + query)[0], 400)
-            history.assert_not_called()
 
     def workbench_document(self):
         status, _, body = self.request('/')
@@ -1582,19 +1479,15 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         catalog.side_effect = ValueError('snapshot_id must be digits-only')
         self.assertEqual(self.json_request('/api/catalog?table=raw.orders&snapshot_id=bad')[0], 400)
 
-    def test_preview_and_ingest_browser_uploads(self):
-        for endpoint in ('preview', 'ingest'):
-            with patch.object(wb.lake_ingest, endpoint, return_value={'action': endpoint}) as call:
-                for binary in (False, True):
-                    body = {'filename': 'orders.csv'}
-                    body.update({'content_base64': base64.b64encode(b'id\n1').decode()} if binary else {'content': 'id\n1'})
-                    self.assertEqual(self.json_request('/api/lake/' + endpoint, body), (200, {'action': endpoint}))
-                    expected = dict(filename='orders.csv', content=b'id\n1' if binary else 'id\n1', format='auto')
-                    expected.update(dict(limit=10) if endpoint == 'preview' else dict(table=None, mode='replace', batch_size=500))
-                    call.assert_called_with(None, **expected)
-        with patch.object(wb.lake_ingest, 'preview', return_value={}) as preview:
-            self.assertEqual(self.json_request('/api/lake/preview', {'file': 'orders.csv', 'limit': 2, 'format': 'csv'})[0], 200)
-            preview.assert_called_once_with('orders.csv', format='csv', limit=2)
+    def test_ingest_browser_uploads(self):
+        with patch.object(wb.lake_ingest, 'ingest', return_value={'action': 'ingest'}) as call:
+            for binary in (False, True):
+                body = {'filename': 'orders.csv'}
+                body.update({'content_base64': base64.b64encode(b'id\n1').decode()} if binary else {'content': 'id\n1'})
+                self.assertEqual(self.json_request('/api/lake/ingest', body), (200, {'action': 'ingest'}))
+                expected = dict(filename='orders.csv', content=b'id\n1' if binary else 'id\n1',
+                                table=None, mode='replace', format='auto', batch_size=500)
+                call.assert_called_with(None, **expected)
 
     def test_invalid_browser_uploads(self):
         cases = [{}, {'filename': 'x.csv'}, {'content': 'id\n1'}, {'filename': 1, 'content': ''},
@@ -1603,14 +1496,11 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                  {'filename': 'x', 'content': '', 'content_base64': ''},
                  {'file': 'x.csv', 'filename': 'x.csv', 'content': ''},
                  {'file': 'x.csv', 'format': 'unknown'}]
-        for endpoint in ('preview', 'ingest'):
-            with patch.object(wb.lake_ingest, endpoint) as call:
-                for body in cases:
-                    with self.subTest(endpoint=endpoint, body=body):
-                        self.assertEqual(self.json_request('/api/lake/' + endpoint, body)[0], 400)
-                call.assert_not_called()
-        for limit in (0, -1, True, '1', None, 1.5):
-            self.assertEqual(self.json_request('/api/lake/preview', {'file': 'x.csv', 'limit': limit})[0], 400)
+        with patch.object(wb.lake_ingest, 'ingest') as call:
+            for body in cases:
+                with self.subTest(body=body):
+                    self.assertEqual(self.json_request('/api/lake/ingest', body)[0], 400)
+            call.assert_not_called()
 
     def test_models_http_marks_registered_targets_without_exposing_owner(self):
         registry = {
@@ -1843,9 +1733,9 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                              ['9007199254740993', '9007199254740995'])
 
     @patch.object(wb.bears_resident, "catalog")
-    def test_catalog_lineage_and_columns(self, catalog):
+    def test_catalog_search_and_columns(self, catalog):
         catalog.return_value = {"metadata": {"marts": [["fct_orders"]]}}
-        for path, action, table in [("/api/catalog", "search", None), ("/api/lineage", "lineage", None),
+        for path, action, table in [("/api/catalog", "search", None),
                                     ("/api/catalog?table=marts.fct_orders", "describe", "marts.fct_orders")]:
             with self.subTest(path=path):
                 code, result = self.json_request(path)
@@ -1931,12 +1821,6 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         self.assertEqual(code, 200)
         self.assertEqual(result['metadata']['snapshots']['rows'], [['9007199254740993', None, '2026-10-17']])
 
-    def test_lineage_from_actual_models(self):
-        code, result = self.json_request("/api/lineage")
-        self.assertEqual(code, 200)
-        self.assertIn("stg_tpch_orders", result["metadata"]["lineage"]["fct_orders"])
-        self.assertIn("stg_tpch_customers", result["metadata"]["lineage"]["dim_customers"])
-
     @patch.object(wb.bears_resident, "run")
     def test_all_bears(self, run):
         for bear in ("sre", "query", "data", "catalog", "policy"):
@@ -1949,15 +1833,6 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                 for key, value in payload.items():
                     self.assertEqual(getattr(args, key), value)
                 self.assertEqual(args.table, "latest" if bear == "catalog" else None)
-
-    @patch.object(wb.manage, "Client")
-    def test_pawprints(self, client):
-        rows = [{"timestamp": "2026-10-17", "action_type": "warehouse.query", "duration_ms": 3, "status": "success"}]
-        client.return_value.query.return_value = json.dumps({"data": rows})
-        self.assertEqual(self.json_request("/api/pawprints"), (200, rows))
-        statement = client.return_value.query.call_args.args[0]
-        self.assertIn("agenthouse.pawprints", statement)
-        self.assertIn("ORDER BY timestamp DESC LIMIT 100", statement)
 
     @patch.object(wb.warehouse_resident, "query")
     @patch.object(wb.bears_resident, "run")
@@ -1973,9 +1848,17 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         run.assert_not_called()
         query.assert_not_called()
 
-    @patch.object(wb.manage, "Client", side_effect=RuntimeError("ClickHouse unavailable"))
-    def test_backend_errors(self, _):
-        self.assertEqual(self.json_request("/api/pawprints"), (502, {"error": "ClickHouse unavailable"}))
+    @patch.object(wb.bears_resident, 'models_inventory', side_effect=RuntimeError('unavailable'))
+    def test_get_backend_errors_map_to_502(self, _):
+        self.assertEqual(self.json_request('/api/models'), (502, {'error': 'unavailable'}))
+
+    def test_removed_legacy_routes_return_not_found(self):
+        for path in ('/api/history', '/api/pawprints', '/api/lineage'):
+            with self.subTest(path=path):
+                self.assertEqual(self.json_request(path), (404, {'error': 'route not found'}))
+        for path in ('/api/warehouse/autochill', '/api/lake/preview'):
+            with self.subTest(path=path):
+                self.assertEqual(self.json_request(path, {}), (404, {'error': 'route not found'}))
 
     def test_unknown_routes(self):
         self.assertEqual(self.json_request("/missing")[0], 404)

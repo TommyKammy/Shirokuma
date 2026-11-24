@@ -23,7 +23,6 @@ import stage_exports
 import warehouse_resident
 import request_auth
 from http_origin import request_origin_allowed
-from agenthouse import manage
 
 INDEX = Path(__file__).parent / "workbench" / "index.html"
 RESULT_CHART = INDEX.with_name("result_chart.js")
@@ -37,15 +36,13 @@ STATIC_ASSETS = {
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
 EDIT_ROLES = {'admin', 'data_engineer'}
 GET_ROUTES = {path: ALL_ROLES for path in (
-    '/', '/index.html', *STATIC_ASSETS, '/api/session', '/api/status', '/api/catalog', '/api/lineage',
-    '/api/history', '/api/models', '/api/pawprints')}
+    '/', '/index.html', *STATIC_ASSETS, '/api/session', '/api/status', '/api/catalog', '/api/models')}
 GET_ROUTES['/api/ai/config'] = {'admin'}
 GET_ROUTES['/api/stages'] = {'admin'}
 GET_ROUTES['/api/marts'] = {'admin'}
 GET_ROUTES.update({path: EDIT_ROLES for path in ('/api/jobs', '/api/jobs/runs', '/api/jobs/schedules', '/api/alerts')})
 POST_ROUTES = {path: EDIT_ROLES for path in (
-    '/api/warehouse/chill', '/api/warehouse/autochill', '/api/lake/ingest',
-    '/api/lake/preview', '/api/lake/export', '/api/catalog/drop',
+    '/api/warehouse/chill', '/api/lake/ingest', '/api/lake/export', '/api/catalog/drop',
     '/api/catalog/clone', '/api/models/build')}
 POST_ROUTES.update({path: ALL_ROLES for path in (
     '/api/warehouse/wake', '/api/warehouse/query', '/api/bears/run')})
@@ -431,8 +428,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         url = urlsplit(self.path)
         params = parse_qs(url.query, keep_blank_values=True)
         allowed = {'role', 'table', 'detail', 'snapshot_id'}
-        if url.path == '/api/history':
-            allowed.add('mode')
         if params.keys() - allowed:
             raise PermissionError('Unknown query parameter')
         roles = self.headers.get_all('X-Shirokuma-Role', []) + params.get('role', [])
@@ -511,7 +506,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     except Exception as exc:
                         report.update(status="degraded", components={"error": str(exc)})
                 self.respond(report)
-            elif url.path in ("/api/catalog", "/api/lineage"):
+            elif url.path == "/api/catalog":
                 params = parse_qs(url.query, keep_blank_values=True)
                 table = params.get('table', [None])[0]
                 bears_resident.check_catalog_access(role, table)
@@ -519,7 +514,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 bears_resident.validate_catalog_detail(options.get('detail'), table)
                 if 'snapshot_id' in options and not table:
                     raise ValueError('table is required for snapshot_id')
-                action = "lineage" if url.path.endswith("lineage") else "describe" if table else "search"
+                action = "describe" if table else "search"
                 result = bears_resident.catalog(SimpleNamespace(
                     bear="catalog", action=action, table=table, role=role, include_config=False, **options))
                 # Iceberg IDs exceed JavaScript's safe integer range. Preserve
@@ -535,13 +530,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond(result)
             elif url.path == '/api/ai/config':
                 self.respond(masked_ai_config(bears_resident.load_ai_config()))
-            elif url.path == '/api/history':
-                params = parse_qs(url.query, keep_blank_values=True)
-                mode = params.get('mode')
-                if mode is not None and mode != ['runtime']:
-                    raise ValueError('history mode must be runtime')
-                self.respond(bears_resident.activity_history(mode='runtime') if mode
-                             else bears_resident.activity_history())
             elif url.path == '/api/models':
                 self.respond(bears_resident.models_inventory())
             elif url.path == '/api/jobs':
@@ -556,10 +544,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 self.respond({'schedules': jobs_resident.list_schedules(self.authenticated_user or 'local', role)})
             elif url.path == '/api/alerts':
                 self.respond(alerts_resident.list_alerts(self.authenticated_user or 'local', role))
-            elif url.path == "/api/pawprints":
-                result = manage.Client().query(
-                    "SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON")
-                self.respond(json.loads(result)["data"])
             else:
                 self.respond({"error": "route not found"}, 404)
         except request_auth.AuthenticationError as exc:
@@ -731,21 +715,6 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         except ValueError as exc:
                             raise PermissionError(str(exc)) from exc
                     result = warehouse_resident.query(size, statement, catalog="iceberg", schema=schema, max_rows=limit, **options)
-                elif path == '/api/warehouse/autochill':
-                    if 'minutes' in body and role != 'admin':
-                        raise PermissionError('Only admin can configure auto-chill')
-                    if 'minutes' not in body and 'check' not in body:
-                        raise ValueError('minutes or check is required')
-                    if 'minutes' in body and (type(body['minutes']) is not int or not 0 <= body['minutes'] <= 1440):
-                        raise ValueError('minutes must be an integer between 0 and 1440')
-                    if 'check' in body and type(body['check']) is not bool:
-                        raise ValueError('check must be a boolean')
-                    if 'minutes' in body:
-                        result = warehouse_resident.configure_auto_chill(body['minutes'])
-                    else:
-                        result = warehouse_resident.auto_chill_status()
-                    if body.get('check') is True:
-                        result = warehouse_resident.check_auto_chill('LOCAL')
                 elif path == '/api/catalog/clone':
                     source = body.get('source_table')
                     if not isinstance(source, str) or not source.strip():
@@ -784,17 +753,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                         raise ValueError('invalid model action')
                     import lake_pipeline
                     result = lake_pipeline.run(action)
-                elif path in ('/api/lake/ingest', '/api/lake/preview'):
+                elif path == '/api/lake/ingest':
                     file, options = lake_input(body)
                     table, mode, fmt = body.get('table'), body.get('mode', 'replace'), body.get('format', 'auto')
                     if not isinstance(fmt, str) or fmt not in {'auto', 'csv', 'jsonl', 'parquet'}:
                         raise ValueError('invalid file format')
-                    if path == '/api/lake/preview':
-                        limit = body.get('limit', 10)
-                        if type(limit) is not int or limit < 1:
-                            raise ValueError('limit must be a positive integer')
-                        self.respond(lake_ingest.preview(file, format=fmt, limit=limit, **options))
-                        return
                     batch_size = body.get('batch_size', 500)
                     if ('table' in body and not isinstance(table, str)) or not all(isinstance(v, str) for v in (mode, fmt)):
                         raise ValueError('table, mode, and format must be strings')

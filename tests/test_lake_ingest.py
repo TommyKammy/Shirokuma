@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools' / 'local_experiment'))
+import database_http_json
 import lake_ingest as lake
 
 
@@ -405,6 +406,16 @@ class LakeIngestTests(unittest.TestCase):
             self.assertEqual(report, dict(expected, file='orders.csv'))
         self.assertEqual(len(lake.preview(path, limit=0)['sample_rows']), 1)
         self.trino.assert_not_called()
+
+    def test_preview_decimal_precision_survives_workbench_json_response(self):
+        for suffix, content in (
+                ('json', '[{"amount":12.34},{"amount":9007199254740993.25}]'),
+                ('jsonl', '{"amount":12.34}\n{"amount":9007199254740993.25}')):
+            with self.subTest(suffix=suffix):
+                result = lake.preview(filename='orders.' + suffix, content=content)
+                encoded = database_http_json.encode(result).decode('utf-8')
+                self.assertIn('12.34', encoded)
+                self.assertIn('9007199254740993.25', encoded)
 
     def test_upload_ingestion_preserves_modes_and_cleans_up(self):
         original = lake.read_file
