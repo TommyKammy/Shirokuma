@@ -6,6 +6,7 @@ from pathlib import Path
 import test_workbench_admin_ui as admin
 import test_workbench_creations as creations
 import test_workbench_retirement_ui as retirement
+from workbench_source import WorkbenchSource
 
 
 class DatabaseManagementUI(unittest.TestCase):
@@ -183,7 +184,7 @@ assert.equal(JSON.parse(writeCalls().at(-1).options.body).team,'Next Team');
         array_only_without_foreach = r'(?:find|filter|map|some|every|reduce|slice|indexOf|includes|sort|reverse|concat|flatMap)'
         properties = ('children', 'childNodes', 'options', 'selectedOptions', 'rows', 'cells')
         problems = []
-        for number, line in enumerate(admin.HTML.splitlines(), 1):
+        for number, line in enumerate(WorkbenchSource().source.splitlines(), 1):
             for prop in properties:
                 if re.search(r'\.' + prop + r'\.' + array_only + r'\s*\(', line):
                     # Lineage graph nodes are plain objects, not DOM collections.
