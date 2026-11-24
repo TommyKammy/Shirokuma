@@ -10,6 +10,7 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
+import unittest.mock
 from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
@@ -167,6 +168,35 @@ class ClientTests(unittest.TestCase):
 
     def call(self, action, *flags, context=C):
         return client.main([action, '--api-url=' + self.url, '--context=' + json.dumps(context), *flags], profile=self.profile)
+
+    def test_uncertain_post_reports_server_status_and_code_but_keeps_retry_intent(self):
+        flags = ['--plan-id=' + PLAN, '--executor=native_graph']
+        rejected = client.RequestUncertain(status=409, server_code='DBT_NATIVE_PARQUET_REQUIRED')
+        with unittest.mock.patch.object(client.DbtClient, 'post', side_effect=rejected):
+            reply = self.call('run', *flags, '--idempotency-key=parquet-1')
+        self.assertTrue(reply['request_uncertain'])
+        self.assertEqual(reply['server_error'], dict(status=409, code='DBT_NATIVE_PARQUET_REQUIRED'))
+        self.assertEqual(reply['retry']['idempotency_key'], 'parquet-1')
+        with unittest.mock.patch.object(client.DbtClient, 'post', side_effect=client.RequestUncertain()):
+            self.assertNotIn('server_error', self.call('run', *flags))
+
+    def test_rejection_message_names_code_and_status_only(self):
+        for error, expected in ((client.RequestRejected('DBT_REQUEST_FAILED', status=403, server_code='FORBIDDEN_ROLE'),
+                                 'DBT request rejected: DBT_REQUEST_FAILED (HTTP 403, FORBIDDEN_ROLE).'),
+                                (client.RequestRejected('DBT_VIEW_CHANGED', status=409),
+                                 'DBT request rejected: DBT_VIEW_CHANGED (HTTP 409, no code).'),
+                                (client.RequestRejected('DBT_REQUEST_FAILED'), 'DBT request rejected: DBT_REQUEST_FAILED.'),
+                                (ValueError('secret detail'),
+                                 'DBT request failed (details withheld). Retain the original context and idempotency key.')):
+            with self.subTest(error=error):
+                self.assertEqual(client.failure_message(error), expected)
+
+    def test_rejection_result_is_json_with_identifiers_only(self):
+        error = client.RequestRejected('DBT_REQUEST_FAILED', status=404, server_code='NOT_FOUND')
+        self.assertEqual(client.rejection_result(error), dict(request_rejected=True, code='DBT_REQUEST_FAILED',
+                                                              http_status=404, server_code='NOT_FOUND'))
+        self.assertEqual(client.rejection_result(client.RequestRejected('DBT_VIEW_CHANGED')),
+                         dict(request_rejected=True, code='DBT_VIEW_CHANGED', http_status=None, server_code=None))
 
     def test_graph_request_ack_quality_and_verbatim_recovery(self):
         flags = ['--plan-id=' + PLAN, '--executor=native_graph']

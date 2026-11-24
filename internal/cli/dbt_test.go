@@ -218,3 +218,30 @@ func TestDbtExpectedTargetForwarding(t *testing.T) {
 		t.Fatal(runner.calls)
 	}
 }
+
+func TestDbtRejectionNamesCodeAndStatusOnly(t *testing.T) {
+	cases := map[string]string{
+		`{"request_rejected": true, "code": "DBT_REQUEST_FAILED", "http_status": 404, "server_code": "NOT_FOUND"}`: "dbt request rejected: DBT_REQUEST_FAILED (HTTP 404, NOT_FOUND)",
+		`{"request_rejected": true, "code": "DBT_VIEW_CHANGED", "http_status": 409, "server_code": null}`:          "dbt request rejected: DBT_VIEW_CHANGED (HTTP 409, no code)",
+		`{"request_rejected": true, "code": "secret path", "http_status": 403, "server_code": "x y"}`:              "dbt request rejected: DBT_REQUEST_FAILED (HTTP 403, no code)",
+		`{"request_rejected": true, "code": "DBT_REQUEST_FAILED", "http_status": null}`:                            "dbt request rejected: DBT_REQUEST_FAILED",
+	}
+	for output, want := range cases {
+		runner := &fakeRunner{responses: []fakeResponse{{output: output}}}
+		out := &bytes.Buffer{}
+		cmd := newDbtCommand(runner)
+		cmd.SetOut(out)
+		cmd.SetArgs([]string{"projects", "--database=sales"})
+		err := cmd.Execute()
+		if err == nil || err.Error() != want || out.Len() != 0 {
+			t.Fatalf("output %s: got %v, stdout %q", output, err, out.String())
+		}
+	}
+	runner := &fakeRunner{responses: []fakeResponse{{output: `{"request_uncertain": true}`}}}
+	cmd := newDbtCommand(runner)
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetArgs([]string{"projects", "--database=sales"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("uncertain reply must stay a successful JSON result: %v", err)
+	}
+}

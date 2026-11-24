@@ -377,7 +377,33 @@ class RequestCharacterizationTests(unittest.TestCase):
                 with self.assertRaises(expected) as caught:
                     client.request(method, '/test', body=body)
                 self.assertEqual(str(caught.exception), message)
+                self.assertEqual((caught.exception.status, caught.exception.server_code),
+                                 (status, payload.get('code') or payload.get('error', {}).get('code')))
                 self.assertEqual(client.opener.open.call_count, 1)
+
+    def test_dbt_server_code_is_reported_only_when_it_is_an_identifier(self):
+        for payload, code in (({'code': 'DBT_NATIVE_PARQUET_REQUIRED', 'message': 'm', 'retryable': False}, 'DBT_NATIVE_PARQUET_REQUIRED'),
+                              ({'code': 'lower'}, None), ({'code': 'A' * 65}, None), ({'code': 'BAD CODE'}, None),
+                              ({'code': 7}, None), (['DBT_X'], None), ('not json', None)):
+            with self.subTest(payload=payload):
+                raw = payload.encode() if isinstance(payload, str) else json.dumps(payload).encode()
+                error = HTTPError('http://127.0.0.1:8888/test', 409, 'failure', {}, io.BytesIO(raw))
+                client = self.client(dbt.DbtClient, error=error)
+                with self.assertRaises(dbt.RequestUncertain) as caught:
+                    client.request('POST', '/test', body={})
+                self.assertEqual((caught.exception.status, caught.exception.server_code), (409, code))
+
+    def test_dbt_truncated_error_body_keeps_post_uncertain(self):
+        class Truncated(io.BytesIO):
+            def read(self, *args):
+                raise http.client.IncompleteRead(b'{"code": "DBT_')
+        for status, body in ((409, {}), (500, {}), (409, {'expected_target': {}})):
+            with self.subTest(status=status, body=body):
+                error = HTTPError('http://127.0.0.1:8888/test', status, 'failure', {}, Truncated())
+                client = self.client(dbt.DbtClient, error=error)
+                with self.assertRaises(dbt.RequestUncertain) as caught:
+                    client.request('POST', '/test', body=body)
+                self.assertEqual((caught.exception.status, caught.exception.server_code), (status, None))
 
     def test_circular_json_fails_before_send_without_uncertainty(self):
         body = {}
