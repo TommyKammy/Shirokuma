@@ -21,6 +21,18 @@ mkdir -p "$DIR/logs" "$DIR/run"
 
 running() { [ -f "$DIR/run/$1.pid" ] && kill -0 "$(cat "$DIR/run/$1.pid")" 2>/dev/null; }
 listening() { python3 -c "import socket; socket.create_connection(('127.0.0.1', $1), 1)" 2>/dev/null; }
+# Both servers bind their port before foundation initialization finishes, so a
+# TCP connect is not readiness. Any HTTP response (401 included) means the
+# server has entered its request loop.
+serving() {
+  python3 -c '
+import sys, urllib.error, urllib.request
+try:
+    urllib.request.urlopen("http://127.0.0.1:%s/" % sys.argv[1], timeout=2)
+except urllib.error.HTTPError:
+    pass
+' "$1" 2>/dev/null
+}
 
 case "$action" in
 status)
@@ -52,13 +64,13 @@ start)
   for spec in "workbench 8888" "endpoint 8080"; do
     set -- $spec
     i=0
-    until listening "$2"; do
-      running "$1" || { echo "$1 exited before listening; see $DIR/logs/$1.log" >&2; exit 1; }
-      i=$((i + 1)); [ "$i" -lt 180 ] || { echo "port $2 did not listen; see $DIR/logs/$1.log" >&2; exit 1; }
-      sleep 0.5
+    until serving "$2"; do
+      running "$1" || { echo "$1 exited before serving; see $DIR/logs/$1.log" >&2; exit 1; }
+      i=$((i + 1)); [ "$i" -lt 120 ] || { echo "$1 did not serve HTTP on $2; see $DIR/logs/$1.log" >&2; exit 1; }
+      sleep 1
     done
     running "$1" || { echo "$1 exited; see $DIR/logs/$1.log" >&2; exit 1; }
-    echo "$1 listening on 127.0.0.1:$2"
+    echo "$1 serving on 127.0.0.1:$2"
   done
   ;;
 stop)
