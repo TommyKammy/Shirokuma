@@ -82,7 +82,7 @@ flowchart TB
 
 #### 1. Start the Logical Lab
 
-See [Clean-cluster bootstrap of a local logical_v1 instance](docs/guides/logical-local-bootstrap-2026-11-23.md) for the current clean-cluster procedure (Trino 484 foundation, Workbench `:8888`, SQL endpoint `:8080`). The old `make lab-up` / `shirokuma-dev` Flux path is retired.
+See the [Shirokuma startup guide](docs/guides/shirokuma-startup-guide.md) for daily start/stop (`tools/local_experiment/instance.sh`), versions and rebuilds, and [Clean-cluster bootstrap of a local logical_v1 instance](docs/guides/logical-local-bootstrap-2026-11-23.md) for the detailed clean-cluster procedure (Trino 484 foundation, Workbench `:8888`, SQL endpoint `:8080`). The old `make lab-up` / `shirokuma-dev` Flux path is retired.
 
 #### 2. Seed Sample TPC-H Data & Build dbt Marts
 ```bash
@@ -175,8 +175,8 @@ Snowflake や Databricks の巨大機能をすべて模倣するのではなく�
 
 ### クイックスタート（主要コマンド）
 
-現在のクリーンクラスタ手順は
-[logical_v1 起動ガイド](docs/guides/logical-local-bootstrap-2026-11-23.md) を参照してください。
+日常の起動・停止・作り直しは [Shirokuma 起動ガイド](docs/guides/shirokuma-startup-guide.md)、
+クリーンクラスタからの詳細手順は [logical_v1 起動ガイド](docs/guides/logical-local-bootstrap-2026-11-23.md) を参照してください。
 旧 `make lab-up` / `shirokuma-dev` 経路は廃止されています。
 
 ```bash

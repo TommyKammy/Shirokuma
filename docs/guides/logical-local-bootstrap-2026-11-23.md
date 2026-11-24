@@ -4,8 +4,8 @@ doc_id: DB-LOGICAL-LOCAL-BOOTSTRAP
 title: Clean-cluster bootstrap of a local logical_v1 instance
 status: accepted
 created: 2026-11-23
-updated: 2026-11-23
-version: "1.0"
+updated: 2026-11-24
+version: "1.1"
 area: guides
 tags: [database, logical, foundation, trino, workbench, bootstrap]
 ---
@@ -139,13 +139,13 @@ image/SPI 更新なら `refresh-verification` を案内する。新規構築で�
 `runtime_profile.py:144` の `RuntimeProfile` と `:217` の `logical_config` が
 要求する exact schema に合わせる。すべて絶対パス・0600、ディレクトリは 0700。
 以下のコードは値を表示しない。`SHIROKUMA_LOGIN_USER` は任意のログイン名
-（既定 `admin`）に置き換えてよい。
+（既定 `admin`）に置き換えてよい。`FOUNDATION_ID` / `REVISION` / `ENVIRONMENT_ID` は
+§2 で決めた値をそのまま引き継ぐ（ここで別の値にすると §7 の登録が
+`Logical foundation differs` で失敗する）。
 
 ```sh
-export FOUNDATION_ID="foundation-20261123"
-export REVISION=1
-export ENVIRONMENT_ID="local-20261123"
-export SHIROKUMA_LOGIN_USER="admin"
+export FOUNDATION_ID REVISION ENVIRONMENT_ID
+export SHIROKUMA_LOGIN_USER="${SHIROKUMA_LOGIN_USER:-admin}"
 PATH="$PWD/tools/local_experiment/dataops/.venv/bin:$PATH" python3 - <<'PY'
 import hashlib, json, os, secrets
 from pathlib import Path
