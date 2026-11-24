@@ -32,6 +32,7 @@ STATIC_ASSETS = {
     '/assets/saved_lineage.js': (INDEX.with_name('saved_lineage.js'), 'application/javascript; charset=utf-8'),
     '/assets/result_export.js': (INDEX.with_name('result_export.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_admin.js': (INDEX.with_name('db_admin.js'), 'application/javascript; charset=utf-8'),
+    '/assets/db_dbt.js': (INDEX.with_name('db_dbt.js'), 'application/javascript; charset=utf-8'),
     '/assets/workbench.css': (INDEX.with_name('workbench.css'), 'text/css; charset=utf-8'),
 }
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}
