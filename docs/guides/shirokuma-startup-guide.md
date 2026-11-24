@@ -139,6 +139,8 @@ chmod 700 "$DIR" "$DIR"/{runtime,runtime/credentials,state,logs,run}
    **タグなし** arm64 digest にします。
 4. `apply` を実行します（§5）。`--settings` は **絶対パス**（`"$DIR/foundation/settings.json"`）で渡します。
 5. runtime profile・accounts・client・platform-admin を作ります（§6）。
+   §6 は上で決めた `FOUNDATION_ID` / `REVISION` / `ENVIRONMENT_ID` を引き継ぎます。
+   別の値に変えると §7 の登録が `Logical foundation differs` で失敗します。
 6. Workbench と endpoint を止めた状態で `register-foundation` を実行します（§7）。
    `{"registered": true}` が返ればよいです。
 
