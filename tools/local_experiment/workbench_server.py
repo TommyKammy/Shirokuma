@@ -33,6 +33,7 @@ STATIC_ASSETS = {
     '/assets/result_export.js': (INDEX.with_name('result_export.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_admin.js': (INDEX.with_name('db_admin.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_jobs.js': (INDEX.with_name('db_jobs.js'), 'application/javascript; charset=utf-8'),
+    '/assets/db_stages.js': (INDEX.with_name('db_stages.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_dbt.js': (INDEX.with_name('db_dbt.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_creation.js': (INDEX.with_name('db_creation.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_audit.js': (INDEX.with_name('db_audit.js'), 'application/javascript; charset=utf-8'),

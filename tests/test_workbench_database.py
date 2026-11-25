@@ -66,6 +66,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
                            ('result_export.js', 'application/javascript; charset=utf-8'),
                            ('db_admin.js', 'application/javascript; charset=utf-8'),
                            ('db_jobs.js', 'application/javascript; charset=utf-8'),
+                           ('db_stages.js', 'application/javascript; charset=utf-8'),
                            ('db_dbt.js', 'application/javascript; charset=utf-8'),
                            ('db_creation.js', 'application/javascript; charset=utf-8'),
                            ('db_audit.js', 'application/javascript; charset=utf-8'),
@@ -92,7 +93,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
                     self.assertEqual(handler.wfile.getvalue(), asset.read_bytes())
 
     def test_chart_asset_rejects_query_body_and_unknown_paths(self):
-        for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_jobs.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/db_audit.js', '/assets/db_runtime.js', '/assets/workbench.css'):
+        for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_jobs.js', '/assets/db_stages.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/db_audit.js', '/assets/db_runtime.js', '/assets/workbench.css'):
             with self.subTest(path=path):
                 for suffix in ('?x=1', '?role=admin', '?x=1&x=2'):
                     self.assertEqual(self.request(path + suffix, roles=())[0], 400)
