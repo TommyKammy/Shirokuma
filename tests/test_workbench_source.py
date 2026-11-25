@@ -11,7 +11,7 @@ from workbench_source import INDEX, WORKBENCH, SCRIPT_BOUNDARY, WorkbenchSource,
 class WorkbenchSourceTests(unittest.TestCase):
     def test_production_order_excludes_head_bootstrap(self):
         parsed = WorkbenchSource(INDEX.read_text())
-        self.assertEqual(len(parsed.sources), 5 + len(parsed.asset_sources))
+        self.assertEqual(len(parsed.sources), 6 + len(parsed.asset_sources))
         self.assertEqual(parsed.sources[0], (WORKBENCH / 'result_chart.js').read_text())
         self.assertIn('function populateChartColumns()', parsed.sources[0])
         self.assertIn('function renderChart()', parsed.sources[0])
@@ -24,9 +24,12 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.asset_sources['/assets/db_admin.js'], (WORKBENCH / 'db_admin.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_jobs.js'], (WORKBENCH / 'db_jobs.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_dbt.js'], (WORKBENCH / 'db_dbt.js').read_text())
+        self.assertEqual(parsed.asset_sources['/assets/db_creation.js'], (WORKBENCH / 'db_creation.js').read_text())
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']))
-        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_dbt.js'])
+        self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']), parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']))
+        # The creation block follows db_dbt.js in index.html, so its asset is sources[-2].
+        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_creation.js'])
         self.assertNotIn('function dbLineageRefresh(){', parsed.sources[-1].split('const dbProfileKey=')[0].split('const dbLineage=')[0])
         self.assertLess(parsed.source.index('const $ ='), parsed.source.index('const i18n ='))
         self.assertLess(parsed.source.index('const i18n ='), parsed.source.index("let language = 'en';"))
@@ -93,7 +96,7 @@ assert.equal(new Function(sources[0]+'\\nreturn this;')(),undefined);
 
     def test_missing_fixed_asset_reports_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js'):
+            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js', 'db_creation.js'):
                 with self.subTest(name=name), self.assertRaises(FileNotFoundError):
                     WorkbenchSource('<body><script src="/assets/' + name + '"></script></body>', directory)
             with self.assertRaises(FileNotFoundError):
