@@ -6,7 +6,7 @@ import re
 
 WORKBENCH = Path(__file__).resolve().parents[1] / 'tools/local_experiment/workbench'
 INDEX = WORKBENCH / 'index.html'
-SCRIPT_ASSETS = {'/assets/result_chart.js': 'result_chart.js', '/assets/base_i18n.js': 'base_i18n.js', '/assets/saved_lineage.js': 'saved_lineage.js', '/assets/result_export.js': 'result_export.js', '/assets/db_admin.js': 'db_admin.js', '/assets/db_jobs.js': 'db_jobs.js', '/assets/db_stages.js': 'db_stages.js', '/assets/db_dbt.js': 'db_dbt.js', '/assets/db_creation.js': 'db_creation.js', '/assets/db_audit.js': 'db_audit.js', '/assets/db_runtime.js': 'db_runtime.js'}
+SCRIPT_ASSETS = {'/assets/result_chart.js': 'result_chart.js', '/assets/base_i18n.js': 'base_i18n.js', '/assets/saved_lineage.js': 'saved_lineage.js', '/assets/result_export.js': 'result_export.js', '/assets/db_admin.js': 'db_admin.js', '/assets/db_jobs.js': 'db_jobs.js', '/assets/db_stages.js': 'db_stages.js', '/assets/db_marts.js': 'db_marts.js', '/assets/db_dbt.js': 'db_dbt.js', '/assets/db_creation.js': 'db_creation.js', '/assets/db_audit.js': 'db_audit.js', '/assets/db_runtime.js': 'db_runtime.js'}
 STYLE_ASSETS = {'/assets/workbench.css': 'workbench.css'}
 SCRIPT_BOUNDARY = '\n// --- Workbench script boundary ---\n'
 
