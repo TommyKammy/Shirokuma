@@ -13,6 +13,10 @@ from urllib.request import Request
 from unittest.mock import patch
 
 import test_workbench_admin_ui as admin
+from workbench_source import WorkbenchSource
+
+
+SOURCE = WorkbenchSource(admin.HTML).source
 
 
 SETUP = admin.SETUP + r'''
@@ -873,7 +877,7 @@ assert.match(contents($('db-creation-process')),/Only the original requester/);
 ''')
 
     def test_canonical_limited_recovery_requires_fresh_explicit_full_approval(self):
-        self.assertIn("confirm(t(recovery?'Confirm limited recovery verification for this reviewed plan?'", admin.HTML)
+        self.assertIn("confirm(t(recovery?'Confirm limited recovery verification for this reviewed plan?'", SOURCE)
         self.javascript(SETUP + r'''
 const bootstrap=plan('bootstrap','PREPARED'),full=plan('full');
 show(process({plans:[bootstrap,full],next_actions:['approve'],progress_code:'FULL_REVIEW_REQUIRED'}));
@@ -1213,7 +1217,7 @@ assert.equal(dbCreation.review,null);await approve();assert.equal(creationPosts.
         self.assertIn(
             "confirm(t('Withdraw approval for this creation? Future dispatch stops. "
             "The LOCAL reservation and effects already applied are retained.'))",
-            admin.HTML,
+            SOURCE,
         )
         self.javascript(SETUP + r'''
 const actions=['replan','reconcile','withdraw'];

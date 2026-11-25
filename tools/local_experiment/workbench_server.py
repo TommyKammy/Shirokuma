@@ -34,6 +34,7 @@ STATIC_ASSETS = {
     '/assets/db_admin.js': (INDEX.with_name('db_admin.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_jobs.js': (INDEX.with_name('db_jobs.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_dbt.js': (INDEX.with_name('db_dbt.js'), 'application/javascript; charset=utf-8'),
+    '/assets/db_creation.js': (INDEX.with_name('db_creation.js'), 'application/javascript; charset=utf-8'),
     '/assets/workbench.css': (INDEX.with_name('workbench.css'), 'text/css; charset=utf-8'),
 }
 ALL_ROLES = {'admin', 'data_engineer', 'bi_viewer'}

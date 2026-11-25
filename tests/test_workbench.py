@@ -1610,6 +1610,7 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
                            ('db_admin.js', 'application/javascript; charset=utf-8'),
                            ('db_jobs.js', 'application/javascript; charset=utf-8'),
                            ('db_dbt.js', 'application/javascript; charset=utf-8'),
+                           ('db_creation.js', 'application/javascript; charset=utf-8'),
                            ('workbench.css', 'text/css; charset=utf-8')):
             path, asset = '/assets/' + name, wb.INDEX.with_name(name)
             with self.subTest(path=path):
