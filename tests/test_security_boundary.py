@@ -148,7 +148,7 @@ class SecurityBoundaryTests(unittest.TestCase):
             with self.subTest(database_mode=database_mode), \
                     patch.object(runtime_profile, 'active', return_value=database_mode), \
                     patch.object(runtime_profile, 'current', return_value=None):
-                for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_jobs.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/workbench.css'):
+                for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_jobs.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/db_audit.js', '/assets/workbench.css'):
                     with self.subTest(path=path):
                         self.assertEqual(self.workbench(path), 401)
                         self.assertEqual(self.workbench(path, Authorization='Basic invalid'), 401)

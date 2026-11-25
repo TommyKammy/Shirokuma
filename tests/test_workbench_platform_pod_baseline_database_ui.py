@@ -117,7 +117,7 @@ const snapshot=dbPodBaseline.compute.record;dbEpoch++;dbAuthorizationVersion++;d
     def test_legacy_audit_preview_contract_stays_separate(self):
         # The existing Audit preview still owns its latest-100 endpoint/filter.
         html=resources_ui.compute_ui.platform_ui.observations.harness.HTML
-        self.assertNotIn('/api/v1/audit/telemetry',html)
+        self.assertNotIn('/api/v1/audit/telemetry',WorkbenchSource(html).source)
         self.javascript(r"""
 await podBoot();dbAuditInstall();
 const podAuditItems=dbInventories.get('admin').items;assert.ok(dbInventoryCurrent(podAuditItems));
