@@ -6,6 +6,7 @@ import test_workbench_database_ui as database_ui
 from workbench_source import WorkbenchSource
 
 HTML = database_ui.HTML
+SOURCE = WorkbenchSource(HTML).source
 CSS = WorkbenchSource(HTML).css
 
 RETIRED_IDS = '''
@@ -52,9 +53,9 @@ class RebuildCleanupStatic(unittest.TestCase):
     def test_removed_ids_are_not_read_from_javascript(self):
         for identifier in RETIRED_IDS:
             with self.subTest(identifier=identifier):
-                self.assertNotIn("$('" + identifier + "')", HTML)
-                self.assertNotIn('getElementById("' + identifier + '")', HTML)
-                self.assertNotIn("getElementById('" + identifier + "')", HTML)
+                self.assertNotIn("$('" + identifier + "')", SOURCE)
+                self.assertNotIn('getElementById("' + identifier + '")', SOURCE)
+                self.assertNotIn("getElementById('" + identifier + "')", SOURCE)
 
     def test_removed_css_selectors_are_gone(self):
         for selector in ('legacy-tabs', '#ingestion-legacy', '#transformation-legacy',

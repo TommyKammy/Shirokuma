@@ -32,6 +32,7 @@ STATIC_ASSETS = {
     '/assets/saved_lineage.js': (INDEX.with_name('saved_lineage.js'), 'application/javascript; charset=utf-8'),
     '/assets/result_export.js': (INDEX.with_name('result_export.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_admin.js': (INDEX.with_name('db_admin.js'), 'application/javascript; charset=utf-8'),
+    '/assets/db_dataops.js': (INDEX.with_name('db_dataops.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_jobs.js': (INDEX.with_name('db_jobs.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_stages.js': (INDEX.with_name('db_stages.js'), 'application/javascript; charset=utf-8'),
     '/assets/db_marts.js': (INDEX.with_name('db_marts.js'), 'application/javascript; charset=utf-8'),
