@@ -25,11 +25,14 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.asset_sources['/assets/db_jobs.js'], (WORKBENCH / 'db_jobs.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_dbt.js'], (WORKBENCH / 'db_dbt.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_creation.js'], (WORKBENCH / 'db_creation.js').read_text())
+        self.assertEqual(parsed.asset_sources['/assets/db_audit.js'], (WORKBENCH / 'db_audit.js').read_text())
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']), parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']))
-        # The creation block follows db_dbt.js in index.html, so its asset is sources[-2].
-        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_creation.js'])
+        self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']), parsed.sources.index(parsed.asset_sources['/assets/db_audit.js']))
+        # The audit block follows the creation block in index.html, so their assets are sources[-2] and sources[-3].
+        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_audit.js'])
+        self.assertEqual(parsed.sources[-3], parsed.asset_sources['/assets/db_creation.js'])
         self.assertNotIn('function dbLineageRefresh(){', parsed.sources[-1].split('const dbProfileKey=')[0].split('const dbLineage=')[0])
         self.assertLess(parsed.source.index('const $ ='), parsed.source.index('const i18n ='))
         self.assertLess(parsed.source.index('const i18n ='), parsed.source.index("let language = 'en';"))
@@ -96,7 +99,7 @@ assert.equal(new Function(sources[0]+'\\nreturn this;')(),undefined);
 
     def test_missing_fixed_asset_reports_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js', 'db_creation.js'):
+            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js', 'db_creation.js', 'db_audit.js'):
                 with self.subTest(name=name), self.assertRaises(FileNotFoundError):
                     WorkbenchSource('<body><script src="/assets/' + name + '"></script></body>', directory)
             with self.assertRaises(FileNotFoundError):
