@@ -115,9 +115,10 @@ for(const id of ['runtime-minutes-help','runtime-policy','runtime-draft'])assert
 """)
 
     def test_scoped_wrapping_rules_and_no_new_fetch_or_store(self):
-        html=database_ui.HTML
-        self.assertIn('#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}', WorkbenchSource(html).css)
-        helper=html[html.index('function dbRuntimeDraftMinutes()'):html.index('async function dbRuntimeRequest')]
+        source=WorkbenchSource(database_ui.HTML)
+        self.assertIn('#runtime-panel .runtime-condition{min-width:0;max-width:75ch;overflow-wrap:anywhere;white-space:normal}', source.css)
+        runtime=source.asset_sources['/assets/db_runtime.js']
+        helper=runtime[runtime.index('function dbRuntimeDraftMinutes()'):runtime.index('async function dbRuntimeRequest')]
         for forbidden in ['fetch(', 'setTimeout(', 'setInterval(', 'localStorage', 'dbRuntimeRequest(', 'dbRuntimeObserve(', 'dbRuntimeReceipt(']:
             self.assertNotIn(forbidden, helper)
 

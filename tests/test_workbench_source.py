@@ -26,14 +26,18 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.asset_sources['/assets/db_dbt.js'], (WORKBENCH / 'db_dbt.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_creation.js'], (WORKBENCH / 'db_creation.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_audit.js'], (WORKBENCH / 'db_audit.js').read_text())
+        self.assertEqual(parsed.asset_sources['/assets/db_runtime.js'], (WORKBENCH / 'db_runtime.js').read_text())
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']), parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']), parsed.sources.index(parsed.asset_sources['/assets/db_audit.js']))
-        # The audit block follows the creation block in index.html, so their assets are sources[-2] and sources[-3].
-        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_audit.js'])
-        self.assertEqual(parsed.sources[-3], parsed.asset_sources['/assets/db_creation.js'])
-        self.assertNotIn('function dbLineageRefresh(){', parsed.sources[-1].split('const dbProfileKey=')[0].split('const dbLineage=')[0])
+        self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_audit.js']), parsed.sources.index(parsed.asset_sources['/assets/db_runtime.js']))
+        # The runtime block follows the audit block in index.html, so the tail is runtime, audit, creation.
+        self.assertEqual(parsed.sources[-2], parsed.asset_sources['/assets/db_runtime.js'])
+        self.assertEqual(parsed.sources[-3], parsed.asset_sources['/assets/db_audit.js'])
+        self.assertEqual(parsed.sources[-4], parsed.asset_sources['/assets/db_creation.js'])
+        lineage_source = next(source for source in parsed.sources if 'const dbLineage=createSavedLineagePanel(' in source)
+        self.assertNotIn('function dbLineageRefresh(){', lineage_source.split('const dbProfileKey=')[0].split('const dbLineage=')[0])
         self.assertLess(parsed.source.index('const $ ='), parsed.source.index('const i18n ='))
         self.assertLess(parsed.source.index('const i18n ='), parsed.source.index("let language = 'en';"))
         self.assertEqual(parsed.style_sources, [(WORKBENCH / 'workbench.css').read_text()])
@@ -99,7 +103,7 @@ assert.equal(new Function(sources[0]+'\\nreturn this;')(),undefined);
 
     def test_missing_fixed_asset_reports_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js', 'db_creation.js', 'db_audit.js'):
+            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_jobs.js', 'db_dbt.js', 'db_creation.js', 'db_audit.js', 'db_runtime.js'):
                 with self.subTest(name=name), self.assertRaises(FileNotFoundError):
                     WorkbenchSource('<body><script src="/assets/' + name + '"></script></body>', directory)
             with self.assertRaises(FileNotFoundError):
