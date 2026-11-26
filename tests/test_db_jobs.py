@@ -1,4 +1,5 @@
 """Database Job contracts using real SQLite, flock and the P3 transport boundary."""
+import ast
 import base64
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -586,6 +587,46 @@ class DatabaseJobsTests(unittest.TestCase):
         self.assertEqual(self.submit(job)['id'], run['id'])
         self.finish(run)
 
+    def test_start_rejects_stalled_legacy_run_without_rewriting_it(self):
+        job = self.save()
+        with control_store.connect() as db:
+            db.execute("INSERT INTO runs (id,job_name,actor,role,definition,arguments,status,created_at,started_at) "
+                "VALUES ('legacy-running','legacy','owner','admin','{}','{}','running','2026-01-01T00:00:00Z',"
+                "'2026-01-01T00:00:00Z')")
+        with patch.object(legacy, '_lost', wraps=legacy._lost) as legacy_lost:
+            with self.assertRaises(QueryError) as caught:
+                self.submit(job, key='blocked')
+        self.assertEqual((caught.exception.code, caught.exception.status),
+                         ('UNKNOWN_RECONCILIATION_REQUIRED', 409))
+        legacy_lost.assert_not_called()
+        with control_store.connect() as db:
+            self.assertEqual(tuple(db.execute(
+                "SELECT status,finished_at,error FROM runs WHERE id='legacy-running'").fetchone()),
+                ('running', None, None))
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM db_job_runs').fetchone()[0], 0)
+
+    def test_start_marks_stalled_database_run_unknown_and_rejects(self):
+        job = self.save()
+        run = self.submit(job)
+        self.clear_jobs()  # No worker owns the queued run any more.
+        seen, original = [], jobs._lost
+        def lost(db):
+            original(db)
+            seen.append(db.execute('SELECT status FROM db_job_runs WHERE id=?',
+                                   (run['id'],)).fetchone()[0])
+        with patch.object(jobs, '_lost', side_effect=lost):
+            with self.assertRaises(QueryError) as caught:
+                self.submit(job, key='after-loss')
+        self.assertEqual((caught.exception.code, caught.exception.status),
+                         ('UNKNOWN_RECONCILIATION_REQUIRED', 409))
+        self.assertEqual(seen, ['unknown'], 'run start must reconcile the stale database run')
+        # The refused transaction rolls back; the next recovery pass persists it.
+        self.assertEqual(jobs.get_run(self.p, self.c, run['id'])['status'], 'unknown')
+        with control_store.connect() as db:
+            row = db.execute('SELECT status,finished_at FROM db_job_runs WHERE id=?', (run['id'],)).fetchone()
+            self.assertEqual(row['status'], 'unknown')
+            self.assertIsNotNone(row['finished_at'])
+
     def test_same_name_jobs_execute_in_three_arbitrary_database_contexts(self):
         for index, database in enumerate(self.f.databases):
             context = self.f.context(database)
@@ -792,6 +833,16 @@ with patch.object(j.queries,'_capture_dataops',return_value=SimpleNamespace(head
         first.communicate('', timeout=20)
         self.assertEqual(jobs.get_run(self.p, self.c, run_id)['status'], 'unknown')
         self.assertEqual(jobs.reconcile_run(self.p, self.c, run_id)['status'], 'failed')
+
+
+class DatabaseJobsLegacyIsolationTests(unittest.TestCase):
+    def test_module_does_not_import_legacy_resident_runner(self):
+        tree = ast.parse(Path(jobs.__file__).read_text())
+        imported = {alias.name.split('.')[0] for node in ast.walk(tree)
+                    if isinstance(node, ast.Import) for alias in node.names}
+        imported |= {node.module.split('.')[0] for node in ast.walk(tree)
+                     if isinstance(node, ast.ImportFrom) and node.module}
+        self.assertNotIn('jobs_resident', imported)
 
 
 class JobMigrationTests(unittest.TestCase):

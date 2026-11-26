@@ -21,6 +21,7 @@ import catalog_admin
 import control_store
 import data_management as registry
 import db_jobs
+import job_support
 import query_service
 from query_context import QueryError, ResolvedQueryContext
 import request_auth
@@ -117,7 +118,7 @@ def graph(db, run_id):
             _require(a['state'] == op['state'] == 'UNKNOWN' and children and step['status'] == 'unknown')
             _require(saved['action'] in ('sql', 'alert') and saved.get('mode', 'read-only') == 'read-only' and op['route'] == 'job-sql')
             payload = json.loads(op['payload'])
-            sql, _ = db_jobs.legacy._render(saved['sql'], definition.get('parameters', {}), json.loads(run['arguments']))
+            sql, _ = job_support._render(saved['sql'], definition.get('parameters', {}), json.loads(run['arguments']))
             _require(payload == dict(context=json.loads(run['context']),
                 payload=dict(action=saved['action'], sql=sql, mode='read-only')))
             _require(hashlib.sha256(op['payload'].encode()).hexdigest() == op['fingerprint'])
@@ -1062,7 +1063,7 @@ class Recovery:
     def locks(self, frozen):
         with ExitStack() as stack:
             stack.enter_context(warehouse_operations._operator_gate())
-            lock = db_jobs.legacy._lock()
+            lock = job_support._lock()
             _require(lock is not None, 'JOB_BUSY')
             stack.enter_context(lock)
             for operation_id in frozen['operation_ids']:

@@ -15,7 +15,6 @@ import data_management as registry
 import dataops_service as ds
 import dataops_routes as routes
 import job_support
-import jobs_resident as legacy
 import manual_export
 import manual_ingest
 import manual_wap
@@ -369,7 +368,7 @@ def submit_run(principal, context, job_id, *, expected_revision, arguments, key,
         with control_store.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             revalidate_admission(db, principal, context)
-            legacy._lost(db)
+            _lost(db)
             replay = _request(db, principal, route, key, payload)
             if replay:
                 lock.close()
