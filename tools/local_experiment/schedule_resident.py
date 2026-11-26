@@ -125,14 +125,6 @@ def _firing_subject(schedule):
 
 def _tick(now, stop=None, refresh_clock=False):
     result = dict(started=[], skipped=[], paused=[], unknown=[])
-    if stop is None or not stop.is_set():
-        try:
-            import db_schedules
-            database = db_schedules.tick(now, refresh_clock=refresh_clock, stop=stop)
-            for key in result:
-                result[key].extend(database[key])
-        except Exception:
-            logging.getLogger(__name__).exception('DB scheduler tick failed')
     claim = _lock('jobs-scheduler-tick.lock')
     if claim is None:
         return result

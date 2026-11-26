@@ -17,7 +17,6 @@ import query_service as queries
 import request_auth
 from query_context import QueryError
 import schedule_calendar as calendar
-import schedule_resident as legacy_scheduler
 import warehouse_admission as admission
 
 
@@ -289,9 +288,8 @@ class ScheduleTests(ScheduleFixture):
             jobs._worker(run_id)
             clock[0] = due + timedelta(seconds=60)
         with patch.object(calendar, '_utc', side_effect=lambda value=None: value if value is not None else clock[0]), \
-                patch.object(legacy_scheduler, '_utc', side_effect=lambda value=None: value if value is not None else clock[0]), \
                 patch.object(jobs, '_start', side_effect=finish_then_delay):
-            legacy_scheduler._tick(due, refresh_clock=True)
+            schedules.tick(due, refresh_clock=True)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(sorted(t['status'] for t in ticks), ['skipped', 'succeeded'])
         self.assertEqual([t['code'] for t in ticks if t['status'] == 'skipped'], ['MISSED'])
@@ -307,7 +305,7 @@ class ScheduleTests(ScheduleFixture):
             stop.set()
             return frozen
         with patch.object(queries, '_capture_dataops', side_effect=stopping):
-            legacy_scheduler._tick(self.now + timedelta(minutes=1), stop=stop)
+            schedules.tick(self.now + timedelta(minutes=1), stop=stop)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(len(ticks), 1)
         self.assertEqual((ticks[0]['status'], ticks[0]['code'], ticks[0]['run_id']), ('skipped', 'STOPPED', None))
@@ -321,7 +319,7 @@ class ScheduleTests(ScheduleFixture):
             stop.set()
             jobs._worker(run_id)
         with patch.object(jobs, '_start', side_effect=accepted):
-            legacy_scheduler._tick(self.now + timedelta(minutes=1), stop=stop)
+            schedules.tick(self.now + timedelta(minutes=1), stop=stop)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(len(ticks), 1)
         self.assertEqual(ticks[0]['status'], 'succeeded')
@@ -560,6 +558,62 @@ class ScheduleTests(ScheduleFixture):
         schedules.tick(self.now + timedelta(minutes=1))
         self.assertFalse(self.current(schedule)['enabled'])
         self.assertIn(self.history(schedule)[0]['status'], ('failed', 'unknown'))
+
+
+class SchedulerDaemonTests(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(schedules.stop_scheduler)
+
+    def test_start_scheduler_ticks_with_live_stop_and_joins(self):
+        entered, calls = threading.Event(), []
+        def tick(now, *, refresh_clock=None, stop=None):
+            calls.append((now, refresh_clock, stop))
+            entered.set()
+        with patch.object(schedules, 'tick', side_effect=tick):
+            self.assertTrue(schedules.start_scheduler(interval=.01))
+            self.assertTrue(entered.wait(2))
+            thread = schedules._SCHEDULER_THREAD
+            self.assertTrue(thread.is_alive())
+            schedules.stop_scheduler()
+            self.assertFalse(thread.is_alive())
+        self.assertTrue(calls)
+        self.assertTrue(all(refresh is True and stop is schedules._SCHEDULER_STOP
+                            for _, refresh, stop in calls))
+
+    def test_start_scheduler_rejects_a_second_live_loop(self):
+        entered = threading.Event()
+        def tick(now, *, refresh_clock=None, stop=None):
+            entered.set()
+        with patch.object(schedules, 'tick', side_effect=tick):
+            self.assertTrue(schedules.start_scheduler(interval=.01))
+            self.assertTrue(entered.wait(2))
+            thread = schedules._SCHEDULER_THREAD
+            self.assertFalse(schedules.start_scheduler(interval=.01))
+            self.assertIs(schedules._SCHEDULER_THREAD, thread)
+            self.assertEqual([t for t in threading.enumerate() if t.name == 'db-scheduler'], [thread])
+            schedules.stop_scheduler()
+
+    def test_scheduler_interval_validation(self):
+        before = schedules._SCHEDULER_THREAD
+        for interval in (0, 61, True, '1'):
+            with self.subTest(interval=interval), self.assertRaises(ValueError):
+                schedules.start_scheduler(interval)
+        self.assertIs(schedules._SCHEDULER_THREAD, before)
+
+    def test_tick_errors_are_logged_and_the_loop_continues(self):
+        calls, retried = [], threading.Event()
+        def tick(now, *, refresh_clock=None, stop=None):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError('synthetic tick failure')
+            retried.set()
+        with patch.object(schedules, 'tick', side_effect=tick), \
+                self.assertLogs(schedules.__name__, level='ERROR') as logs:
+            self.assertTrue(schedules.start_scheduler(interval=.01))
+            self.assertTrue(retried.wait(2))
+            schedules.stop_scheduler()
+        self.assertTrue(any('DB scheduler tick failed' in line for line in logs.output))
+        self.assertGreaterEqual(len(calls), 2)
 
 
 class AlertTests(ScheduleFixture):
