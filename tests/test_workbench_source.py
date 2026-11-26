@@ -23,6 +23,7 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.asset_sources['/assets/result_export.js'], (WORKBENCH / 'result_export.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_admin.js'], (WORKBENCH / 'db_admin.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_dataops.js'], (WORKBENCH / 'db_dataops.js').read_text())
+        self.assertEqual(parsed.asset_sources['/assets/db_explorer.js'], (WORKBENCH / 'db_explorer.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_jobs.js'], (WORKBENCH / 'db_jobs.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_stages.js'], (WORKBENCH / 'db_stages.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_marts.js'], (WORKBENCH / 'db_marts.js').read_text())
@@ -31,12 +32,15 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.asset_sources['/assets/db_audit.js'], (WORKBENCH / 'db_audit.js').read_text())
         self.assertEqual(parsed.asset_sources['/assets/db_runtime.js'], (WORKBENCH / 'db_runtime.js').read_text())
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dataops.js']))
+        self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dataops.js']), parsed.sources.index(parsed.asset_sources['/assets/db_explorer.js']))
+        self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_explorer.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dataops.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']), parsed.sources.index(parsed.asset_sources['/assets/db_stages.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_stages.js']), parsed.sources.index(parsed.asset_sources['/assets/db_marts.js']))
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_marts.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']))
         self.assertEqual(parsed.sources.index(parsed.asset_sources['/assets/db_dataops.js']), parsed.sources.index(parsed.asset_sources['/assets/db_admin.js']) + 1)
+        self.assertEqual(parsed.sources.index(parsed.asset_sources['/assets/db_explorer.js']), parsed.sources.index(parsed.asset_sources['/assets/db_dataops.js']) + 1)
         self.assertEqual(parsed.sources.index(parsed.asset_sources['/assets/db_stages.js']), parsed.sources.index(parsed.asset_sources['/assets/db_jobs.js']) + 1)
         self.assertEqual(parsed.sources.index(parsed.asset_sources['/assets/db_marts.js']), parsed.sources.index(parsed.asset_sources['/assets/db_stages.js']) + 1)
         self.assertLess(parsed.sources.index(parsed.asset_sources['/assets/db_dbt.js']), parsed.sources.index(parsed.asset_sources['/assets/db_creation.js']))
@@ -47,9 +51,10 @@ class WorkbenchSourceTests(unittest.TestCase):
         self.assertEqual(parsed.sources[-3], parsed.asset_sources['/assets/db_audit.js'])
         self.assertEqual(parsed.sources[-4], parsed.asset_sources['/assets/db_creation.js'])
         lineage_source = next(source for source in parsed.sources if 'const dbLineage=createSavedLineagePanel(' in source)
-        # The Manual DataOps block now lives in db_dataops.js but still directly precedes
-        # the saved-lineage script, so include it to keep the original checked region.
-        lineage_prefix = parsed.asset_sources['/assets/db_dataops.js'] + lineage_source
+        # The Explorer block now lives in db_explorer.js and directly follows
+        # db_dataops.js. The old inline script text began with the newline after its
+        # <script> tag, so restore that newline to keep the original checked region.
+        lineage_prefix = parsed.asset_sources['/assets/db_dataops.js'] + '\n' + lineage_source
         self.assertNotIn('function dbLineageRefresh(){', lineage_prefix.split('const dbProfileKey=')[0].split('const dbLineage=')[0])
         self.assertLess(parsed.source.index('const $ ='), parsed.source.index('const i18n ='))
         self.assertLess(parsed.source.index('const i18n ='), parsed.source.index("let language = 'en';"))
@@ -116,7 +121,7 @@ assert.equal(new Function(sources[0]+'\\nreturn this;')(),undefined);
 
     def test_missing_fixed_asset_reports_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_dataops.js', 'db_jobs.js', 'db_stages.js', 'db_marts.js', 'db_dbt.js', 'db_creation.js', 'db_audit.js', 'db_runtime.js'):
+            for name in ('result_chart.js', 'base_i18n.js', 'saved_lineage.js', 'result_export.js', 'db_admin.js', 'db_dataops.js', 'db_explorer.js', 'db_jobs.js', 'db_stages.js', 'db_marts.js', 'db_dbt.js', 'db_creation.js', 'db_audit.js', 'db_runtime.js'):
                 with self.subTest(name=name), self.assertRaises(FileNotFoundError):
                     WorkbenchSource('<body><script src="/assets/' + name + '"></script></body>', directory)
             with self.assertRaises(FileNotFoundError):
