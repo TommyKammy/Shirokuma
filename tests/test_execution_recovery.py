@@ -29,6 +29,7 @@ import dataops_service as ds
 import db_jobs
 import execution_recovery as recovery
 import grant_management as grants
+import job_support
 import query_service as qs
 from query_context import QueryError
 import warehouse_admission as admission
@@ -671,7 +672,7 @@ class RecoveryTests(unittest.TestCase):
 
     def test_live_job_or_query_owner_rejected(self):
         self.unknown()
-        lock = db_jobs.legacy._lock()
+        lock = job_support._lock()
         try:
             self.assert_code('JOB_BUSY', self.plan)
         finally:
