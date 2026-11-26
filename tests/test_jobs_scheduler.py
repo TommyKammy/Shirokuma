@@ -597,6 +597,11 @@ print(json.dumps(result),flush=True)
                     child.kill()
                 child.communicate(timeout=5)
 
+    def test_legacy_tick_does_not_run_database_schedules(self):
+        with patch('db_schedules.tick') as database:
+            scheduler._tick(BASE)
+        database.assert_not_called()
+
     def test_daemon_is_process_singleton_survives_errors_and_stops(self):
         retried = threading.Event()
         calls = []

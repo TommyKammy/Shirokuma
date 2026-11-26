@@ -6,6 +6,7 @@ from datetime import datetime
 import hashlib
 import json
 import logging
+import threading
 import uuid
 
 import control_store
@@ -18,6 +19,9 @@ import warehouse_admission as admission
 _scope = ContextVar('db_schedule_admission', default=None)
 _TABLES = {'job': 'db_jobs', 'stage': 'db_stages', 'mart': 'db_marts'}
 _IDENTITY = ('database_id', 'schema_id', 'warehouse_id', 'selected_role', 'sql_catalog', 'sql_schema')
+_SCHEDULER_THREAD = None
+_SCHEDULER_STOP = threading.Event()
+_SCHEDULER_MUTEX = threading.Lock()
 
 
 def _visible(row, principal, context):
@@ -487,3 +491,31 @@ def acknowledge_alert(principal, context, alert_id, *, key):
         result = _alert(db.execute('SELECT * FROM db_alerts WHERE id=?', (alert_id,)).fetchone())
         _receipt(db, principal, 'ack', key, payload, result)
         return result
+
+
+def start_scheduler(interval=10):
+    global _SCHEDULER_THREAD
+    if not isinstance(interval, (int, float)) or isinstance(interval, bool) or not 0 < interval <= 60:
+        raise ValueError('scheduler poll interval must be between 0 and 60 seconds')
+    with _SCHEDULER_MUTEX:
+        if _SCHEDULER_THREAD is not None and _SCHEDULER_THREAD.is_alive():
+            return False
+        _SCHEDULER_STOP.clear()
+        def run():
+            while not _SCHEDULER_STOP.is_set():
+                try:
+                    tick(calendar._utc(), refresh_clock=True, stop=_SCHEDULER_STOP)
+                except Exception:
+                    logging.getLogger(__name__).exception('DB scheduler tick failed')
+                _SCHEDULER_STOP.wait(interval)
+        _SCHEDULER_THREAD = threading.Thread(target=run, name='db-scheduler', daemon=True)
+        _SCHEDULER_THREAD.start()
+        return True
+
+
+def stop_scheduler():
+    with _SCHEDULER_MUTEX:
+        _SCHEDULER_STOP.set()
+        thread = _SCHEDULER_THREAD
+    if thread is not None and thread is not threading.current_thread():
+        thread.join()

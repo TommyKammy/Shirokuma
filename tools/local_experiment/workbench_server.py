@@ -9,7 +9,7 @@ import signal
 import sys
 from urllib.parse import parse_qs, urlsplit
 
-import schedule_resident
+import db_schedules
 import warehouse_resident
 import request_auth
 from http_origin import request_origin_allowed
@@ -398,24 +398,24 @@ def main(argv=None):
                 warehouse_resident.initialize_auto_chill()
                 print(f'Shirokuma Workbench: http://{args.host}:{server.server_port}', flush=True)
                 try:
-                    schedule_resident.start_scheduler()
+                    db_schedules.start_scheduler()
                     server.serve_forever()
                 except KeyboardInterrupt:
                     pass
                 finally:
                     warehouse_resident.stop_auto_chill_daemon()
-                    schedule_resident.stop_scheduler()
+                    db_schedules.stop_scheduler()
             return
         database_creation_bridge.configure()
         if runtime_profile.active():
             print(f'Shirokuma Workbench: http://{args.host}:{server.server_port}', flush=True)
             try:
-                schedule_resident.start_scheduler()
+                db_schedules.start_scheduler()
                 server.serve_forever()
             except KeyboardInterrupt:
                 pass
             finally:
-                schedule_resident.stop_scheduler()
+                db_schedules.stop_scheduler()
             return
 
 

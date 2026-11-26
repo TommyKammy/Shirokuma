@@ -111,8 +111,8 @@ class ScheduleRoutes(unittest.TestCase):
         events = []
         with patch('runtime_profile.configure_process'), patch('runtime_profile.active', return_value=True), \
                 patch.object(server.request_auth, 'validate_bind'), patch.object(server, 'HTTPServer') as factory, \
-                patch.object(server.schedule_resident, 'start_scheduler', side_effect=lambda: events.append('start')) as start, \
-                patch.object(server.schedule_resident, 'stop_scheduler', side_effect=lambda: events.append('stop')) as stop, \
+                patch.object(server.db_schedules, 'start_scheduler', side_effect=lambda: events.append('start')) as start, \
+                patch.object(server.db_schedules, 'stop_scheduler', side_effect=lambda: events.append('stop')) as stop, \
                 patch.object(server.warehouse_resident, 'persistent_trino') as trino, \
                 patch.object(server.warehouse_resident, 'initialize_auto_chill') as chill, \
                 redirect_stdout(io.StringIO()):

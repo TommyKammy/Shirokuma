@@ -251,8 +251,8 @@ class BridgeTests(BridgeFixture):
                 duplicate = os.dup
                 stack.enter_context(patch.dict(os.environ,SHIROKUMA_MANAGED_FD='3'))
                 stack.enter_context(patch.object(bridge.os,'dup',side_effect=lambda ignored:duplicate(child.fileno())))
-                stack.enter_context(patch.object(workbench_server.schedule_resident,'start_scheduler'))
-                stack.enter_context(patch.object(workbench_server.schedule_resident,'stop_scheduler'))
+                stack.enter_context(patch.object(workbench_server.db_schedules,'start_scheduler'))
+                stack.enter_context(patch.object(workbench_server.db_schedules,'stop_scheduler'))
                 stack.enter_context(patch('trino_auth.backend_ssl_context'))
                 def serving(server):
                     stack.callback(bridge._managed.channel.close)
