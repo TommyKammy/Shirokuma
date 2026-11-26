@@ -12,7 +12,7 @@ import control_store
 import db_jobs as jobs
 import request_auth
 from query_context import QueryError, ResolvedQueryContext, resolve_context, revalidate_admission
-import schedule_resident as calendar
+import schedule_calendar as calendar
 import warehouse_admission as admission
 
 _scope = ContextVar('db_schedule_admission', default=None)

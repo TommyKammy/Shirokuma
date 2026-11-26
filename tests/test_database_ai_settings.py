@@ -13,10 +13,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'tools/local_experiment'))
 import db_ai_settings as settings
-import bears_resident as bears
+import ai_config
 import request_auth as auth
 import runtime_profile
-import wap_resident as wap
+import state_files
 import workbench_server as wb
 from warehouse_operations import OperationError
 import test_database_platform_resources as resources_tests
@@ -41,7 +41,7 @@ class AISettingsTests(unittest.TestCase):
                       'dba': dict(role='admin', platform_admin=False, enabled=True)}
         self.patch(patch.object(auth, '_principal_accounts', side_effect=lambda: self.users))
         self.principal = auth.AuthenticatedPrincipal('p', 'admin', True)
-        self.complete = self.patch(patch.object(bears, '_ai_completion', return_value={
+        self.complete = self.patch(patch.object(ai_config, '_ai_completion', return_value={
             'choices': [{'message': {'content': 'pong secret'}}], 'usage': {'secret': 1}}))
         for target in ('request_auth.authorize_database', 'query_context.resolve_context',
                        'control_store.connect', 'urllib.request.urlopen', 'socket.create_connection'):
@@ -51,17 +51,17 @@ class AISettingsTests(unittest.TestCase):
         return settings.perform(principal or self.principal, role, action, changes)
 
     def stored(self, **extra):
-        wap.persist_json(wap.state_path('ai_config.json'), dict(CONFIG, **extra))
+        state_files.persist_json(state_files.state_path('ai_config.json'), dict(CONFIG, **extra))
 
     def test_active_root_known_dto_and_no_grants_or_implicit_test(self):
         self.stored(api_key='secret', arbitrary='secret', api_key_env='SECRET')
-        self.patch(patch.object(bears, 'AI_CONFIG_PATH', self.root / 'stale.json'))
-        self.patch(patch.object(bears, '_ai_config', dict(CONFIG, model='stale')))
+        self.patch(patch.object(ai_config, 'AI_CONFIG_PATH', self.root / 'stale.json'))
+        self.patch(patch.object(ai_config, '_ai_config', dict(CONFIG, model='stale')))
         got = self.perform()
         self.assertEqual(got, dict(CONFIG, api_key='********'))
         self.assertNotIn('secret', json.dumps(got))
         self.perform('save', dict(CONFIG, model='changed'))
-        saved = json.loads(wap.state_path('ai_config.json').read_text())
+        saved = json.loads(state_files.state_path('ai_config.json').read_text())
         self.assertEqual(saved['model'], 'changed')
         self.assertNotIn('arbitrary', saved)
         self.assertFalse((self.root / 'stale.json').exists())
@@ -74,7 +74,7 @@ class AISettingsTests(unittest.TestCase):
                 (self.principal, 'data_engineer'), (self.principal, 'bi_viewer'),
                 (auth.AuthenticatedPrincipal('dba', 'admin', False), 'admin')]:
             for action in ('get', 'save', 'test'):
-                with patch.object(bears, 'load_ai_config') as load:
+                with patch.object(ai_config, 'load_ai_config') as load:
                     with self.assertRaises(OperationError) as error:
                         self.perform(action, CONFIG, principal, role)
                     self.assertEqual(error.exception.status, 403)
@@ -94,7 +94,7 @@ class AISettingsTests(unittest.TestCase):
                 for change in ({'model': 'changed'}, {'provider': 'custom'},
                                {'api_url': 'https://example.invalid/v1'}):
                     result = self.perform('save', CONFIG | change)
-                    saved = json.loads(wap.state_path('ai_config.json').read_text())
+                    saved = json.loads(state_files.state_path('ai_config.json').read_text())
                     self.assertEqual(saved['max_tokens'], tokens)
                     self.assertEqual(saved['temperature'], temperature)
                     self.assertNotIn('arbitrary', saved)
@@ -111,16 +111,16 @@ class AISettingsTests(unittest.TestCase):
             for supplied in ({}, {'api_key': '********'}):
                 self.stored(api_key=key, api_key_env='TEST_KEY')
                 self.perform('save', CONFIG | supplied)
-                active = bears.load_ai_config(path=wap.state_path('ai_config.json'))
-                self.assertEqual(bears.resolve_api_key(active), key or 'env-secret')
+                active = ai_config.load_ai_config(path=state_files.state_path('ai_config.json'))
+                self.assertEqual(ai_config.resolve_api_key(active), key or 'env-secret')
                 for changed in ({'provider': 'custom'}, {'api_url': 'https://example.invalid/v1'}):
                     self.stored(api_key=key, api_key_env='TEST_KEY')
                     self.perform('save', CONFIG | changed | supplied)
-                    active = bears.load_ai_config(path=wap.state_path('ai_config.json'))
-                    self.assertIsNone(bears.resolve_api_key(active))
+                    active = ai_config.load_ai_config(path=state_files.state_path('ai_config.json'))
+                    self.assertIsNone(ai_config.resolve_api_key(active))
                     self.assertEqual(active['api_key_env'], '')
                     self.perform('save', CONFIG | changed | {'api_key': 'new-secret'})
-                    self.assertEqual(bears.load_ai_config(path=wap.state_path('ai_config.json'))['api_key'], 'new-secret')
+                    self.assertEqual(ai_config.load_ai_config(path=state_files.state_path('ai_config.json'))['api_key'], 'new-secret')
 
     def test_strict_fields_scalar_types_and_url(self):
         bad = [CONFIG | {k: v} for k, values in {
@@ -142,14 +142,14 @@ class AISettingsTests(unittest.TestCase):
                     with self.assertRaises(OperationError) as error: self.perform(action, body)
                     self.assertEqual(error.exception.status, 400)
         self.complete.assert_not_called()
-        self.assertFalse(wap.state_path('ai_config.json').exists())
+        self.assertFalse(state_files.state_path('ai_config.json').exists())
         for provider in settings.PROVIDERS:
             self.perform('save', CONFIG | {'provider': provider, 'timeout': 600})
         self.perform('save', CONFIG | {'model': 'x' * 512})
 
     def test_test_synthetic_no_save_no_leak_and_sanitized_failure(self):
         self.stored(api_key='secret')
-        before = wap.state_path('ai_config.json').read_bytes()
+        before = state_files.state_path('ai_config.json').read_bytes()
         result = self.perform('test', CONFIG)
         self.assertEqual(set(result), {'status', 'latency_ms'})
         self.assertEqual(result['status'], 'connected')
@@ -158,7 +158,7 @@ class AISettingsTests(unittest.TestCase):
         self.assertIs(body['enable_thinking'], False)
         self.assertEqual(body['max_tokens'], 16)
         self.assertEqual(config['api_key'], 'secret')
-        self.assertEqual(before, wap.state_path('ai_config.json').read_bytes())
+        self.assertEqual(before, state_files.state_path('ai_config.json').read_bytes())
         for provider in settings.PROVIDERS - {'local-openai'}:
             self.perform('test', CONFIG | {'provider': provider})
             body = self.complete.call_args.args[1]
@@ -169,7 +169,7 @@ class AISettingsTests(unittest.TestCase):
             self.assertEqual(self.perform('test', CONFIG)['error'], 'AI_TEST_FAILED')
         self.complete.side_effect = RuntimeError('secret provider response')
         self.assertNotIn('secret', json.dumps(self.perform('test', CONFIG)))
-        with patch.object(wap, 'persist_json', side_effect=OSError('secret path')):
+        with patch.object(state_files, 'persist_json', side_effect=OSError('secret path')):
             with self.assertRaises(OperationError) as error: self.perform('save', CONFIG)
             self.assertEqual(error.exception.code, 'AI_CONFIG_UNAVAILABLE')
 
@@ -185,7 +185,7 @@ class AISettingsTests(unittest.TestCase):
                     return original(*args)
                 self.users['p']['platform_admin'] = True
                 self.complete.reset_mock()
-                with patch.object(settings, '_authority', authority), patch.object(wap, 'persist_json') as save:
+                with patch.object(settings, '_authority', authority), patch.object(state_files, 'persist_json') as save:
                     with self.assertRaises(OperationError) as error: self.perform(action, CONFIG)
                     self.assertEqual(error.exception.status, 403)
                     if lose_on == 2:

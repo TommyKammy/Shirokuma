@@ -105,6 +105,7 @@ class TrinoAuthTests(unittest.TestCase):
         self.assertNotEqual(auth.backend_headers(role='admin'), before)
 
     def test_password_mode_ai_requests_keep_provider_credentials(self):
+        import ai_config
         import bears_resident as bears
         import trino_auth as backend_auth
         active = dict(provider='openai', model='ai-model', api_url='https://ai.invalid/v1',
@@ -122,7 +123,7 @@ class TrinoAuthTests(unittest.TestCase):
             lambda: self.assertEqual(bears.generate_data_sql_retry('trino', 'one', [],
                                       'SELECT broken', 'unknown column'), 'SELECT 1'),
         )
-        with patch.object(bears, 'load_ai_config', side_effect=lambda: dict(active)), \
+        with patch.object(ai_config, 'load_ai_config', side_effect=lambda: dict(active)), \
              patch.object(bears, 'sql', return_value={'rows': []}), \
              patch.object(bears.wr.urllib.request, 'urlopen', side_effect=capture), \
              patch.object(backend_auth, 'backend_ssl_context', return_value=None) as backend_tls:

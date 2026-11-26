@@ -453,7 +453,7 @@ class IngestTests(unittest.TestCase):
         import ast
         import datetime
         import re
-        source = Path(__file__).resolve().parents[1] / 'tools/local_experiment/lake_ingest.py'
+        source = Path(__file__).resolve().parents[1] / 'tools/local_experiment/ingest_types.py'
         tree = ast.parse(source.read_text())
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'timestamp_value')
         namespace = dict(re=re, datetime=datetime.datetime)

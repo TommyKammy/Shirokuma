@@ -2,9 +2,9 @@
 import time
 from urllib.parse import urlsplit
 
-import bears_resident as bears
+import ai_config
 from db_platform_observations import _authority
-import wap_resident as wap
+import state_files
 from warehouse_operations import OperationError
 
 FIELDS = {'provider', 'model', 'api_url', 'api_key', 'timeout'}
@@ -33,7 +33,7 @@ def _validate(config):
 
 
 def _public(config):
-    return {k: ('********' if bears.resolve_api_key(config) else '') if k == 'api_key'
+    return {k: ('********' if ai_config.resolve_api_key(config) else '') if k == 'api_key'
             else config[k] for k in FIELDS}
 
 
@@ -45,7 +45,7 @@ def _fence(principal, role, original):
 def perform(principal, role, action, changes=None):
     authority = _authority(principal, role)
     # Explicit path bypasses the legacy module path and in-memory cache.
-    config = bears.load_ai_config(path=wap.state_path('ai_config.json'))
+    config = ai_config.load_ai_config(path=state_files.state_path('ai_config.json'))
     if action != 'get':
         if (type(changes) is not dict or set(changes) - FIELDS
                 or not FIELDS - {'api_key'} <= set(changes)):
@@ -66,7 +66,7 @@ def perform(principal, role, action, changes=None):
             saved[key] = config[key]
         _fence(principal, role, authority)
         try:
-            wap.persist_json(wap.state_path('ai_config.json'), saved)
+            state_files.persist_json(state_files.state_path('ai_config.json'), saved)
         except OSError:
             _fence(principal, role, authority)
             raise OperationError('AI_CONFIG_UNAVAILABLE', 503) from None
@@ -79,7 +79,7 @@ def perform(principal, role, action, changes=None):
                         messages=[dict(role='user', content='Reply with pong.')])
             if config['provider'] == 'local-openai':
                 body['enable_thinking'] = False
-            completion = bears._ai_completion(config, body)
+            completion = ai_config._ai_completion(config, body)
             content = completion['choices'][0]['message']['content']
             if type(content) is not str or not content.strip():
                 raise ValueError()

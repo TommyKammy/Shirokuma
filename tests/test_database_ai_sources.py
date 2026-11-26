@@ -49,7 +49,8 @@ class SourceTests(unittest.TestCase):
                 'query_service._acquire_query_owner', 'query_service._best_cancel',
                 'query_service.inspect_query', 'query_service.history',
                 'warehouse_lifecycle.ensure_awake', 'trino_auth.prepare_backend_v2',
-                'logical_registry._credentials', 'bears_resident.resolve_api_key'):
+                'logical_registry._credentials', 'bears_resident.resolve_api_key',
+                'ai_config.resolve_api_key'):
             self.patch(patch(target, side_effect=AssertionError(target)))
 
     def record(self, ident='ordinary', *, context=None, actor='alice', sql='SELECT * FROM orders',

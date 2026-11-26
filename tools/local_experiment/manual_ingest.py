@@ -30,12 +30,12 @@ def sql_type(value):
 
 def typed_value(value, kind):
     """Convert exactly as emitted; the converted value is also the dedup key."""
-    import lake_ingest as legacy
+    import ingest_types
     kind = sql_type(kind)
     if value is None or value == '' and kind != 'VARCHAR':
         return None
     if kind == 'VARCHAR':
-        text = legacy.json_text(value) if isinstance(value, (dict, list)) else str(value)
+        text = ingest_types.json_text(value) if isinstance(value, (dict, list)) else str(value)
         if '\x00' in text:
             raise ValueError('NUL in value')
         return text
@@ -45,10 +45,10 @@ def typed_value(value, kind):
         if isinstance(value, str) and value.lower() in ('true', 'false'):
             return value.lower() == 'true'
         raise ValueError('invalid BOOLEAN')
-    if kind in legacy.INTEGER_TYPES:
+    if kind in ingest_types.INTEGER_TYPES:
         if type(value) is bool:
             raise ValueError('invalid integer')
-        return legacy.integer_value(value, kind)
+        return ingest_types.integer_value(value, kind)
     if kind in ('DOUBLE', 'REAL'):
         if type(value) is bool:
             raise ValueError('invalid float')
@@ -77,7 +77,7 @@ def typed_value(value, kind):
     if kind == 'DATE':
         if type(value) is date:
             return value
-        if not legacy.is_date(value):
+        if not ingest_types.is_date(value):
             raise ValueError('invalid DATE')
         return date.fromisoformat(value)
     if kind.startswith('TIMESTAMP'):
@@ -85,12 +85,12 @@ def typed_value(value, kind):
             if value.tzinfo is not None:
                 raise ValueError('offset timestamps unsupported')
             value = value.isoformat(sep=' ', timespec='microseconds')
-        return datetime.fromisoformat(legacy.timestamp_value(value, kind))
+        return datetime.fromisoformat(ingest_types.timestamp_value(value, kind))
     raise ValueError('unsupported type')
 
 
 def _read(raw, detected, encoding, delimiter, hints, target_columns=None, *, allow_new_columns=False):
-    import lake_ingest as legacy
+    import ingest_types
     text = raw.decode(encoding)
     if detected == 'csv':
         reader = csv.reader(io.StringIO(text, newline=''), delimiter=delimiter, strict=True)
@@ -129,10 +129,10 @@ def _read(raw, detected, encoding, delimiter, hints, target_columns=None, *, all
     def infer(values):
         present = [v for v in values if v is not None and v != '']
         numeric_text = re.compile(r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?')
-        exact_numeric = (present and not any(legacy.leading_zero(v) for v in present) and
+        exact_numeric = (present and not any(ingest_types.leading_zero(v) for v in present) and
             all(type(v) in (int, Decimal) or type(v) is str and numeric_text.fullmatch(v.strip()) for v in present))
         if exact_numeric:
-            if all(legacy.integer(v) for v in present):
+            if all(ingest_types.integer(v) for v in present):
                 return 'BIGINT'
             numbers = [Decimal(str(v)) for v in present]
             if not all(n.is_finite() for n in numbers):
@@ -140,7 +140,7 @@ def _read(raw, detected, encoding, delimiter, hints, target_columns=None, *, all
             scale = max(max(0, -n.as_tuple().exponent) for n in numbers)
             whole = max(max(0, n.adjusted() + 1) for n in numbers)
             return sql_type(f'DECIMAL({max(1, whole + scale)},{scale})')
-        return legacy.infer_type(values)
+        return ingest_types.infer_type(values)
     # Existing target types precede both inference and value conversion.
     columns = [(n, target_types[n] if n in target_types else
                 normalized_hints[n] if n in hints else infer([r[i] for r in rows]))

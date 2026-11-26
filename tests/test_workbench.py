@@ -19,6 +19,7 @@ import unittest
 from unittest.mock import patch, Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
+import ai_config
 import workbench_server as wb
 import runtime_profile
 from workbench_source import WorkbenchSource
@@ -597,14 +598,14 @@ eval(SHARED+JOBS+`
             for key in (None, '********', '', 'new-secret'):
                 supplied = {**change, **({'api_key': key} if key is not None else {})}
                 with self.subTest(change=change, key=key), \
-                     patch.object(wb.bears_resident, 'load_ai_config', return_value=dict(active)), \
+                     patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
                      patch.dict(wb.bears_resident._ai_config, {}, clear=True), \
                      patch.object(wb.bears_resident.wap, 'persist_json') as persist:
                     result = wb.bears_resident.save_ai_config(supplied)
                     self.assertEqual(result['api_key'], 'new-secret' if key == 'new-secret' else '')
                     self.assertEqual(persist.call_args.args[1]['api_key'], result['api_key'])
         for change in ({'model': 'new'}, {'api_url': active['api_url']}, {'api_key': '********'}):
-            with patch.object(wb.bears_resident, 'load_ai_config', return_value=dict(active)), \
+            with patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
                  patch.dict(wb.bears_resident._ai_config, {}, clear=True), \
                  patch.object(wb.bears_resident.wap, 'persist_json'):
                 self.assertEqual(wb.bears_resident.save_ai_config(change)['api_key'], 'old-secret')
@@ -614,7 +615,7 @@ eval(SHARED+JOBS+`
         for key_env in ('OPENAI_API_KEY', 'BEAR_API_KEY'):
             active = dict(provider='openai', api_url='https://api.openai.com/v1',
                           api_key='', api_key_env=key_env)
-            with patch.object(bears, 'load_ai_config', side_effect=lambda: dict(active)), \
+            with patch.object(ai_config, 'load_ai_config', side_effect=lambda: dict(active)), \
                  patch.dict(os.environ, {'OPENAI_API_KEY': 'openai-secret',
                                          'BEAR_API_KEY': 'bear-secret', 'NEW_KEY': 'new-secret'}):
                 for change in ({'api_url': 'https://new.example/v1'}, {'provider': 'custom'}):
