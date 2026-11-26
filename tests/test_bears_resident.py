@@ -63,51 +63,6 @@ class BearsResidentTests(unittest.TestCase):
                     b.clone_table('raw.orders')
                 self.assertEqual(telemetry.call_args.args[2], 'failed')
 
-    def test_activity_history_filters_and_independent_failures(self):
-        actions = ['warehouse.query', 'lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop',
-                   'bear.data_engineer', 'warehouse.wake', 'bear.sre']
-        events = [dict(action_type=a) for a in actions] + [{}]
-        with patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')), \
-             patch.object(b, 'sql', return_value={'rows': [['q1']]}) as sql, \
-             patch('agenthouse.manage.Client') as client:
-            client.return_value.query.return_value = json.dumps({'data': events})
-            result = b.activity_history(7)
-            self.assertEqual(result['runtime_queries'], {'rows': [['q1']]})
-            self.assertEqual(result['query_history'], events[:1])
-            self.assertEqual(result['load_history'], events[1:6])
-            sql.assert_called_once_with('url', 'SELECT query_id, state, "user", source, query FROM system.runtime.queries '
-                                        "WHERE source <> 'shirokuma-bears' ORDER BY created DESC LIMIT 7")
-            client.return_value.query.assert_called_once_with(
-                'SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON')
-            sql.side_effect = RuntimeError('runtime unavailable')
-            self.assertEqual(b.activity_history()['load_history'], events[1:6])
-            sql.side_effect = None
-            client.return_value.query.side_effect = RuntimeError('history unavailable')
-            result = b.activity_history()
-            self.assertIn('error', result['query_history'])
-            self.assertEqual(result['runtime_queries'], {'rows': [['q1']]})
-        with patch.object(b.wr, 'trino', side_effect=RuntimeError('tunnel unavailable')), \
-             patch('agenthouse.manage.Client', side_effect=RuntimeError('client unavailable')):
-            result = b.activity_history()
-            self.assertIn('error', result['runtime_queries'])
-            self.assertIn('error', result['load_history'])
-        for limit in (True, 0, -1, '1'):
-            with self.assertRaises(ValueError):
-                b.activity_history(limit)
-
-    def test_runtime_history_skips_agenthouse_and_validates_before_backends(self):
-        with patch.object(b.wr, 'trino', return_value=contextlib.nullcontext('url')) as trino, \
-             patch.object(b, 'sql', return_value={'rows': []}), \
-             patch('agenthouse.manage.Client') as client:
-            self.assertEqual(b.activity_history(mode='runtime'), {'runtime_queries': {'rows': []}})
-            client.assert_not_called()
-            trino.reset_mock()
-            for mode in ('', 'all', True, []):
-                with self.assertRaises(ValueError):
-                    b.activity_history(mode=mode)
-            trino.assert_not_called()
-            client.assert_not_called()
-
     def test_sql_honors_export_limits_without_changing_default_calls(self):
         with patch.object(b.wr, 'execute', return_value={'rows': []}) as execute:
             b.sql('url', 'SELECT * FROM "iceberg"."raw"."orders" LIMIT 10000')

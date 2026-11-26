@@ -330,34 +330,6 @@ def clone_table(source_table, target_table=None, snapshot_id=None):
                 audit=audit, telemetry=telemetry)
 
 
-def activity_history(limit=50, *, mode=None):
-    if type(limit) is not int or limit < 1:
-        raise ValueError('limit must be a positive integer')
-    if mode not in (None, 'runtime'):
-        raise ValueError('unknown history mode')
-
-    def runtime():
-        with wr.trino() as url:
-            return sql(url, 'SELECT query_id, state, "user", source, query FROM system.runtime.queries '
-                       "WHERE source <> 'shirokuma-bears' ORDER BY created DESC LIMIT " + str(limit))
-
-    def pawprints():
-        from agenthouse.manage import Client
-        return json.loads(Client().query(
-            'SELECT * FROM agenthouse.pawprints ORDER BY timestamp DESC LIMIT 100 FORMAT JSON'))['data']
-
-    runtime_queries = attempt(runtime)
-    if mode == 'runtime':
-        return dict(runtime_queries=runtime_queries)
-    events = attempt(pawprints)
-    if isinstance(events, dict):
-        return dict(runtime_queries=runtime_queries, query_history=events, load_history=events)
-    loads = {'lake.ingest', 'lake.export', 'catalog.clone', 'catalog.drop', 'bear.data_engineer'}
-    return dict(runtime_queries=runtime_queries,
-                query_history=[e for e in events if e.get('action_type') == 'warehouse.query'],
-                load_history=[e for e in events if e.get('action_type') in loads])
-
-
 @wr.legacy_operation
 def drop_table(table):
     message = 'drop is only allowed in raw, sandbox, staging, marts, or scratch schemas'
