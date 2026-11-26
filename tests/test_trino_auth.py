@@ -106,7 +106,7 @@ class TrinoAuthTests(unittest.TestCase):
 
     def test_password_mode_ai_requests_keep_provider_credentials(self):
         import ai_config
-        import bears_resident as bears
+        import ai_benchmark as benchmark
         import trino_auth as backend_auth
         active = dict(provider='openai', model='ai-model', api_url='https://ai.invalid/v1',
                       api_key='ai-provider-secret', api_key_env='', timeout=5,
@@ -117,15 +117,10 @@ class TrinoAuthTests(unittest.TestCase):
             captured.append(request)
             return io.BytesIO(json.dumps(dict(choices=[dict(message=dict(content='SELECT 1'))])).encode())
 
-        paths = (
-            lambda: self.assertEqual(bears.test_ai_connection()['status'], 'connected'),
-            lambda: self.assertEqual(bears.generate_data_sql('trino', 'one'), 'SELECT 1'),
-            lambda: self.assertEqual(bears.generate_data_sql_retry('trino', 'one', [],
-                                      'SELECT broken', 'unknown column'), 'SELECT 1'),
-        )
+        paths = (lambda: self.assertEqual(benchmark.generate_data_sql('trino', 'one'), 'SELECT 1'),)
         with patch.object(ai_config, 'load_ai_config', side_effect=lambda: dict(active)), \
-             patch.object(bears, 'sql', return_value={'rows': []}), \
-             patch.object(bears.wr.urllib.request, 'urlopen', side_effect=capture), \
+             patch.object(benchmark, 'sql', return_value={'rows': []}), \
+             patch.object(benchmark.wr.urllib.request, 'urlopen', side_effect=capture), \
              patch.object(backend_auth, 'backend_ssl_context', return_value=None) as backend_tls:
             for call in paths:
                 call()
@@ -135,7 +130,7 @@ class TrinoAuthTests(unittest.TestCase):
                 self.assertIsNone(request.get_header('X-trino-user'))
                 self.assertNotIn('Basic ', str(request.headers))
             backend_tls.assert_not_called()
-        self.assertEqual(len(captured), 3)
+        self.assertEqual(len(captured), 1)
 
     def test_password_mode_rejects_plaintext_urls_and_missing_ca(self):
         for url in ('http://127.0.0.1:8080', 'https://user:password@localhost', 'https:relative'):

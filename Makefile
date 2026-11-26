@@ -75,10 +75,8 @@ test-resident-core-4:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_admission_entries.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_dataops_routes.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_clone_database_ui.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_wap_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_concurrency.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_publication_views.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_ingest.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_ingest.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_timings.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_order.py'
@@ -105,7 +103,6 @@ test-resident-core-5:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_manual_table_drop.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_drop_database_ui.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_sqlserver_sync.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpch_sql.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_tpcds_variants.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_comparison.py'
@@ -154,7 +151,6 @@ test-resident-core-7:
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_workbench_profile_database_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_trino_auth.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_runtime_*.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_seed.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_native.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_corrections.py'
@@ -178,9 +174,7 @@ test-resident-core-8:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_warehouse_*database.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_security_boundary.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_jobs_*.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lake_pipeline.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_bears_resident.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_ai_semantic_benchmark.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bulk.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_snapshots.py'
@@ -215,41 +209,10 @@ qualify-local-perf:
 	@LOCAL_PERF_REAL=1 benchmarks/local_perf/.venv/bin/python -m unittest discover -v -s tests -p 'test_local_perf_real.py'
 
 WAREHOUSE ?= LOCAL
-BEAR_QUERY ?= SELECT * FROM iceberg.marts.fct_orders LIMIT 10
-BEAR_REQUEST ?= aggregate total sales and quantity by customer and nation
-.PHONY: bears-smoke bear-sre bear-query bear-data bear-catalog bear-policy
-bears-smoke:
-	@$(MAKE) bear-sre
-	@$(MAKE) bear-query
-	@$(MAKE) bear-data
-	@$(MAKE) bear-catalog
-	@$(MAKE) bear-policy
-bear-sre:
-	@$(PYTHON) tools/local_experiment/bears_resident.py sre inspect
-bear-query:
-	@$(PYTHON) tools/local_experiment/bears_resident.py query --sql "$(BEAR_QUERY)"
-bear-data:
-	@$(PYTHON) tools/local_experiment/bears_resident.py data "$(BEAR_REQUEST)"
-bear-catalog:
-	@$(PYTHON) tools/local_experiment/bears_resident.py catalog search
-bear-policy:
-	@$(PYTHON) tools/local_experiment/bears_resident.py policy baseline
 .DEFAULT_GOAL := verify
 .PHONY: warehouse-status warehouse-chill warehouse-wake
 warehouse-status warehouse-chill warehouse-wake:
 	@$(PYTHON) tools/local_experiment/warehouse_resident.py $(patsubst warehouse-%,%,$@) --warehouse $(WAREHOUSE)
-
-LAKE_SCALE ?= tiny
-.PHONY: lake-build lake-test
-lake-build:
-	@$(PYTHON) tools/local_experiment/lake_pipeline.py build
-
-lake-test:
-	@$(PYTHON) tools/local_experiment/lake_pipeline.py test
-
-.PHONY: lake-seed lake-status
-lake-seed lake-status:
-	@$(PYTHON) tools/local_experiment/lake_seed.py $(patsubst lake-%,%,$@) --scale $(LAKE_SCALE)
 
 .PHONY: lab-up lab-down lab-status test-lab-lifecycle verify-local-experiment
 lab-up:

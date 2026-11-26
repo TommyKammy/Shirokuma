@@ -11,9 +11,12 @@ from collections import Counter
 from contextlib import nullcontext
 from decimal import Decimal, localcontext
 import json
+import re
 import sys
 
-import bears_resident as bears
+import warehouse_resident as wr
+
+from ai_config import _ai_completion, merged_ai_config
 
 
 SOURCE_SQL = """WITH orders AS (
@@ -90,6 +93,63 @@ BENCHMARKS = [
 ]
 
 
+def sql(url, statement, max_rows=None):
+    headers = {"X-Trino-User": "shirokuma-bears", "X-Trino-Source": "shirokuma-bears",
+               "X-Trino-Catalog": "iceberg", "X-Trino-Schema": "marts"}
+    if max_rows is not None:
+        return wr.execute(url, statement, headers, max_rows=max_rows)
+    # Honor explicit larger limits used by exports while keeping ordinary calls
+    # and their default result cap unchanged.
+    limit = re.search(r'\bLIMIT ([0-9]+)\s*$', statement)
+    if limit and int(limit[1]) > 1000:
+        return wr.execute(url, statement, headers, max_rows=int(limit[1]))
+    return wr.execute(url, statement, headers)
+
+
+def generate_data_sql(url, request, llm_usage=None, sources_rows=None, config=None):
+    sources = sql(url, "SELECT table_schema, table_name, column_name, data_type FROM iceberg.information_schema.columns WHERE table_schema IN ('marts', 'tpch_tiny', 'raw', 'sandbox')", max_rows=10000)
+    if sources_rows is not None:
+        sources_rows.extend(sources['rows'])
+    return _complete_data_sql(dict(request=request, sources=sources['rows']), llm_usage, config)
+
+
+def _extract_sql(content: str) -> str:
+    content = content.strip()
+    fence = re.search(r'```(?:sql|json)?\s*\n?(.*?)```', content, re.I | re.S)
+    if fence:
+        content = fence[1].strip()
+    try:
+        parsed = json.loads(content)
+    except ValueError:
+        statement = content
+    else:
+        if not isinstance(parsed, dict) or not isinstance(parsed.get('generated_sql'), str):
+            raise ValueError('completion must contain generated_sql')
+        statement = parsed['generated_sql']
+    return statement.strip().removesuffix(';').rstrip()
+
+
+def _complete_data_sql(context, llm_usage=None, config=None):
+    active = merged_ai_config(config or {})
+    body = {"model": active['model'], "temperature": active['temperature'],
+            "max_tokens": active['max_tokens'],
+            "messages": [{"role": "system", "content": "Return JSON with generated_sql: one SELECT statement (WITH allowed). Use only supplied Iceberg sources. No DDL or DML. Use Trino ANSI SQL only (no QUALIFY; wrap window functions in a CTE and filter with WHERE). Correct failed_sql using error_message when supplied. Business semantic definitions (apply only to supplied columns): Completed sales require status = 'COMPLETED'; exclude 'CANCELLED' and 'REFUNDED'. Revenue uses total_amount at order grain, or quantity * extended_price * (1 - discount) at item grain. Time-grain aggregations use date_trunc('month', order_date), or the requested day/year grain. Grain-safe joins: avoid duplicate row multiplication when joining orders, order_items, or customers; aggregate items to order grain before summing order totals and use unique customer keys."},
+                         {"role": "user", "content": json.dumps(context)}]}
+    if active['provider'] == 'local-openai':
+        body['enable_thinking'] = False
+    completion = _ai_completion(active, body)
+    if llm_usage is not None and (completion.get('model') or completion.get('usage')):
+        usage = completion.get('usage') or {}
+        llm_usage.update(model_provider=active['provider'], model_name=completion.get('model') or body['model'])
+        for key in ('prompt_tokens', 'completion_tokens'):
+            count = usage.get(key)
+            if type(count) is int and count >= 0:
+                llm_usage[key] = (llm_usage.get(key) or 0) + count
+            else:
+                llm_usage.setdefault(key, None)
+    return _extract_sql(completion["choices"][0]["message"]["content"])
+
+
 def results_match(actual, expected):
     """Compare row multisets, ignoring aliases/order; numbers round to 6 places.
 
@@ -133,7 +193,7 @@ def run_benchmark(url=None, mock_generator=None):
     and do not erase successful execution of the generated query.
     """
     details = []
-    with (nullcontext(url) if url is not None else bears.wr.trino()) as endpoint:
+    with (nullcontext(url) if url is not None else wr.trino()) as endpoint:
         for entry in BENCHMARKS:
             detail = dict(id=entry['id'], question=entry['question'], syntax_valid=False,
                           semantic_correct=False)
@@ -142,16 +202,16 @@ def run_benchmark(url=None, mock_generator=None):
                 if mock_generator is not None:
                     statement = mock_generator(entry['question']['en'])
                 else:
-                    statement = bears.generate_data_sql(endpoint, entry['question']['en'] +
+                    statement = generate_data_sql(endpoint, entry['question']['en'] +
                         '\nUse these business CTE definitions (include them in your SQL):\n' + SOURCE_SQL)
                 detail['generated_sql'] = statement
-                statement = bears.wr.check_sql_policy(statement, mode='read-only')
-                actual = bears.sql(endpoint, statement, max_rows=sys.maxsize)
+                statement = wr.check_sql_policy(statement, mode='read-only')
+                actual = sql(endpoint, statement, max_rows=sys.maxsize)
                 detail['syntax_valid'] = True
             except Exception as exc:
                 detail['error'] = str(exc)
             try:
-                gold = bears.sql(endpoint, entry['gold_sql'], max_rows=sys.maxsize)
+                gold = sql(endpoint, entry['gold_sql'], max_rows=sys.maxsize)
             except Exception as exc:
                 detail['gold_error'] = str(exc)
             if actual is not None and gold is not None:

@@ -48,8 +48,7 @@ class ProposalTests(unittest.TestCase):
         self.addCleanup(lambda: [o.close() for o in self.owners])
         self.tripwires = [self.patch(t, side_effect=AssertionError(t)) for t in (
             'query_service.submit_explain', 'query_service._transport', 'query_service.cancel',
-            'logical_registry.identity_credentials', 'trino_auth.prepare_backend_v2',
-            'bears_resident.generate_data_sql', 'bears_resident._complete_data_sql')]
+            'logical_registry.identity_credentials', 'trino_auth.prepare_backend_v2')]
 
     def patch(self, target, **kw):
         p = patch(target, **kw)

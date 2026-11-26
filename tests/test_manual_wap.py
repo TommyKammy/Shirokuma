@@ -827,7 +827,7 @@ class ManualWapTests(unittest.TestCase):
     def test_import_no_paths_json_or_sqlglot_and_dynamic_state_root(self):
         root = Path(os.environ['SHIROKUMA_STATE_DIR']) / 'uncreated'
         code = ('import sys; sys.path.insert(0,"tools/local_experiment"); '
-                'import wap_resident, manual_wap; '
+                'import manual_wap; '
                 'assert "sqlglot" not in sys.modules')
         result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
             env=dict(os.environ, SHIROKUMA_STATE_DIR=str(root)))

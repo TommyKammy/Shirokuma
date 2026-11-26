@@ -19,7 +19,7 @@ import control_store
 import data_management as dm
 import dataops_service as ds
 import database_inventory as inv
-import lake_ingest as lake
+import manual_ingest
 import manual_ingest as manual
 import query_service as qs
 from query_context import QueryError
@@ -126,7 +126,7 @@ class ManualIngestTests(unittest.TestCase):
             kwargs[field] = self.fixture.locator('fresh') if mode == 'create' else self.fixture.existing()
         kwargs.setdefault('filename', 'data.csv')
         kwargs.setdefault('content', 'id,label\n1,001\n2,\n3,text\n')
-        return lake.manual_ingest(self.principal, kwargs.pop('context', self.fixture.context()),
+        return manual_ingest.ingest(self.principal, kwargs.pop('context', self.fixture.context()),
             idempotency_key=key, mode=mode, **kwargs)
 
     def sql(self):
@@ -153,7 +153,7 @@ class ManualIngestTests(unittest.TestCase):
             path = Path(temp) / 'anything.csv'
             path.write_bytes(b'id,label\n1,001\n')
             locator = self.fixture.locator()
-            first = lake.manual_ingest(self.principal, self.fixture.context(), idempotency_key='same',
+            first = manual_ingest.ingest(self.principal, self.fixture.context(), idempotency_key='same',
                 mode='create', destination=locator, file=path)
             calls = len(self.sql())
             again = self.run_ingest('same', destination=locator, filename='other.csv', content=path.read_bytes())
@@ -162,7 +162,7 @@ class ManualIngestTests(unittest.TestCase):
             self.assertEqual(len(self.sql()), calls)
             path.write_bytes(b'broken,"unterminated')
             with self.assertRaises(QueryError) as caught:
-                lake.manual_ingest(self.principal, self.fixture.context(), idempotency_key='same',
+                manual_ingest.ingest(self.principal, self.fixture.context(), idempotency_key='same',
                     mode='create', destination=locator, file=path)
             self.assertEqual(caught.exception.status, 409)
             self.assertEqual(len(self.sql()), calls)
@@ -184,7 +184,7 @@ class ManualIngestTests(unittest.TestCase):
             path = Path(temp) / 'data.json'
             path.write_bytes(raw)
             locator = self.fixture.locator()
-            first = lake.manual_ingest(self.principal, self.fixture.context(), idempotency_key='json-file',
+            first = manual_ingest.ingest(self.principal, self.fixture.context(), idempotency_key='json-file',
                 mode='create', destination=locator, file=path)
             calls = len(self.sql())
             second = self.run_ingest('json-file', destination=locator, filename='uploaded.jsonl', content=raw)
@@ -226,7 +226,7 @@ class ManualIngestTests(unittest.TestCase):
         admin = self.fixture.fixture.principal('owner')
         context = self.fixture.context(principal=admin, role='admin')
         with self.assertRaises(QueryError):
-            lake.manual_ingest(admin, context, idempotency_key='admin-cross', mode='create',
+            manual_ingest.ingest(admin, context, idempotency_key='admin-cross', mode='create',
                 destination=self.fixture.locator(database=self.fixture.databases[1]), filename='x.csv', content='id\n1\n')
         with self.assertRaises(QueryError):
             self.run_ingest('marts', destination=self.fixture.locator(schema='marts'))
@@ -383,7 +383,7 @@ class ManualIngestTests(unittest.TestCase):
                 path.write_text('id,label\n99,changed\n')
                 return result
             with patch.object(ds, 'begin', side_effect=mutate):
-                result = lake.manual_ingest(self.principal, self.fixture.context(), idempotency_key='frozen',
+                result = manual_ingest.ingest(self.principal, self.fixture.context(), idempotency_key='frozen',
                     mode='create', destination=self.fixture.locator(), file=path, schema_hints=hints, key_columns=keys)
             self.assertTrue(result['committed'])
             self.assertIn("'001'", '\n'.join(self.sql()))
@@ -463,11 +463,11 @@ class ManualIngestTests(unittest.TestCase):
     def test_admin_can_ingest_raw_but_not_marts(self):
         owner = self.fixture.fixture.principal('owner')
         context = self.fixture.context(principal=owner, role='admin')
-        result = lake.manual_ingest(owner, context, idempotency_key='admin', mode='create',
+        result = manual_ingest.ingest(owner, context, idempotency_key='admin', mode='create',
             destination=self.fixture.locator('admin_created'), filename='x.csv', content='id\n7\n')
         self.assertTrue(result['committed'])
         with self.assertRaises(QueryError) as caught:
-            lake.manual_ingest(owner, context, idempotency_key='admin-marts', mode='create',
+            manual_ingest.ingest(owner, context, idempotency_key='admin-marts', mode='create',
                 destination=self.fixture.locator('admin_created', schema='marts'), filename='x.csv', content='id\n7\n')
         self.assertEqual(caught.exception.status, 403)
 
@@ -659,7 +659,7 @@ class ManualIngestTests(unittest.TestCase):
         script = '''
 import os,json,uuid
 from contextlib import contextmanager
-import lake_ingest,query_service as qs,data_management as dm,database_inventory as inv,request_auth
+import manual_ingest,query_service as qs,data_management as dm,database_inventory as inv,request_auth
 from query_context import ResolvedQueryContext
 c=ResolvedQueryContext(**json.loads(os.environ['INGEST_CONTEXT']))
 p=request_auth.AuthenticatedPrincipal('alice','data_engineer',False)
@@ -681,7 +681,7 @@ def transport(url,method,pin,body=None):
   objects['/namespaces/'+parts[1]+'/tables/'+parts[2]]={'table-uuid':str(uuid.uuid4())}
  return {'id':'child_'+str(uuid.uuid4())}
 qs._transport=transport
-lake_ingest.manual_ingest(p,c,idempotency_key='crash',mode='create',destination=dm.DestinationLocator(**json.loads(os.environ['INGEST_LOCATOR'])),filename='data.csv',content='id\\n1\\n')
+manual_ingest.ingest(p,c,idempotency_key='crash',mode='create',destination=dm.DestinationLocator(**json.loads(os.environ['INGEST_LOCATOR'])),filename='data.csv',content='id\\n1\\n')
 '''
         environment = dict(os.environ, PYTHONPATH=str(Path(ds.__file__).parent),
             INGEST_CONTEXT=json.dumps(asdict(self.fixture.context())), INGEST_LOCATOR=json.dumps(asdict(locator)))
