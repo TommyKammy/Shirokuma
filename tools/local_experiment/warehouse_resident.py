@@ -243,31 +243,6 @@ def auto_chill_status():
                 idle_seconds=max(0, int(time.time() - read_last_activity())))
 
 
-def configure_auto_chill(minutes: int):
-    global _AUTO_CHILL_MINUTES
-    if type(minutes) is not int or not 0 <= minutes <= 1440:
-        raise ValueError('minutes must be an integer between 0 and 1440')
-    import warehouse_lifecycle
-    if warehouse_lifecycle.applicable():
-        # Management HTTP performs current platform authorization and revision CAS.
-        raise PermissionError('Use authenticated warehouse runtime policy API')
-    path = activity_path().with_name('auto_chill.json')
-    temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
-    with lifecycle_mutation(), _ACTIVITY_LOCK:
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary.write_text(json.dumps({'auto_chill_minutes': minutes}), encoding='utf-8')
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-        _AUTO_CHILL_MINUTES = minutes
-    touch_activity()
-    if minutes > 0:
-        start_auto_chill_daemon()
-    else:
-        stop_auto_chill_daemon()
-    return auto_chill_status()
-
 def _load_auto_chill_minutes(default=0):
     """Read the shared setting without starting or joining the monitor thread."""
     try:

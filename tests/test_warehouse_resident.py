@@ -1206,21 +1206,20 @@ class ResidentWarehouseTests(unittest.TestCase):
                 self.assertEqual(w.main(), 0)
                 serve.assert_called_once_with(*expected)
 
-    def test_auto_chill_configuration_and_threshold(self):
+    def test_auto_chill_threshold_and_idle_status(self):
+        path = w.activity_path().with_name('auto_chill.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
              patch.object(w.time, 'time', return_value=100) as clock, \
              patch.object(w, 'status', return_value={'replicas': 1}) as status, \
-             patch.object(w, 'start_auto_chill_daemon') as start, \
-             patch.object(w, 'stop_auto_chill_daemon') as stop, \
              patch.object(w, 'trino', return_value=nullcontext('url')), \
              patch.object(w, '_execute', return_value={'rows': [[0]]}), \
              patch.object(w, 'transition') as transition:
+            path.write_text('{"auto_chill_minutes": 0}')
             self.assertFalse(w.check_auto_chill()['chilled'])
             status.assert_not_called()
-            for minutes in (-1, 1441, True, 1.0, '1', None):
-                with self.subTest(minutes=minutes), self.assertRaises(ValueError):
-                    w.configure_auto_chill(minutes)
-            self.assertEqual(w.configure_auto_chill(1), {'auto_chill_minutes': 1, 'idle_seconds': 0})
+            path.write_text('{"auto_chill_minutes": 1}')
+            w.touch_activity()
             clock.return_value = 159
             self.assertFalse(w.check_auto_chill()['chilled'])
             clock.return_value = 160
@@ -1229,10 +1228,6 @@ class ResidentWarehouseTests(unittest.TestCase):
             status.return_value = {'replicas': 0}
             self.assertFalse(w.check_auto_chill()['chilled'])
             transition.assert_called_once()
-            self.assertEqual(w.configure_auto_chill(1440)['auto_chill_minutes'], 1440)
-            self.assertEqual(w.configure_auto_chill(0)['auto_chill_minutes'], 0)
-            self.assertEqual(start.call_count, 2)
-            stop.assert_called_once_with()
             clock.return_value = 0
             self.assertEqual(w.auto_chill_status()['idle_seconds'], 0)
 
@@ -1284,18 +1279,19 @@ class ResidentWarehouseTests(unittest.TestCase):
             transition.assert_not_called()
 
     def test_auto_chill_settings_survive_initialization(self):
+        path = w.activity_path().with_name('auto_chill.json')
+        path.parent.mkdir(parents=True, exist_ok=True)
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), \
              patch.object(w, 'start_auto_chill_daemon') as start, \
              patch.object(w, 'stop_auto_chill_daemon') as stop:
             for minutes in (17, 0):
-                w.configure_auto_chill(minutes)
+                path.write_text(json.dumps({'auto_chill_minutes': minutes}))
                 w._AUTO_CHILL_MINUTES = 999
                 start.reset_mock()
                 stop.reset_mock()
                 w.initialize_auto_chill()
                 self.assertEqual(w.auto_chill_status()['auto_chill_minutes'], minutes)
                 (start if minutes else stop).assert_called_once_with()
-            path = w.activity_path().with_name('auto_chill.json')
             for invalid in ('invalid json', '{"auto_chill_minutes": true}', '{"auto_chill_minutes": -1}'):
                 path.write_text(invalid)
                 w.initialize_auto_chill()
@@ -1422,19 +1418,19 @@ class ResidentWarehouseTests(unittest.TestCase):
     def test_auto_chill_daemon_start_stop_and_restart(self):
         self.addCleanup(w.stop_auto_chill_daemon)
         with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0):
-            w.configure_auto_chill(1)
+            w.start_auto_chill_daemon()
             first = w._AUTO_CHILL_THREAD
             self.assertTrue(first.daemon)
             self.assertTrue(first.is_alive())
-            w.configure_auto_chill(2)
+            w.start_auto_chill_daemon()
             self.assertIs(w._AUTO_CHILL_THREAD, first)
-            w.configure_auto_chill(0)
+            w.stop_auto_chill_daemon()
             self.assertFalse(first.is_alive())
             self.assertIsNone(w._AUTO_CHILL_THREAD)
             w.stop_auto_chill_daemon()
-            w.configure_auto_chill(1)
+            w.start_auto_chill_daemon()
             self.assertIsNot(w._AUTO_CHILL_THREAD, first)
-            w.configure_auto_chill(0)
+            w.stop_auto_chill_daemon()
 
     def test_auto_chill_daemon_checks_periodically_and_recovers(self):
         with patch.object(w, '_AUTO_CHILL_THREAD', None), \
