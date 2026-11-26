@@ -115,7 +115,7 @@ class ScheduleRoutes(unittest.TestCase):
                 patch.object(server.schedule_resident, 'stop_scheduler', side_effect=lambda: events.append('stop')) as stop, \
                 patch.object(server.warehouse_resident, 'persistent_trino') as trino, \
                 patch.object(server.warehouse_resident, 'initialize_auto_chill') as chill, \
-                patch.object(server.jobs_resident, 'start_scheduler') as legacy, redirect_stdout(io.StringIO()):
+                redirect_stdout(io.StringIO()):
             http = factory.return_value.__enter__.return_value
             http.serve_forever.side_effect = lambda: events.append('serve')
             server.main(['--port', '8888'])
@@ -124,7 +124,6 @@ class ScheduleRoutes(unittest.TestCase):
             stop.assert_called_once_with()
             trino.assert_not_called()
             chill.assert_not_called()
-            legacy.assert_not_called()
 
 
 class NativeScheduleRoutes(unittest.TestCase):

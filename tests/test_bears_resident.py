@@ -250,61 +250,6 @@ class BearsResidentTests(unittest.TestCase):
             audit.assert_not_called()
             lineage.assert_not_called()
 
-    def test_catalog_http_sections_preserve_authenticated_role_and_large_ids(self):
-        from email.message import Message
-        import workbench_server as server
-        active = 9007199254740993
-        original_role = server.request_auth.current_role()
-
-        def execute(url, statement, headers):
-            self.assertEqual(server.request_auth.current_role(), 'bi_viewer')
-            if statement.startswith('SHOW COLUMNS'):
-                return {'rows': [['id', 'bigint']]}
-            if '$snapshots' in statement:
-                return {'rows': [[active, active - 1, 'timestamp']]}
-            if '$history' in statement:
-                return {'rows': [[active]]}
-            if statement.startswith('SELECT COUNT'):
-                return {'rows': [[2, 0]]}
-            return {'rows': [[1]]}
-
-        for detail, key in [('columns', 'columns'), ('preview', 'preview'), ('profile', 'profile'),
-                            ('ddl', 'definition'), ('snapshots', 'snapshots'), ('lineage', 'lineage_detail')]:
-            handler = object.__new__(server.WorkbenchHandler)
-            handler.path = '/api/catalog?table=marts.orders&detail=' + detail
-            handler.headers = Message()
-            with self.subTest(detail=detail), patch.object(server, 'bears_resident', b), \
-                 patch.object(server.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')), \
-                 patch.object(b.wr, 'execute', side_effect=execute) as sql, \
-                 patch.object(b, '_table_lineage', return_value={'upstream': [], 'downstream': []}), \
-                 patch.object(handler, 'respond') as respond:
-                handler.do_GET()
-            self.assertEqual(handler.authenticated_user, 'reader')
-            metadata = respond.call_args.args[0]['metadata']
-            self.assertEqual(set(metadata), {key})
-            if detail == 'snapshots':
-                self.assertEqual(metadata[key]['rows'][0], [str(active), str(active - 1), 'timestamp'])
-            elif detail == 'profile':
-                self.assertEqual(metadata[key]['snapshot_id'], str(active))
-            elif detail == 'lineage':
-                sql.assert_not_called()
-            self.assertEqual(server.request_auth.current_role(), original_role)
-
-    def test_catalog_http_rejects_invalid_detail_before_backend(self):
-        from email.message import Message
-        import workbench_server as server
-        for query in ('table=marts.orders&detail=', 'table=marts.orders&detail=bad',
-                      'detail=columns', 'detail=full'):
-            handler = object.__new__(server.WorkbenchHandler)
-            handler.path = '/api/catalog?' + query
-            handler.headers = Message()
-            with self.subTest(query=query), patch.object(server, 'bears_resident', b), \
-                 patch.object(server.request_auth, 'authenticate', return_value=('reader', 'bi_viewer')), \
-                 patch.object(b, 'catalog') as catalog, patch.object(handler, 'respond') as respond:
-                handler.do_GET()
-            self.assertEqual(respond.call_args.args[1], 400)
-            catalog.assert_not_called()
-
     def test_drop_restrictions_and_telemetry(self):
         for schema in ('raw', 'sandbox', 'staging', 'marts', 'scratch'):
             with patch.object(b, 'sql') as sql, patch.object(b.wr, 'telemetry', return_value='recorded') as telemetry:

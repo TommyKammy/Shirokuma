@@ -170,12 +170,11 @@ class WorkbenchDatabaseTests(unittest.TestCase):
             self.assertNotIn('sensitive', json.dumps(error))
 
     def test_legacy_routes_are_unavailable_before_handlers(self):
-        with patch.object(wb.bears_resident, 'catalog') as catalog, patch.object(wb.warehouse_resident, 'transition') as transition:
+        with patch.object(wb.warehouse_resident, 'transition') as transition:
             for path in ('/api/catalog', '/api/history', '/api/pawprints', '/api/models', '/api/lineage', '/api/ai/config', '/api/jobs', '/api/stages', '/api/marts'):
                 self.assertEqual(self.request(path)[1]['code'], 'FEATURE_UNAVAILABLE')
             for path in ('/api/warehouse/wake', '/api/warehouse/chill', '/api/query', '/api/ingest', '/api/models/build', '/api/bears/run'):
                 self.assertEqual(self.request(path, 'POST', {})[1]['code'], 'FEATURE_UNAVAILABLE')
-            catalog.assert_not_called()
             transition.assert_not_called()
 
     def test_unknown_duplicate_parameters_do_not_reach_services(self):
@@ -285,7 +284,7 @@ class WorkbenchDatabaseTests(unittest.TestCase):
                 patch.object(request_auth, 'validate_bind', side_effect=lambda host: events.append(('validate', host))) as validate, \
                 patch.object(wb.warehouse_resident, 'initialize_auto_chill') as chill, \
                 patch.object(wb.warehouse_resident, 'persistent_trino') as tunnel, \
-                patch.object(wb.jobs_resident, 'start_scheduler') as scheduler, patch('sys.stdout', new_callable=io.StringIO):
+                patch('sys.stdout', new_callable=io.StringIO):
             configure.side_effect = lambda: events.append(('configure',))
             wb.main([])
             configure.assert_called_once_with()
@@ -294,7 +293,44 @@ class WorkbenchDatabaseTests(unittest.TestCase):
             server.return_value.__enter__.return_value.serve_forever.assert_called_once_with()
             chill.assert_not_called()
             tunnel.assert_not_called()
-            scheduler.assert_not_called()
+
+    def test_runtime_profile_required_before_legacy_dispatch(self):
+        with patch.object(runtime_profile, 'active', return_value=False), \
+                patch.object(wb.WorkbenchHandler, 'database_request',
+                             side_effect=AssertionError('database dispatch without profile')):
+            for method, path in (('GET', '/'), ('GET', '/api/jobs'), ('GET', '/api/v1/queries'),
+                                 ('POST', '/api/jobs/run'), ('POST', '/api/v1/queries')):
+                with self.subTest(method=method, path=path):
+                    status, body = self.request(path, method, {} if method == 'POST' else None)
+                    self.assertEqual(status, 503)
+                    self.assertEqual(body['code'], 'RUNTIME_PROFILE_REQUIRED')
+                    self.assertEqual(body['message'], 'Database runtime profile required')
+                    self.assertFalse(body['retryable'])
+
+    def test_main_requires_database_profile_before_binding(self):
+        stderr = io.StringIO()
+        with patch.object(runtime_profile, 'configure_process'), \
+                patch.object(runtime_profile, 'active', return_value=False), \
+                patch.object(wb, 'HTTPServer') as server, \
+                patch.object(request_auth, 'validate_bind') as validate, \
+                patch('sys.stderr', stderr):
+            with self.assertRaises(SystemExit) as raised:
+                wb.main([])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertIn('database runtime profile', stderr.getvalue())
+        self.assertIn('SHIROKUMA_RUNTIME_PROFILE', stderr.getvalue())
+        server.assert_not_called()
+        validate.assert_not_called()
+
+    def test_active_profile_delegates_get_and_post_to_database_request(self):
+        handler = object.__new__(wb.WorkbenchHandler)
+        calls = []
+        with patch.object(wb.WorkbenchHandler, 'management_request', return_value=False), \
+                patch.object(wb.WorkbenchHandler, 'database_request',
+                             side_effect=lambda method: calls.append(method)):
+            handler.do_GET()
+            handler.do_POST()
+        self.assertEqual(calls, ['GET', 'POST'])
 
 
 if __name__ == '__main__':

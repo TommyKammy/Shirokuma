@@ -80,13 +80,11 @@ class AuditRoutes(unittest.TestCase):
                 handler.respond = Mock()
                 with patch.object(runtime_profile, 'active', return_value=active), \
                         patch.object(request_auth, 'authenticate_principal', return_value=principal), \
-                        patch.object(audit, 'events', return_value={'items':[]}) as service, \
-                        patch.object(wb.bears_resident, 'catalog') as legacy:
+                        patch.object(audit, 'events', return_value={'items':[]}) as service:
                     getattr(handler, 'do_' + method)()
                     reply, status = (handler.respond.call_args.args + (200,))[:2]
                     self.assertEqual(status, 200 if method == 'GET' else 405)
                     self.assertEqual(service.call_count, 1 if method == 'GET' else 0)
-                    legacy.assert_not_called()
         handler = object.__new__(wb.WorkbenchHandler)
         handler.path = '/api/v1/audit/events'
         handler.headers = Message()
