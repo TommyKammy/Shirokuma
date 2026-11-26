@@ -20,17 +20,16 @@ from unittest.mock import Mock, patch
 from urllib.parse import unquote, urlsplit, urlencode
 
 sys.path.insert(0, str(Path(__file__).parents[1] / 'tools/local_experiment'))
+import ai_config
 import ai_routes
-# Existing Bears resolves its config path at import; isolate that bootstrap too.
-with tempfile.TemporaryDirectory() as _import_state:
-    with patch.dict(os.environ, {'SHIROKUMA_STATE_DIR': _import_state}):
-        import bears_resident
+import bears_resident
 import control_store as store
 import data_management as dm
 import database_inventory as inv
 import db_ai as ai
 from query_context import QueryError, resolve_context
 import request_auth as auth
+import state_files
 import warehouse_resident as wr
 
 
@@ -42,17 +41,17 @@ class DatabaseAIConfigPathTests(unittest.TestCase):
         env = patch.dict(os.environ, {'SHIROKUMA_STATE_DIR': str(self.root / 'global')}, clear=True)
         env.start()
         self.addCleanup(env.stop)
-        # Execute the real Bears module before selecting the active profile.
-        spec = importlib.util.spec_from_file_location('bears_resident', bears_resident.__file__)
-        self.bears = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(self.bears)
-        modules = patch.dict(sys.modules, {'bears_resident': self.bears})
+        # Execute the real AI config module before selecting the active profile.
+        spec = importlib.util.spec_from_file_location('ai_config', ai_config.__file__)
+        self.config_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.config_module)
+        modules = patch.dict(sys.modules, {'ai_config': self.config_module})
         modules.start()
         self.addCleanup(modules.stop)
-        self.global_path = self.bears.AI_CONFIG_PATH
+        self.global_path = self.config_module.AI_CONFIG_PATH
         self.global_bytes = b'{"model":"saved-model","timeout":17}'
         self.global_path.write_bytes(self.global_bytes)
-        self.bears._ai_config.update(model='cached-model', timeout=9, max_tokens=77)
+        self.config_module._ai_config.update(model='cached-model', timeout=9, max_tokens=77)
 
     def test_active_path_is_resolved_after_import_and_on_every_call(self):
         for name, model, timeout in (('first', 'first-model', 11), ('second', 'second-model', 13)):
@@ -64,16 +63,16 @@ class DatabaseAIConfigPathTests(unittest.TestCase):
                 config = ai._config()
                 self.assertEqual((config['model'], config['timeout'], config['max_tokens']),
                                  (model, timeout, 1024))
-                self.assertEqual(self.bears.AI_CONFIG_PATH, self.global_path)
+                self.assertEqual(self.config_module.AI_CONFIG_PATH, self.global_path)
                 self.assertEqual(self.global_path.read_bytes(), self.global_bytes)
 
     def test_explicit_path_ignores_cache_and_legacy_call_preserves_overlay_order(self):
         active = self.root / 'active.json'
         active.write_text('{"model":"active-model"}')
-        explicit = self.bears.load_ai_config(path=active)
+        explicit = self.config_module.load_ai_config(path=active)
         self.assertEqual((explicit['model'], explicit['timeout'], explicit['max_tokens']),
                          ('active-model', 30, 1024))
-        legacy = self.bears.load_ai_config()
+        legacy = self.config_module.load_ai_config()
         self.assertEqual((legacy['model'], legacy['timeout'], legacy['max_tokens']),
                          ('saved-model', 17, 77))
         self.assertEqual(self.global_path.read_bytes(), self.global_bytes)
@@ -82,8 +81,8 @@ class DatabaseAIConfigPathTests(unittest.TestCase):
         os.environ['SHIROKUMA_STATE_DIR'] = str(self.root / 'missing')
         os.environ.update(BEAR_MODEL='env-model', BEAR_MODEL_URL='http://127.0.0.1:8123/v1',
                           BEAR_API_KEY='env-secret')
-        path = self.bears.wap.state_path('ai_config.json')
-        explicit = self.bears.load_ai_config(path=path)
+        path = state_files.state_path('ai_config.json')
+        explicit = self.config_module.load_ai_config(path=path)
         self.assertEqual(explicit, dict(provider='local-openai', model='env-model',
             api_url='http://127.0.0.1:8123/v1', api_key_env='BEAR_API_KEY', api_key='',
             timeout=30, max_tokens=1024, temperature=0.0))
@@ -133,7 +132,7 @@ class DatabaseAITests(unittest.TestCase):
         def load_config(*, path):
             self.assertEqual(path, self.root / 'ai_config.json')
             return dict(self.config)
-        self.patch(patch.object(bears_resident, 'load_ai_config', side_effect=load_config))
+        self.patch(patch.object(ai_config, 'load_ai_config', side_effect=load_config))
         self.complete = self.patch(patch.object(ai, '_complete', return_value='説明'))
         self.forbidden = [self.patch(patch(target, side_effect=AssertionError(target))) for target in (
             'query_service.submit', 'warehouse_admission.admit', 'dataops_service.begin',
@@ -701,7 +700,8 @@ JSON '{"json_secret":829}', ARRAY['array_secret', 937],
             self.config = dict(original, **{key: value})
             self.assert_error('AI_PROVIDER_UNAVAILABLE', ai._config)
         self.config = original
-        with patch.object(bears_resident, 'resolve_api_key', side_effect=AssertionError('key resolution')):
+        with patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError('key resolution')), \
+                patch.object(bears_resident, 'resolve_api_key', side_effect=AssertionError('key resolution')):
             self.assertNotIn('api_key', ai._config())
 
     def test_failure_classification_is_durable_and_replay_never_retries(self):
@@ -823,6 +823,7 @@ class ProviderTransportTests(unittest.TestCase):
     def test_local_http_only_content_and_no_key_proxy_or_tools(self):
         config = self.serve()
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'SECRET', 'HTTP_PROXY': 'http://192.0.2.1:1'}), \
+                patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError()), \
                 patch.object(bears_resident, 'resolve_api_key', side_effect=AssertionError()):
             self.assertEqual(ai._complete(config, 'SELECT ?', [], 'en'), 'Only content')
         self.assertEqual(len(self.requests), 1)

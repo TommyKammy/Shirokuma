@@ -16,7 +16,8 @@ import db_schedules as schedules
 import query_service as queries
 import request_auth
 from query_context import QueryError
-import schedule_resident as calendar
+import schedule_calendar as calendar
+import schedule_resident as legacy_scheduler
 import warehouse_admission as admission
 
 
@@ -288,8 +289,9 @@ class ScheduleTests(ScheduleFixture):
             jobs._worker(run_id)
             clock[0] = due + timedelta(seconds=60)
         with patch.object(calendar, '_utc', side_effect=lambda value=None: value if value is not None else clock[0]), \
+                patch.object(legacy_scheduler, '_utc', side_effect=lambda value=None: value if value is not None else clock[0]), \
                 patch.object(jobs, '_start', side_effect=finish_then_delay):
-            calendar._tick(due, refresh_clock=True)
+            legacy_scheduler._tick(due, refresh_clock=True)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(sorted(t['status'] for t in ticks), ['skipped', 'succeeded'])
         self.assertEqual([t['code'] for t in ticks if t['status'] == 'skipped'], ['MISSED'])
@@ -305,7 +307,7 @@ class ScheduleTests(ScheduleFixture):
             stop.set()
             return frozen
         with patch.object(queries, '_capture_dataops', side_effect=stopping):
-            calendar._tick(self.now + timedelta(minutes=1), stop=stop)
+            legacy_scheduler._tick(self.now + timedelta(minutes=1), stop=stop)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(len(ticks), 1)
         self.assertEqual((ticks[0]['status'], ticks[0]['code'], ticks[0]['run_id']), ('skipped', 'STOPPED', None))
@@ -319,7 +321,7 @@ class ScheduleTests(ScheduleFixture):
             stop.set()
             jobs._worker(run_id)
         with patch.object(jobs, '_start', side_effect=accepted):
-            calendar._tick(self.now + timedelta(minutes=1), stop=stop)
+            legacy_scheduler._tick(self.now + timedelta(minutes=1), stop=stop)
         ticks = self.history(first) + self.history(second)
         self.assertEqual(len(ticks), 1)
         self.assertEqual(ticks[0]['status'], 'succeeded')

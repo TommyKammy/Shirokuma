@@ -19,7 +19,7 @@ import data_management as registry
 import dataops_routes as common
 import database_inventory as inventory
 import query_context
-import wap_resident as wap
+import state_files
 from query_context import QueryError
 
 _ACTIVE = ('QUEUED', 'RUNNING')
@@ -243,8 +243,8 @@ def _capture(principal, context, sql, *, tables_only=False):
 
 
 def _config():
-    import bears_resident
-    config = bears_resident.load_ai_config(path=wap.state_path('ai_config.json'))
+    import ai_config
+    config = ai_config.load_ai_config(path=state_files.state_path('ai_config.json'))
     try:
         url = config['api_url']
         if not isinstance(url, str) or re.search(r'[\s\\\x00-\x1f]', url):

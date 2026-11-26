@@ -14,6 +14,7 @@ import control_store
 import data_management as registry
 import dataops_service as ds
 import dataops_routes as routes
+import job_support
 import jobs_resident as legacy
 import manual_export
 import manual_ingest
@@ -76,21 +77,21 @@ def _parameters(definition, arguments):
     if arguments is not None and (not isinstance(arguments, dict) or arguments.keys() - specs.keys()):
         raise ValueError('unexpected arguments')
     for name, spec in specs.items():
-        if (not isinstance(name, str) or not legacy.PARAMETER.fullmatch(name) or not isinstance(spec, dict)
+        if (not isinstance(name, str) or not job_support.PARAMETER.fullmatch(name) or not isinstance(spec, dict)
                 or set(spec) - {'type', 'required', 'default'} or
                 spec.get('type') not in ('string', 'integer', 'boolean', 'date') or
                 type(spec.get('required', False)) is not bool):
             raise ValueError('invalid parameter declaration')
         required = spec.get('required', False)
         if 'default' in spec:
-            legacy._typed(spec['default'], spec['type'], not required)
+            job_support._typed(spec['default'], spec['type'], not required)
         if arguments is None:
             value = spec.get('default', {'string': '', 'integer': 0, 'boolean': False, 'date': '2000-01-01'}[spec['type']])
         else:
             if required and name not in arguments and 'default' not in spec:
                 raise ValueError('missing required parameter')
             value = arguments.get(name, spec.get('default'))
-        values[name] = legacy._typed(value, spec['type'], not required)
+        values[name] = job_support._typed(value, spec['type'], not required)
     return values
 
 
@@ -134,7 +135,7 @@ def _validate(principal, context, definition, arguments=None):
         if action in ('sql', 'alert'):
             if not isinstance(step['sql'], str) or not step['sql'].strip():
                 raise ValueError('SQL required')
-            sql, _ = legacy._render(step['sql'], definition.get('parameters', {}), values)
+            sql, _ = job_support._render(step['sql'], definition.get('parameters', {}), values)
             mode = step.get('mode', 'read-only')
             if action == 'alert' and mode != 'read-only':
                 raise ValueError('alert must be read-only')
@@ -144,7 +145,7 @@ def _validate(principal, context, definition, arguments=None):
             if context.selected_role != 'admin':
                 raise QueryError('SQL_PERMISSION_DENIED', 403)
             if action == 'ingest':
-                if not isinstance(step['input'], str) or not legacy.PARAMETER.fullmatch(step['input']):
+                if not isinstance(step['input'], str) or not job_support.PARAMETER.fullmatch(step['input']):
                     raise ValueError('named upload required')
                 create = step['mode'] == 'create'
                 if step['mode'] not in ('create', 'replace', 'append', 'upsert'):
@@ -254,7 +255,7 @@ def list_jobs(principal, context):
 
 
 def _decode_upload(name, value):
-    if (not isinstance(name, str) or not legacy.PARAMETER.fullmatch(name)
+    if (not isinstance(name, str) or not job_support.PARAMETER.fullmatch(name)
             or not isinstance(value, dict)):
         raise ValueError('named upload object required')
     routes._keys(value, {'filename', 'content_base64'})
@@ -356,7 +357,7 @@ def submit_run(principal, context, job_id, *, expected_revision, arguments, key,
         captured, _ = _uploads(context, definition['steps'], raw_inputs)
         values, steps = _validate(principal, context, definition, arguments)
     frozen = queries._capture_dataops(principal, context)
-    lock = legacy._lock()
+    lock = job_support._lock()
     if lock is None:
         # The same key may have won in a different process during capture.
         with control_store.connect() as db:
@@ -550,7 +551,7 @@ def _lost(db):
 
 
 def _recover():
-    lock = legacy._lock()
+    lock = job_support._lock()
     if lock is not None:
         try:
             with control_store.connect() as db:
@@ -606,7 +607,7 @@ def reconcile_run(principal, context, run_id):
     _access(principal, context)
     with control_store.connect() as db:
         row = _run(db, run_id, principal, context)
-    lock = legacy._lock()
+    lock = job_support._lock()
     if lock is None:
         raise QueryError('JOB_BUSY', 409)
     try:

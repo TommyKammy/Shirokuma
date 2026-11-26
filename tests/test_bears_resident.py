@@ -16,6 +16,7 @@ sys.path.insert(0, str(TOOLS))
 SPEC = importlib.util.spec_from_file_location("bears_resident", TOOLS / "bears_resident.py")
 b = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(b)
+import ai_config
 
 
 class BearsResidentTests(unittest.TestCase):
@@ -711,8 +712,11 @@ class BearsResidentTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.ai_config_path = Path(temporary.name) / 'ai_config.json'
+        config_cache = {}
         for target, name, value in ((b, 'AI_CONFIG_PATH', self.ai_config_path),
-                                    (b, '_ai_config', {})):
+                                    (ai_config, 'AI_CONFIG_PATH', self.ai_config_path),
+                                    (b, '_ai_config', config_cache),
+                                    (ai_config, '_ai_config', config_cache)):
             config_patch = patch.object(target, name, value)
             config_patch.start()
             self.addCleanup(config_patch.stop)
@@ -742,7 +746,7 @@ class BearsResidentTests(unittest.TestCase):
         self.assertEqual(b.save_ai_config(settings), settings)
         self.assertEqual(json.loads(self.ai_config_path.read_text()), settings)
         self.assertEqual(self.ai_config_path.stat().st_mode & 0o777, 0o600)
-        with patch.object(b, '_ai_config', {}):
+        with patch.object(b, '_ai_config', {}), patch.object(ai_config, '_ai_config', {}):
             self.assertEqual(b.load_ai_config(), settings)
 
     def test_ai_config_missing_invalid_and_unwritable_storage(self):
@@ -851,7 +855,7 @@ class BearsResidentTests(unittest.TestCase):
             for key in (None, '********', '', 'new-secret'):
                 supplied = {**change, **({'api_key': key} if key is not None else {})}
                 with self.subTest(change=change, key=key), \
-                     patch.object(b, 'load_ai_config', return_value=dict(active)), \
+                     patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
                      patch.dict(b.os.environ, {}, clear=True), \
                      patch.object(b.wr, 'http_json', return_value=completion) as http:
                     self.assertEqual(b.test_ai_connection(supplied)['status'], 'connected')
@@ -862,7 +866,7 @@ class BearsResidentTests(unittest.TestCase):
                 config = dict(provider=provider, api_key_env='OPENAI_API_KEY')
                 self.assertIsNone(b.resolve_api_key(config))
                 self.assertEqual(b.resolve_api_key({**config, 'api_key': 'explicit'}), 'explicit')
-        with patch.object(b, 'load_ai_config', return_value=dict(active)), \
+        with patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
              patch.object(b.wr, 'http_json', return_value=completion) as http:
             b.test_ai_connection({'model': 'other'})
             self.assertEqual(http.call_args.args[2]['Authorization'], 'Bearer saved-secret')
@@ -911,13 +915,13 @@ class BearsResidentTests(unittest.TestCase):
                                 ({'api_key': ''}, None), ({'api_key': 'new-secret'}, 'new-secret'),
                                 ({'api_key_env': 'NEW_KEY'}, 'new-env-secret')):
                             with self.subTest(credential=credential, change=change, supplied=supplied), \
-                                 patch.object(b, 'load_ai_config', return_value=dict(active)):
+                                 patch.object(ai_config, 'load_ai_config', return_value=dict(active)):
                                 self.assertEqual(generate({**change, **supplied}), 'SELECT 1')
                                 path, authorization, _ = requests[-1]
                                 self.assertEqual(path, change.get('api_url', base['api_url'])
                                                  .removeprefix(endpoint) + '/chat/completions')
                                 self.assertEqual(authorization, 'Bearer ' + expected if expected else None)
-                    with patch.object(b, 'load_ai_config', return_value=dict(active)):
+                    with patch.object(ai_config, 'load_ai_config', return_value=dict(active)):
                         self.assertEqual(generate({'model': 'new-model'}), 'SELECT 1')
                         self.assertEqual(requests[-1][1], 'Bearer ' + old_key)
                         self.assertEqual(requests[-1][2]['model'], 'new-model')
