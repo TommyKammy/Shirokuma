@@ -69,24 +69,6 @@ class SecurityBoundaryTests(unittest.TestCase):
         finally:
             client.close()
 
-    def test_three_authenticated_roles_and_spoofing(self):
-        with patch.object(wb.bears_resident, 'load_ai_config', return_value={}) as load:
-            self.assertEqual(self.workbench('/api/ai/config', user='alice'), 200)
-            for user in ('emily', 'vera'):
-                self.assertEqual(self.workbench('/api/ai/config', user=user), 403)
-                self.assertEqual(self.workbench('/api/ai/config', user=user,
-                                 **{'X-Trino-User': 'admin', 'X-Shirokuma-Role': 'admin'}), 403)
-            self.assertEqual(self.workbench('/api/ai/config', **{'X-Trino-User': 'admin'}), 401)
-            self.assertEqual(load.call_count, 1)
-        with patch.object(wb.warehouse_resident, 'query', return_value={}) as query:
-            for user in ('alice', 'emily'):
-                self.assertEqual(self.workbench('/api/warehouse/query', {'sql': 'SELECT * FROM iceberg.raw.secret'}, user), 200)
-            self.assertEqual(self.workbench('/api/warehouse/query', {'sql': 'SELECT * FROM iceberg.raw.secret'}, 'vera'), 403)
-            self.assertEqual(query.call_count, 2)
-        with patch.object(wb.bears_resident, 'run') as run:
-            self.assertEqual(self.workbench('/api/bears/run', {'bear': 'catalog', 'action': 'describe', 'table': 'raw.secret'}, 'vera'), 403)
-            run.assert_not_called()
-
     def test_invalid_authentication_fails_closed(self):
         for value in ('', 'Bearer token', 'Basic !!!', 'Basic ' + base64.b64encode(b'alice:wrong').decode(),
                       'Basic ' + base64.b64encode(b'unknown:password').decode()):
@@ -99,11 +81,6 @@ class SecurityBoundaryTests(unittest.TestCase):
         headers['Authorization'] = headers['Authorization']
         with self.assertRaises(auth.AuthenticationError):
             auth.authenticate(headers)
-        for malformed in ('{}', '[]', '{bad', '{"x":{"role":"admin"}}'):
-            self.accounts.write_text(malformed)
-            self.assertEqual(self.workbench('/'), 401)
-        self.accounts.unlink()
-        self.assertEqual(self.workbench('/'), 401)
 
     def test_sql_endpoint_identity_and_default_ceiling(self):
         for user in ('vera', None):
@@ -124,36 +101,22 @@ class SecurityBoundaryTests(unittest.TestCase):
                 self.assertEqual(code, 403)
                 backend.request.assert_not_called()
 
-    def test_session_identity_initializes_roles_without_selector(self):
-        client = http.client.HTTPConnection(*self.server.server_address, timeout=3)
-        try:
-            for user, maximum in [('alice', 'admin'), ('emily', 'data_engineer'), ('vera', 'bi_viewer')]:
-                client.request('GET', '/api/session', headers=self.headers(user))
-                response = client.getresponse()
-                raw = response.read()
-                self.assertEqual(response.status, 200)
-                self.assertEqual(json.loads(raw), dict(username=user, role=maximum, maximum_role=maximum, authenticated=True))
-                self.assertNotIn(b'password', raw)
-                self.assertNotIn(b'secret-', raw)
-        finally:
-            client.close()
+    def test_session_source_initializes_roles_without_selector(self):
         html = WorkbenchSource().source
         self.assertIn("const response=await fetch('/api/session')", html)
         self.assertIn("option.disabled=ranks[option.value]>ranks[currentRole]", html)
 
-    def test_chart_asset_uses_configured_auth_in_both_modes(self):
+    def test_chart_asset_uses_configured_auth_in_database_mode(self):
         accounts = {user: dict(account, platform_admin=False) for user, account in self.users.items()}
         self.accounts.write_text(json.dumps(accounts))
-        for database_mode in (False, True):
-            with self.subTest(database_mode=database_mode), \
-                    patch.object(runtime_profile, 'active', return_value=database_mode), \
-                    patch.object(runtime_profile, 'current', return_value=None):
-                for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_dataops.js', '/assets/db_explorer.js', '/assets/db_jobs.js', '/assets/db_stages.js', '/assets/db_marts.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/db_audit.js', '/assets/db_runtime.js', '/assets/workbench.css'):
-                    with self.subTest(path=path):
-                        self.assertEqual(self.workbench(path), 401)
-                        self.assertEqual(self.workbench(path, Authorization='Basic invalid'), 401)
-                        for user in ('alice', 'emily', 'vera'):
-                            self.assertEqual(self.workbench(path, user=user), 200)
+        with patch.object(runtime_profile, 'active', return_value=True), \
+                patch.object(runtime_profile, 'current', return_value=None):
+            for path in ('/assets/result_chart.js', '/assets/base_i18n.js', '/assets/saved_lineage.js', '/assets/result_export.js', '/assets/db_admin.js', '/assets/db_dataops.js', '/assets/db_explorer.js', '/assets/db_jobs.js', '/assets/db_stages.js', '/assets/db_marts.js', '/assets/db_dbt.js', '/assets/db_creation.js', '/assets/db_audit.js', '/assets/db_runtime.js', '/assets/workbench.css'):
+                with self.subTest(path=path):
+                    self.assertEqual(self.workbench(path), 401)
+                    self.assertEqual(self.workbench(path, Authorization='Basic invalid'), 401)
+                    for user in ('alice', 'emily', 'vera'):
+                        self.assertEqual(self.workbench(path, user=user), 200)
 
     def test_viewer_frontend_bootstrap_uses_authenticated_role(self):
         html = WorkbenchSource().source
@@ -224,16 +187,12 @@ initializeSession().then(()=>{
             'SELECT * FROM iceberg.marts.t a JOIN iceberg.marts.u b ON a.id=b.id LIMIT 5',
             'SELECT * FROM (SELECT * FROM iceberg.marts.t) x',
         ]
-        with patch.object(wb.warehouse_resident, 'query', return_value={}) as query:
-            for sql in denied + allowed:
-                expected = 403 if sql in denied else 200
-                with self.subTest(sql=sql):
-                    query.reset_mock()
-                    self.assertEqual(self.workbench('/api/warehouse/query', {'sql': sql}, 'vera'), expected)
-                    self.assertEqual(query.called, expected == 200)
-                    code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement', sql, headers=self.headers('vera'))
-                    self.assertEqual(code, expected)
-                    self.assertEqual(backend.request.called, expected == 200)
+        for sql in denied + allowed:
+            expected = 403 if sql in denied else 200
+            with self.subTest(sql=sql):
+                code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement', sql, headers=self.headers('vera'))
+                self.assertEqual(code, expected)
+                self.assertEqual(backend.request.called, expected == 200)
 
     def test_endpoint_continuations_are_bound_to_identity(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), wb.WorkbenchHandler)

@@ -137,6 +137,7 @@ go run ./cmd/shirokuma bear data --table marts.segment_revenue --rollback --snap
 go run ./cmd/shirokuma workbench --port 8888
 # Open http://127.0.0.1:8888
 ```
+> The Workbench requires a database runtime profile. Set `SHIROKUMA_RUNTIME_PROFILE` or provide `var/shirokuma/runtime-profile.json`; without one it exits with status 2.
 
 #### 7. Run Verification Suites
 ```bash
@@ -209,6 +210,8 @@ go run ./cmd/shirokuma bear data --table marts.segment_revenue --rollback --snap
 
 # 6. 統合 Web UI「Shirokuma Workbench」の起動 (http://127.0.0.1:8888)
 go run ./cmd/shirokuma workbench --port 8888
+# データベース runtime profile が必須です。SHIROKUMA_RUNTIME_PROFILE を設定するか
+# var/shirokuma/runtime-profile.json を配置してください。未設定時は終了コード 2 で終了します。
 
 # 7. 高速コア検証（約6秒）およびフル CI 検証（約12秒）
 make verify-core

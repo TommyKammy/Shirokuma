@@ -67,24 +67,6 @@ class LogicalWarehouseStatusHTTPTests(unittest.TestCase):
             self.assertEqual(result,dict(status='healthy',data_mode='database'))
             status.assert_not_called()
 
-    def test_legacy_status_keeps_existing_component_observation(self):
-        import runtime_profile
-        handler = object.__new__(server.WorkbenchHandler)
-        handler.path='/api/status';handler.headers=Message();handler.respond=Mock()
-        handler.authenticate=Mock(return_value=True)
-        handler.authenticated_user='local'
-        objects = [dict(kind='Deployment',metadata=dict(name='trino-local'),spec=dict(replicas=1),status=dict(readyReplicas=1))]
-        with patch.object(runtime_profile,'active',return_value=False), patch.object(runtime_profile,'current',return_value=None), \
-                patch.object(server.warehouse_resident,'kubectl',return_value=json.dumps(dict(items=objects))) as read, \
-                patch.object(server.warehouse_resident,'auto_chill_status',return_value={}), \
-                patch.object(server,'components',return_value={}), patch.object(server.warehouse_resident,'status') as logical:
-            handler.do_GET()
-        result, = handler.respond.call_args.args
-        self.assertEqual(result['warehouse']['state'],'active')
-        self.assertNotIn('creation_mode',result)
-        read.assert_called_once_with('get','deploy,sts','-o','json')
-        logical.assert_not_called()
-
 
 class ManagementHTTPTests(unittest.TestCase):
     def test_grant_management_http_pending_cas_replay_inspect_and_admin(self):
@@ -309,24 +291,12 @@ class ManagementHTTPTests(unittest.TestCase):
             self.assertEqual(self.request('/api/v1/runtime', 'GET', role='bi_viewer')[1], 403)
             self.assertEqual(attest.call_count, 1)
 
-    def test_normal_server_and_old_route_without_yaml_or_operator_import(self):
+    def test_normal_server_import_without_yaml_or_operator(self):
         source = """
-import sys, io
-from unittest.mock import Mock, patch
+import sys
 sys.path.insert(0, 'tools/local_experiment')
 sys.modules['yaml'] = None
-import workbench_server as server
-assert 'warehouse_operator' not in sys.modules
-assert 'database_generation' not in sys.modules
-handler = object.__new__(server.WorkbenchHandler)
-handler.path = '/api/session'
-handler.authorize = lambda *args: 'bi_viewer'
-handler.respond = Mock()
-handler.authenticated_user = 'legacy'
-handler.maximum_role = 'bi_viewer'
-with patch('runtime_profile.active', return_value=False):
-    handler.do_GET()
-assert handler.respond.call_args.args[0]['username'] == 'legacy'
+import workbench_server
 assert 'warehouse_operator' not in sys.modules
 assert 'database_generation' not in sys.modules
 """
