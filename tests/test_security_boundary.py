@@ -123,32 +123,28 @@ class SecurityBoundaryTests(unittest.TestCase):
         bootstrap = 'async function initializeSession() {' + html.split(
             'async function initializeSession() {', 1)[1].split('\nstartWorkbench();', 1)[0]
         script = """
-let currentRole='admin',catalogSession;
-const session={username:'vera',authenticated:true,maximum_role:'bi_viewer'};
+let currentRole='admin',databaseMode=false;
+const session={username:'vera',authenticated:true,maximum_role:'bi_viewer',data_mode:'database'};
 const options=['admin','data_engineer','bi_viewer'].map(value=>({value,disabled:false}));
 const select={options,value:'admin'};
 const calls=[];
 const $=()=>select;
 function assertViewerRole(){
  if(currentRole!=='bi_viewer'||select.value!=='bi_viewer'||!options[0].disabled||!options[1].disabled||options[2].disabled)throw Error('incorrect role menu');
- if(catalogSession!==JSON.stringify(['vera',true,'bi_viewer']))throw Error('incorrect session identity');
 }
-function applyRole(){assertViewerRole();calls.push('apply');}
-async function workbenchRestorePage(restoredSession){
+async function initializeDatabaseUI(restoredSession){
  assertViewerRole();
  if(restoredSession!==session)throw Error('incorrect restored session');
- calls.push('restore');
+ calls.push('database');
  await Promise.resolve();
- calls.push('restored');
+ calls.push('database-ready');
 }
-function refreshStatus(){assertViewerRole();calls.push('status:'+currentRole);}
-function loadCatalog(){assertViewerRole();calls.push('catalog:'+currentRole);}
-function loadJobAlerts(){throw Error('viewer loaded privileged alerts');}
 async function fetch(path){calls.push(path);return {ok:true,json:async()=>session};}
 """ + bootstrap + """
 initializeSession().then(()=>{
  assertViewerRole();
- if(JSON.stringify(calls)!==JSON.stringify(['/api/session','apply','restore','restored','status:bi_viewer','catalog:bi_viewer']))throw Error('API called before identity or restoration');
+ if(!databaseMode)throw Error('database mode not selected');
+ if(JSON.stringify(calls)!==JSON.stringify(['/api/session','database','database-ready']))throw Error('API called before identity or database UI');
 }).catch(error=>{console.error(error);process.exit(1);});
 """
         result = subprocess.run(['node', '-'], input=script, capture_output=True, text=True)

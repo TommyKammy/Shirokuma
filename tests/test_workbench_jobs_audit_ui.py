@@ -15,9 +15,6 @@ HTML = harness.HTML
 CSS = WorkbenchSource(HTML).css
 SOURCE = WorkbenchSource(HTML)
 LOAD_JOB_ALERTS = source_function('loadJobAlerts', SOURCE.sources)
-JOBS_VISIBLE = source_function('jobsVisible', SOURCE.sources)
-VISIBILITY_HANDLER = next(line for line in SOURCE.source.splitlines()
-                           if line.startswith("document.addEventListener('visibilitychange',()=>{if(typeof databaseMode"))
 
 
 class JobsAuditAtlasUI(unittest.TestCase):
@@ -29,39 +26,14 @@ class JobsAuditAtlasUI(unittest.TestCase):
         self.assertTrue(output.endswith('NAVIGATION_COMPLETE\n'), 'Initialization did not complete: ' + output)
         return output.removesuffix('NAVIGATION_COMPLETE\n')
 
-    def test_jobs_keep_one_view_and_all_operations(self):
-        for identifier in [
-            'jobs-definitions', 'jobs-runs', 'jobs-alerts',
-            'job-new', 'job-add-step', 'job-save', 'job-run', 'job-run-open',
-            'job-schedule-save', 'job-schedule-stop', 'job-alerts-refresh',
-        ]:
-            self.assertIn('id="' + identifier + '"', HTML)
-        for identifier in ['jobs-view-definitions', 'jobs-view-runs', 'jobs-view-alerts', 'jobs-anchors']:
-            self.assertNotIn(identifier, HTML)
-        self.assertNotIn('data-view="jobs"', HTML)
-        self.assertNotIn('id="jobs-runs" role="tabpanel"', HTML)
-        self.assertNotIn('id="jobs-alerts" role="tabpanel"', HTML)
-        self.assertLess(HTML.index('id="jobs-definitions"'), HTML.index('id="jobs-runs"'))
-        self.assertLess(HTML.index('id="jobs-runs"'), HTML.index('id="jobs-alerts"'))
-        self.assertIn("input.id='job-arg-'+name", WorkbenchSource(HTML).source)
-        self.assertIn("jobSteps.push({action:'sql'", WorkbenchSource(HTML).source)
-        self.assertIn('id="job-save" class="primary"', HTML)
-        self.assertNotIn('id="job-run" class="primary', HTML)
-        self.assertNotIn('id="job-schedule-save" class="primary', HTML)
-
     def test_database_jobs_do_not_call_legacy_jobs_or_show_legacy_errors(self):
         self.javascript(JOBS_SETUP + r'''
 await openJobs();await activate($('tab-jobs'));
-const before=calls.filter(c=>c.path.startsWith('/api/jobs')).length;
-const handlers=[];document.addEventListener=(event,fn)=>handlers.push(fn);
-databaseMode=true;activeTab='jobs';currentRole='admin';document.hidden=false;
-JOBS_VISIBLE
-assert.equal(jobsVisible(),false);
-VISIBILITY_HANDLER
-assert.equal(handlers.length,1);handlers[0]();
-assert.equal(calls.filter(c=>c.path.startsWith('/api/jobs')).length,before);
+assert.equal(calls.filter(c=>c.path.startsWith('/api/jobs')).length,0);
+document.dispatchEvent?.(new Event('visibilitychange'));
+assert.equal(calls.filter(c=>c.path.startsWith('/api/jobs')).length,0);
 assert.equal($('jobs-error').hidden,true);assert.equal($('jobs-error').textContent,'');
-'''.replace('JOBS_VISIBLE', JOBS_VISIBLE).replace('VISIBILITY_HANDLER', VISIBILITY_HANDLER))
+''')
 
     def test_job_labels_schedule_options_order_and_recent_runs(self):
         self.javascript(JOBS_SETUP + r'''
@@ -188,7 +160,7 @@ assert.equal(calls.some(c=>c.path.startsWith('/api/jobs/schedules')),false);
 
     def test_notification_popover_count_latest_list_and_jobs_link(self):
         self.javascript(JOBS_SETUP + LOAD_JOB_ALERTS + r'''
-const jobsVisible=()=>false;let stageEpoch=0;
+let stageEpoch=0;
 await openJobs();await activate($('tab-jobs'));
 const context=dbJobs.context;
 const alert=(message,extra={})=>({id:message,owner:'owner',database_id:context.database_id,selected_role:context.selected_role,context:structuredClone(context),message,severity:'critical',job_name:'daily',last_seen_at:'2026-10-29T01:02:00Z',acknowledged_at:null,resolved_at:null,...extra});

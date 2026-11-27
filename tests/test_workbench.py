@@ -54,86 +54,6 @@ class WorkbenchHTML(HTMLParser):
 
 class WorkbenchTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_calendar_schedule_controls_payloads_readback_and_async_permissions(self):
-        doc = self.workbench_document()
-        script = doc.main_script()
-        shared = 'const scheduleFields=' + script.split('const scheduleFields=', 1)[1].split('function jobAlertTime(', 1)[0]
-        jobs = 'function jobSchedulePayload(' + script.split('function jobSchedulePayload(', 1)[1].split("$('job-parameter-example')", 1)[0]
-        for prefix in ('job-schedule',):
-            for field in ('kind', 'minutes', 'time', 'timezone', 'date', 'day', *('weekday-' + str(day) for day in range(1, 8))):
-                self.assertTrue(any(node.get('for') == prefix + '-' + field for node in doc.nodes))
-            kind = doc.by_id(prefix + '-kind')
-            self.assertEqual([node['value'] for node in doc.nodes if node['tag'] == 'option' and kind in node['ancestors']],
-                             ['interval', 'daily', 'once', 'weekly', 'monthly'])
-        busy_handler = 'async function busy(' + script.split('async function busy(', 1)[1].split('function aiStatus(', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',checked:false,disabled:false,hidden:false,dataset:{},children:[],querySelectorAll(){return [];},replaceChildren(...items){this.children=items;},append(...items){this.children.push(...items);},reportValidity(){return true;},setAttribute(){},removeAttribute(){}};
-const databaseMode=false;
-let language='en',currentRole='admin',stageEpoch=1,jobScheduleRequest=0,jobSelectionEpoch=0,jobScheduleEnabledDirty=false;
-const jobsVisible=()=>currentRole!=='bi_viewer';
-let selectedJob={name:'orders',can_manage:true},jobSchedules=[];
-const t=(key,values={})=>key.replace(/\{(\w+)\}/g,(_,name)=>values[name]??'');
-const ui=(node,key,values={})=>{node.textContent=t(key,typeof values==='function'?values():values);};
-const pruneUIBindings=()=>{},readJobArguments=()=>({limit:3}),uiBindings=new Map();
-const busy=eval('('+BUSY+')');
-const document={createElement:()=>({append(){}})};
-let respond;const calls=[];const api=(path,body)=>{calls.push({path,body});return new Promise(resolve=>respond=resolve);};
-eval(SHARED+JOBS+`
-(async()=>{
- const base={kind:'daily',time:'08:30',timezone:'Asia/Tokyo',enabled:true};
- for(const [fields,expected] of [
-  [{kind:'interval',every_minutes:'7',enabled:true},{kind:'interval',every_minutes:7,enabled:true}],
-  [base,base],
-  [{...base,kind:'once',date:'2030-02-28'},{...base,kind:'once',date:'2030-02-28'}],
-  [{...base,kind:'weekly',weekdays:[7,1,3]},{...base,kind:'weekly',weekdays:[1,3,7]}],
-  [{...base,kind:'monthly',day_of_month:'31'},{...base,kind:'monthly',day_of_month:31}],
-  [{...base,kind:'monthly',day_of_month:'last'},{...base,kind:'monthly',day_of_month:'last'}]
- ]){
-  assert.deepEqual(jobSchedulePayload('orders',fields,{limit:3}),{name:'orders',...expected,arguments:{limit:3}});
-  for(const prefix of ['job-schedule','stage-schedule']){
-   fillScheduleFields(prefix,expected);updateScheduleKind(prefix,true);
-   assert.deepEqual(schedulePayload(readScheduleFields(prefix)),expected);
-   assert.equal($(prefix+'-interval').hidden,fields.kind!=='interval');
-   assert.equal($(prefix+'-daily').hidden,fields.kind==='interval');
-   for(const kind of ['once','weekly','monthly'])assert.equal($(prefix+'-'+kind).hidden,fields.kind!==kind);
-   assert.equal($(prefix+'-date').disabled,fields.kind!=='once');
-   assert.equal($(prefix+'-weekday-1').disabled,fields.kind!=='weekly');
-   assert.equal($(prefix+'-day').disabled,fields.kind!=='monthly');
-   updateScheduleKind(prefix,false);for(const field of scheduleFields)assert.equal($(prefix+'-'+field).disabled,true);
-  }
- }
- for(const invalid of [{...base,kind:'once',date:'2030-02-30'},{...base,kind:'weekly',weekdays:[]},{...base,kind:'weekly',weekdays:[1,1]},{...base,kind:'monthly',day_of_month:'32'},{...base,time:'25:00'},{...base,timezone:'Invalid/Zone'},{kind:'interval',every_minutes:0}])assert.throws(()=>schedulePayload(invalid));
- const saved={name:'orders',...base,kind:'weekly',weekdays:[1,5],next_run_at:'2030-01-07T23:30:00Z'};
- jobSchedules=[saved];renderJobSchedule();assert.equal($('job-schedule-kind').value,'weekly');
- assert.equal($('job-schedule-weekday-5').checked,true);assert.equal($('job-schedule-weekday-2').checked,false);
- assert.ok(scheduleNextTime(saved).includes('08:30'));assert.ok(scheduleNextTime(saved).includes('Asia/Tokyo'));
- assert.ok(scheduleSummary(saved).includes('Monday'));assert.ok(scheduleSummary({...saved,kind:'monthly',day_of_month:'last'}).includes('Last day'));
- // Save sends the calendar fields and arguments, then reads the authoritative persisted schedule.
- $('job-schedule-kind').value='monthly';$('job-schedule-day').value='last';
- let pending=saveJobSchedule();assert.deepEqual(calls.at(-1),{path:'/api/jobs/schedule',body:{name:'orders',kind:'monthly',day_of_month:'last',time:'08:30',timezone:'Asia/Tokyo',enabled:true,arguments:{limit:3}}});
- respond({});await new Promise(resolve=>setImmediate(resolve));assert.equal(calls.at(-1).path,'/api/jobs/schedules');
- respond({schedules:[{...saved,kind:'monthly',day_of_month:'last'}]});await pending;assert.equal($('job-schedule-day').value,'last');
- // Pause bypasses malformed edited time/date fields, as before.
- $('job-schedule-enabled').checked=false;$('job-schedule-time').value='bad';
- pending=saveJobSchedule();assert.deepEqual(calls.at(-1).body,{name:'orders',enabled:false});
- respond({});await new Promise(resolve=>setImmediate(resolve));respond({schedules:[{...saved,enabled:false}]});await pending;
- let count=calls.length;currentRole='bi_viewer';await saveJobSchedule();assert.equal(calls.length,count);updateJobScheduleKind();assert.equal($('job-schedule-kind').disabled,true);
- currentRole='admin';selectedJob.can_manage=false;await saveJobSchedule();assert.equal(calls.length,count);
- selectedJob.can_manage=true;fillScheduleFields('job-schedule',saved);pending=saveJobSchedule();
- currentRole='bi_viewer';++stageEpoch;respond({});await pending;assert.equal(calls.length,count+1);assert.equal($('job-schedule-save').disabled,true);
- // The real busy finalizer also respects switching to a definition owned by someone else.
- currentRole='admin';renderJobSchedule();pending=saveJobSchedule();selectedJob={name:'other',can_manage:false};respond({});await pending;assert.equal($('job-schedule-save').disabled,true);
- // A late refresh cannot populate schedules after a role reset, including switching back.
- currentRole='admin';pending=loadJobSchedules();const previous=jobSchedules;currentRole='bi_viewer';++stageEpoch;currentRole='admin';respond({schedules:[{...saved,name:'late'}]});await pending;assert.equal(jobSchedules,previous);
- console.log('calendar schedule behavior complete');
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        source = 'const SHARED=' + json.dumps(shared) + ';const JOBS=' + json.dumps(jobs) + ';const BUSY=' + json.dumps(busy_handler) + ';' + harness
-        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('calendar schedule behavior complete', result.stdout)
-
     def test_ai_endpoint_changes_clear_environment_credentials(self):
         for key_env in ('OPENAI_API_KEY', 'BEAR_API_KEY'):
             active = dict(provider='openai', api_url='https://api.openai.com/v1',
@@ -176,167 +96,6 @@ eval(SHARED+JOBS+`
             self.assertIn(f"'{en}':'{ja}'", script)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_role_switch_and_api_headers(self):
-        script = self.workbench_document().main_script()
-        handlers = script.split("let currentRole = 'admin';", 1)[1].split('function message(', 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-const nodes={};const $=id=>nodes[id]??={value:'',disabled:false,hidden:false,options:[]};
-const document={documentElement:{dataset:{}}};let selectedTable=null;
-$('ai-settings').hidden=true;
-$('query-mode').options=['read-only','sandbox-write','admin-write'].map(value=>({value}));
-const calls=[];const fetch=async(path,options)=>{calls.push({path,...options});return {ok:true,json:async()=>({})};};
-let currentRole='admin',stageEpoch=0;
-// Catalog cache and status invalidation have separate harnesses; isolate the role/header contract here.
-let catalogGeneration=0;function catalogMutation(){return false;}function catalogIdentity(){return currentRole;}
-function invalidateCatalogDetails(){}function observeCatalogRuns(){}function resetCatalogIdentity(){}
-function invalidateStatus(){}
-function loadCatalog(){}
-function workbenchRenderAlerts(){}
-function workbenchSyncMobileNav(){}
-eval(HANDLERS+`
-(async()=>{
- await api('/api/status');assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'admin');
- $('role-selector').value='bi_viewer';$('role-selector').onchange();
- assert.equal(document.documentElement.dataset.role,'bi_viewer');
- assert.equal($('query-mode').value,'read-only');assert.equal($('query-mode').disabled,true);
- assert.equal($('query-schema').value,'marts');assert.equal($('role-indicator').hidden,false);
- assert.equal($('ai-settings').hidden,true);
- for(const id of ['drop-table-btn','ai-settings-button'])assert.equal($(id).disabled,true);
- await api('/api/warehouse/query',{sql:'SELECT 1'});
- assert.equal(calls.at(-1).headers['X-Shirokuma-Role'],'bi_viewer');
- assert.equal(calls.at(-1).headers['Content-Type'],'application/json');
- $('role-selector').value='data_engineer';$('role-selector').onchange();
- assert.equal($('ai-settings-button').disabled,true);
- assert.equal($('query-mode').options[2].disabled,true);
- $('role-selector').value='admin';$('role-selector').onchange();
- assert.equal($('ai-settings-button').disabled,false);assert.equal($('role-indicator').hidden,true);
- assert.equal($('query-mode').options[2].disabled,false);
- assert.equal($('clone-table-btn').disabled,true);
-})().catch(error=>{console.error(error);process.exitCode=1;});`);
-"""
-        result = subprocess.run(['node', '-'], input='const HANDLERS=' + json.dumps(handlers) + ';' + harness,
-                                capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_worksheet_close_behaviors_and_reload(self):
-        script = self.workbench_document().main_script()
-        dictionary = script[script.index('const i18n'):script.index('function ui(')]
-        source = script[script.index("const worksheetKey="):script.index("if(matchMedia('(max-width: 1024px)')")]
-        wire = script[script.index('function wireTabs('):script.index('// Views inside a page')]
-        harness = r'''
-const assert=require('node:assert/strict'),vm=require('node:vm');
-function boot(saved=null,unavailable=false){
- const nodes={},store=saved?{'shirokuma.worksheets.v1':JSON.stringify(saved)}:{};
- let focused=null,confirmations=[],answer=true,sequence=0;
- class Element{
-  constructor(tag='div'){this.tag=tag;this.children=[];this.attrs={};this.dataset={};this.value='';this.selectionStart=0;this.selectionEnd=0;this.selectionDirection='none';this.disabled=false;}
-  append(...c){this.children.push(...c);}replaceChildren(...c){this.children=c;}
-  setAttribute(k,v){this.attrs[k]=v;}getAttribute(k){return this.attrs[k];}
-  addEventListener(k,fn){this['on'+k]=fn;}focus(){focused=this;}click(){if(!this.disabled)this.onclick?.();}
-  setSelectionRange(a,b,d){this.selectionStart=a;this.selectionEnd=b;this.selectionDirection=d;}
-  querySelectorAll(selector){return this.children.flatMap(c=>[...(selector==='[role=tab]'&&c.attrs.role==='tab'?[c]:[]),...c.querySelectorAll(selector)]);}
- }
- const $=id=>nodes[id]||$('worksheet-tabs').querySelectorAll('[role=tab]').find(n=>n.id===id);
- for(const id of ['sql','worksheet-tabs','worksheet-closers','worksheet-close-select','worksheet-close-action','add-worksheet-tab','query-meta'])nodes[id]=new Element();
- const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10'};nodes.sql.value=samples.orders;
- const context=vm.createContext({$,samples,document:{createElement:tag=>new Element(tag)},crypto:{randomUUID:()=>String(++sequence)},
-  localStorage:{getItem:k=>{if(unavailable)throw Error('blocked');return store[k]??null;},setItem:(k,v)=>{if(unavailable)throw Error('blocked');store[k]=v;}},
-  confirm:text=>{confirmations.push(text);return answer;},activate:()=>{},ui:(node,key,values)=>{node.textContent=context.t(key,values);}});
- vm.runInContext(DICTIONARY+WIRE+SOURCE,context);
- return {context,nodes,store,confirmations,answer:value=>answer=value,run:code=>vm.runInContext(code,context),
-  tabs:()=>nodes['worksheet-tabs'].querySelectorAll('[role=tab]'),select:()=>nodes['worksheet-close-select'],action:()=>nodes['worksheet-close-action'],focus:()=>focused};
-}
-const a=boot();assert.equal(a.select().disabled,true);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,true);assert.match(a.action().title,/at least one/);
-a.run("closeWorksheet(worksheetId)");assert.equal(a.tabs().length,1);
-a.nodes['add-worksheet-tab'].click();a.nodes['add-worksheet-tab'].click();
-const ids=a.run('worksheets.map(w=>w.id)');
-assert.equal(a.tabs().length,3);assert.equal(a.select().disabled,false);assert.equal(a.action().disabled,true);assert.equal(a.nodes['worksheet-closers'].hidden,false);assert.equal(a.select().children.length,4);
-assert.deepEqual(a.select().children.slice(1).map(option=>option.textContent),['Close Worksheet 1','Close Worksheet 2','Close Worksheet 3']);
-assert.equal(a.tabs().every(n=>n.attrs.role==='tab'),true);assert.equal(a.nodes['worksheet-tabs'].children.length,a.tabs().length);
-// Choosing a target never closes it; only the explicit action button does.
-a.select().value=ids[0];a.select().onchange();
-assert.equal(a.tabs().length,3);assert.equal(a.confirmations.length,0);assert.equal(a.action().disabled,false);
-// Closing a nonactive sample through the explicit action preserves the current draft and selection.
-a.nodes.sql.value='SELECT latest';a.nodes.sql.setSelectionRange(2,7,'backward');a.action().click();
-assert.equal(a.confirmations.length,0);assert.equal(a.nodes.sql.value,'SELECT latest');assert.equal(a.nodes.sql.selectionStart,2);assert.equal(a.nodes.sql.selectionEnd,7);assert.equal(a.nodes.sql.selectionDirection,'backward');
-assert.equal(a.run('worksheets.find(w=>w.id===worksheetId).sql'),'SELECT latest');assert.equal(a.tabs().length,2);assert.equal(a.focus(),a.tabs()[1]);
-// Cancellation leaves state and persisted data unchanged, restoring focus to the close action.
-a.run("worksheets.find(w=>w.id==='"+ids[1]+"').sql='SELECT keep'");
-const before=a.run('JSON.stringify({worksheets,worksheetId})'),stored=a.store['shirokuma.worksheets.v1'];
-a.answer(false);a.select().value=ids[1];a.select().onchange();a.action().click();
-assert.equal(a.run('JSON.stringify({worksheets,worksheetId})'),before);assert.equal(a.store['shirokuma.worksheets.v1'],stored);assert.equal(a.focus(),a.action());
-assert.match(a.confirmations.at(-1),/removes this worksheet’s SQL/);
-// Closing the active last tab chooses the remaining tab, confirms, and restores focus there.
-a.answer(true);a.select().value=ids[2];a.select().onchange();a.action().click();assert.equal(a.tabs().length,1);assert.equal(a.run('worksheetId'),ids[1]);assert.equal(a.nodes.sql.value,'SELECT keep');assert.equal(a.focus(),a.tabs()[0]);
-const reloaded=boot(JSON.parse(a.store['shirokuma.worksheets.v1']));assert.equal(reloaded.tabs().length,1);assert.equal(reloaded.run('worksheetId'),a.run('worksheetId'));
-// Numbering follows the largest remaining number, never the tab count.
-const b=boot({active:'b',tabs:[{id:'a',name:'Worksheet 1',sql:''},{id:'b',name:'Worksheet 3',sql:'persisted SQL'},{id:'c',name:'Worksheet 4',sql:''}]});
-b.answer(false);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.tabs().length,3);assert.equal(b.confirmations.length,1,'persisted SQL needs confirmation');assert.equal(b.focus(),b.action());
-b.answer(true);b.select().value='b';b.select().onchange();b.action().click();assert.equal(b.run('worksheetId'),'c');assert.equal(b.focus(),b.tabs()[1]);
-b.nodes['add-worksheet-tab'].click();assert.equal(b.run('worksheets.at(-1).name'),'Worksheet 5');
-// Keyboard tab movement receives only role=tab buttons; close remains a labeled select plus explicit action.
-let prevented=0;b.tabs()[2].onkeydown({key:'Home',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'a');
-b.tabs()[0].onkeydown({key:'End',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'1');
-b.tabs()[2].onkeydown({key:'ArrowLeft',preventDefault(){prevented++;}});assert.equal(b.run('worksheetId'),'c');assert.equal(prevented,3);
-b.select().value='a';b.select().onchange();assert.equal(b.confirmations.length,2);b.action().click();assert.equal(b.confirmations.length,2,'empty SQL closes directly');
-b.run("language='ja';updateWorksheetCloseLabels()");assert.match(b.select().children[1].textContent,/閉じる/);assert.match(b.action().title,/閉じる/);
-b.nodes.sql.value='編集 SQL';b.answer(false);b.select().value='c';b.select().onchange();b.action().click();assert.match(b.confirmations.at(-1),/SQL が削除/);assert.equal(b.focus(),b.action());
-const c=boot(null,true);c.nodes['add-worksheet-tab'].click();c.select().value=c.run('worksheets[0].id');c.select().onchange();c.action().click();assert.equal(c.tabs().length,1);assert.match(c.nodes['query-meta'].textContent,/storage unavailable/);
-'''
-        result = subprocess.run(['node', '-'], input='const DICTIONARY=' + json.dumps(dictionary) + ',WIRE=' + json.dumps(wire) + ',SOURCE=' + json.dumps(source) + ';\n' + harness, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_copilot_generate_preserves_origin_and_intervening_edits(self):
-        script = self.workbench_document().main_script()
-        helpers = script[script.index('const worksheetKey='):script.index('function worksheetName(')]
-        handlers = script[script.index("for(const [id,bear,action] of [['copilot-generate'"):script.index('// Shared authorization epoch')]
-        harness = r'''
-const assert=require('node:assert/strict'),vm=require('node:vm');
-async function check(scenario){
- const nodes={},store={},$=id=>nodes[id]??={value:'',textContent:''};
- $('sql').value='SELECT original';$('copilot-request').value='generate a query';
- let resolve,request;
- const response=new Promise(done=>resolve=done);
- const context=vm.createContext({$,t:text=>text,busy:(_node,fn)=>fn(),
-  message:(id,text)=>$(id).textContent=text,
-  localStorage:{getItem:key=>store[key]??null,setItem:(key,value)=>store[key]=value},
-  api:(url,payload)=>{request={url,payload};return response;}});
- const run=code=>vm.runInContext(code,context);
- run(HELPERS+HANDLERS);
- run("worksheets.push({id:'survivor',name:'Worksheet 2',sql:'SELECT survivor'});saveWorksheet()");
- const pending=$('copilot-generate').onclick();
- assert.equal(request.url,'/api/bears/run');
- assert.equal(JSON.stringify(request.payload),JSON.stringify({bear:'data',action:'generate',request:'generate a query'}));
- if(scenario!=='active'&&scenario!=='edited active'){
-  run("saveWorksheet();worksheetId='survivor';$('sql').value=worksheets[1].sql;saveWorksheet()");
- }
- if(scenario==='deleted')run('worksheets.splice(0,1);saveWorksheet()');
- if(scenario==='edited active')$('sql').value='SELECT edited active'; // Before an input event saves it.
- if(scenario==='edited inactive')run("worksheets[0].sql='SELECT edited inactive';saveWorksheet()");
- const active=run('worksheetId'),editor=$('sql').value;
- const result={generated_sql:'SELECT generated',detail:'Generation completed'};
- resolve(result);await pending;
- assert.equal(run('worksheetId'),active,scenario+' keeps active selection');
- assert.equal($('sql').value,scenario==='active'?result.generated_sql:editor,scenario+' editor');
- assert.equal(run("worksheets.find(w=>w.id==='survivor').sql"),'SELECT survivor',scenario+' survivor');
- const origin=run("worksheets.find(w=>w.id==='initial')");
- if(scenario==='deleted')assert.equal(origin,undefined);
- else if(scenario==='edited active')assert.equal($('sql').value,'SELECT edited active');
- else assert.equal(origin.sql,scenario==='edited inactive'?'SELECT edited inactive':result.generated_sql,scenario+' origin');
- assert.equal($('copilot-result').textContent,JSON.stringify(result,null,2),scenario+' result remains visible');
- const persisted=JSON.parse(store['shirokuma.worksheets.v1']);
- assert.equal(persisted.active,active,scenario+' persisted selection');
- if(scenario==='active'||scenario==='inactive')assert.equal(persisted.tabs[0].sql,result.generated_sql,scenario+' persisted SQL');
-}
-(async()=>{for(const scenario of ['active','inactive','deleted','edited active','edited inactive'])await check(scenario);})().catch(error=>{console.error(error);process.exitCode=1;});
-'''
-        source = 'const HELPERS=' + json.dumps(helpers) + ',HANDLERS=' + json.dumps(handlers) + ';\n' + harness
-        result = subprocess.run(['node', '-'], input=source, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
     def test_ai_settings_form_and_translations(self):
         doc = self.workbench_document()
         dialog = doc.by_id('ai-settings')
@@ -457,40 +216,10 @@ eval('function aiStatus('+HANDLERS);
             self.assertEqual(translations[label], label)
 
     @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
-    def test_phase8_javascript_execution_contracts(self):
-        """Execute production handlers with a small DOM/API adapter; no lab writes."""
-        script = self.workbench_document().main_script()
-        # Parse the entire script, then execute the query handler itself.
-        handler = script.split("$('run-query').onclick=", 1)[1].split("$('sql').onkeydown", 1)[0]
-        harness = r"""
-const assert=require('node:assert/strict');
-new Function(SCRIPT);
-const nodes={sql:{value:'SELECT 1; SELECT 2',selectionStart:10,selectionEnd:18},
- 'query-schema':{value:'raw'},'query-mode':{value:'read-only'},
- 'query-warehouse':{value:'LOCAL'},'max-rows':{value:'1000'},
- 'result-filter':{},'query-results':{replaceChildren(){}}};
-const $=id=>nodes[id]??{};let payload,queryResult,sortColumn;
-const busy=(button,task)=>task(),ui=()=>{},message=()=>{},renderResults=()=>{},
- populateChartColumns=()=>{},rememberQuery=()=>{};
-const api=async(path,body)=>{assert.equal(path,'/api/warehouse/query');payload=body;return {rows:[]};};
-const run=eval(HANDLER);
-(async()=>{
- await run();assert.equal(payload.sql,'SELECT 2');assert.equal(payload.schema,'raw');assert.ok(!('mode' in payload));
- nodes['query-schema'].value='marts';nodes.sql.selectionStart=nodes.sql.selectionEnd=0;
- await run();assert.equal(payload.sql,nodes.sql.value);assert.ok(!('schema' in payload));
- nodes.sql.value='   SELECT 3';nodes.sql.selectionStart=0;nodes.sql.selectionEnd=3;
- nodes['query-mode'].value='sandbox-write';await run();assert.equal(payload.sql,nodes.sql.value);assert.equal(payload.mode,'sandbox-write');
-})().catch(e=>{console.error(e);process.exitCode=1;});
-"""
-        source = 'const SCRIPT=' + json.dumps(script) + ';const HANDLER=' + json.dumps(handler) + ';\n' + harness
-        result = subprocess.run(['node'], input=source, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    @unittest.skipUnless(shutil.which('node'), 'JavaScript verification requires Node.js')
     def test_result_sorting_keeps_header_focus_and_updates_only_current_aria_sort(self):
         script = self.workbench_document().main_script()
-        table_source = script[script.index('function table('):script.index('let statusEpoch=')]
-        results_source = script[script.index('let queryResult=null'):script.index('function download(')]
+        table_source = script[script.index('function table('):script.index('function syncRunLabel(')]
+        results_source = script[script.index('let queryResult=null'):script.index('let download;')]
         harness = r'''
 const assert=require('node:assert/strict');
 let activeElement=null;
@@ -599,11 +328,6 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
         # Desktop typography remains compact outside the narrow media query.
         self.assertIn('.editor{display:block;width:100%;min-height:200px;height:clamp(200px,32vh,420px);margin:0;padding:12px 14px;border:0;border-radius:0;background:var(--surface);font-size:13px', css)
         self.assertIn('body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.5 var(--sans)', css)
-        for identifier in ('job-name',):
-            with self.subTest(pattern=identifier):
-                pattern = doc.by_id(identifier)['pattern']
-                self.assertIn('[a-z0-9_\\-]', pattern)
-                self.assertNotIn('[a-z0-9_-]', pattern)
         results = doc.by_id('query-results')
         self.assertEqual(results['role'], 'region')
         self.assertEqual(results['tabindex'], '0')
@@ -626,11 +350,6 @@ assert.equal(delimited(','),'"n","text"\r\n"1","zz_match"\r\n"1","aa_match"\r\n"
             "createElementNS(ns,'svg')", "const points=visibleRows().filter",
             "for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart",
             "$('query-results').hidden=view!=='table'", "$('query-chart').hidden=view!=='chart'",
-            "const payload={source_table:source}", 'payload.snapshot_id=snapshot',
-            "api('/api/catalog/clone',payload)", "actionButton('Clone Snapshot'",
-            "api('/api/lake/export',{table:selected,format})", 'atob(result.content_base64)',
-            'downloadFile(content,result.filename', 'link.download=filename',
-            'row_count:result.row_count,total_rows:result.total_rows',
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, script)

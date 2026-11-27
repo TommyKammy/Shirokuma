@@ -6,7 +6,7 @@ import test_workbench_database_ui as harness
 
 # Load the shipped legacy status formatter into the shared harness's global scope.
 JOB_STATUS = (
-    harness.SCRIPT[harness.SCRIPT.index('const jobStatuses='):harness.SCRIPT.index('const liveJobStates=')]
+    harness.SCRIPT[harness.SCRIPT.index('const jobStatuses='):harness.SCRIPT.index('const jobActionLabels=')]
     .replace('const jobStatuses=', 'globalThis.jobStatuses=')
     + harness.SCRIPT[harness.SCRIPT.index('function jobStatus('):].split('\n', 1)[0]
     .replace('function jobStatus(', 'globalThis.jobStatus=function(') + '\n'

@@ -79,13 +79,9 @@ class WorkbenchSourceTests(unittest.TestCase):
             self.assertEqual(parsed.source.split(SCRIPT_BOUNDARY), parsed.sources)
 
     def test_chart_extraction_compiles_and_runs_with_caller_globals(self):
-        from test_catalog_ui import function as catalog_function
-        from test_jobs_ui import function as jobs_function
-
         parsed = WorkbenchSource()
         declarations = [function('renderChart'), function('renderChart', parsed.sources),
-                        function('renderChart', parsed.source),
-                        catalog_function('renderChart'), jobs_function('renderChart')]
+                        function('renderChart', parsed.source)]
         for index, declaration in enumerate(declarations):
             with self.subTest(extractor=index):
                 harness = '''

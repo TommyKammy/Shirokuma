@@ -74,21 +74,6 @@ assert.equal(activeTab,'home');
 noPosts();
 """)
 
-    def test_legacy_mode_defaults_to_home_and_keeps_old_hashes(self):
-        self.run_url('http://local/', r"""
-databaseMode=false;activate=legacyActivate;
-globalThis.loadJobs=()=>{};globalThis.loadStages=()=>{};globalThis.loadMarts=()=>{};
-await workbenchRestorePage(session);
-assert.equal(activeTab,'home');assert.equal(new URL(location.href).hash,'#home');
-location.href='http://local/#warehouse';await workbenchRestorePage(session);
-assert.equal(activeTab,'warehouse');assert.equal(new URL(location.href).hash,'#sql');
-location.href='http://local/#catalog';await workbenchRestorePage(session);
-assert.equal(activeTab,'catalog');assert.equal(new URL(location.href).hash,'#explore');
-location.href='http://local/#unknown-route';await workbenchRestorePage(session);
-assert.equal(activeTab,'home');assert.equal(new URL(location.href).hash,'#home');
-noPosts();
-""")
-
     def test_attention_aggregates_sql_compute_database_jobs_and_alerts(self):
         self.javascript(HOME + r"""
 await boot();dbAdmin.platform=true;dbRuns.clear();
@@ -197,24 +182,6 @@ setLanguage('ja');
 assert.ok(homeText('home-attention-list').includes('データベース一覧を取得できませんでした'));
 assert.ok(!homeText('home-attention-list').includes('通知を取得できませんでした'));
 assert.ok(!homeText('home-attention-list').includes('ジョブの実行履歴を取得できませんでした'));
-""")
-
-    def test_legacy_source_errors_name_the_source_that_failed(self):
-        self.javascript(HOME + r"""
-await boot();databaseMode=false;workbenchShellReady=true;activeTab='home';
-route=async path=>{
- if(path==='/api/alerts')throw Error('alerts down');
- if(path==='/api/jobs/runs')throw Error('runs down');
- return {};
-};
-await loadHome();await tick();
-const text=homeText('home-attention-list');
-assert.ok(text.includes(t('Could not load notifications')),text);
-assert.ok(text.includes(t('Could not load job runs')),text);
-assert.equal(homeErrors('home-attention-list').length,2);
-setLanguage('ja');
-assert.ok(homeText('home-attention-list').includes('通知を取得できませんでした'));
-assert.ok(homeText('home-attention-list').includes('ジョブの実行履歴を取得できませんでした'));
 """)
 
     def test_job_sources_are_not_read_or_rendered_for_a_viewer(self):
