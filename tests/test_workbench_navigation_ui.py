@@ -282,17 +282,6 @@ $('workbench-boot-reload').focus();assert.equal(document.activeElement,$('workbe
 $('workbench-boot-reload').click();assert.equal(reloads,1);noPosts();
 """)
 
-    def test_legacy_anonymous_session_retains_existing_initialization(self):
-        self.run_url('http://local/', r"""
-databaseMode=false;session={username:null,maximum_role:'admin',authenticated:false};
-globalThis.loadJobAlerts=()=>{};
-await startWorkbench();
-assert.equal($('workbench-boot').hidden,true);
-assert.ok(shell().every(node=>!node.hasAttribute('inert')));
-assert.equal(calls.filter(c=>c.path==='/api/session').length,1);
-assert.equal(dbAdmin.installed,false);noPosts();
-""")
-
     def test_boot_surface_localizes_before_app_initialization(self):
         early = re.search(r'<script data-workbench-language>([\s\S]*?)</script>', harness.HTML)[1]
         for lang in ['ja', 'en']:
@@ -365,23 +354,6 @@ location.href='http://local/#explore';await workbenchHistoryRestore();
 assert.equal(selected(),'catalog');
 location.href='http://local/#pawprints';await workbenchHistoryRestore();
 assert.equal(selected(),'pawprints');assert.equal(new URL(location.href).hash,'#audit');
-noPosts();
-""")
-
-    def test_anonymous_legacy_history_restores_visible_routes_only(self):
-        self.run_url('http://local/#warehouse', r"""
-databaseMode=false;activate=legacyActivate;session={username:null,maximum_role:'admin',authenticated:false};
-sessionRoute=async()=>structuredClone(session);globalThis.loadJobAlerts=()=>{};globalThis.loadStages=()=>{};globalThis.loadJobs=()=>{};
-await startWorkbench();
-assert.equal($('workbench-boot').hidden,true);assert.equal(selected(),'warehouse');assert.equal(new URL(location.href).hash,'#sql');
-$('tab-ingestion').click();$('tab-jobs').click();
-assert.equal(selected(),'jobs');assert.equal(new URL(location.href).hash,'#jobs');
-location.href='http://local/#ingestion';await workbenchHistoryRestore();
-assert.equal(selected(),'ingestion');assert.equal(new URL(location.href).hash,'#ingestion');
-$('tab-jobs').hidden=true;location.href='http://local/#jobs';await workbenchHistoryRestore();
-assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');
-location.href='http://local/#db-admin';await workbenchHistoryRestore();
-assert.equal(selected(),'home');assert.equal(new URL(location.href).hash,'#home');
 noPosts();
 """)
 
@@ -489,15 +461,6 @@ await activate($('tab-ingestion'));assert.equal(new URL(location.href).hash,'#in
 clearTimeout(p.timer);
 """)
 
-    def test_legacy_mode_reuses_routes_without_changing_admin_access(self):
-        self.run_url('http://local/#jobs?keep=f', r"""
-databaseMode=false;activate=legacyActivate;
-globalThis.loadJobs=()=>{};globalThis.loadStages=()=>{};globalThis.loadMarts=()=>{};
-await workbenchRestorePage(session);assert.equal(activeTab,'jobs');assert.equal(new URL(location.href).hash,'#jobs?keep=f');
-assert.equal(document.title,'Jobs · Shirokuma Workbench');setLanguage('ja');assert.equal(document.title,t('Jobs')+' · Shirokuma Workbench');
-$('tab-db-admin').hidden=true;location.href='http://local/#db-admin';
-await workbenchRestorePage(session);assert.equal(activeTab,'home');noPosts();
-""")
 
 
 if __name__ == '__main__':

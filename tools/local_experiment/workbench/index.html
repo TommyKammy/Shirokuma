@@ -200,7 +200,6 @@ try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; 
 <section id="ingestion" hidden>
 <div class="atlas-flow" id="ingestion-atlas">
 <h1 id="ingestion-heading">Ingestion &amp; Stages</h1>
-<p id="ingestion-mode-guidance" class="callout info" hidden>Ingestion &amp; Stages is available in Database mode.</p>
 <div class="atlas-fields" id="ingestion-role-field"></div>
 <div class="atlas-message-slot" id="atlas-ingestion-message" tabindex="-1"></div>
 <nav class="atlas-actions" id="ingestion-method" aria-label="Ingestion method"><a id="ingestion-tab-file" class="atlas-link" href="#ingestion" aria-current="page">File import</a><a id="ingestion-tab-stages" class="atlas-link" href="#ingestion/stages">Saved stages</a></nav>
@@ -212,7 +211,6 @@ try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; 
 <section id="transformation" hidden>
 <div class="atlas-flow" id="transformation-atlas">
 <h1 id="transformation-heading">Transformation</h1>
-<p id="transformation-mode-guidance" class="callout info" hidden>Transformation is available in Database mode.</p>
 <div class="atlas-fields" id="transformation-role-field"></div>
 <div class="atlas-message-slot" id="atlas-transformation-message" tabindex="-1"></div>
 <div id="transformation-atlas-models"></div>
@@ -227,44 +225,6 @@ try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; 
 <section id="jobs" hidden>
 <div class="page-head"><div class="page-title"><h1>Jobs</h1></div></div>
 <div id="jobs-error" class="error" role="alert" hidden></div>
-<div id="jobs-definitions">
-<div class="panel"><div class="panel-head"><div><h2>Saved jobs</h2><small>Select a job to edit, run or schedule it.</small></div><div class="toolbar"><button id="jobs-refresh" type="button">Refresh jobs</button><button id="job-new" type="button">New job</button></div></div><div id="jobs-list" class="table-wrap list"><div class="empty">No jobs loaded.</div></div>
-<div class="detail-grid">
-<form id="job-form" class="section"><div class="section-head"><h3>Job definition</h3><small id="job-editor-state" class="badge" role="status">New definition</small></div>
-<div class="job-fields"><div><label for="job-name">Job name</label><input id="job-name" required maxlength="64" pattern="[a-z][a-z0-9_\-]*" placeholder="daily_sales"></div><div><label for="job-description">Description</label><input id="job-description" maxlength="500"></div></div>
-<label for="job-parameters">Argument definitions (JSON)</label><textarea id="job-parameters" rows="3" spellcheck="false" aria-describedby="job-parameter-help">{}</textarea><small id="job-parameter-help">Types: string, integer, boolean, date. Use every argument in SQL as a template value without quotes. <code>{{name}}</code></small>
-<details class="help"><summary>Argument definition example</summary><pre id="job-parameter-example"></pre></details>
-<h3 class="job-step-heading" style="margin-top:14px">Steps</h3><div id="job-steps"></div><div class="form-actions"><button id="job-add-step" type="button">Add step</button><button id="job-save" class="primary" type="submit">Save job</button><span id="job-save-state" class="state" role="status"></span></div>
-</form>
-<div>
-<form id="job-run-form" class="section"><div class="section-head"><h3>Manual run</h3><span id="job-run-name" class="muted">Choose a saved job.</span></div><div id="job-run-arguments" class="job-fields"></div><p id="job-run-help" class="help">Runs use your authenticated role. Steps stop at the first failure.</p><div class="form-actions"><button id="job-run" class="run" type="submit" disabled>Run job</button><span id="job-run-state" class="state" role="status" aria-live="polite"></span><button id="job-run-open" class="small" type="button" hidden>Inspect run</button></div></form>
-<form id="job-schedule-form" class="section" novalidate><div class="section-head"><h3>Schedule</h3><span id="job-schedule-name" class="muted">Choose a saved job.</span></div>
-<p class="help">Runs only while the service is running. Occurrences at least 60 seconds late or blocked by another job are skipped. No catch-up or automatic retry.</p>
-<div class="schedule-status"><div id="job-schedule-state" role="status" aria-live="polite"></div><button id="job-schedule-stop" class="stop small" type="button" disabled>Stop schedule</button></div>
-<div class="job-fields"><div><label for="job-schedule-kind">Frequency</label><select id="job-schedule-kind" disabled><option value="interval">Every N minutes</option><option value="daily">Daily</option><option value="once">Once</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
-<div id="job-schedule-interval"><label for="job-schedule-minutes">Interval (minutes)</label><input id="job-schedule-minutes" type="number" min="1" max="10080" step="1" value="60" required disabled></div>
-<div id="job-schedule-once" hidden><label for="job-schedule-date">Local date</label><input id="job-schedule-date" type="date" required disabled></div>
-<div id="job-schedule-monthly" hidden><label for="job-schedule-day">Day of the month</label><select id="job-schedule-day" disabled><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option><option value="last">Last day</option></select></div>
-<div id="job-schedule-daily" class="schedule-daily" hidden><div><label for="job-schedule-time">Local time</label><input id="job-schedule-time" type="time" step="60" value="09:00" required disabled></div><div><label for="job-schedule-timezone">Timezone (IANA)</label><input id="job-schedule-timezone" value="Asia/Tokyo" placeholder="Asia/Tokyo" required disabled></div></div></div>
-<fieldset class="schedule-weekdays" id="job-schedule-weekly" hidden><legend>Days of the week</legend><div class="toolbar"><label class="job-enable-label" for="job-schedule-weekday-1"><input id="job-schedule-weekday-1" type="checkbox" disabled> Monday</label><label class="job-enable-label" for="job-schedule-weekday-2"><input id="job-schedule-weekday-2" type="checkbox" disabled> Tuesday</label><label class="job-enable-label" for="job-schedule-weekday-3"><input id="job-schedule-weekday-3" type="checkbox" disabled> Wednesday</label><label class="job-enable-label" for="job-schedule-weekday-4"><input id="job-schedule-weekday-4" type="checkbox" disabled> Thursday</label><label class="job-enable-label" for="job-schedule-weekday-5"><input id="job-schedule-weekday-5" type="checkbox" disabled> Friday</label><label class="job-enable-label" for="job-schedule-weekday-6"><input id="job-schedule-weekday-6" type="checkbox" disabled> Saturday</label><label class="job-enable-label" for="job-schedule-weekday-7"><input id="job-schedule-weekday-7" type="checkbox" disabled> Sunday</label></div></fieldset>
-<p id="job-schedule-once-help" class="schedule-help" hidden>Enabling a one-time schedule requires a future local date and time. A daylight-saving gap is rejected; a repeated time uses its first occurrence. The schedule turns off after its slot, even if skipped or failed.</p>
-<p id="job-schedule-calendar-help" class="schedule-help" hidden>Calendar times use the specified timezone.</p>
-<p id="job-schedule-monthly-help" class="schedule-help" hidden>Months without the selected day are skipped. Choose Last day for month-end.</p>
-<label class="job-enable-label" for="job-schedule-enabled"><input id="job-schedule-enabled" type="checkbox" disabled> Enable schedule</label>
-<p class="help">Uses the argument values entered above. Saving captures your current authenticated role.</p>
-<div class="form-actions"><button id="job-schedule-save" type="submit" disabled>Save schedule</button><span id="job-schedule-message" class="state" role="status" aria-live="polite"></span></div>
-</form>
-</div>
-</div>
-</div>
-</div>
-<div id="jobs-runs">
-<div class="panel"><div class="panel-head"><div><h2>Run history</h2><small>Shows the latest 100 runs you can see.</small></div><div class="toolbar"><label for="job-runs-filter" class="muted">Job</label><select id="job-runs-filter"><option value="">All jobs</option></select><button id="job-runs-refresh" type="button">Refresh runs</button></div></div><div id="job-runs" class="table-wrap list"><div class="empty">No runs loaded.</div></div></div>
-<div class="panel" id="job-step-panel"><div class="panel-head"><h2>Step history</h2><span id="job-detail-state" class="state" role="status" aria-live="polite">Choose a run to inspect its steps.</span></div><div id="job-failure" class="error" role="alert" hidden></div><div id="job-run-detail" class="table-wrap list"></div></div>
-</div>
-<div id="jobs-alerts">
-<div class="panel"><div class="panel-head"><div><h2>Notifications</h2><small id="job-alerts-timezone"></small></div><button id="job-alerts-refresh" type="button">Refresh notifications</button></div><div class="notes"><span>Continuing conditions are grouped. Acknowledging a notification does not resolve its condition.</span><span>Up to 100 notifications, unacknowledged first.</span></div><div id="job-alerts-error" class="error" role="alert" hidden></div><div id="job-alerts" class="table-wrap list"><div class="empty">No notifications loaded.</div></div></div>
-</div>
 </section>
 <section id="catalog" hidden>
 <div class="page-head"><div class="page-title"><h1>Data Explorer</h1><p>Browse Iceberg schemas, inspect columns, and follow dbt model dependencies.</p></div><div class="page-actions"><button id="refresh-catalog">Refresh catalog</button></div></div>
@@ -286,7 +246,6 @@ try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; 
 <section id="bears" hidden>
 <div id="bears-atlas" class="atlas-flow" hidden>
 <div class="pageheading" id="bears-pageheading"><h1 id="bears-heading">AI Bears</h1><span class="badge" id="bears-environment">LOCAL · Local lab</span></div>
-<p id="bears-mode-guidance" class="callout info" hidden>AI Bears is available in Database mode.</p>
 <form id="bears-form" novalidate>
 <div class="atlas-fields" id="bears-context-fields">
 <label for="bears-database">DB<select class="field" id="bears-database"></select></label>
@@ -331,11 +290,10 @@ try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; 
 </div>
 
 </section>
-<section id="pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1></div></div><p id="audit-mode-guidance" class="callout info">Audit log is available in Database mode.</p></section>
+<section id="pawprints" hidden><div class="page-head"><div class="page-title"><h1>Audit Log</h1></div></div></section>
 <section id="compute" hidden>
 <div id="compute-atlas" class="atlas-flow" hidden>
 <div class="pageheading" id="compute-overview"><h1 id="compute-heading">Compute &amp; Governance</h1><span id="compute-overview-title" class="visually-hidden"></span><span class="badge" id="compute-environment">LOCAL · Local lab</span></div>
-<p id="compute-mode-guidance" class="callout info" hidden>Compute &amp; Governance is available in Database mode.</p>
 <p class="small" id="compute-viewer-guidance" hidden></p>
 <div id="compute-runtime-host"></div>
 <details id="compute-usage"><summary>Resource allocation, usage and headroom</summary><div id="compute-usage-list"></div><p class="small" id="compute-usage-note"></p></details>
@@ -460,45 +418,12 @@ const samples = {
 };
 let currentRole = 'admin';
 let databaseMode=false;
-function applyRole() {
- invalidateStatus();
- // Role changes still fence every in-flight non-Database job/stage read.
- ++stageEpoch;
- resetCatalogIdentity();
- document.documentElement.dataset.role=currentRole;
- if(typeof resetJobsUI==='function')resetJobsUI();
- $('tab-jobs').hidden=currentRole==='bi_viewer';
- if(currentRole==='bi_viewer'){$('jobs-alert-count').hidden=true;workbenchAlertCount=0;workbenchAlerts=[];workbenchRenderAlerts();}
- if(currentRole==='bi_viewer'&&typeof activeTab!=='undefined'&&activeTab==='jobs')activate($('tab-warehouse'));
- if(typeof workbenchRenderProfile==='function')workbenchRenderProfile();
- workbenchSyncMobileNav();
- if(typeof renderJobSteps==='function')renderJobSteps();
- if(typeof activeTab!=='undefined'&&activeTab==='jobs')loadJobs();
- const viewer=currentRole==='bi_viewer', engineer=currentRole==='data_engineer';
- $('role-indicator').hidden=!viewer;
- for(const id of ['drop-table-btn','clone-table-btn'])$(id).disabled=viewer||!selectedTable;
- for(const id of ['ai-settings-button','ai-save'])$(id).disabled=viewer||engineer;
- if(currentRole!=='admin'&&!$('ai-settings').hidden)$('ai-settings').hidden=true;
- const mode=$('query-mode');
- for(const option of mode.options)option.disabled=viewer?option.value!=='read-only':engineer&&option.value==='admin-write';
- if(viewer||(engineer&&mode.value==='admin-write'))mode.value='read-only';
- mode.disabled=viewer;
- $('query-schema').disabled=viewer;if(viewer)$('query-schema').value='marts';
- if(typeof workbenchHomeRoleChanged==='function')workbenchHomeRoleChanged();
-}
-$('role-selector').onchange=()=>{currentRole=$('role-selector').value;applyRole();loadCatalog();};
 async function api(path, body) {
- const mutation=catalogMutation(path,body),identity=catalogIdentity(),generation=catalogGeneration;
- if(mutation)invalidateCatalogDetails();
- try{
  const headers={'X-Shirokuma-Role':currentRole};
  const response = await fetch(path, body === undefined ? {headers} : {method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify(body)});
- if(path.split('?')[0]==='/api/catalog'&&[401,403].includes(response.status)&&identity===catalogIdentity()&&generation===catalogGeneration){resetCatalogIdentity();message('catalog-error',t('Catalog access changed. Refresh the page to sign in or reload permissions.'));}
  const data = await response.json();
  if (!response.ok || data.error) throw new Error(data.error || `HTTP ${response.status}`);
- if(identity===catalogIdentity())observeCatalogRuns(path,body,data);
  return data;
- }finally{if(mutation)invalidateCatalogDetails();}
 }
 function message(id, text) {
  if(id==='jobs-error'&&typeof databaseMode!=='undefined'&&databaseMode){const node=$(id);if(node){node.textContent='';node.hidden=true;}return;}
@@ -569,33 +494,8 @@ function table(container, columns, rows, localizeHeaders=true) {
  rows.forEach(row=>{const tr=body.insertRow();row.forEach(value=>{const td=tr.insertCell();if(value===null)td.className='null';td.textContent=value===null?'NULL':typeof value==='object'?JSON.stringify(value):String(value);});});
  container.append(element);
 }
-let statusEpoch=0,statusPending=null;
-function invalidateStatus(){++statusEpoch;statusPending=null;}
-function refreshStatus({force=false}={}){
- if(force)invalidateStatus();
- const epoch=statusEpoch,role=currentRole,session=catalogSession;
- if(statusPending?.epoch===epoch&&statusPending.role===role&&statusPending.session===session)return statusPending.promise;
- const current=()=>epoch===statusEpoch&&role===currentRole&&session===catalogSession;
- const promise=(async()=>{
- workbenchScreenMessage('status-error','');
- try{
-  const data=await api('/api/status');if(!current())return;const w=data.warehouse;
-  const state=w.error?'Unavailable':({active:'Running',chilled:'Chilled',starting:'Starting'}[w.state]||w.state);
-  const tone=w.error?'tone-bad':w.state==='active'?'tone-ok':w.state==='starting'?'tone-run':'';
-  const computeKey=w.error||!w.state?'unknown':w.state==='active'?'available':w.state==='chilled'?'paused':w.state==='starting'?'switching':'unknown';
-  workbenchSetComputeStatus(computeKey,{available:'tone-ok',paused:'',switching:'tone-run',unknown:'tone-bad'}[computeKey],w.error||'');
-  ui($('warehouse-state'),state);$('warehouse-state').className='badge '+tone;
-  ui($('replicas'),'Replicas {ready} / {desired}',{ready:w.ready_replicas??'—',desired:w.replicas??'—'});
-  $('components').replaceChildren();
-  Object.entries(data.components).forEach(([name,c])=>{const pill=document.createElement('span');pill.className='badge';if(name==='error')ui(pill,'Readiness unavailable: {error}',{error:c});else pill.textContent=`${name}: ${c.ready_replicas}/${c.replicas}`;$('components').append(pill);});
-  if(w.error)workbenchScreenMessage('status-error',w.error);
- }catch(error){if(!current())return;ui($('warehouse-state'),'Unavailable');$('warehouse-state').className='badge tone-bad';workbenchSetComputeStatus('unknown','tone-bad',error.message);workbenchScreenMessage('status-error',error.message);}
- finally {if(current())pruneUIBindings();}
- })().finally(()=>{if(statusPending?.promise===promise)statusPending=null;});
- statusPending={epoch,role,session,promise};return promise;
-}
+let refreshStatus;
 $('refresh-status').onclick=()=>busy($('refresh-status'),refreshStatus);
-for(const action of ['chill','wake'])$(action).onclick=()=>busy($(action),async()=>{try{invalidateStatus();await api('/api/warehouse/'+action,{});await refreshStatus({force:true});}catch(e){workbenchScreenMessage('status-error',e.message);}});
 function syncRunLabel(){return dbSyncRunLabel();}
 function loadSampleSQL(){
  const key=$('sample-query').value;if(!key||!samples[key])return;
@@ -603,162 +503,10 @@ function loadSampleSQL(){
  if(typeof databaseMode!=='undefined'&&databaseMode&&typeof dbRenderRun==='function')dbRenderRun();
  $('sql').focus();
 }
-document.querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>{setSQL(samples[b.dataset.sample]);syncRunLabel();$('sql').focus();});
 $('load-query').onclick=loadSampleSQL;
 for(const event of ['select','keyup','mouseup','touchend'])$('sql').addEventListener(event,()=>{syncRunLabel();});
-$('run-query').onclick=()=>busy($('run-query'),async()=>{
- message('query-error','');ui($('query-meta'),'Executing…');$('query-meta').className='status-line tone-run';
- try{const editor=$('sql'),selection=editor.selectionStart<editor.selectionEnd?editor.value.slice(editor.selectionStart,editor.selectionEnd):'';
- const payload={sql:selection.trim()?selection:editor.value,warehouse:$('query-warehouse').value,max_rows:Number($('max-rows').value)};if($('query-schema').value!=='marts')payload.schema=$('query-schema').value;if($('query-mode').value!=='read-only')payload.mode=$('query-mode').value;const data=await api('/api/warehouse/query',payload);
- queryResult=data;populateChartColumns();sortColumn=-1;$('result-filter').value='';renderResults();rememberQuery(payload.sql);ui($('query-meta'),'{rows} rows{truncated} · {duration} ms · {id}',()=>({rows:data.rows.length,truncated:data.truncated?t(' · truncated'):'',duration:data.duration_ms??'—',id:data.query_id??''}));$('query-meta').className='status-line tone-ok';
- }catch(e){queryResult=null;renderResults();message('query-error',e.message);ui($('query-meta'),'Query failed');$('query-meta').className='status-line tone-bad';$('query-results').replaceChildren();}
-});
-$('sql').onkeydown=e=>{if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();$('run-query').click();}};
-let columnRequest=0;
-let catalogSession='',catalogGeneration=0,catalogListRequest=0,activeInspector='columns',catalogSessionValidation=null,snapshotPreviewRequest=0;
-const catalogCache=new Map(),catalogPending=new Map(),catalogRunStates=new Map();
+let activeInspector='columns';
 const inspectorTargets={columns:'table-columns',preview:'table-preview',profile:'table-profile-panel-body',ddl:'table-ddl',snapshots:'table-snapshots',lineage:'table-lineage'};
-function catalogIdentity(){return JSON.stringify([catalogSession,currentRole]);}
-function catalogKey(selected,section){return JSON.stringify([catalogIdentity(),selected,section]);}
-function cachedCatalogDetail(key){
- const entry=catalogCache.get(key);if(!entry)return;
- if(Date.now()-entry.at>=15000){catalogCache.delete(key);return;}
- return entry.data;
-}
-function invalidateCatalogDetails(){
- ++catalogGeneration;++snapshotPreviewRequest;catalogCache.clear();catalogPending.clear();catalogSessionValidation=null;
- for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- if(selectedTable){
-  ui($(inspectorTargets[activeInspector]),'Details changed. Refresh details to continue.');
-  for(const id of ['open-table-sql','clone-table-btn','export-table-btn','drop-table-btn'])$(id).disabled=true;
-  $('refresh-table-details').disabled=false;
- }
- message('catalog-error','');
-}
-function resetCatalogIdentity(){
- selectedTable=null;
- invalidateCatalogDetails();++columnRequest;++catalogListRequest;catalogRunStates.clear();
- catalogMetadata={};selectedTable=null;renderCatalogTrees();
- ui($('table-title'),'Table Inspector');
- for(const id of ['open-table-sql','clone-table-btn','export-table-btn','refresh-table-details'])$(id).disabled=true;
- $('drop-table-btn').hidden=true;
-}
-function validateCatalogSession(){
- const identity=catalogIdentity(),generation=catalogGeneration;
- if(catalogSessionValidation?.identity===identity&&catalogSessionValidation.generation===generation)return catalogSessionValidation.promise;
- const current=()=>identity===catalogIdentity()&&generation===catalogGeneration;
- const promise=(async()=>{
-  const response=await fetch('/api/session');
-  if(!current())return false;
-  if([401,403].includes(response.status)){resetCatalogIdentity();message('catalog-error',t('Catalog access changed. Refresh the page to sign in or reload permissions.'));return false;}
-  const session=await response.json();if(!current())return false;
-  if(!response.ok)throw Error(session.error||`HTTP ${response.status}`);
-  const next=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
-  if(next!==catalogSession){
-   catalogSession=next;
-   const ranks={bi_viewer:0,data_engineer:1,admin:2},maximum=session.maximum_role in ranks?session.maximum_role:'bi_viewer';
-   if(!(currentRole in ranks)||ranks[currentRole]>ranks[maximum])currentRole=maximum;
-   for(const option of $('role-selector').options)option.disabled=ranks[option.value]>ranks[maximum];
-   $('role-selector').value=currentRole;
-   applyRole();await loadCatalog();return false;
-  }
-  return true;
- })().finally(()=>{if(catalogSessionValidation?.promise===promise)catalogSessionValidation=null;});
- catalogSessionValidation={identity,generation,promise};return promise;
-}
-function catalogMutation(path,body){
- if(body===undefined)return false;
- if(['/api/warehouse/query','/api/lake/ingest','/api/catalog/clone','/api/catalog/drop','/api/jobs/run','/api/marts/run','/api/stages/import','/api/stages/scan','/api/stages/export'].includes(path))return true;
- if(path==='/api/models/build')return body.action==='build';
- return path==='/api/bears/run'&&body.bear==='data'&&(['stage','publish','refresh','rollback'].includes(body.action)||!!(body.stage_table||body.publish||body.refresh||body.rollback));
-}
-function observeCatalogRuns(path,body,data){
- let states;
- if(path==='/api/jobs/runs')states=(data.runs||[]).map(r=>[r.id,r.status]);
- if(path==='/api/marts')states=(data.marts||[]).filter(m=>m.last_run).map(m=>[m.last_run.id,m.last_run.status]);
- if(path==='/api/stages/files')states=(data.files||[]).filter(f=>f.last_run_id).map(f=>[f.last_run_id,f.ingestion_status]);
- if(!states)return;
- const key=JSON.stringify([path,body?.name]),signature=JSON.stringify(states.sort((a,b)=>String(a[0]).localeCompare(String(b[0]))));
- if(catalogRunStates.get(key)!==signature&&(catalogRunStates.has(key)||states.length))invalidateCatalogDetails();
- catalogRunStates.set(key,signature);
-}
-function fetchCatalogDetail(selected,section){
- const key=catalogKey(selected,section),cached=cachedCatalogDetail(key);
- if(cached)return validateCatalogSession().then(valid=>valid?cachedCatalogDetail(key):undefined);
- if(catalogPending.has(key))return catalogPending.get(key);
- const generation=catalogGeneration,identity=catalogIdentity();
- const pending=api('/api/catalog?table='+encodeURIComponent(selected)+'&detail='+section).then(data=>{
-  const metadataKey={ddl:'definition',lineage:'lineage_detail'}[section]||section;
-  if(data.metadata?.[metadataKey]?.error)throw Error(data.metadata[metadataKey].error);
-  if(generation===catalogGeneration&&identity===catalogIdentity()){
-   for(const [k,entry] of catalogCache)if(Date.now()-entry.at>=15000)catalogCache.delete(k);
-   catalogCache.delete(key);catalogCache.set(key,{at:Date.now(),data});
-   if(catalogCache.size>64)catalogCache.delete(catalogCache.keys().next().value);
-  }
-  return data;
- }).finally(()=>{if(catalogPending.get(key)===pending)catalogPending.delete(key);});
- catalogPending.set(key,pending);return pending;
-}
-async function describeTable(schema,name){
- ++snapshotPreviewRequest;
- const request=++columnRequest,selected=schema+'.'+name;selectedTable=selected;
- const section=activeInspector,generation=catalogGeneration,identity=catalogIdentity();
- const current=()=>request===columnRequest&&generation===catalogGeneration&&identity===catalogIdentity()&&selectedTable===selected&&activeInspector===section;
- for(const id of ['clone-table-btn','export-table-btn','drop-table-btn'])$(id).disabled=true;
- $('refresh-table-details').disabled=false;
- $('table-title').textContent=selected;$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;
- for(const id of [...Object.values(inspectorTargets),'snapshot-preview'])$(id).replaceChildren();
- message('catalog-error','');
- try{
-  if(!cachedCatalogDetail(catalogKey(selected,section)))ui($(inspectorTargets[section]),'Loading…');
-  let data=await fetchCatalogDetail(selected,section);
-  if(!current())return;
-  if(!data)data=await fetchCatalogDetail(selected,section);
-  if(!current()||!data)return;
-  const m=data.metadata,snapshots=m.snapshots?.rows||[];
-  if(section==='columns')table($('table-columns'),['Column','Type','Extra','Comment'],m.columns||[]);
-  if(section==='preview')renderData($('table-preview'),m.preview);
-  if(section==='profile'){
-  const profile=m.profile||{};$('inspect-profile').replaceChildren();
-  const stats=document.createElement('p');if(profile.error)stats.textContent=profile.error;else ui(stats,'Rows: {rows} · Columns: {columns}',{rows:profile.row_count??'—',columns:profile.column_count??'—'});
-  const badge=document.createElement('span');badge.className='badge '+(profile.quality_passed===true?'good':'');ui(badge,'Quality: {state}',()=>({state:t(profile.quality_passed===true?'Passed':profile.quality_passed===false?'Needs review':'Unavailable')}));
-  const nulls=document.createElement('div');nulls.className='table-wrap';
-  table(nulls,['Column','NULL count','NULL %'],Object.entries(profile.null_counts||{}).map(([column,count])=>[column,count,profile.row_count>0?(100*count/profile.row_count).toFixed(2)+'%':'—']));$('inspect-profile').append(stats,badge,nulls);
-  }
-  if(section==='ddl'){const definition=m.definition?.error|| (m.definition||[]).map(r=>r[0]).join('\n');if(definition)$('table-ddl').textContent=definition;else ui($('table-ddl'),'Definition unavailable');}
-  if(section==='lineage')renderLineage($('table-lineage'),m.lineage_detail?.upstream||[],selected,m.lineage_detail?.downstream||[]);
-  if(m.lineage_detail?.wap_sql){const sql=document.createElement('pre');sql.textContent=m.lineage_detail.wap_sql;$('table-lineage').append(sql);}
-  if(section==='snapshots')table($('table-snapshots'),['Snapshot ID','Parent ID','Committed at','Actions'],snapshots.map(r=>[...r.slice(0,3),'']));
-  if(m.snapshots?.error)$('table-snapshots').textContent=m.snapshots.error;
-  $('snapshot-preview').replaceChildren();
-  $('table-snapshots').querySelectorAll('tbody tr').forEach((row,i)=>{
-   const snapshot=String(snapshots[i][0]);
-   const preview=actionButton('Preview Snapshot',async()=>{const previewRequest=++snapshotPreviewRequest;try{const data=await api('/api/catalog?table='+encodeURIComponent(selected)+'&snapshot_id='+encodeURIComponent(snapshot));if(!current()||previewRequest!==snapshotPreviewRequest)return;const heading=document.createElement('p');ui(heading,'Snapshot {snapshot} · Historical rows: {rows} · Current rows: {current} · Delta: {delta}',()=>({snapshot,rows:data.row_count,current:data.current_row_count??t('unavailable'),delta:data.current_row_count==null?t('unavailable'):data.row_count-data.current_row_count}));const grid=document.createElement('div');grid.className='table-wrap';renderData(grid,data.preview);$('snapshot-preview').replaceChildren(heading,grid);}catch(e){if(current()&&previewRequest===snapshotPreviewRequest)$('snapshot-preview').textContent=e.message;}});
-   const rollback=actionButton('Rollback',async()=>{if(!current()||!confirm(t('Rollback {table} to snapshot {snapshot}?',{table:selected,snapshot})))return;try{const result=await api('/api/bears/run',{bear:'data',action:'rollback',rollback:selected,snapshot_id:snapshot});if(request!==columnRequest||identity!==catalogIdentity())return;if(result.valid===false)throw new Error(t('Rollback audit needs review'));await describeTable(schema,name);}catch(e){if(request===columnRequest&&identity===catalogIdentity())ui($('snapshot-preview'),'Rollback failed: {error}',{error:e.message});}});
-   const clone=actionButton('Clone Snapshot',()=>cloneTable(selected,snapshot,request));
-   row.lastElementChild.append(preview,rollback,clone);
-  });
-  $('clone-table-btn').disabled=currentRole==='bi_viewer';$('export-table-btn').disabled=false;
-  $('drop-table-btn').disabled=currentRole==='bi_viewer';
-  $('open-table-sql').disabled=false;$('drop-table-btn').hidden=!['raw','sandbox','staging','scratch'].includes(schema);
- }catch(e){if(current()){ui($(inspectorTargets[section]),'Details unavailable');message('catalog-error',e.message);}}
-}
-async function loadCatalog(){
- invalidateCatalogDetails();const request=++catalogListRequest,identity=catalogIdentity(),generation=catalogGeneration;
- const current=()=>request===catalogListRequest&&identity===catalogIdentity()&&generation===catalogGeneration;
- const staleList=()=>{if(request===catalogListRequest&&identity===catalogIdentity()&&generation!==catalogGeneration)for(const id of ['catalog-tree','worksheet-tree'])ui($(id),'Catalog changed. Use Refresh catalog in Data Explorer.');};
- message('catalog-error','');ui($('catalog-tree'),'Loading tables…');
- try{const data=await api('/api/catalog');if(!current()){staleList();return;}catalogMetadata=data.metadata;renderCatalogTrees();
-  if(selectedTable){const [schema,name]=selectedTable.split('.');if(catalogMetadata[schema]?.some(row=>row[0]===name))await describeTable(schema,name);else{resetCatalogSelection();}}
- }catch(e){if(!current()){staleList();return;}message('catalog-error',e.message);ui($('catalog-tree'),'Catalog unavailable. Check warehouse readiness and refresh.');ui($('worksheet-tree'),'Catalog unavailable. Use Refresh catalog in Data Explorer.');}
-}
-function resetCatalogSelection(){
- ++columnRequest;selectedTable=null;ui($('table-title'),'Table Inspector');
- for(const id of ['open-table-sql','clone-table-btn','export-table-btn','refresh-table-details'])$(id).disabled=true;
- $('drop-table-btn').hidden=true;
-}
-$('refresh-table-details').onclick=()=>busy($('refresh-table-details'),loadCatalog).finally(()=>{$('refresh-table-details').disabled=!selectedTable;});
-$('refresh-catalog').onclick=()=>busy($('refresh-catalog'),loadCatalog);
 const bears=[
  {key:'sre',name:'SRE Bear',description:'Inspect workload readiness, recent errors, and runtime metrics.',fields:[]},
  {key:'query',name:'Query Doctor Bear',description:'Explain SQL or inspect a recent query for performance advice.',fields:[['target','Query target','latest'],['sql','SQL to explain (optional)','',true]]},
@@ -784,7 +532,7 @@ for(const bear of bears){
  card.append(content);bearPanels.append(card);
 }
 let activeTab='home';
-function activate(button){if(button.hidden||button.disabled)return;const previous=activeTab;stopJobsPolling();if(activeTab==='home'&&button.dataset.tab!=='home')workbenchHomeLeave();for(const b of tabs){const selected=b===button;if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');$(b.dataset.tab).hidden=!selected;}activeTab=button.dataset.tab;workbenchRememberPage(activeTab);applyPageTitle();workbenchScreenMessagesRouteChanged();if(activeTab==='home')loadHome();if(activeTab==='jobs')loadJobs();if(activeTab==='catalog')$('refresh-catalog').click();if(previous!==activeTab)workbenchResetRouteView({focus:true});}
+let activate;
 function workbenchSubpageForTab(tab){
  const page=workbenchRoute().page||'';
  return workbenchTabForPage(page)===tab&&page!==workbenchRouteForTab(tab);
@@ -1096,17 +844,6 @@ function workbenchCommandEntries(){
     entries.push({label,kind:'Table',href:'#explore',run:async()=>{await activate($('tab-catalog'));await dbExploreOpenSearchItem(item);}});
     if(entries.length>=80)break;
    }
-  }else{
-   for(const [schema,rows] of Object.entries(catalogMetadata||{})){
-    if(!Array.isArray(rows))continue;
-    for(const row of rows){
-     const name=Array.isArray(row)?row[0]:row;if(typeof name!=='string')continue;
-     const label=schema+'.'+name;if(!matchName(label)||seen.has(label))continue;seen.add(label);
-     entries.push({label,kind:'Table',href:'#explore',run:async()=>{await activate($('tab-catalog'));await describeTable(schema,name);}});
-     if(entries.length>=60)break;
-    }
-    if(entries.length>=60)break;
-   }
   }
   const databases=[];
   for(const database of dbDatabases||[]){
@@ -1224,16 +961,8 @@ if(typeof document.addEventListener==='function')document.addEventListener('keyd
  if(workbenchOverlayEscape(event))event.preventDefault?.();
 });
 if(typeof document.addEventListener==='function')document.addEventListener('click',event=>workbenchOverlayOutsideClick(event.target));
-setInterval(async()=>{if(document.hidden)return;if(typeof databaseMode!=='undefined'&&databaseMode){await dbRefreshAccess();await refreshStatus();await dbExplanationPoll();if(currentRole!=='bi_viewer'&&typeof loadJobAlerts==='function')loadJobAlerts(false);return;}if(currentRole!=='bi_viewer')loadJobAlerts(jobsVisible());await refreshStatus();},15000);
+setInterval(async()=>{if(document.hidden)return;if(typeof databaseMode!=='undefined'&&databaseMode){await dbRefreshAccess();await refreshStatus();await dbExplanationPoll();if(currentRole!=='bi_viewer'&&typeof loadJobAlerts==='function')loadJobAlerts(false);return;}},15000);
 // Small DOM helpers keep all catalog, model, and SQL text out of HTML interpolation.
-function actionButton(label,task){const b=document.createElement('button');ui(b,label);if(label==='Rollback')b.dataset.roleWrite='admin';if(label==='Clone Snapshot')b.dataset.roleWrite='engineer';b.onclick=()=>busy(b,task);return b;}
-function renderData(container,data){if(data?.error){container.textContent=data.error;return;}table(container,data?.columns||[],(data?.rows||[]).slice(0,50),false);}
-function renderLineage(container,upstream,name,downstream=[]){container.replaceChildren();for(const [label,names] of [['Upstream sources',upstream],['Model',[name]],['Downstream models',downstream]]){const row=document.createElement('div');row.className='lineage-row';const title=document.createElement('strong');ui(title,label);row.append(title);for(const text of names.length?names:['None recorded']){const node=document.createElement('span');node.className='node';if(names.length)node.textContent=text;else ui(node,text);row.append(node);}container.append(row);}}
-let catalogMetadata={},selectedTable=null;
-function renderCatalogTrees(){for(const [target,filter,insert] of [['catalog-tree','catalog-filter',false],['worksheet-tree','worksheet-tree-filter',true]]){const container=$(target),term=$(filter).value.toLowerCase();container.replaceChildren();container.className='';for(const [schema,rows] of Object.entries(catalogMetadata)){if(!Array.isArray(rows))continue;const matches=rows.filter(row=>(schema+'.'+row[0]).toLowerCase().includes(term));if(!matches.length)continue;const group=document.createElement('details'),title=document.createElement('summary');group.open=true;title.textContent=`${schema} (${matches.length})`;group.append(title);for(const row of matches){const name=row[0],b=document.createElement('button');b.className='table-link';b.textContent=name;b.onclick=()=>{if(insert){const editor=$('sql'),start=editor.selectionStart,end=editor.selectionEnd;editor.setRangeText(schema+'.'+name,start,end,'end');saveWorksheet();editor.focus();}else describeTable(schema,name);};group.append(b);}container.append(group);}if(!container.childElementCount)ui(container,'No matching tables.');}}
-$('catalog-filter').oninput=renderCatalogTrees;$('worksheet-tree-filter').oninput=renderCatalogTrees;
-$('open-table-sql').onclick=()=>openWorksheet('SELECT * FROM '+selectedTable+' LIMIT 50');
-$('drop-table-btn').onclick=()=>busy($('drop-table-btn'),async()=>{const selected=selectedTable;if(!selected||!confirm(t('Drop {table}? This deletes the table.',{table:selected})))return;try{await api('/api/catalog/drop',{table:selected});if(selectedTable===selected){++columnRequest;selectedTable=null;$('refresh-table-details').disabled=true;$('clone-table-btn').disabled=true;$('export-table-btn').disabled=true;ui($('table-title'),'Table dropped');$('open-table-sql').disabled=true;$('drop-table-btn').hidden=true;for(const id of ['table-columns','table-preview','inspect-profile','table-ddl','table-snapshots','snapshot-preview','table-lineage'])$(id).replaceChildren();}await loadCatalog();}catch(e){message('catalog-error',e.message);}});
 function wireTabs(buttons,select,orientation){
  buttons.forEach(button=>{
   button.onclick=()=>select(button);
@@ -1265,29 +994,16 @@ function showView(id){
    target?.scrollIntoView?.({block:'start'});
    return;
   }
-  const section=kind==='marts'?$('transformation-publications'):$('transformation-atlas');
-  section?.scrollIntoView?.({block:'start'});return;
  }
  const button=$(id);if(button&&!button.hidden)button.click();
 }
-function selectInspector(button){
- if(typeof databaseMode!=='undefined'&&databaseMode)return dbSelectInspector(button);
- activeInspector=button.dataset.inspect;
- inspectorTabs.forEach(b=>{const selected=b===button;b.setAttribute('aria-selected',String(selected));b.tabIndex=selected?0:-1;$('inspect-'+b.dataset.inspect).hidden=!selected;});
- if(selectedTable){const [schema,name]=selectedTable.split('.');return describeTable(schema,name);}
-}
 function workbenchInspectorTabs(){return [...document.querySelectorAll('[data-inspect]')];}
-const inspectorTabs=workbenchInspectorTabs();wireTabs(inspectorTabs,selectInspector);
-
+const inspectorTabs=workbenchInspectorTabs();
 // Storage is optional (private browsing, quotas, or damaged records must not block SQL).
-const worksheetKey='shirokuma.worksheets.v1',historyKey='shirokuma.query_history.v1';
 function readStorage(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
 function writeStorage(key,value){try{localStorage.setItem(key,JSON.stringify(value));}catch{ui($('query-meta'),'Browser storage unavailable. Changes stay in this session.');}}
-let saved=readStorage(worksheetKey,{});
-let worksheets=Array.isArray(saved?.tabs)?saved.tabs.filter(w=>w&&typeof w.id==='string'&&typeof w.name==='string'&&typeof w.sql==='string'):[];
-if(!worksheets.length)worksheets=[{id:'initial',name:'Worksheet 1',sql:$('sql').value}];
-let worksheetId=worksheets.some(w=>w.id===saved?.active)?saved.active:worksheets[0].id;
-function saveWorksheet(){if(typeof databaseMode!=='undefined'&&databaseMode)return dbSave();const current=worksheets.find(w=>w.id===worksheetId);if(current)current.sql=$('sql').value;writeStorage(worksheetKey,{active:worksheetId,tabs:worksheets});}
+let worksheets=[],worksheetId='';
+let saveWorksheet,addWorksheet;
 function setSQL(sql){$('sql').value=sql;saveWorksheet();}
 function worksheetName(w){const numbered=/^Worksheet (\d+)$/.exec(w.name);return numbered?t('Worksheet {number}',{number:numbered[1]}):w.name;}
 function updateWorksheetCloseAction(){
@@ -1319,19 +1035,11 @@ function closeWorksheet(id){
  return true;
 }
 function renderWorksheets(){const container=$('worksheet-tabs');container.replaceChildren();for(const w of worksheets){const b=document.createElement('button');const numbered=/^Worksheet (\d+)$/.exec(w.name);if(numbered)ui(b,'Worksheet {number}',{number:numbered[1]});else b.textContent=w.name;b.setAttribute('role','tab');b.id='worksheet-'+w.id;b.setAttribute('aria-controls','sql');b.setAttribute('aria-selected',String(w.id===worksheetId));b.tabIndex=w.id===worksheetId?0:-1;b.dataset.worksheet=w.id;container.append(b);}updateWorksheetCloseLabels();wireTabs([...container.querySelectorAll('[role=tab]')],b=>{saveWorksheet();worksheetId=b.dataset.worksheet;$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;saveWorksheet();renderWorksheets();$(b.id)?.focus();});}
-function addWorksheet(sql=samples.orders){saveWorksheet();const number=Math.max(0,...worksheets.map(w=>Number(/^Worksheet (\d+)$/.exec(w.name)?.[1]||0)))+1;const w={id:crypto.randomUUID(),name:'Worksheet '+number,sql};worksheets.push(w);worksheetId=w.id;$('sql').value=sql;saveWorksheet();renderWorksheets();}
-function openWorksheet(sql){addWorksheet(sql);activate($('tab-warehouse'));$('sql').focus();}
 $('worksheet-close-select').onchange=updateWorksheetCloseAction;
 $('worksheet-close-action').onclick=()=>{const select=$('worksheet-close-select'),id=select.value;if(!id){select.focus();return;}if(!closeWorksheet(id))$('worksheet-close-action').focus();};
-$('sql').addEventListener('input',saveWorksheet);$('add-worksheet-tab').onclick=()=>addWorksheet();
-$('sql').value=worksheets.find(w=>w.id===worksheetId).sql;renderWorksheets();
+$('sql').addEventListener('input',()=>saveWorksheet());$('add-worksheet-tab').onclick=()=>addWorksheet();
 if(matchMedia('(max-width: 1024px)').matches)$('worksheet-explorer').open=false;
-let history=readStorage(historyKey,[]);history=Array.isArray(history)?history.filter(q=>q&&typeof q.sql==='string'&&typeof q.at==='string').slice(0,50):[];
 function historyPlaceholder(){const option=new Option('','');ui(option,'Restore a past query…');return option;}
-function renderHistory(){$('query-history').replaceChildren(historyPlaceholder());history.forEach((q,i)=>$('query-history').add(new Option(`${new Date(q.at).toLocaleString()} · ${q.sql.slice(0,100)}`,String(i))));}
-function rememberQuery(sql){history=[{sql,at:new Date().toISOString()},...history.filter(q=>q.sql!==sql)].slice(0,50);writeStorage(historyKey,history);renderHistory();}
-$('query-history').onchange=()=>{const value=$('query-history').value;if(value!==''){setSQL(history[Number(value)].sql);$('sql').focus();}};renderHistory();
-
 let queryResult=null,sortColumn=-1,sortDirection=1;
 const cellText=v=>v==null?'NULL':typeof v==='object'?JSON.stringify(v):String(v);
 function filteredRows(){const term=$('result-filter').value.toLowerCase();return (queryResult?.rows||[]).filter(row=>row.some(v=>cellText(v).toLowerCase().includes(term)));}
@@ -1383,500 +1091,41 @@ function renderResults(){
 }
 $('result-filter').oninput=renderResults;
 function delimited(separator){const quote=v=>'"'+cellText(v).replaceAll('"','""')+'"';return [queryResult.columns.map(c=>typeof c==='string'?c:c.name),...visibleRows()].map(row=>row.map(quote).join(separator)).join('\r\n');}
-function download(format){if(!queryResult)return;const content=format==='csv'?delimited(','):format==='tsv'?delimited('\t'):JSON.stringify(visibleRows().map(row=>Object.fromEntries(queryResult.columns.map((c,i)=>[typeof c==='string'?c:c.name,row[i]]))),null,2);const type=format==='csv'?'text/csv;charset=utf-8':format==='tsv'?'text/tab-separated-values;charset=utf-8':'application/json';const url=URL.createObjectURL(new Blob([content],{type})),link=document.createElement('a');link.href=url;link.download='query-results.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);ui($('result-action-state'),'Downloaded visible rows.');}
+let download;
 $('export-csv').onclick=()=>download('csv');$('export-json').onclick=()=>download('json');$('export-tsv').onclick=()=>download('tsv');$('copy-tsv').onclick=async()=>{try{await navigator.clipboard.writeText(delimited('\t'));ui($('result-action-state'),'Copied visible rows.');}catch(e){ui($('result-action-state'),'Copy failed: {error}',{error:e.message});}};
 
-for(const [id,bear,action] of [['copilot-generate','data','generate'],['copilot-explain','query','explain']])$(id).onclick=()=>busy($(id),async()=>{try{const payload={bear,action},origin=action==='generate'?{id:worksheetId,sql:$('sql').value}:null;if(action==='generate'){payload.request=$('copilot-request').value.trim();if(!payload.request)throw new Error(t('Describe the SQL you need first.'));}const result=await api('/api/bears/run',payload);if(action==='generate'&&(result.generated_sql||result.sql)){
- const worksheet=worksheets.find(w=>w.id===origin.id);
- if(worksheet&&(worksheetId===origin.id?$('sql').value:worksheet.sql)===origin.sql){
-  worksheet.sql=result.generated_sql||result.sql;
-  if(worksheetId===origin.id)$('sql').value=worksheet.sql;
-  saveWorksheet();
- }
-}message('copilot-result',JSON.stringify(result,null,2));}catch(e){message('copilot-result',e.message);}});
-
-
-
-// Shared authorization epoch for the non-Database job views. The retired stage
-// UI used the same counter, so its name is kept to avoid touching job contracts.
 let stageEpoch=0;
-const scheduleFields=['kind','minutes','time','timezone','date','day',...Array.from({length:7},(_,i)=>'weekday-'+(i+1))];
-function readScheduleFields(prefix){
- return {kind:$(prefix+'-kind').value,every_minutes:$(prefix+'-minutes').value,time:$(prefix+'-time').value,timezone:$(prefix+'-timezone').value,date:$(prefix+'-date').value,day_of_month:$(prefix+'-day').value,weekdays:Array.from({length:7},(_,i)=>i+1).filter(day=>$(prefix+'-weekday-'+day).checked),enabled:$(prefix+'-enabled').checked===true};
-}
-function fillScheduleFields(prefix,saved){
- $(prefix+'-kind').value=saved?.kind||'interval';$(prefix+'-minutes').value=saved?.every_minutes??60;
- $(prefix+'-time').value=saved?.time||'09:00';$(prefix+'-timezone').value=saved?.timezone||'Asia/Tokyo';
- $(prefix+'-date').value=saved?.date||'';$(prefix+'-day').value=saved?.day_of_month??1;
- for(let day=1;day<=7;day++)$(prefix+'-weekday-'+day).checked=(saved?.weekdays||[]).includes(day);
- $(prefix+'-enabled').checked=saved?.enabled===true;
-}
-function updateScheduleKind(prefix,editable){
- const kind=$(prefix+'-kind').value;
- $(prefix+'-once-help').hidden=kind!=='once';$(prefix+'-monthly-help').hidden=kind!=='monthly';$(prefix+'-calendar-help').hidden=kind==='interval';
- for(const [group,active] of [['interval',kind==='interval'],['daily',kind!=='interval'],['once',kind==='once'],['weekly',kind==='weekly'],['monthly',kind==='monthly']])$(prefix+'-'+group).hidden=!active;
- for(const field of scheduleFields){const active=field==='kind'||(field==='minutes'?kind==='interval':['time','timezone'].includes(field)?kind!=='interval':field==='date'?kind==='once':field==='day'?kind==='monthly':kind==='weekly');$(prefix+'-'+field).disabled=!editable||!active;}
-}
-function scheduleConfiguration(saved){return JSON.stringify(['kind','every_minutes','time','timezone','date','weekdays','day_of_month','enabled'].map(key=>saved?.[key]??null));}
-function schedulePayload(fields){
- const payload={kind:fields.kind,enabled:fields.enabled===true};
- if(fields.kind==='interval'){
-  const minutes=Number(fields.every_minutes);if(!Number.isInteger(minutes)||minutes<1||minutes>10080)throw Error(t('Interval must be an integer from 1 to 10080.'));payload.every_minutes=minutes;
- }else{
-  if(!['daily','once','weekly','monthly'].includes(fields.kind))throw Error(t('Choose a schedule frequency.'));
-  const zone=fields.timezone.trim();if(!/^([01]\d|2[0-3]):[0-5]\d$/.test(fields.time)||!zone)throw Error(t('Enter a valid time and IANA timezone.'));
-  try{new Intl.DateTimeFormat('en',{timeZone:zone});}catch{throw Error(t('Enter a valid time and IANA timezone.'));}
-  payload.time=fields.time;payload.timezone=zone;
-  if(fields.kind==='once'){
-   const date=new Date(fields.date+'T00:00:00Z');if(!/^\d{4}-\d{2}-\d{2}$/.test(fields.date)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==fields.date)throw Error(t('Enter a valid local date.'));payload.date=fields.date;
-  }else if(fields.kind==='weekly'){
-   const days=fields.weekdays;if(!Array.isArray(days)||!days.length||days.some(day=>!Number.isInteger(day)||day<1||day>7)||new Set(days).size!==days.length)throw Error(t('Choose at least one weekday.'));payload.weekdays=[...days].sort((a,b)=>a-b);
-  }else if(fields.kind==='monthly'){
-   const day=fields.day_of_month==='last'?'last':Number(fields.day_of_month);if(day!=='last'&&(!Number.isInteger(day)||day<1||day>31))throw Error(t('Choose a day from 1 to 31 or the last day.'));payload.day_of_month=day;
-  }
- }return payload;
-}
-function scheduleSummary(saved){
- if(!saved)return '';
- if((saved.kind||'interval')==='interval')return t('Every {minutes} minutes',{minutes:saved.every_minutes});
- const kind=t(({once:'Once',daily:'Daily',weekly:'Weekly',monthly:'Monthly'})[saved.kind]||'Daily');
- const days=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
- const detail=saved.kind==='once'?saved.date:saved.kind==='weekly'?(saved.weekdays||[]).map(day=>t(days[day-1])).join(', '):saved.kind==='monthly'?(saved.day_of_month==='last'?t('Last day'):String(saved.day_of_month)):'';
- return [kind,detail,saved.time,saved.timezone].filter(Boolean).join(' · ');
-}
-function scheduleNextTime(saved){
- // Interval schedules have no zone of their own; show them in the browser's zone and always add JST.
- if(!saved?.next_run_at)return '\u2014';const zone=saved.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'UTC',date=new Date(saved.next_run_at);
- if(!Number.isFinite(date.getTime()))return saved.next_run_at;
- const local=new Intl.DateTimeFormat(language==='ja'?'ja-JP':'en-GB',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',timeZone:zone}).format(date)+' ('+zone+')';
- const jst=typeof fmtJST==='function'?fmtJST(date):local;
- return zone==='Asia/Tokyo'?jst:local+' · '+jst;
-}
 // Shared by jobs, stages and refresh targets: JST display with the exact value on hover.
 function jobAlertTime(value){
  if(!value)return '—';const date=new Date(value);if(!Number.isFinite(date.getTime()))return value;
  return typeof fmtJST==='function'?fmtJST(date):value;
 }
-// Status colour classes; the visible label always states the outcome in words.
-function statusTone(status){return ({success:'tone-ok',succeeded:'tone-ok',finished:'tone-ok',queued:'tone-run',running:'tone-run',failed:'tone-bad',denied:'tone-bad',unknown:'tone-warn',interrupted:'tone-warn',degraded:'tone-warn'})[status]||'';}
-
-
-
 // Phase 8 controls use the same API and registered UI text as the other panels.
 function bindResultViewControls(){
  for(const view of ['table','chart'])$('result-view-'+view).onclick=()=>{for(const kind of ['table','chart'])$('result-view-'+kind).setAttribute('aria-pressed',String(kind===view));$('query-results').hidden=view!=='table';$('query-chart').hidden=view!=='chart';$('chart-tools').hidden=view!=='chart';renderChart();};
  for(const id of ['chart-type','chart-x-col','chart-y-col'])$(id).onchange=renderChart;
 }
 bindResultViewControls();
-async function cloneTable(source,snapshot,request=columnRequest){
- if(!source)return;
- const identity=catalogIdentity();let refreshRequest=request;
- try{const payload={source_table:source};if(snapshot!==undefined)payload.snapshot_id=snapshot;
- const result=await api('/api/catalog/clone',payload);
- if(request!==columnRequest||identity!==catalogIdentity())return;
- // Catalog refresh reloads the selected inspector once, advancing its request.
- refreshRequest=request+1;
- await loadCatalog();
- if(refreshRequest!==columnRequest||identity!==catalogIdentity()||selectedTable!==source)return;
- ui($('catalog-error'),result.audit?.quality_passed===false?'Clone audit needs review':'Cloned {source} to {table}.',{source,table:result.table});$('catalog-error').hidden=false;
- }catch(e){if((request===columnRequest||refreshRequest===columnRequest)&&identity===catalogIdentity()){ui($('catalog-error'),'Clone failed: {error}',{error:e.message});$('catalog-error').hidden=false;}}
-}
-$('clone-table-btn').onclick=()=>busy($('clone-table-btn'),()=>cloneTable(selectedTable));
-function downloadFile(content,filename,type){
- const url=URL.createObjectURL(new Blob([content],{type})),link=document.createElement('a');
- link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-$('export-table-btn').onclick=()=>busy($('export-table-btn'),async()=>{
- const selected=selectedTable,request=columnRequest;if(!selected)return;
- try{const format=$('export-table-format').value,result=await api('/api/lake/export',{table:selected,format});
- const content=format==='parquet'?Uint8Array.from(atob(result.content_base64),c=>c.charCodeAt(0)):result.content;
- downloadFile(content,result.filename,{csv:'text/csv;charset=utf-8',jsonl:'application/x-ndjson',parquet:'application/vnd.apache.parquet'}[format]);
- if(request===columnRequest){ui($('catalog-error'),'Exported {table} ({row_count} / {total_rows} rows) to {filename}.',{table:selected,filename:result.filename,row_count:result.row_count,total_rows:result.total_rows});$('catalog-error').hidden=false;}
- }catch(e){if(request===columnRequest){ui($('catalog-error'),'Export failed: {error}',{error:e.message});$('catalog-error').hidden=false;}}
-});
-
-// Jobs are manually admitted by the server; this page never schedules or retries work.
-let jobEntries=[],jobRunCache=[],jobRunState='loading',jobSelectionEpoch=0,jobDetailRequest=0,jobDirty=false,jobSchedules=[],jobSteps=[],editingJob=null,selectedJob=null,selectedRunId=null,jobsPoll=null,jobsRequest=0,jobListRequest=0,jobScheduleRequest=0,jobScheduleEnabledDirty=false;
 const jobStatuses={queued:'Queued',running:'Running',succeeded:'Succeeded',success:'Succeeded',failed:'Failed',interrupted:'Interrupted',unknown:'Unknown outcome',skipped:'Skipped',pending:'Pending'};
-const liveJobStates=new Set(['queued','running']);
-const jobActions=['sql','alert','dbt_build','dbt_test','ingest','wap_refresh','wap_publish'];
 const jobActionLabels={sql:'Run SQL',alert:'Evaluate alert',dbt_build:'Build dbt models',dbt_test:'Test dbt models',ingest:'Ingest file',stage_import:'Stage import',stage_export:'Stage export',stage_scan:'Scan stage',wap_refresh:'Refresh WAP model',wap_publish:'Publish WAP model'};
-function jobTrigger(run){return run.trigger==='stage'?((run.steps||[]).some(step=>step.action==='stage_export')?'Stage export':'Stage import'):run.trigger==='schedule'?'Scheduled':'Manual';}
-function jobSummary(step){
- const summary=step.summary;if(!summary||typeof summary!=='object')return '\u2014';
- const parts=[],count=summary.rows_ingested??summary.row_count,models=summary.model_count??(Array.isArray(summary.models)?summary.models.length:undefined);
- if(step.action==='alert'){
- const statuses={opened:'New notification',ongoing:'Ongoing notification',resolved:'Notification resolved',clear:'No active notification',definition_changed:'Closed after rule change'};
- if(typeof summary.condition_met==='boolean')parts.push(t(summary.condition_met?'Condition met':'Condition clear'));
- if(statuses[summary.alert_status])parts.push(t(statuses[summary.alert_status]));
- if(summary.alert_id)parts.push(t('Notification {id}',{id:String(summary.alert_id).slice(0,8)}));
- }else if(['ingest','stage_import','stage_scan'].includes(step.action)&&count!==undefined)parts.push(t('{count} rows ingested',{count}));
- else if(models!==undefined)parts.push(t(models===1?'1 model':'{count} models',{count:models}));
- else if(count!==undefined)parts.push(t(count===1?'1 result row':'{count} result rows',{count}));
- if(summary.table)parts.push(t('Target table {table}',{table:summary.table}));
- if(summary.duration_ms!==undefined)parts.push(String(summary.duration_ms)+(language==='ja'?'ms':' ms'));
- return parts.join(language==='ja'?'・':' · ')||'\u2014';
-}
-function jobEmpty(id,key){$(id).replaceChildren();const node=document.createElement('div');node.className='empty';ui(node,key);$(id).append(node);}
-function jobAlertCanAcknowledge(alert){return currentRole!=='bi_viewer'&&alert.can_manage===true&&!alert.acknowledged_at;}
-function jobAlertResolution(alert){return alert.resolution==='condition_cleared'?'Condition cleared':alert.resolution==='definition_changed'?'Definition changed':alert.resolved_at?'Resolved':'Active condition';}
-function jobAlertTimestamp(value){
- const time=document.createElement('time');time.dateTime=value;time.title=value;ui(time,'{time}',()=>({time:jobAlertTime(value)}));return time;
-}
-function renderJobAlerts(alerts){
- ui($('job-alerts-timezone'),'Times use JST.');
- if(!alerts.length){jobEmpty('job-alerts','No notifications.');return;}
- table($('job-alerts'),['Importance','Notification','Acknowledgement','Resolution','Occurrences','Last seen','Actions'],alerts.map(alert=>[alert.severity,'','','',alert.occurrences,'','']));
- $('job-alerts').querySelectorAll('tbody tr').forEach((row,index)=>{
- const alert=alerts[index];ui(row.cells[0],alert.severity==='critical'?'critical':'warning');
- const notification=document.createElement('div');notification.className='alert-main';notification.textContent=alert.message;row.cells[1].append(notification);
- const context=document.createElement('small');ui(context,'Job: {job} \u00b7 Step: {step} \u00b7 Owner: {owner}',{job:alert.job_name,step:alert.step_name||String(alert.step_position),owner:alert.owner});row.cells[1].append(context);
- if(alert.first_seen_at){const detail=document.createElement('details'),label=document.createElement('summary');ui(label,'First seen');detail.append(label,jobAlertTimestamp(alert.first_seen_at));row.cells[1].append(detail);}
- const acknowledgement=document.createElement('span');ui(acknowledgement,alert.acknowledged_at?'Acknowledged':'Unacknowledged');row.cells[2].append(acknowledgement);
- if(alert.acknowledged_at){const stamp=document.createElement('small');stamp.append(jobAlertTimestamp(alert.acknowledged_at));if(alert.acknowledged_by)stamp.title=alert.acknowledged_by;row.cells[2].append(stamp);}
- ui(row.cells[3],jobAlertResolution(alert));if(alert.resolved_at)row.cells[3].title=alert.resolved_at;
- if(alert.last_seen_at)row.cells[5].append(jobAlertTimestamp(alert.last_seen_at));
- if(jobAlertCanAcknowledge(alert))row.lastElementChild.append(actionButton('Acknowledge',async()=>{
- try{await api('/api/alerts/ack',{alert_id:alert.id});await loadJobAlerts(true);}catch(error){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}
- }));
- });
-}
-
-async function loadJobAlerts(render=jobsVisible()){
+async function loadJobAlerts(){
  const role=currentRole,epoch=stageEpoch;
  const current=()=>role===currentRole&&epoch===stageEpoch;
  if(role==='bi_viewer'){$('jobs-alert-count').hidden=true;workbenchAlertCount=0;workbenchAlerts=[];workbenchRenderAlerts();return;}
- if(typeof databaseMode!=='undefined'&&databaseMode){
-  // Database mode reads the same alert DTO through the Jobs context. Without a
-  // loaded context this stays empty instead of starting an unrelated read.
-  if(typeof dbJobs==='undefined'||!dbJobs.installed||!dbJobs.started||!dbJobs.context||dbJobs.invalid)return;
-  try{
-   const data=await dataopsRequest('/api/v1/alerts',dbJobs.context);if(!current())return;
-   const alerts=Array.isArray(data.alerts)?data.alerts.filter(alert=>dbScheduleScoped(alert,dbJobs.context)):[];
-   const count=Math.max(0,Number(data.unacknowledged_count)||0);
-   workbenchAlertCount=count;workbenchAlerts=alerts;workbenchRenderAlerts();
-  }catch(error){if(current()){workbenchAlertCount=0;workbenchAlerts=[];workbenchRenderAlerts();}}
-  return;
- }
+ // Database mode reads the same alert DTO through the Jobs context. Without a
+ // loaded context this stays empty instead of starting an unrelated read.
+ if(typeof dbJobs==='undefined'||!dbJobs.installed||!dbJobs.started||!dbJobs.context||dbJobs.invalid)return;
  try{
- const data=await api('/api/alerts');if(!current())return;
- const count=Math.max(0,Number(data.unacknowledged_count)||0);ui($('jobs-alert-count'),'{count} unacknowledged',{count});$('jobs-alert-count').hidden=count===0;
- workbenchAlertCount=count;workbenchAlerts=Array.isArray(data.alerts)?data.alerts:[];workbenchRenderAlerts();
- if(render&&jobsVisible()){message('job-alerts-error','');renderJobAlerts(data.alerts||[]);}
- }catch(error){if(current()&&render&&jobsVisible()){ui($('job-alerts-error'),'Notification failed: {error}',{error:error.message});$('job-alerts-error').hidden=false;}}
- finally{pruneUIBindings();}
+  const data=await dataopsRequest('/api/v1/alerts',dbJobs.context);if(!current())return;
+  const alerts=Array.isArray(data.alerts)?data.alerts.filter(alert=>dbScheduleScoped(alert,dbJobs.context)):[];
+  const count=Math.max(0,Number(data.unacknowledged_count)||0);
+  workbenchAlertCount=count;workbenchAlerts=alerts;workbenchRenderAlerts();
+ }catch(error){if(current()){workbenchAlertCount=0;workbenchAlerts=[];workbenchRenderAlerts();}}
 }
-$('job-alerts-refresh').onclick=()=>busy($('job-alerts-refresh'),()=>loadJobAlerts(true));
 function jobStatus(status){return t(jobStatuses[status]||'Unknown');}
-function jobDuration(item){if(item.duration_ms!==undefined)return item.duration_ms;const start=Date.parse(item.started_at),end=item.finished_at?Date.parse(item.finished_at):Date.now();return Number.isFinite(start)&&Number.isFinite(end)?Math.max(0,end-start):'\u2014';}
-function stopJobsPolling(){clearTimeout(jobsPoll);jobsPoll=null;}
-function jobsVisible(){return (typeof databaseMode==='undefined'||!databaseMode)&&activeTab==='jobs'&&!document.hidden&&currentRole!=='bi_viewer';}
-function scheduleJobsPolling(runs){stopJobsPolling();if(jobsVisible()&&runs.some(run=>liveJobStates.has(run.status)))jobsPoll=setTimeout(()=>refreshJobRuns(),2000);}
-function jobField(parent,label,key,value='',choices=null){
- const wrap=document.createElement('div'),caption=document.createElement('label'),id='job-field-'+crypto.randomUUID();
- caption.htmlFor=id;ui(caption,label);const input=document.createElement(choices?'select':key==='sql'?'textarea':'input');input.id=id;input.dataset.field=key;
- if(choices)for(const optionValue of choices){const option=document.createElement('option');option.value=optionValue;const label=key==='action'?jobActionLabels[optionValue]:optionValue;if(label in i18n.en)ui(option,label);else option.textContent=label;input.append(option);}
- input.value=value??'';if(key==='sql'){input.rows=4;input.spellcheck=false;}
- wrap.append(caption,input);parent.append(wrap);return input;
-}
-function syncJobSteps(){
- for(const node of $('job-steps').children){const index=Number(node.dataset.index),step=jobSteps[index];if(!step)continue;
- for(const field of node.querySelectorAll('[data-field]'))step[field.dataset.field]=field.value;}
-}
-function renderJobSteps(){
- if(!$('job-steps'))return;
- syncJobSteps();$('job-steps').replaceChildren();
- jobSteps.forEach((step,index)=>{
- const fieldset=document.createElement('fieldset');fieldset.className='job-step';fieldset.dataset.index=index;
- const legend=document.createElement('legend');ui(legend,'Step {number}',{number:index+1});fieldset.append(legend);
- const row=document.createElement('div');row.className='job-fields';fieldset.append(row);
- jobField(row,'Step name','name',step.name||'');
- const action=jobField(row,'Step type','action',step.action||'sql',jobActions);
- for(const option of action.options)option.disabled=currentRole!=='admin'&&!['sql','alert'].includes(option.value);
- action.onchange=()=>{syncJobSteps();const name=jobSteps[index].name;jobSteps[index]={name,action:action.value};$('job-steps').replaceChildren();renderJobSteps();};
- if(['sql','alert'].includes(step.action)){
- const sql=jobField(fieldset,'SQL text','sql',step.sql||(step.action==='alert'?'SELECT false AS triggered':'SELECT 1'));sql.required=true;
- const options=document.createElement('div');options.className='job-fields';fieldset.append(options);
- if(step.action==='sql'){
- const mode=jobField(options,'Mode','mode',step.mode||'read-only',['read-only','sandbox-write','admin-write']);
- for(const option of mode.options)option.disabled=currentRole!=='admin'&&option.value==='admin-write';
- }else{
- const note=document.createElement('small');ui(note,'Read-only evaluation. Return exactly one row and one boolean column: true opens a notification; false clears it.');fieldset.append(note);
- const message=jobField(fieldset,'Alert message','message',step.message||'');message.required=true;message.maxLength=500;
- jobField(options,'Severity','severity',step.severity||'warning',['warning','critical']);
- }
- jobField(options,'Schema','schema',step.schema||'marts',['marts','raw','sandbox','staging','tpch_tiny','smoke']);
- }else if(step.action==='ingest'){
- jobField(fieldset,'Server file path','file',step.file||'');jobField(fieldset,'Target table','table',step.table||'raw.events');
- const options=document.createElement('div');options.className='job-fields';fieldset.append(options);
- jobField(options,'Mode','mode',step.mode||'append',['append','replace','upsert']);
- jobField(options,'Export format','format',step.format||'auto',['auto','csv','jsonl','parquet']);
- jobField(options,'Upsert key (optional)','key',step.key||'');
- }else if(['wap_refresh','wap_publish'].includes(step.action))jobField(fieldset,'WAP model','table',step.table||'');
- const remove=actionButton('Remove step',async()=>{syncJobSteps();jobSteps.splice(index,1);markJobDirty();$('job-steps').replaceChildren();renderJobSteps();});remove.type='button';fieldset.append(remove);
- if(editingJob&&!editingJob.can_manage)for(const control of fieldset.querySelectorAll('input,select,textarea,button'))control.disabled=true;
- $('job-steps').append(fieldset);
- });
- pruneUIBindings();
-}
-function editJob(entry){
- editingJob=entry;
- const definition=entry?.definition||{name:'',description:'',parameters:{},steps:[{action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'}]};
- $('job-name').value=definition.name;$('job-name').readOnly=!!entry;
- $('job-description').value=definition.description||'';$('job-parameters').value=JSON.stringify(definition.parameters||{},null,2);
- $('job-steps').replaceChildren();jobSteps=structuredClone(definition.steps||[]);renderJobSteps();
- ui($('job-editor-state'),entry&&!entry.can_manage?'Read-only definition':entry?definition.name:'New definition');
- for(const element of $('job-form').querySelectorAll('input,textarea,select,button'))element.disabled=!!entry&&!entry.can_manage;
- $('job-save-state').textContent='';jobDirty=false;updateJobRunControls();
-}
-// The run button follows the saved definition: unsaved edits must be saved before running.
-function markJobDirty(){if(jobDirty)return;jobDirty=true;updateJobRunControls();}
-function updateJobRunControls(){
- const dirty=jobDirty&&!!selectedJob&&editingJob?.name===selectedJob.name;
- $('job-run').disabled=!selectedJob?.can_manage||dirty||$('job-run').getAttribute('aria-busy')==='true';
- ui($('job-run-help'),dirty?'Save the definition before running. Runs always use the saved version.':'Runs use your authenticated role. Steps stop at the first failure.');
- $('job-run-help').className=dirty?'callout warn':'help';
-}
-function confirmDiscardJob(){return !jobDirty||confirm(t('Discard unsaved changes to the job definition?'));}
-// A manual-run result belongs to the job and selection it was submitted from.
-function clearManualRun(){++jobSelectionEpoch;const open=$('job-run-open');open.hidden=true;delete open.dataset.run;delete open.dataset.job;$('job-run-state').textContent='';}
-function openJob(entry,{route=true}={}){clearManualRun();editJob(entry);selectJob(entry);renderJobList();if(route&&typeof workbenchShowDetail==='function')workbenchShowDetail('jobs',entry.name);}
-function clearSelectedJob(){
- selectedJob=null;ui($('job-run-name'),'Choose a saved job.');jobEmpty('job-run-arguments','Save the job before running or scheduling it.');
- clearManualRun();updateJobRunControls();renderJobSchedule();if(jobEntries.length)renderJobList();
-}
-function resetJobsUI(){
- stopJobsPolling();jobEntries=[];jobRunCache=[];jobSchedules=[];jobRunState='loading';selectedRunId=null;
- editJob(null);clearSelectedJob();
- $('job-runs-filter').value='';renderJobList();renderJobRuns();
- $('job-run-detail').replaceChildren();ui($('job-detail-state'),'Choose a run to inspect its steps.');$('job-detail-state').className='state';
- for(const id of ['jobs-error','job-failure','job-alerts-error','job-schedule-message'])message(id,'');
- jobEmpty('job-alerts','No notifications loaded.');$('job-alerts-timezone').textContent='';
- for(const id of ['jobs-alert-count']){$(id).textContent='';$(id).hidden=true;}
-}
-function updateRunFilter(){
- const filter=$('job-runs-filter'),value=filter.value,names=[...new Set([...jobEntries.map(entry=>entry.name),...jobRunCache.map(run=>run.job_name)])].filter(Boolean).sort();
- if([...filter.options].slice(1).map(option=>option.value).join('\n')===names.join('\n'))return;
- filter.replaceChildren(filter.options[0],...names.map(name=>new Option(name,name)));filter.value=names.includes(value)?value:'';
-}
-function renderJobList(runs){
- if(runs)jobRunCache=runs;updateRunFilter();
- // Keep the manual-run status current from history even while another run's steps are open.
- const manual=jobRunCache.find(run=>run.id===$('job-run-open').dataset.run);
- if(manual){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:manual.id,status:jobStatus(manual.status)}));$('job-run-state').className='state status-line '+statusTone(manual.status);}
- if(!jobEntries.length){jobEmpty('jobs-list','No saved jobs yet. Choose New job to create the first one.');return;}
- table($('jobs-list'),['Job name','Description','Owner','Schedule','Last run','Actions'],jobEntries.map(entry=>[entry.name,entry.definition.description||'',entry.owner,'','','']));
- $('jobs-list').querySelectorAll('tbody tr').forEach((row,index)=>{
-  const entry=jobEntries[index],schedule=jobSchedules.find(item=>item.name===entry.name),run=jobRunCache.find(item=>item.job_name===entry.name),count=entry.definition.steps.length;
-  if(entry.name===(selectedJob||editingJob)?.name)row.setAttribute('aria-current','true');
-  const steps=document.createElement('small');ui(steps,count===1?'1 step':'{count} steps',{count});row.cells[1].append(steps);
-  if(!entry.can_manage){const note=document.createElement('small');ui(note,'Read-only definition');row.cells[2].append(note);}
-  const state=document.createElement('span');state.className='badge '+(schedule?.enabled?'tone-ok':'');ui(state,schedule?.enabled?'Enabled':'Disabled');row.cells[3].append(state);
-  if(schedule?.enabled){const next=document.createElement('small');ui(next,'Next run: {time}',()=>({time:scheduleNextTime(schedule)}));row.cells[3].append(next);}
-  if(run){const status=document.createElement('span');status.className='badge '+statusTone(run.status);ui(status,jobStatuses[run.status]||'Unknown');row.cells[4].append(status,jobAlertTimestamp(run.started_at||run.created_at));}
-  else ui(row.cells[4],jobRunState==='loading'?'Loading…':jobRunState==='failed'?'History unavailable':'Not in the latest 100 runs');
-  row.lastElementChild.append(actionButton('Open',async()=>{if(!confirmDiscardJob())return;openJob(entry);$('job-name').focus();}),actionButton('Run history',async()=>{$('job-runs-filter').value=entry.name;renderJobRuns();}));
- });
-}
-function selectJob(entry){
- selectedJob=entry;$('job-run-name').textContent=entry.definition.name;$('job-run-arguments').replaceChildren();
- const parameters=entry.definition.parameters||{};
- for(const [name,spec] of Object.entries(parameters)){
- const wrap=document.createElement('div'),label=document.createElement('label'),input=document.createElement(spec.type==='boolean'?'select':'input');
- input.id='job-arg-'+name;input.dataset.argument=name;input.dataset.type=spec.type;
- label.htmlFor=input.id;label.textContent=name+' ('+spec.type+')'+(spec.required===true&&spec.default===undefined?' *':'');
- if(spec.type==='boolean')for(const value of ['','true','false']){const option=document.createElement('option');option.value=value;option.textContent=value||'\u2014';input.append(option);}
- else input.type=spec.type==='integer'?'number':spec.type==='date'?'date':'text';
- if(spec.type==='integer')input.step='1';input.required=spec.required===true&&spec.default===undefined;
- if(spec.default!==undefined)input.value=String(spec.default);
- wrap.append(label,input);$('job-run-arguments').append(wrap);
- }
- if(!Object.keys(parameters).length)jobEmpty('job-run-arguments','No arguments required.');
- updateJobRunControls();
- renderJobSchedule();
-}
-async function loadJobs(){
- if(!jobsVisible())return;
- const request=++jobListRequest,role=currentRole,epoch=stageEpoch;
- const selection=jobSelectionEpoch;
- const current=()=>request===jobListRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
- message('jobs-error','');try{
- const data=await api('/api/jobs');if(!current())return;jobEntries=data.jobs||[];
- const selectionChanged=selection!==jobSelectionEpoch;
- if(!selectionChanged&&selectedJob){const updated=jobEntries.find(entry=>entry.name===selectedJob.name);if(updated)selectJob(updated);else clearSelectedJob();}
- renderJobList();
- await loadJobSchedules(selectionChanged,selectionChanged);if(!current())return;
- await refreshJobRuns(false);
- }catch(error){if(current()){message('jobs-error',error.message);stopJobsPolling();}}
- finally{pruneUIBindings();}
-}
-async function refreshJobRuns(refreshSchedules=true){
- if(!jobsVisible())return;
- const request=++jobsRequest,role=currentRole,epoch=stageEpoch;
- const current=()=>request===jobsRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
- const selection=selectedRunId,detailRequest=jobDetailRequest;
- try{
- const data=await api('/api/jobs/runs');if(!current())return;
- const runs=data.runs||[];jobRunCache=runs;jobRunState='ready';renderJobRuns();
- if(typeof renderJobList==='function')renderJobList(runs);
- if(selection&&selection===selectedRunId&&detailRequest===jobDetailRequest)await showJobRun(selection,runs.find(run=>run.id===selection));
- if(!current())return;
- await loadJobAlerts(true);
- if(!current())return;
- if(refreshSchedules)await loadJobSchedules(true);
- if(!current())return;
- scheduleJobsPolling(runs);
- }catch(error){if(current()){if(jobRunState!=='ready')jobRunState='failed';message('jobs-error',error.message);stopJobsPolling();if(typeof renderJobList==='function')renderJobList();}}
- finally{pruneUIBindings();}
-}
-function renderJobRuns(){
- const filter=$('job-runs-filter').value,runs=filter?jobRunCache.filter(run=>run.job_name===filter):jobRunCache;
- if(!runs.length){jobEmpty('job-runs',filter?'This job has no runs among the latest 100 runs.':'No runs among the latest 100 runs. Run a saved job to see its history here.');return;}
- table($('job-runs'),['Run ID','Job','Status','Trigger','Scheduled for (JST)','User','Started','Duration (ms)','Actions'],runs.map(run=>[run.id,run.job_name,jobStatus(run.status),t(jobTrigger(run)),run.scheduled_for?fmtJST(run.scheduled_for):'\u2014',run.actor,'',jobDuration(run),'']));
- $('job-runs').querySelectorAll('tbody tr').forEach((row,index)=>{const run=runs[index];ui(row.cells[2],jobStatuses[run.status]||'Unknown');
-  // Short IDs keep the table readable; the full value stays available on hover and in Step history.
-  row.cells[0].title=run.id;row.cells[0].textContent=String(run.id).slice(0,8);
-  if(run.scheduled_for){row.cells[4].title=run.scheduled_for;}row.cells[2].className=statusTone(run.status);ui(row.cells[3],jobTrigger(run));
-  if(run.started_at||run.created_at)row.cells[6].append(jobAlertTimestamp(run.started_at||run.created_at));else row.cells[6].textContent='\u2014';
-  if(run.id===selectedRunId)row.setAttribute('aria-current','true');
-  row.lastElementChild.append(actionButton('Inspect run',async()=>{await showJobRun(run.id);$('job-step-panel').scrollIntoView({block:'nearest'});}));});
-}
-async function showJobRun(id,freshRun){
- const request=++jobDetailRequest,role=currentRole,epoch=stageEpoch;
- const current=()=>request===jobDetailRequest&&role===currentRole&&epoch===stageEpoch&&jobsVisible();
- if(selectedRunId!==id){
-  // A newly chosen run never keeps the previous run's steps on screen while it loads or if it fails.
-  selectedRunId=id;ui($('job-detail-state'),'Loading run {id}…',{id});$('job-detail-state').className='state status-line tone-run';
-  message('job-failure','');$('job-run-detail').replaceChildren();renderJobRuns();
- }
- let data;
- try{data=freshRun||await api('/api/jobs/detail',{run_id:id});}
- catch(error){if(current()&&selectedRunId===id){ui($('job-detail-state'),'Run {id} details unavailable: {error}',{id,error:error.message});$('job-detail-state').className='state status-line tone-bad';$('job-run-detail').replaceChildren();message('job-failure','');}return;}
- if(!current()||selectedRunId!==id)return;
- const run=data.run||data;
- if(run.id===$('job-run-open').dataset.run){ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);}
- ui($('job-detail-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-detail-state').className='state status-line '+statusTone(run.status);
- const unknown=['unknown','interrupted'].includes(run.status),failed=(run.steps||[]).find(step=>['failed','unknown','interrupted'].includes(step.status));
- $('job-failure').className=unknown?'callout warn':'error';
- message('job-failure',unknown?t('Outcome unknown. Check the target before running again.')+(failed?'\n'+(failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1))+(failed.error?': '+failed.error:''):''):failed?t('Failed step: {step}',{step:failed.name||failed.action||String((run.steps||[]).indexOf(failed)+1)})+(failed.error?'\n'+failed.error:''):run.error||'');
- const steps=run.steps||[];
- if(!current()||selectedRunId!==id)return;
- if(!steps.length)jobEmpty('job-run-detail','No steps recorded.');
- else{table($('job-run-detail'),['Steps','Step type','Status','Duration (ms)','Summary'],steps.map((step,index)=>[step.name||String(index+1),step.action||run.definition?.steps?.[index]?.action||'',jobStatus(step.status),jobDuration(step),step.error||jobSummary(step)]));$('job-run-detail').querySelectorAll('tbody tr').forEach((row,index)=>{const step=steps[index];ui(row.cells[1],jobActionLabels[step.action||run.definition?.steps?.[index]?.action]||'Unknown');ui(row.cells[2],jobStatuses[step.status]||'Unknown');row.cells[2].className=statusTone(step.status);if(step.error)row.cells[4].className='details-cell';else ui(row.cells[4],'{summary}',()=>({summary:jobSummary(step)}));});}
-}
-function readJobArguments(){
- const values={};for(const input of $('job-run-arguments').querySelectorAll('[data-argument]')){
- if(input.value==='')continue;let value=input.value;
- if(input.dataset.type==='integer'){value=Number(value);if(!Number.isSafeInteger(value))throw Error(t('Arguments must match their declared types.'));}
- else if(input.dataset.type==='boolean')value=value==='true';
- values[input.dataset.argument]=value;
- }return values;
-}
-function jobSchedulePayload(name,fields,argumentsValue){return {name,...schedulePayload(fields),arguments:argumentsValue};}
-function jobScheduleEditable(entry){return !!entry?.can_manage&&currentRole!=='bi_viewer';}
-function updateJobScheduleKind(){updateScheduleKind('job-schedule',jobScheduleEditable(selectedJob));}
-function renderJobSchedule(preserveInputs=false){
- const saved=selectedJob?jobSchedules.find(schedule=>schedule.name===selectedJob.name):null,editable=jobScheduleEditable(selectedJob);
- if(selectedJob)$('job-schedule-name').textContent=selectedJob.name;else ui($('job-schedule-name'),'Choose a saved job.');
- if(!preserveInputs){fillScheduleFields('job-schedule',saved);jobScheduleEnabledDirty=false;}
- for(const control of $('job-schedule-form').querySelectorAll('input,select,button'))control.disabled=!editable;
- updateJobScheduleKind();$('job-schedule-state').replaceChildren();
- const badge=document.createElement('span');badge.className='badge '+(saved?.enabled?'tone-ok':'');ui(badge,saved?.enabled?'Enabled':'Disabled');$('job-schedule-state').append(badge);
- $('job-schedule-stop').disabled=!editable||!saved?.enabled;
- if(saved){
- const labels={admin:'Admin',data_engineer:'Data Engineer',bi_viewer:'BI Viewer'};
- for(const [key,values] of [['Saved role: {role}',()=>({role:t(labels[saved.role]||'Unknown')})],['Authentication: {mode}',{mode:saved.auth_mode}],['Next run: {time}',()=>({time:scheduleNextTime(saved)})],['{summary}',()=>({summary:scheduleSummary(saved)})]]){
- const text=document.createElement('span');ui(text,key,values);$('job-schedule-state').append(text);
- }
- if(!preserveInputs)for(const input of $('job-run-arguments').querySelectorAll('[data-argument]'))if(Object.hasOwn(saved.arguments||{},input.dataset.argument))input.value=saved.arguments[input.dataset.argument]===null?'':String(saved.arguments[input.dataset.argument]);
- }else{const text=document.createElement('span');ui(text,'No saved schedule.');$('job-schedule-state').append(text);}
- pruneUIBindings();
-}
-function saveJobSchedule(){
- if(!jobScheduleEditable(selectedJob))return;
- const pause=jobSchedules.some(schedule=>schedule.name===selectedJob.name&&schedule.enabled===true)&&!$('job-schedule-enabled').checked;
- if(!pause&&!$('job-run-form').reportValidity())return;
- const name=selectedJob.name,role=currentRole,epoch=stageEpoch;
- const current=()=>currentRole===role&&stageEpoch===epoch&&selectedJob?.name===name;
- return busy($('job-schedule-save'),async()=>{
- try{
- const payload=pause?{name:selectedJob.name,enabled:false}:jobSchedulePayload(selectedJob.name,readScheduleFields('job-schedule'),readJobArguments());
- await api('/api/jobs/schedule',payload);if(!current())return;await loadJobSchedules();if(current())ui($('job-schedule-message'),'Schedule saved.');
- }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
- }).finally(()=>{$('job-schedule-save').disabled=!jobScheduleEditable(selectedJob);});
-}
-// Stopping changes only the saved schedule; calendar and argument drafts stay in the form.
-function stopJobSchedule(){
- if(!jobScheduleEditable(selectedJob)||!jobSchedules.some(schedule=>schedule.name===selectedJob.name&&schedule.enabled===true))return;
- const name=selectedJob.name,role=currentRole,epoch=stageEpoch;
- const current=()=>currentRole===role&&stageEpoch===epoch&&selectedJob?.name===name;
- return busy($('job-schedule-stop'),async()=>{
- try{
- await api('/api/jobs/schedule',{name,enabled:false});if(!current())return;
- jobScheduleEnabledDirty=false;await loadJobSchedules(true);if(current())ui($('job-schedule-message'),'Schedule stopped.');
- }catch(error){if(current())ui($('job-schedule-message'),'Schedule failed: {error}',{error:error.message});}
- }).finally(()=>{$('job-schedule-stop').disabled=!jobScheduleEditable(selectedJob)||!jobSchedules.some(schedule=>schedule.name===selectedJob?.name&&schedule.enabled===true);});
-}
-async function loadJobSchedules(preserveInputs=false,preserveSelection=false){
- const request=++jobScheduleRequest,role=currentRole,epoch=stageEpoch,name=selectedJob?.name,selection=jobSelectionEpoch;
- const data=await api('/api/jobs/schedules');if(request!==jobScheduleRequest||role!==currentRole||epoch!==stageEpoch||!jobsVisible())return;
- jobSchedules=data.schedules||[];
- const selectionChanged=preserveSelection||selection!==jobSelectionEpoch||name!==selectedJob?.name;
- // Passive history refreshes keep calendar/argument drafts, including an
- // explicitly edited checkbox across repeated server-side state changes.
- if(preserveInputs&&!selectionChanged&&!jobScheduleEnabledDirty)$('job-schedule-enabled').checked=jobSchedules.some(schedule=>schedule.name===name&&schedule.enabled===true);
- renderJobSchedule(preserveInputs||selectionChanged);
- if(typeof renderJobList==='function')renderJobList();
-}
-$('job-schedule-kind').onchange=updateJobScheduleKind;
-$('job-schedule-stop').onclick=stopJobSchedule;
-$('job-schedule-enabled').onchange=()=>{jobScheduleEnabledDirty=true;};
-$('job-schedule-form').onsubmit=event=>{event.preventDefault();saveJobSchedule();};
-renderJobSchedule();
-$('job-parameter-example').textContent=JSON.stringify({start_date:{type:'date',required:true},limit:{type:'integer',default:100}},null,2)+'\n\nSELECT * FROM marts.fct_orders WHERE order_date >= {{start_date}} LIMIT {{limit}}';
-$('job-new').onclick=()=>{if(!confirmDiscardJob())return;editJob(null);clearSelectedJob();if(typeof workbenchClearDetail==='function')workbenchClearDetail('jobs');$('job-name').focus();};
-$('job-add-step').onclick=()=>{syncJobSteps();jobSteps.push({action:'sql',sql:'SELECT 1',mode:'read-only',schema:'marts'});renderJobSteps();markJobDirty();};
-$('job-form').oninput=$('job-form').onchange=()=>{if(!editingJob||editingJob.can_manage)markJobDirty();};
-$('job-runs-filter').onchange=renderJobRuns;
-$('job-run-open').onclick=()=>{
- const id=$('job-run-open').dataset.run,job=$('job-run-open').dataset.job;if(!id)return;
- const filter=$('job-runs-filter');if(filter.value&&filter.value!==job)filter.value=[...filter.options].some(option=>option.value===job)?job:'';
- renderJobRuns();return showJobRun(id);
-};
-$('jobs-refresh').onclick=()=>busy($('jobs-refresh'),loadJobs);
-$('job-runs-refresh').onclick=()=>busy($('job-runs-refresh'),refreshJobRuns);
-$('job-form').onsubmit=event=>{event.preventDefault();const role=currentRole,epoch=stageEpoch;
- const current=()=>role===currentRole&&epoch===stageEpoch;
- busy($('job-save'),async()=>{
- try{
- syncJobSteps();const parameters=JSON.parse($('job-parameters').value);
- if(!parameters||Array.isArray(parameters)||typeof parameters!=='object')throw Error(t('Argument definitions must be a JSON object.'));
- const definition={name:$('job-name').value.trim(),description:$('job-description').value.trim(),parameters,steps:jobSteps.map(step=>Object.fromEntries(Object.entries(step).filter(([key,value])=>value!==''||key==='sql')))};
- await api('/api/jobs/save',definition);if(!current())return;await loadJobs();if(!current())return;const entry=jobEntries.find(entry=>entry.name===definition.name);if(entry)openJob(entry);ui($('job-save-state'),'Job saved.');
- }catch(error){if(current())ui($('job-save-state'),'Save failed: {error}',{error:error.message});}
- });};
-$('job-run-form').onsubmit=event=>{event.preventDefault();if(!selectedJob?.can_manage||$('job-run').disabled)return;
- const job=selectedJob.name,selection=jobSelectionEpoch,role=currentRole,epoch=stageEpoch;
- const current=()=>selection===jobSelectionEpoch&&role===currentRole&&epoch===stageEpoch&&selectedJob?.name===job;
- return busy($('job-run'),async()=>{
- let run;
- try{run=(await api('/api/jobs/run',{name:job,arguments:readJobArguments()})).run;}
- catch(error){if(current()){ui($('job-run-state'),'Run failed: {error}',{error:error.message});$('job-run-state').className='state status-line tone-bad';}return;}
- // The server accepted the run. A later selection or role change only stops this view from claiming it.
- if(current()){
-  const open=$('job-run-open');open.dataset.run=run.id;open.dataset.job=job;open.hidden=false;selectedRunId=run.id;
-  ui($('job-run-state'),'Run {id} \u00b7 {status}',()=>({id:run.id,status:jobStatus(run.status)}));$('job-run-state').className='state status-line '+statusTone(run.status);
- }
- await refreshJobRuns();
- }).finally(updateJobRunControls);};
-document.addEventListener('visibilitychange',()=>{if(typeof databaseMode!=='undefined'&&databaseMode){stopJobsPolling();return;}if(document.hidden)stopJobsPolling();else if(jobsVisible())refreshJobRuns();});
-window.addEventListener('pagehide',stopJobsPolling);
 document.addEventListener('visibilitychange',()=>{dbRawLogsSync();dbLokiErrorsSync();});
 window.addEventListener('pagehide',()=>{dbRawLogsClear(true);dbRawLogsSync();dbLokiErrorsClear();dbLokiErrorsSync();});
-editJob(null);clearSelectedJob();
-
 // Database mode is deliberately installed only after /api/session selects it.
-// The legacy handlers and storage remain the default for older servers.
 const dbWorksheetKey='shirokuma.worksheets.v2';
 async function startWorkbench(){
  $('workbench-boot-reload').onclick=()=>globalThis.location.reload();
@@ -1961,7 +1210,7 @@ function workbenchScreenMessagesRouteChanged(){
 // are discarded by the epoch/identity pair.
 let workbenchHomeEpoch=0,workbenchHomeData=null,workbenchHomePending=null;
 function workbenchHomeIdentity(){
- const principal=typeof databaseMode!=='undefined'&&databaseMode?(typeof dbPrincipal==='string'?dbPrincipal:''):(typeof catalogSession==='string'?catalogSession:'');
+ const principal=typeof databaseMode!=='undefined'&&databaseMode?(typeof dbPrincipal==='string'?dbPrincipal:''):'';
  return JSON.stringify([principal,currentRole]);
 }
 function workbenchHomeJobsAllowed(){
@@ -1986,10 +1235,6 @@ function workbenchHomeCurrent(epoch,identity){
 function workbenchHomeTime(value){
  if(value===undefined||value===null||value==='')return '';
  return typeof fmtJST==='function'?fmtJST(value):String(value);
-}
-function workbenchHomeGet(path){
- if(typeof databaseMode!=='undefined'&&databaseMode&&typeof dbAPI==='function')return dbAPI(path,currentRole);
- return api(path);
 }
 let workbenchHomeJobPending=null;
 function workbenchHomeJobKey(){
@@ -2048,14 +1293,13 @@ async function workbenchHomeLoadRuns(epoch,identity){
    if(jobKey!==workbenchHomeJobKey())return;
    if(!context){workbenchHomeData.jobsUnavailable=true;return;}
    data=await dataopsRequest('/api/v1/jobs/runs',context);
-  }else data=await workbenchHomeGet('/api/jobs/runs');
+  }
   if(!workbenchHomeCurrent(epoch,identity)||!workbenchHomeData)return;
   if(databaseMode&&jobKey!==workbenchHomeJobKey())return;
   workbenchHomeData.runs=Array.isArray(data?.runs)?data.runs:[];
  }catch(error){
   if(workbenchHomeCurrent(epoch,identity)&&workbenchHomeData){
    if(databaseMode)workbenchHomeData.jobsUnavailable=true;
-   else workbenchHomeData.errors.runs=error?.message||t('Could not load');
   }
  }finally{
   if(workbenchHomeCurrent(epoch,identity)&&workbenchHomeData){workbenchHomeData.pending.runs=false;workbenchHomeRender();}
@@ -2071,7 +1315,7 @@ async function workbenchHomeLoadAlerts(epoch,identity){
    if(jobKey!==workbenchHomeJobKey())return;
    if(!context){workbenchHomeData.jobsUnavailable=true;return;}
    data=await dataopsRequest('/api/v1/alerts',context);
-  }else data=await workbenchHomeGet('/api/alerts');
+  }
   if(!workbenchHomeCurrent(epoch,identity)||!workbenchHomeData)return;
   if(databaseMode&&jobKey!==workbenchHomeJobKey())return;
   const alerts=Array.isArray(data?.alerts)?data.alerts:[];
@@ -2079,7 +1323,6 @@ async function workbenchHomeLoadAlerts(epoch,identity){
  }catch(error){
   if(workbenchHomeCurrent(epoch,identity)&&workbenchHomeData){
    if(databaseMode)workbenchHomeData.jobsUnavailable=true;
-   else workbenchHomeData.errors.alerts=error?.message||t('Could not load');
   }
  }finally{
   if(workbenchHomeCurrent(epoch,identity)&&workbenchHomeData){workbenchHomeData.pending.alerts=false;workbenchHomeRender();}
@@ -2107,7 +1350,7 @@ async function workbenchHomeLoadDatabases(epoch,identity){
    else if(shared.pending.error&&shared.pending.error.code!=='AUTH_READ_STALE')throw shared.pending.error;
   }
   if(!items){
-   const data=await workbenchHomeGet('/api/v1/databases');
+   const data=await dbAPI('/api/v1/databases',currentRole);
    if(!workbenchHomeCurrent(epoch,identity)||!workbenchHomeData)return;
    items=Array.isArray(data?.items)?data.items:[];
   }
@@ -2150,10 +1393,6 @@ function workbenchHomeActionRow({href,mark,title,detail,status,databaseId}){
 function workbenchHomeAttentionItems(data){
  const items=[];
  // (a) SQL outcomes stay unknown until the original request is reconciled. Never resend.
- if(!databaseMode&&typeof queryResult!=='undefined'&&String(queryResult?.state||'').toUpperCase()==='UNKNOWN'){
-  items.push({href:'#sql',mark:'!',title:t('Review the unknown outcome of {name}',{name:'SQL'}),
-   detail:[queryResult.request_id,t('Check the status without resending')].filter(Boolean).join(' · '),status:t('Awaiting reconciliation')});
- }
  for(const run of typeof dbRuns!=='undefined'&&dbRuns?dbRuns.values():[]){
   if(String(run?.state||'').toUpperCase()!=='UNKNOWN')continue;
   if(run.origin?.principal&&typeof dbPrincipal==='string'&&run.origin.principal!==dbPrincipal)continue;
@@ -2264,8 +1503,7 @@ function workbenchHomeContext(){
    schema:schema.display_name||schema.sql_name,
    warehouse:w.warehouse||'LOCAL',role:w.selected_role||currentRole};
  }
- const schema=$('query-schema')?.value||'',warehouse=$('query-warehouse')?.value||'';
- return {available:true,title:t('Workspace'),database:'iceberg',schema:schema||t('Not selected'),warehouse:warehouse||'LOCAL',role:currentRole};
+ return {available:false};
 }
 function workbenchHomeRoleLabel(role){
  return t({admin:'Admin',data_engineer:'Data Engineer',bi_viewer:'BI Viewer'}[role]||'Not selected');
@@ -2294,9 +1532,6 @@ function workbenchHomeObjects(){
   objects.push({name:dbObject.display_name||dbObject.physical_name,
    detail:[[database?.sql_catalog||database?.display_name,schema?.sql_name].filter(Boolean).join('.'),kind].filter(Boolean).join(' · '),
    href:database&&schema&&typeof dbExplorePath==='function'?'#explore/'+dbExplorePath(database,schema,dbObject):'#explore'});
- }
- if(!databaseMode&&typeof selectedTable==='string'&&selectedTable){
-  objects.push({name:selectedTable,detail:['iceberg',t('Table')].join(' · '),href:'#explore'});
  }
  return [...new Map(objects.filter(item=>item.name).map(item=>[item.name+'\n'+item.href,item])).values()];
 }
@@ -2391,19 +1626,8 @@ function workbenchDetailId(page){
  try{return decodeURIComponent(raw);}catch{return raw;}
 }
 async function workbenchRestorePage(session,{history=false}={}){
- if(session.authenticated!==true&&!(history&&!databaseMode)){
-  if(!databaseMode){
-   const routed=workbenchTabForPage(workbenchRoute().page);
-   if(routed){
-    const button=tabs.find(tab=>tab.dataset.tab===routed&&!tab.hidden&&!tab.disabled)||$('tab-home');
-    workbenchRememberPage(button.dataset.tab);
-    for(const tab of tabs){const selected=tab===button;if(selected)tab.setAttribute('aria-current','page');else tab.removeAttribute('aria-current');$(tab.dataset.tab).hidden=!selected;}
-    activeTab=button.dataset.tab;applyPageTitle();workbenchScreenMessagesRouteChanged();
-   }
-  }
-  return;
- }
- const {page:pageValue}=workbenchRoute(),page=pageValue||'',dbt=databaseMode?dbDbtURL():{},creation=databaseMode?dbCreationURL():{};
+ if(session.authenticated!==true)return;
+ const {page:pageValue}=workbenchRoute(),page=pageValue||'',dbt=dbDbtURL(),creation=dbCreationURL();
  // Older creation links used SQL/worksheet fragment names before top-page routes.
  const legacy=!page||/^(?:workbench|worksheet-[A-Za-z0-9_-]+)$/.test(page);
  const routed=workbenchTabForPage(page);
@@ -2437,14 +1661,6 @@ async function workbenchRestorePage(session,{history=false}={}){
     if(id&&typeof dbJobsRestorePage==='function')await dbJobsRestorePage(page);
     else if(typeof dbJobsShowList==='function')dbJobsShowList({route:false});
    }
-   if(!databaseMode&&available&&target==='jobs'){
-    const id=workbenchDetailId(page);
-    if(id&&typeof loadJobs==='function'){
-     await loadJobs();
-     const entry=jobEntries.find(entry=>entry.name===id);
-     if(entry)openJob(entry,{route:false});
-    }
-   }
    if(databaseMode&&available&&target==='pawprints'){
     const id=workbenchDetailId(page);
     if(id&&typeof dbAuditRestorePage==='function')await dbAuditRestorePage(page);
@@ -2459,7 +1675,7 @@ async function workbenchHistoryRestore(){
  workbenchResetRouteView();
  try{await workbenchRestorePage(workbenchSession||{authenticated:false},{history:true});}
  catch(error){
-  const id={warehouse:databaseMode?'database-context-state':'status-error',catalog:'catalog-error','db-admin':'db-admin-error',transformation:databaseMode?'db-dbt-status':'models-state',pawprints:'db-audit-status',jobs:'jobs-error'}[activeTab]||'status-error';
+  const id={warehouse:'database-context-state',catalog:'catalog-error','db-admin':'db-admin-error',transformation:'db-dbt-status',pawprints:'db-audit-status',jobs:'jobs-error'}[activeTab]||'status-error';
   if($(id)){if(id==='status-error')workbenchScreenMessage(id,error.message);else message(id,error.message);}
  }
  workbenchHistoryHref=globalThis.location.href;
@@ -8132,7 +7348,6 @@ async function initializeDatabaseUI(session){
   if(logicalWarehouseStatus)dbRenderWarehouseStatus(data.warehouse?.state);
   else{ui($('warehouse-state'),data.status==='healthy'?'Ready':'Unavailable');if(dbRuntimeSupport()==='unsupported')workbenchSetComputeStatus('unsupported','tone-warn',dbRuntimeDefaultGuidance());}
  }catch(error){if(identity===dbIdentity()){dbRenderHeaderComputeState('State unavailable');if(logicalWarehouseStatus){dbRenderWarehouseStatus();workbenchScreenMessage('status-error',t('Shared warehouse status is unavailable. Refresh to check again.'));}else workbenchScreenMessage('status-error',error.message);}}};
- applyRole=dbApplyRole;loadCatalog=dbRefreshExplorer;
  $('tab-catalog').setAttribute('aria-controls','warehouse');
  activate=button=>{
   if(button.hidden||button.disabled)return;
@@ -8141,7 +7356,7 @@ async function initializeDatabaseUI(session){
   if(activeTab==='home'&&next!=='home')workbenchHomeLeave();
   workbenchRememberPage(next);
   if(activeTab==='db-admin'&&next!=='db-admin'){dbAdminClearReadiness();dbAdminRetireInvalidate();}
-  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)dbResultExport.invalidateBoundary();stopJobsPolling();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;applyPageTitle();if(tabs.includes(button))workbenchResetRouteView({focus:true});workbenchScreenMessagesRouteChanged();dbProposalSync();dbExplanationSync();dbCuratorSync();dbObservationsSync();if(target==='bears'){if(workbenchAtlasBears.inventoryFailed)workbenchAtlasBears.inventoryAttempted='';workbenchAtlasBears.refreshKey='';workbenchAtlasBears.shareContext=true;workbenchAtlasBearsSync();}else workbenchAtlasBears.shareContext=false;if(workspace)return dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='home'){void loadHome();return;}else if(target==='db-admin')return dbHydratePage('db-admin',dbAdminOpen);else if(target==='jobs')return dbHydratePage('jobs',dbJobsOpen);else if(target==='pawprints')return dbHydratePage('pawprints',dbAuditOpen);else if(target==='compute'){if(dbRuntime.installed)dbRuntimeSync();return;}else{dataopsOpen(target);if(target==='ingestion')workbenchAtlasShowIngestion(workbenchAtlasIngestionView(),{remember:false});if(target==='transformation'){workbenchAtlasShowTransformation();workbenchResetRouteView();}}};
+  if(next!==activeTab)dataopsRecoveryBoundary();if(next!==activeTab){dbProfileInvalidate();dbLineageInvalidate();dbDropInvalidate();}if((['warehouse','catalog'].includes(next)?'warehouse':next)!==activeTab)dbResultExport.invalidateBoundary();dbCreationSuspend();dbJobsSuspend();const target=button.dataset.tab,workspace=['warehouse','catalog'].includes(target);for(const b of tabs){const selected=b===button;if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');$(b.dataset.tab).hidden=workspace?b.dataset.tab!=='warehouse':!selected;}activeTab=workspace?'warehouse':target;applyPageTitle();if(tabs.includes(button))workbenchResetRouteView({focus:true});workbenchScreenMessagesRouteChanged();dbProposalSync();dbExplanationSync();dbCuratorSync();dbObservationsSync();if(target==='bears'){if(workbenchAtlasBears.inventoryFailed)workbenchAtlasBears.inventoryAttempted='';workbenchAtlasBears.refreshKey='';workbenchAtlasBears.shareContext=true;workbenchAtlasBearsSync();}else workbenchAtlasBears.shareContext=false;if(workspace)return dbShowWorkspace(target==='catalog'?'details':'worksheet');else if(target==='home'){void loadHome();return;}else if(target==='db-admin')return dbHydratePage('db-admin',dbAdminOpen);else if(target==='jobs')return dbHydratePage('jobs',dbJobsOpen);else if(target==='pawprints')return dbHydratePage('pawprints',dbAuditOpen);else if(target==='compute'){if(dbRuntime.installed)dbRuntimeSync();return;}else{dataopsOpen(target);if(target==='ingestion')workbenchAtlasShowIngestion(workbenchAtlasIngestionView(),{remember:false});if(target==='transformation'){workbenchAtlasShowTransformation();workbenchResetRouteView();}}};
  $('role-selector').onchange=async()=>{
   const auditUsed=!!dbAudit.proof||!!dbAudit.choiceItems;
   dataopsRecoveryBoundary();dbSave();currentRole=$('role-selector').value;dbApplyRole();if(typeof loadJobAlerts==='function')loadJobAlerts(false);
@@ -8718,20 +7933,14 @@ async function initializeSession() {
  const response=await fetch('/api/session');
  const session=await response.json();
  if(!response.ok)throw new Error(session.error||`HTTP ${response.status}`);
+ if(session.data_mode!=='database')throw new Error('Database runtime profile required');
  if(session.data_mode==='database'&&session.authenticated!==true)throw new Error('Authentication required');
  workbenchSession=session;
- catalogSession=JSON.stringify([session.username,session.authenticated,session.maximum_role]);
  const ranks={bi_viewer:0,data_engineer:1,admin:2};
  currentRole=session.maximum_role;
  for(const option of $('role-selector').options)option.disabled=ranks[option.value]>ranks[currentRole];
  $('role-selector').value=currentRole;
  if(session.data_mode==='database'){databaseMode=true;await initializeDatabaseUI(session);return;}
- for(const id of ['ingestion-atlas','transformation-atlas','bears-atlas','compute-atlas'])if($(id))$(id).hidden=false;
- for(const id of ['ingestion-mode-guidance','transformation-mode-guidance','bears-mode-guidance','compute-mode-guidance'])if($(id))$(id).hidden=false;
- applyRole();
- await workbenchRestorePage(session);
- refreshStatus();loadCatalog();
- if(currentRole!=='bi_viewer')loadJobAlerts(false);
 }
 startWorkbench();
 </script>

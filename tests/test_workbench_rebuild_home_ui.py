@@ -343,20 +343,6 @@ assert.ok(nodeText(objects[0]).includes('Orders'));
 assert.ok(nodeText(objects[0]).includes('sales.marts'),nodeText(objects[0]));
 """)
 
-    def test_legacy_mode_keeps_the_existing_context_guidance(self):
-        self.javascript(HOME + r"""
-await boot();databaseMode=false;workbenchShellReady=true;activeTab='home';
-route=async path=>path==='/api/jobs/runs'?{runs:[]}:path==='/api/alerts'?{alerts:[]}:{};
-await loadHome();await tick();
-assert.equal($('home-context-fields').hidden,false);
-assert.equal($('home-context-empty').hidden,true);
-assert.equal($('home-context-heading').textContent,t('Workspace'));
-assert.equal($('home-context-database').textContent,'iceberg');
-assert.equal($('home-context-warehouse').textContent,'LOCAL');
-assert.equal($('home-context-role').textContent,t('Admin'));
-assert.equal($('home-jobs-section').hidden,false);
-""")
-
     def test_viewer_keeps_job_and_import_permissions(self):
         self.javascript(HOME + r"""
 await boot();currentRole='bi_viewer';dbApplyRole();

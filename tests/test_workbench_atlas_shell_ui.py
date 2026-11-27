@@ -307,9 +307,9 @@ assert.equal(currentRole,'admin');assert.equal($('role-indicator').hidden,true);
 
     def test_notification_bell_uses_job_alert_source_and_opens_jobs(self):
         source = WorkbenchSource(harness.HTML).source
-        loader = source[source.index('async function loadJobAlerts('):source.index('$(\'job-alerts-refresh\').onclick')]
+        loader = source[source.index('async function loadJobAlerts('):source.index('function jobStatus(')]
         self.assertIn('workbenchAlertCount=count', loader)
-        self.assertIn('workbenchAlerts=Array.isArray(data.alerts)?data.alerts:[]', loader)
+        self.assertIn('workbenchAlerts=alerts', loader)
         self.assertIn('workbenchRenderAlerts();', loader)
         self.javascript(r"""
 await boot();

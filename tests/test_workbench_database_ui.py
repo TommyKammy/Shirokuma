@@ -4,12 +4,15 @@ import re
 import subprocess
 import unittest
 
-from test_catalog_ui import function
 from workbench_source import INDEX, SCRIPT_BOUNDARY, WorkbenchSource
 from workbench_source import function as source_function
 
 HTML = INDEX.read_text()
 WORKBENCH_SOURCE = WorkbenchSource(HTML)
+
+
+def function(name):
+    return source_function(name, WORKBENCH_SOURCE.sources)
 SCRIPT = SCRIPT_BOUNDARY.join(source for source in WORKBENCH_SOURCE.sources
                    if source not in [WORKBENCH_SOURCE.asset_sources.get(asset)
                                      for asset in ('/assets/saved_lineage.js', '/assets/result_export.js')])
@@ -22,14 +25,14 @@ FACTORIES = '\n'.join(
 DATABASE = SCRIPT[SCRIPT.index("const dbWorksheetKey="):SCRIPT.index('let initialLanguage;')]
 INITIALIZATION = SCRIPT[SCRIPT.index('async function initializeSession()'):SCRIPT.index('\nstartWorkbench();')]
 NAVIGATION = SCRIPT[SCRIPT.index('const tabs='):SCRIPT.index('setInterval(async()=>')]
+NAVIGATION_HELPERS = SCRIPT[SCRIPT.index('function workbenchSubpageForTab('):SCRIPT.index('const tabs=')]
 NAVIGATION_HANDLERS = NAVIGATION[NAVIGATION.index('tabs.forEach'):]
-LEGACY_ACTIVATE = SCRIPT[SCRIPT.index('function activate('):SCRIPT.index('const tabs=')].replace('function activate(', 'function legacyActivate(')
 PERIODIC_REFRESH = SCRIPT[SCRIPT.index('setInterval(async()=>'):SCRIPT.index('// Small DOM helpers')].replace('setInterval(', 'const periodicRefresh=registerInterval(', 1)
 TRANSLATIONS = SCRIPT[SCRIPT.index('const i18n = '):SCRIPT.index("let language = 'en';")]
 BASE_I18N = WORKBENCH_SOURCE.asset_sources['/assets/base_i18n.js']
 FMT_JST = BASE_I18N[BASE_I18N.index('function fmtJST('):BASE_I18N.index('function fmtInputJST(')]
 JOB_STATUSES = re.search(r'const jobStatuses=\{[^}]+\};', SCRIPT).group(0)
-JOB_STATUS_HELPERS = '\n'.join(source_function(name, SCRIPT) for name in ('statusTone', 'jobStatus'))
+JOB_STATUS_HELPERS = re.search(r'function jobStatus\(status\)\{[^\n]*\}', SCRIPT).group(0)
 MENU = [(name, re.sub('<[^>]+>', '', re.sub(r'<span class="icon"[^>]*>.*?</span>', '', label)))
         for name, label in re.findall(r'<a id="tab-([^"]+)"[^>]*data-tab="[^"]+"[^>]*>(.*?)</a>', HTML)]
 
@@ -88,13 +91,13 @@ const inspectorTargets={columns:'table-columns',preview:'table-preview',snapshot
 const inspectorTabs=['columns','preview','profile','snapshots','lineage'].map(inspect=>Object.assign(new Node('button'),{dataset:{inspect}}));
 const tabs=''' + json.dumps([(name, re.sub('<[^>]+>', '', label)) for name, label in MENU]) + r'''.map(([tab,label])=>{const node=Object.assign(new Node('a'),{id:'tab-'+tab,dataset:{tab},textContent:label,href:'#'+tab});ui(node,label);return node;});
 const samples={orders:'SELECT * FROM marts.fct_orders LIMIT 10',customers:'SELECT * FROM marts.dim_customers LIMIT 10',revenue:`SELECT n.n_name AS nation,\n       SUM(l.l_extendedprice * (1 - l.l_discount)) AS revenue\nFROM tpch_tiny.customer c\nJOIN tpch_tiny.orders o ON c.c_custkey = o.o_custkey\nJOIN tpch_tiny.lineitem l ON o.o_orderkey = l.l_orderkey\nJOIN tpch_tiny.supplier s ON l.l_suppkey = s.s_suppkey\nJOIN tpch_tiny.nation n ON s.s_nationkey = n.n_nationkey\nWHERE c.c_nationkey = s.s_nationkey\nGROUP BY n.n_name\nORDER BY revenue DESC`};
-const confirm=()=>true,populateChartColumns=()=>{},stopJobsPolling=()=>{},stopMartsPolling=()=>{};
+const confirm=()=>true,populateChartColumns=()=>{},stopMartsPolling=()=>{};
 const localStorage={getItem:key=>storage.get(key)??null,setItem:(key,value)=>{storage.set(key,value);writes.push(key);}};
 const readStorage=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 const writeStorage=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
 const historyPlaceholder=()=>new Option('Restore','');
 let renderResults=()=>{for(const id of ['export-csv','export-json','copy-tsv'])$(id).disabled=!queryResult;const count=$('sql-row-count');if(!queryResult){if(count){count.hidden=true;count.textContent='';}return;}if(count){count.hidden=false;ui(count,'Received {rows} rows / showing {visible} rows',{rows:queryResult.rows.length,visible:queryResult.rows.length});}table($('query-results'),queryResult.columns,queryResult.rows);};
-let api=async()=>({status:'healthy'}),applyRole=()=>{},loadCatalog=()=>{},activate=()=>{},download=()=>{},refreshStatus=()=>{};
+let api=async()=>({status:'healthy'}),activate=()=>{},download=()=>{},refreshStatus=()=>{},saveWorksheet=()=>{},addWorksheet=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};
 let session={username:'owner',authenticated:true,maximum_role:'admin',platform_admin:false,data_mode:'database'};
@@ -141,9 +144,9 @@ head.append($('table-title'),actions);inspector.append(head,$('inspector-tabs'),
 const filterLabel=new Node('label');filterLabel.htmlFor='catalog-filter';
 filter.append(filterLabel,$('catalog-filter'),new Node('p'));$('catalog').append(filter,$('catalog-tree'),inspector,$('catalog-error'));
 for(const role of ['admin','data_engineer','bi_viewer'])$('role-selector').add(new Option(role,role));
-''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['transformationTerm', 't', 'setLanguage', 'worksheetName', 'setSQL', 'syncRunLabel', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'saveWorksheet', 'addWorksheet', 'wireTabs', 'showView', 'busy', 'pruneUIBindings', 'loadSampleSQL']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\n' + NAVIGATION_HANDLERS + '\n' + LEGACY_ACTIVATE + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
+''' + '\n'.join(function(name).split('// Register only source UI nodes')[0] for name in ['transformationTerm', 't', 'setLanguage', 'worksheetName', 'setSQL', 'syncRunLabel', 'updateWorksheetCloseAction', 'updateWorksheetCloseLabels', 'closeWorksheet', 'renderWorksheets', 'wireTabs', 'showView', 'busy', 'pruneUIBindings', 'loadSampleSQL']) + '\n' + FACTORIES + '\n' + DATABASE + '\n' + INITIALIZATION + '\n' + NAVIGATION_HELPERS + '\n' + NAVIGATION_HANDLERS + '\nconst registerInterval=callback=>callback;\n' + PERIODIC_REFRESH + r'''
 $('load-query').onclick=loadSampleSQL;
-const legacySQLListener=saveWorksheet;$('sql').addEventListener('input',legacySQLListener);
+$('sql').addEventListener('input',saveWorksheet);
 const input=(id='a')=>({id,name:'Worksheet '+(id==='a'?1:2),sql:'SELECT 1',database_id:'db',schema_id:'schema',binding_revision:1,generation_id:'gen',warehouse:'LOCAL',mode:'read-only',max_rows:100});
 async function boot(tabs=[input()]){
  storage.set(dbWorksheetKey,JSON.stringify({active:tabs[0].id,tabs}));
@@ -299,20 +302,17 @@ for(const change of [()=>{dbPrincipal+='-next';},()=>{currentRole=currentRole===
 }
 ''')
 
-    def test_navigation_dom_order_keyboard_and_legacy_page(self):
+    def test_navigation_dom_order_keyboard_and_language_labels(self):
         self.javascript(r'''
 assert.equal(tabs[0].tagName,'A');assert.equal(tabs[1].tagName,'A');
 assert.deepEqual(tabs.slice(0,3).map(b=>b.id),['tab-home','tab-catalog','tab-warehouse']);
 assert.deepEqual(tabs.slice(0,3).map(b=>b.textContent),['Home','Data Explorer','SQL Worksheets']);
 assert.deepEqual(tabs.slice(0,3).map(b=>b.href),['#home','#catalog','#warehouse']);
-let refreshes=0;$('refresh-catalog').onclick=()=>refreshes++;
-activate=legacyActivate;tabs[1].onclick();assert.equal(activeTab,'catalog');assert.equal($('catalog').hidden,false);assert.equal($('warehouse').hidden,true);assert.equal(refreshes,1);
-assert.equal(tabs[1].getAttribute('aria-current'),'page');assert.equal(tabs.filter(b=>b.getAttribute('aria-current')==='page').length,1);
 assert.equal(tabs.some(b=>Object.hasOwn(b,'tabIndex')&&b.tabIndex!==undefined),false);
 assert.equal(tabs[1].onkeydown,undefined);
 // Modified activation is left to the browser for its normal new-tab behavior.
 let prevented=0,active=activeTab;tabs[2].onclick({button:0,metaKey:true,preventDefault(){prevented++;}});assert.equal(prevented,0);assert.equal(activeTab,active);
-databaseMode=false;setLanguage('ja');assert.equal(tabs[1].textContent,'データ探索');assert.equal(tabs[2].textContent,'SQL ワークシート');
+setLanguage('ja');assert.equal(tabs[1].textContent,'データ探索');assert.equal(tabs[2].textContent,'SQL ワークシート');
 ''')
 
     def test_workspace_navigation_real_pane_switches_and_languages(self):
@@ -665,20 +665,15 @@ route=async()=>({id:run.id,state:'CANCELED'});await dbCancelQuery();assert.equal
 assert.equal(calls.filter(c=>c.path.endsWith('/cancel')).at(-1).options.headers['X-Shirokuma-Role'],'data_engineer');
 ''')
 
-    def test_legacy_is_default_and_v2_storage_is_input_only(self):
+    def test_v2_storage_is_input_only(self):
         self.assertIn("if(session.data_mode==='database')", SCRIPT)
-        self.assertIn("const worksheetKey='shirokuma.worksheets.v1'", SCRIPT)
         self.javascript(r'''
-storage.set('shirokuma.worksheets.v1',JSON.stringify({tabs:[{id:'old',sql:'old private SQL'}]}));
 await boot();assert.equal($('sql').value,'SELECT 1');
-const v1=storage.get('shirokuma.worksheets.v1');
-storage.set('shirokuma.query_history.v1','legacy history');
 $('sql').value='SELECT 22';$('sql').dispatchEvent({type:'input'});$('query-mode').value='sandbox-write';$('query-mode').onchange();
 dbRuns.set('a',{rows:[['never persist']],secret:'never persist'});dbPersist();
 const saved=JSON.parse(storage.get(dbWorksheetKey));assert.equal(saved.tabs[0].sql,'SELECT 22');assert.equal(saved.tabs[0].mode,'sandbox-write');
 assert.deepEqual(Object.keys(saved.tabs[0]).sort(),dbInputFields.slice().sort());assert.ok(!storage.get(dbWorksheetKey).includes('never persist'));
-assert.equal(storage.get('shirokuma.worksheets.v1'),v1);assert.ok(writes.every(k=>k===dbWorksheetKey));
-assert.equal(storage.get('shirokuma.query_history.v1'),'legacy history');
+assert.ok(writes.every(k=>k===dbWorksheetKey));
 ''')
 
     def test_sql01_plus_creates_empty_persisted_worksheet_with_current_context(self):
@@ -766,22 +761,6 @@ $('sql').value=sql+' LIMIT 1';$('sql').dispatchEvent({type:'input'});
 assert.equal(draft.sql,sql+' LIMIT 1');assert.deepEqual(dbInput(original),source);
 assert.deepEqual(JSON.parse(storage.get(dbWorksheetKey)).tabs,[source,dbInput(draft)]);
 assert.ok(calls.every(c=>c.options?.method!=='POST'));
-''')
-
-    def test_sql01_legacy_plus_retains_sample_default_and_explicit_sql(self):
-        add_button = SCRIPT[SCRIPT.index("$('add-worksheet-tab').onclick="):].split(';', 1)[0] + ';'
-        self.javascript("globalThis.worksheetKey='shirokuma.worksheets.v1';\n" + add_button + r'''
-databaseMode=false;worksheets=[{id:'legacy',name:'Worksheet 4',sql:'SELECT original'}];worksheetId='legacy';
-assert.equal(nodes['open-context-example'],undefined);
-$('sql').value='SELECT legacy_draft';
-$('add-worksheet-tab').click();
-assert.equal(worksheets.length,2);assert.equal(worksheets[0].sql,'SELECT legacy_draft');
-assert.equal(dbCurrent().name,'Worksheet 5');assert.equal($('sql').value,samples.orders);assert.equal(dbCurrent().sql,samples.orders);
-assert.deepEqual(JSON.parse(storage.get(worksheetKey)),{active:worksheetId,tabs:worksheets});
-addWorksheet('SELECT legacy_explicit');
-assert.equal(worksheets.length,3);assert.equal(dbCurrent().name,'Worksheet 6');
-assert.equal($('sql').value,'SELECT legacy_explicit');assert.equal(dbCurrent().sql,'SELECT legacy_explicit');
-assert.equal(worksheets[1].sql,samples.orders);assert.equal(calls.length,0);
 ''')
 
     def test_per_tab_inputs_and_new_tab_inheritance_and_history(self):

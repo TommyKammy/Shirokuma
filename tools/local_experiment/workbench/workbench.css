@@ -2561,11 +2561,3 @@ html[data-data-mode=database] #warehouse .pageheading h1{font-size:22px;letter-s
  .jobs-page,.audit-page{max-width:100%;overflow-wrap:anywhere}
  .jobdetailgrid{grid-template-columns:minmax(0,1fr)}
 }
-
-/* Outside Database mode the retired screens keep their heading and the current
-   mode guidance only; the Database-backed Atlas controls are not installed. */
-html:not([data-data-mode=database]) #ingestion-atlas > :not(#ingestion-heading):not(#ingestion-mode-guidance),
-html:not([data-data-mode=database]) #transformation-atlas > :not(#transformation-heading):not(#transformation-mode-guidance),
-html:not([data-data-mode=database]) #bears-atlas > :not(#bears-pageheading):not(#bears-mode-guidance),
-html:not([data-data-mode=database]) #compute-atlas > :not(#compute-overview):not(#compute-mode-guidance),
-html:not([data-data-mode=database]) #compute-diagnostics{display:none!important}

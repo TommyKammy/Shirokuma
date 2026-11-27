@@ -44,7 +44,7 @@ class BearsComputeAtlasUI(unittest.TestCase):
         self.assertNotIn('aria-haspopup="dialog"', button)
         self.assertIn("'compute-ai-settings'", RUNTIME_ORDER)
         self.assertIn('compute-ai-settings', self.markup_css())
-        self.assertIn('databaseMode', source_function('jobsVisible', SOURCE.sources))
+        self.assertIn('dbJobs', source_function('loadJobAlerts', SOURCE.sources))
         timer = next(line for line in SOURCE.source.splitlines() if line.startswith('setInterval(async()=>'))
         self.assertIn('databaseMode', timer)
         self.assertIn('dbRefreshAccess', timer)

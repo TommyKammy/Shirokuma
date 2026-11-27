@@ -128,7 +128,6 @@ test-resident-core-6:
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_lab_lifecycle.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_views.py'
 	@$(DATAOPS_PYTHON) -m unittest discover -v -s tests -p 'test_database_dbt_graph_publication.py'
-	@$(PYTHON) -m unittest discover -v -s tests -p 'test_catalog_ui.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_recovery.py'
 	@$(PYTHON) -m unittest discover -v -s tests -p 'test_local_perf_bindings.py'
 

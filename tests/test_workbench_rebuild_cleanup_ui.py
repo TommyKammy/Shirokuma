@@ -82,28 +82,13 @@ class RebuildCleanupStatic(unittest.TestCase):
                            'transformation-atlas', 'transformation-atlas-models',
                            'transformation-publications', 'transformation-atlas-marts',
                            'transformation-atlas-dbt', 'bears-atlas',
-                           'compute-atlas', 'compute-diagnostics', 'ai-settings',
-                           'audit-mode-guidance'):
+                           'compute-atlas', 'compute-diagnostics', 'ai-settings'):
             with self.subTest(identifier=identifier):
                 self.assertIn('id="' + identifier + '"', HTML)
         for selector in ('.atlas-flow', '.atlas-fields', '.kv', '.section', '.panel',
                          '.impact', '.status-line'):
             with self.subTest(selector=selector):
                 self.assertIn(selector, CSS)
-        for identifier in ('ingestion-mode-guidance', 'transformation-mode-guidance',
-                           'bears-mode-guidance', 'compute-mode-guidance',
-                           'audit-mode-guidance'):
-            with self.subTest(guidance=identifier):
-                self.assertIn('id="' + identifier + '"', HTML)
-        base = WorkbenchSource(HTML).asset_sources['/assets/base_i18n.js']
-        for key in ('Ingestion & Stages is available in Database mode.',
-                    'Transformation is available in Database mode.',
-                    'AI Bears is available in Database mode.',
-                    'Compute & Governance is available in Database mode.',
-                    'Audit log is available in Database mode.'):
-            with self.subTest(key=key):
-                self.assertIn(key, base)
-                self.assertRegex(base, re.escape(key) + r"\':\'[^\']*Database モード")
 
 
 class RebuildCleanupBoot(unittest.TestCase):
