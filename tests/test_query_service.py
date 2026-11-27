@@ -1053,8 +1053,6 @@ class QueryExecutionTests(unittest.TestCase):
         with patch('runtime_profile.active', return_value=True), patch.object(wr, 'warehouse_activity') as activity:
             with self.assertRaises(ValueError):
                 wr.query('LOCAL', 'SELECT 1')
-            with self.assertRaises(ValueError):
-                wr.execute('https://backend', 'SELECT 1', {})
             activity.assert_not_called()
 
     def test_paging_owner_revocation_restart_and_secret_snapshot(self):

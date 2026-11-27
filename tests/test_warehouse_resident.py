@@ -2,9 +2,6 @@ import importlib.util
 import io
 import json
 import copy
-import http.client
-import http.server
-import threading
 import subprocess
 import sys
 import tempfile
@@ -787,39 +784,6 @@ class ResidentWarehouseTests(unittest.TestCase):
         rollback = 'ALTER TABLE iceberg.marts.t EXECUTE rollback_to_snapshot(123)'
         self.assertEqual(w.check_sql_policy(rollback, 'admin-write'), rollback)
 
-    def test_prepared_headers_are_checked_before_backend_access(self):
-        for user, definition in (('bi_reader', 'SELECT 1'), ('powerbi', 'SELECT 1'),
-                                 ('admin', 'DROP TABLE iceberg.raw.orders'),
-                                 ('admin', 'EXPLAIN EXECUTE hidden'), ('admin', 'PREPARE hidden FROM SELECT 1')):
-            headers = {'X-Trino-User': user,
-                       'X-Trino-Prepared-Statement': 'p=' + w.urllib.parse.quote(definition, safe='')}
-            for method, path in (('POST', '/v1/statement'), ('GET', '/v1/statement/q/1')):
-                with self.subTest(user=user, definition=definition, method=method):
-                    code, _, _, backend, wake, status, trino, _ = self.endpoint_request(
-                        method, path, 'SELECT 1' if method == 'POST' else None, headers)
-                    self.assertEqual(code, 403)
-                    for mock in (backend.request, wake, status, trino):
-                        mock.assert_not_called()
-        self.assertEqual(self.endpoint_request('POST', '/v1/statement', 'SELECT 1', {
-            'X-Trino-User': 'admin', 'X-Trino-Prepared-Statement': 'p=SELECT%201'})[0], 200)
-
-    def test_activity_io_failure_preserves_successful_query(self):
-        for operation in ('mkdir', 'write_text', 'replace', 'unlink'):
-            original = getattr(Path, operation)
-            activity = w.activity_path()
-            def fail_activity(path, *args, **kwargs):
-                if path == activity.parent or path.parent == activity.parent:
-                    raise PermissionError('read-only activity')
-                return original(path, *args, **kwargs)
-            with self.subTest(operation=operation), \
-                 patch.object(Path, operation, fail_activity), \
-                 self.assertLogs(w.__name__, level='WARNING'), \
-                 patch.object(w, 'status', return_value={'replicas': 1}), \
-                 patch.object(w, 'trino', return_value=nullcontext('url')), \
-                 patch.object(w, 'execute', return_value={'rows': [[1]]}), \
-                 patch.object(w, 'telemetry'):
-                self.assertEqual(w.query('LOCAL', 'SELECT 1')['rows'], [[1]])
-
     def test_role_sql_permissions(self):
         self.assertEqual(w.check_sql_policy('SELECT * FROM marts.t', role='bi_viewer'), 'SELECT * FROM marts.t')
         for mode in ('sandbox-write', 'admin-write'):
@@ -907,377 +871,6 @@ class ResidentWarehouseTests(unittest.TestCase):
                     'SELECT * FROM iceberg.information_schema.tables'):
             self.assertEqual(w.check_sql_policy(sql, role='bi_viewer'), sql)
 
-    def endpoint_request(self, method, path, sql=None, headers=None, replicas=1,
-                         backend_status=200, payload=None, failure=None, location=None,
-                         omit_host=False):
-        server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), http.server.BaseHTTPRequestHandler)
-        client = http.client.HTTPConnection(*server.server_address, timeout=5)
-        backend = Mock()
-        response = backend.getresponse.return_value
-        response.status = backend_status
-        response.read.return_value = json.dumps(payload if payload is not None else
-            {'id': 'q', 'stats': {'state': 'FINISHED'}, 'data': [[42]]}).encode()
-        response.getheaders.return_value = [('Content-Type', 'application/json'),
-                                            ('X-Trino-Set-Catalog', 'iceberg')]
-        if location:
-            response.getheaders.return_value.append(('Location', location))
-        response.getheader.return_value = ''
-        backend.request.side_effect = failure
-        # Keep a real listening server, while allowing serve_endpoint to install
-        # its handler and exercise one complete HTTP exchange synchronously.
-        def factory(address, handler):
-            server.RequestHandlerClass = handler
-            return server
-        with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory) as factory_mock, \
-             patch.object(w.http.client, 'HTTPConnection', return_value=backend), \
-             patch.object(w, 'trino', return_value=nullcontext('http://127.0.0.1:1234')) as trino, \
-             patch.object(w, 'status', return_value={'replicas': replicas}) as status, \
-             patch.object(w, 'transition') as wake, patch.object(w, '_LAST_ACTIVITY', 0):
-            thread = threading.Thread(target=w.serve_endpoint, kwargs={'port': server.server_port, 'once': True})
-            thread.start()
-            try:
-                if omit_host:
-                    client.putrequest(method, path, skip_host=True)
-                    for name, value in (headers or {}).items():
-                        client.putheader(name, value)
-                    body = sql.encode() if sql is not None else None
-                    if body is not None:
-                        client.putheader('Content-Length', str(len(body)))
-                    client.endheaders(body)
-                else:
-                    client.request(method, path, body=sql, headers=headers or {})
-                result = client.getresponse()
-                code, result_headers, data = result.status, dict(result.getheaders()), result.read()
-            finally:
-                client.close()
-                thread.join(timeout=5)
-            self.assertFalse(thread.is_alive(), 'once=True did not stop')
-            factory_mock.assert_called_once()
-            return code, result_headers, json.loads(data), backend, wake, status, trino, w._LAST_ACTIVITY
-
-    def test_endpoint_host_and_advertised_url_rewriting(self):
-        uri = 'http://backend:8080/v1/statement/q/1?token=abc#fragment'
-        payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
-        payload.update(id='q', stats={'state': 'RUNNING'})
-        cases = [({'Host': 'localhost:18080'}, '', '', 'http://localhost:18080'),
-                 ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
-                   'X-Forwarded-Proto': 'https'}, '', '', 'http://internal:8080'),
-                 ({'Host': 'internal:8080', 'X-Forwarded-Host': 'proxy.example:443',
-                   'X-Forwarded-Proto': 'https'}, '', 'true', 'https://proxy.example:443'),
-                 ({'Host': '', 'X-Forwarded-Host': 'proxy.example:443',
-                   'X-Forwarded-Proto': 'https'}, '', 'true', 'https://proxy.example:443'),
-                 ({'Host': 'localhost:18080', 'X-Forwarded-Host': 'proxy.example'},
-                  'https://trino.example/trino/', 'true', 'https://trino.example/trino')]
-        for headers, advertised, trust, base in cases:
-            with self.subTest(base=base), patch.dict(w.os.environ, {
-                    'TRINO_ADVERTISED_URL': advertised, 'TRINO_TRUST_FORWARDED_HEADERS': trust}):
-                code, response_headers, page, *_ = self.endpoint_request(
-                    'POST', '/v1/statement', 'SELECT 1', headers, payload=payload, location=uri)
-                self.assertEqual(code, 200)
-                expected = base + '/v1/statement/q/1?token=abc#fragment'
-                self.assertEqual(page, dict(payload, **dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), expected)))
-                self.assertEqual(response_headers['Location'], expected)
-
-    def test_endpoint_missing_host_does_not_imply_forwarded_trust(self):
-        uri = 'http://backend:8080/v1/statement/q/1?token=abc'
-        payload = dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), uri)
-        payload.update(id='q', stats={'state': 'RUNNING'})
-        for host in (None, ''):
-            for trust in ('', 'false', '0', 'true'):
-                with self.subTest(host=host, trust=trust), patch.dict(w.os.environ, {
-                        'TRINO_TRUST_FORWARDED_HEADERS': trust}):
-                    headers = {'X-Forwarded-Host': 'untrusted.example:443',
-                               'X-Forwarded-Proto': 'https'}
-                    if host is not None:
-                        headers['Host'] = host
-                    code, response_headers, page, *_ = self.endpoint_request(
-                        'POST', '/v1/statement', 'SELECT 1', headers, payload=payload,
-                        location=uri, omit_host=True)
-                    self.assertEqual(code, 200)
-                    parsed = w.urllib.parse.urlsplit(page['nextUri'])
-                    self.assertEqual(parsed.scheme, 'https' if trust == 'true' else 'http')
-                    self.assertEqual(parsed.hostname,
-                                     'untrusted.example' if trust == 'true' else '127.0.0.1')
-                    self.assertGreater(parsed.port, 0)
-                    self.assertEqual(parsed.path, '/v1/statement/q/1')
-                    self.assertEqual(parsed.query, 'token=abc')
-                    self.assertEqual(page, dict(payload, **dict.fromkeys(('nextUri', 'partialCancelUri', 'infoUri'), page['nextUri'])))
-                    self.assertEqual(response_headers['Location'], page['nextUri'])
-
-    def test_endpoint_uses_threading_http_server(self):
-        with patch.object(w.http.server, 'ThreadingHTTPServer') as server:
-            w.serve_endpoint(port=18080, once=True)
-        self.assertEqual(server.call_args.args[0], ('127.0.0.1', 18080))
-        server.return_value.__enter__.return_value.handle_request.assert_called_once_with()
-
-    def test_endpoint_polls_and_cancels_while_statement_is_blocked(self):
-        real_server = http.server.ThreadingHTTPServer
-        real_client = http.client.HTTPConnection
-        ready, running, release = threading.Event(), threading.Event(), threading.Event()
-        servers, outcomes = [], []
-
-        def factory(address, handler):
-            server = real_server(address, handler)
-            servers.append(server)
-            ready.set()
-            return server
-
-        def connection(*args, **kwargs):
-            backend = Mock()
-            def request(method, *args, **kwargs):
-                if method == 'POST':
-                    running.set()
-                    if not release.wait(5):
-                        raise TimeoutError('test statement was not released')
-            backend.request.side_effect = request
-            backend.getresponse.return_value.status = 200
-            backend.getresponse.return_value.read.return_value = b'{"id":"q","stats":{"state":"FINISHED"}}'
-            backend.getresponse.return_value.getheaders.return_value = []
-            backend.getresponse.return_value.getheader.return_value = ''
-            return backend
-
-        def send(method, path):
-            client = real_client(*servers[0].server_address, timeout=2)
-            try:
-                client.request(method, path, body='SELECT 1' if method == 'POST' else None)
-                response = client.getresponse()
-                response.read()
-                outcomes.append((method, response.status))
-            finally:
-                client.close()
-
-        with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory), \
-             patch.object(w.http.client, 'HTTPConnection', side_effect=connection), \
-             patch.object(w, 'trino', return_value=nullcontext('http://localhost:1234')), \
-             patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'initialize_auto_chill'), \
-             patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
-             patch.object(w, 'transition') as transition:
-            endpoint = threading.Thread(target=w.serve_endpoint, kwargs={'port': 0})
-            endpoint.start()
-            statement = None
-            try:
-                self.assertTrue(ready.wait(2))
-                statement = threading.Thread(target=send, args=('POST', '/v1/statement'))
-                statement.start()
-                self.assertTrue(running.wait(2))
-                self.assertEqual(w.read_last_activity(), 100)
-                self.assertFalse(w.check_auto_chill()['chilled'])
-                transition.assert_not_called()
-                send('GET', '/v1/statement/q/1')
-                send('DELETE', '/v1/statement/q/1')
-                # Until the POST response provides a continuation, guessing a
-                # backend path cannot borrow its still-active admission.
-                self.assertEqual(outcomes, [('GET', 409), ('DELETE', 409)])
-                self.assertTrue(statement.is_alive())
-            finally:
-                release.set()
-                if statement:
-                    statement.join(5)
-                if servers:
-                    servers[0].shutdown()
-                endpoint.join(5)
-            self.assertFalse(endpoint.is_alive())
-            self.assertIn(('POST', 200), outcomes)
-
-    def test_endpoint_statement_wake_headers_and_continuation_urls(self):
-        code, headers, page, backend, wake, _, _, activity = self.endpoint_request(
-            'POST', '/v1/statement', 'SELECT 42; ',
-            {'X-Trino-User': 'powerbi', 'X-Trino-Source': 'Power BI'}, replicas=0,
-            payload={'id': 'q', 'stats': {'state': 'RUNNING'}, 'nextUri': 'http://backend:8080/v1/statement/queued/q/1?x=2',
-                     'partialCancelUri': 'http://backend:8080/v1/statement/queued/q/1', 'data': [[42]]})
-        self.assertEqual(code, 200)
-        wake.assert_called_once_with('wake', 'LOCAL')
-        self.assertGreater(activity, 0)
-        self.assertEqual(headers['X-Trino-Set-Catalog'], 'iceberg')
-        self.assertEqual(page['data'], [[42]])
-        self.assertTrue(page['nextUri'].startswith('http://127.0.0.1:'))
-        self.assertTrue(page['nextUri'].endswith('/v1/statement/queued/q/1?x=2'))
-        self.assertNotIn('backend', page['partialCancelUri'])
-        call = backend.request.call_args
-        self.assertEqual(call.args, ('POST', '/v1/statement'))
-        self.assertEqual(call.kwargs['body'], b'SELECT 42')
-        self.assertEqual(call.kwargs['headers']['X-Trino-Source'], 'Power BI')
-        self.assertEqual(call.kwargs['headers']['X-Trino-User'], 'powerbi')
-        backend.close.assert_called_once()
-
-    def test_powerbi_desktop_import_simulation(self):
-        headers = {
-            'User-Agent': 'Microsoft.Data.Mashup (https://go.microsoft.com/fwlink/?LinkID=304249)',
-            'X-Trino-User': 'bi_reader',
-            'X-Trino-Catalog': 'iceberg',
-            'X-Trino-Schema': 'marts',
-        }
-        cases = (
-            ('SHOW SCHEMAS FROM iceberg',
-             [{'name': 'Schema', 'type': 'varchar'}], [['marts']]),
-            ('SHOW TABLES FROM iceberg.marts',
-             [{'name': 'Table', 'type': 'varchar'}], [['fct_orders']]),
-            ("SELECT table_name FROM information_schema.tables WHERE table_schema = 'marts'",
-             [{'name': 'table_name', 'type': 'varchar'}], [['fct_orders']]),
-            ('SELECT order_id, customer_code, total_amount, order_date FROM iceberg.marts.fct_orders',
-             [{'name': 'order_id', 'type': 'bigint'},
-              {'name': 'customer_code', 'type': 'varchar'},
-              {'name': 'total_amount', 'type': 'decimal(18,2)'},
-              {'name': 'order_date', 'type': 'date'}],
-             [[1, '000123', '1250.50', '2026-10-17'],
-              [2, '000007', '0.01', '2026-10-16']]),
-        )
-        for sql, columns, rows in cases:
-            with self.subTest(sql=sql):
-                payload = {'id': 'powerbi-import', 'columns': columns, 'data': rows,
-                           'stats': {'state': 'FINISHED'}}
-                code, _, page, backend, _, _, _, activity = self.endpoint_request(
-                    'POST', '/v1/statement', sql, headers, payload=payload)
-                self.assertEqual(code, 200)
-                self.assertEqual(page, payload)
-                backend.request.assert_called_once()
-                call = backend.request.call_args
-                self.assertEqual(call.args, ('POST', '/v1/statement'))
-                self.assertEqual(call.kwargs['body'], sql.encode())
-                for name, value in headers.items():
-                    self.assertEqual(call.kwargs['headers'][name], value)
-                self.assertGreater(activity, 0)
-                backend.close.assert_called_once()
-
-        for sql in ('SELECT * FROM iceberg.raw.orders', 'SELECT * FROM raw.orders'):
-            with self.subTest(sql=sql):
-                code, _, page, backend, wake, status, trino, activity = self.endpoint_request(
-                    'POST', '/v1/statement', sql, headers, replicas=0)
-                self.assertEqual(code, 403)
-                self.assertIn('SQL policy violation', page['error']['message'])
-                self.assertIn('restricted to iceberg.marts and metadata', page['error']['message'])
-                for mock in (backend.request, wake, status, trino):
-                    mock.assert_not_called()
-                self.assertEqual(activity, 0)
-
-    def test_endpoint_rejection_precedes_access(self):
-        for sql, headers in (
-                ('DELETE FROM iceberg.marts.t', {'X-Trino-User': 'bi_reader'}),
-                ('SELECT * FROM "iceberg"."raw".t', {'X-Trino-User': 'BI_tool'}),
-                ('SELECT * FROM staging.t', {'X-Trino-User': 'powerbi', 'X-Trino-Catalog': 'iceberg'}),
-                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Catalog': 'iceberg',
-                                     'X-Trino-Schema': 'sandbox'}),
-                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Catalog': 'tpch',
-                                     'X-Trino-Schema': 'tiny'}),
-                ('SELECT * FROM t', {'X-Trino-User': 'bi_reader', 'X-Trino-Schema': 'raw'})):
-            with self.subTest(sql=sql):
-                code, _, page, backend, wake, status, trino, activity = self.endpoint_request(
-                    'POST', '/v1/statement', sql, headers, replicas=0)
-                self.assertEqual(code, 403)
-                self.assertIn('SQL policy violation', page['error']['message'])
-                for mock in (backend.request, wake, status, trino):
-                    mock.assert_not_called()
-                self.assertEqual(activity, 0)
-
-    def test_endpoint_continuations_info_errors_and_non_bi(self):
-        for method, path in (('GET', '/v1/statement/queued/q/1?token=abc'),
-                             ('DELETE', '/v1/statement/executing/q/1'),
-                             ('POST', '/v1/statement/executing/q/1'), ('GET', '/v1/info')):
-            code, _, _, backend, wake, status, _, _ = self.endpoint_request(method, path)
-            self.assertEqual(code, 200 if path == '/v1/info' else 409)
-            if path == '/v1/info':
-                self.assertEqual(backend.request.call_args.args, (method, path))
-            else:
-                backend.request.assert_not_called()
-            wake.assert_not_called()
-            status.assert_not_called()
-        code, _, page, _, _, _, _, activity = self.endpoint_request(
-            'GET', '/v1/info', backend_status=503, payload={'error': {'message': 'unavailable'}})
-        self.assertEqual(code, 503)
-        self.assertEqual(page['error']['message'], 'unavailable')
-        self.assertEqual(activity, 0)
-        self.assertEqual(self.endpoint_request('GET', '/v1/info', failure=OSError('offline'))[0], 502)
-        self.assertEqual(self.endpoint_request('GET', '/unrelated')[0], 404)
-        code, _, _, _, wake, _, _, _ = self.endpoint_request(
-            'POST', '/v1/statement', 'INSERT INTO iceberg.raw.t VALUES (1)', {'X-Trino-User': 'engineer'})
-        self.assertEqual(code, 200)
-        wake.assert_not_called()
-
-    def test_endpoint_parser(self):
-        for options, expected in (([], (8080, '127.0.0.1', 'LOCAL', False)),
-                (['--port', '8090', '--bind', 'localhost', '--warehouse', 's', '--once'],
-                 (8090, 'localhost', 'S', True))):
-            with patch.object(w.sys, 'argv', ['warehouse', 'endpoint'] + options), \
-                 patch.object(w, 'serve_endpoint', return_value={}) as serve, \
-                 patch('sys.stdout', new_callable=io.StringIO):
-                self.assertEqual(w.main(), 0)
-                serve.assert_called_once_with(*expected)
-
-    def test_auto_chill_threshold_and_idle_status(self):
-        path = w.activity_path().with_name('auto_chill.json')
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with patch.object(w, '_AUTO_CHILL_MINUTES', 0), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100) as clock, \
-             patch.object(w, 'status', return_value={'replicas': 1}) as status, \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
-             patch.object(w, 'transition') as transition:
-            path.write_text('{"auto_chill_minutes": 0}')
-            self.assertFalse(w.check_auto_chill()['chilled'])
-            status.assert_not_called()
-            path.write_text('{"auto_chill_minutes": 1}')
-            w.touch_activity()
-            clock.return_value = 159
-            self.assertFalse(w.check_auto_chill()['chilled'])
-            clock.return_value = 160
-            self.assertEqual(w.check_auto_chill(), dict(chilled=True, auto_chill_minutes=1, idle_seconds=60))
-            transition.assert_called_once_with('chill', 'LOCAL')
-            status.return_value = {'replicas': 0}
-            self.assertFalse(w.check_auto_chill()['chilled'])
-            transition.assert_called_once()
-            clock.return_value = 0
-            self.assertEqual(w.auto_chill_status()['idle_seconds'], 0)
-
-    def test_auto_chill_active_queries_postpone_chill(self):
-        for count in (1, 7):
-            w.activity_path().unlink(missing_ok=True)
-            with self.subTest(count=count), patch.object(w, '_AUTO_CHILL_MINUTES', 1), \
-                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
-                 patch.object(w, 'status', return_value={'replicas': 1}), \
-                 patch.object(w, 'trino', return_value=nullcontext('url')), \
-                 patch.object(w, '_execute', return_value={'rows': [[count]]}) as execute, \
-                 patch.object(w, 'transition') as transition:
-                self.assertEqual(w.check_auto_chill(), dict(chilled=False, active_queries=count,
-                    auto_chill_minutes=1, idle_seconds=0))
-                self.assertEqual(w._LAST_ACTIVITY, 100)
-                transition.assert_not_called()
-                self.assertEqual(execute.call_args.args[1],
-                    "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
-                    "AND query NOT LIKE '%system.runtime.queries%'")
-
-    def test_auto_chill_protects_all_active_states(self):
-        for state in ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING'):
-            w.activity_path().unlink(missing_ok=True)
-            def active_count(url, sql, headers):
-                # Emulate a runtime table containing one query in this state.
-                states = sql.split('state IN (', 1)[1].split(')', 1)[0]
-                return {'rows': [[int(repr(state) in states)]]}
-            with self.subTest(state=state), patch.object(w, '_AUTO_CHILL_MINUTES', 1), \
-                 patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100), \
-                 patch.object(w, 'status', return_value={'replicas': 1}), \
-                 patch.object(w, 'trino', return_value=nullcontext('url')), \
-                 patch.object(w, '_execute', side_effect=active_count), \
-                 patch.object(w, 'transition') as transition:
-                self.assertEqual(w.check_auto_chill()['active_queries'], 1)
-                transition.assert_not_called()
-
-    def test_auto_chill_activity_during_poll_aborts_chill(self):
-        def poll(*args):
-            # A CLI or endpoint request completes while Trino is being polled.
-            w.touch_activity()
-            return {'rows': [[0]]}
-        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, '_execute', side_effect=poll), \
-             patch.object(w, 'transition') as transition:
-            self.assertFalse(w.check_auto_chill()['chilled'])
-            transition.assert_not_called()
-
     def test_auto_chill_settings_survive_initialization(self):
         path = w.activity_path().with_name('auto_chill.json')
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -1296,77 +889,6 @@ class ResidentWarehouseTests(unittest.TestCase):
                 path.write_text(invalid)
                 w.initialize_auto_chill()
                 self.assertEqual(w._AUTO_CHILL_MINUTES, 0)
-
-    def test_auto_chill_monitor_reloads_external_settings(self):
-        path = w.activity_path().with_name('auto_chill.json')
-        path.parent.mkdir(parents=True, exist_ok=True)
-
-        def update(minutes):
-            subprocess.run([sys.executable, '-c',
-                            'import json, pathlib, sys; '
-                            'pathlib.Path(sys.argv[1]).write_text(json.dumps('
-                            '{"auto_chill_minutes": int(sys.argv[2])}))',
-                            str(path), str(minutes)], check=True, timeout=10)
-
-        def tick(interval):
-            # Each interval sees a write from a separate process, without restart.
-            minutes = next(settings)
-            if minutes is None:
-                return True
-            update(minutes)
-            return False
-
-        settings = iter((5, 1, 0, None))
-        with patch.object(w, '_AUTO_CHILL_THREAD', None), \
-             patch.object(w, '_AUTO_CHILL_STOP') as stop, \
-             patch.object(w.threading, 'Thread') as thread, \
-             patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'status', return_value={'replicas': 1}) as status, \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, '_execute', return_value={'rows': [[0]]}), \
-             patch.object(w, 'transition') as transition:
-            stop.wait.side_effect = tick
-            w.start_auto_chill_daemon(interval=3)
-            thread.call_args.kwargs['target']()
-            self.assertEqual(w._AUTO_CHILL_MINUTES, 0)
-            status.assert_called_once_with('LOCAL')
-            transition.assert_called_once_with('chill', 'LOCAL')
-            w.stop_auto_chill_daemon()
-
-    def test_auto_chill_reload_off_during_poll_aborts_chill(self):
-        path = w.activity_path().with_name('auto_chill.json')
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text('{"auto_chill_minutes": 1}')
-
-        def poll(*args):
-            path.write_text('{"auto_chill_minutes": 0}')
-            return {'rows': [[0]]}
-
-        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, '_execute', side_effect=poll), \
-             patch.object(w, 'transition') as transition:
-            self.assertEqual(w.check_auto_chill(),
-                             dict(chilled=False, auto_chill_minutes=0, idle_seconds=100))
-            transition.assert_not_called()
-
-    def test_query_records_activity_before_initial_execution(self):
-        def execute(*args):
-            self.assertEqual(w.read_last_activity(), 100)
-            self.assertFalse(w.check_auto_chill()['chilled'])
-            return {'rows': []}
-
-        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', side_effect=execute), \
-             patch.object(w, 'transition') as transition, patch.object(w, 'telemetry'):
-            w.query('LOCAL', 'SELECT 1')
-            transition.assert_not_called()
 
     def test_cross_process_activity_and_idle_seconds(self):
         with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=100):
@@ -1392,28 +914,6 @@ class ResidentWarehouseTests(unittest.TestCase):
             self.assertEqual(w.read_last_activity(), 195)
             w.activity_path().unlink()
             self.assertEqual(w.read_last_activity(), 195)
-
-    def test_query_and_endpoint_update_shared_activity(self):
-        with patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', return_value={'rows': []}), \
-             patch.object(w, 'telemetry'), patch.object(w.time, 'time', return_value=100):
-            w.query('LOCAL', 'SELECT 1')
-        self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 100)
-        with patch.object(w.time, 'time', return_value=200):
-            self.endpoint_request('POST', '/v1/statement', 'SELECT 1')
-        self.assertEqual(json.loads(w.activity_path().read_text())['last_activity'], 200)
-
-    def test_auto_chill_query_failure_does_not_chill(self):
-        with patch.object(w, '_AUTO_CHILL_MINUTES', 1), patch.object(w, '_LAST_ACTIVITY', 0), \
-             patch.object(w.time, 'time', return_value=100), \
-             patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, '_execute', side_effect=RuntimeError('Trino unavailable')), \
-             patch.object(w, 'transition') as transition:
-            with self.assertRaisesRegex(RuntimeError, 'Trino unavailable'):
-                w.check_auto_chill()
-            transition.assert_not_called()
 
     def test_auto_chill_daemon_start_stop_and_restart(self):
         self.addCleanup(w.stop_auto_chill_daemon)
@@ -1449,32 +949,6 @@ class ResidentWarehouseTests(unittest.TestCase):
             w.stop_auto_chill_daemon()
             stop.set.assert_called_once_with()
             thread.return_value.join.assert_called_once_with()
-
-    def test_activity_updated_for_accepted_query_or_successful_wake(self):
-        with patch.object(w, '_LAST_ACTIVITY', 0), patch.object(w.time, 'time', return_value=50), \
-             patch.object(w, 'status', return_value={'replicas': 1, 'state': 'active'}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', return_value={'rows': []}) as execute, \
-             patch.object(w, 'telemetry'):
-            w.query('LOCAL', 'SELECT 1')
-            self.assertEqual(w._LAST_ACTIVITY, 50)
-            w.transition('wake', 'LOCAL')
-            self.assertEqual(w._LAST_ACTIVITY, 50)
-            w._LAST_ACTIVITY = 0
-            with patch.object(w, 'status', return_value={'replicas': 0, 'state': 'chilled'}):
-                w.transition('chill', 'LOCAL')
-            self.assertEqual(w._LAST_ACTIVITY, 0)
-            with patch.object(w, 'status', side_effect=RuntimeError('failed')):
-                with self.assertRaises(RuntimeError):
-                    w.transition('wake', 'LOCAL')
-            self.assertEqual(w._LAST_ACTIVITY, 0)
-            execute.side_effect = RuntimeError('failed')
-            with self.assertRaises(RuntimeError):
-                w.query('LOCAL', 'SELECT 1')
-            self.assertEqual(w._LAST_ACTIVITY, 50)
-            with self.assertRaises(w.admission.AdmissionConflict):
-                w.transition('wake', 'LOCAL')
-            self.assertEqual(w._LAST_ACTIVITY, 50)
 
     def test_qualify_rewrite(self):
         body = 'SELECT id, row_number() OVER (PARTITION BY id ORDER BY ts DESC) AS rn FROM events'
@@ -1548,19 +1022,6 @@ class ResidentWarehouseTests(unittest.TestCase):
                 with self.subTest(mode=mode, statement=statement), self.assertRaises(ValueError):
                     w.check_sql_policy(statement, mode)
 
-    def test_policy_rejection_precedes_warehouse_access(self):
-        with patch.object(w, 'status') as status, patch.object(w, 'trino') as trino:
-            with self.assertRaises(ValueError):
-                w.query('LOCAL', 'INSERT INTO iceberg.marts.t VALUES (1)')
-            status.assert_not_called()
-            trino.assert_not_called()
-        with patch.object(w, 'status', return_value={'replicas': 1}), \
-             patch.object(w, 'trino', return_value=nullcontext('url')), \
-             patch.object(w, 'execute', return_value={'rows': []}) as execute, patch.object(w, 'telemetry'):
-            report = w.query('LOCAL', 'INSERT INTO iceberg.sandbox.t VALUES (1); ', mode='sandbox-write')
-            self.assertEqual(report['mode'], 'sandbox-write')
-            self.assertEqual(execute.call_args.args[1], 'INSERT INTO iceberg.sandbox.t VALUES (1)')
-
     def test_sizes_and_states(self):
         for size in ("xs", "s", "local"):
             self.assertEqual(w.warehouse(size), size.upper())
@@ -1592,117 +1053,6 @@ class ResidentWarehouseTests(unittest.TestCase):
                  patch.object(w, "kubectl") as kube:
                 self.assertEqual(w.transition(action, "S")["result"], "noop")
                 kube.assert_not_called()
-
-    @patch.object(w, "telemetry", return_value="recorded")
-    def test_arbitrary_sql_pagination_and_auto_wake(self, telemetry):
-        sql = "SELECT name FROM arbitrary_table WHERE amount > 17"
-        with patch.object(w, "status", return_value={"replicas": 0}), \
-             patch.object(w, "transition") as wake, \
-             patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
-             patch.object(w, "http_json", side_effect=[
-                 {"id": "query1", "stats": {"state": "RUNNING"}, "nextUri": "http://localhost:1234/next"},
-                 {"id": "query1", "stats": {"state": "FINISHED"}, "columns": [{"name": "name"}], "data": [["a"], ["b"]]}]) as http:
-            report = w.query("local", sql, "iceberg", "public")
-            wake.assert_called_once_with("wake", "LOCAL")
-            self.assertEqual(report["rows"], [["a"], ["b"]])
-            self.assertEqual(report["row_count"], 2)
-            self.assertEqual(report["backend"], "trino-local")
-            self.assertFalse(report["truncated"])
-            self.assertTrue(report["auto_woken"])
-            self.assertEqual(report["query_id"], "query1")
-            self.assertEqual(http.call_args_list[0].args[1], sql.encode())
-            headers = http.call_args_list[0].args[2]
-            self.assertEqual(headers["X-Trino-Catalog"], "iceberg")
-            self.assertEqual(headers["X-Trino-Schema"], "public")
-            self.assertEqual(headers["X-Trino-Source"], "shirokuma-warehouse-LOCAL")
-
-    @patch.object(w, "telemetry", return_value="recorded")
-    def test_job_query_drains_pages_without_retaining_rows(self, telemetry):
-        with patch.object(w, "status", return_value={"replicas": 1}), \
-             patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
-             patch.object(w, "http_json", side_effect=[
-                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1], [2]], "nextUri": "http://localhost:1234/next"},
-                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[3]], "nextUri": "http://localhost:1234/done"},
-                 {"id": "job1", "stats": {"state": "FINISHED"}}]) as http, patch.object(w.urllib.request, "urlopen") as cancel:
-            report = w.query("LOCAL", "SELECT 1", max_rows=None)
-        self.assertEqual(http.call_count, 3)
-        cancel.assert_not_called()
-        self.assertEqual(report['rows'], [])
-        self.assertEqual(report['row_count'], 3)
-        self.assertFalse(report['truncated'])
-        self.assertEqual(report['result'], 'verified')
-
-    @patch.object(w, "telemetry", return_value="recorded")
-    def test_job_query_reports_error_after_result_page(self, telemetry):
-        with patch.object(w, "status", return_value={"replicas": 1}), \
-             patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
-             patch.object(w, "http_json", side_effect=[
-                 {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1]], "nextUri": "http://localhost:1234/next"},
-                 {"id": "job1", "stats": {"state": "FAILED"}, "error": {"message": "private value", "errorName": "DIVISION_BY_ZERO"}}]), \
-             patch.object(w.urllib.request, "urlopen") as cancel:
-            with self.assertRaises(w.TrinoQueryError) as failure:
-                w.query("LOCAL", "SELECT 1", max_rows=None)
-        cancel.assert_not_called()
-        self.assertEqual(failure.exception.error_name, 'DIVISION_BY_ZERO')
-        self.assertEqual(w.TrinoQueryError('private', 'unsafe value').error_name, 'UNKNOWN')
-        self.assertEqual(telemetry.call_args.kwargs, {'status': 'failed'})
-
-    def test_query_rejections_and_trino_error(self):
-        with self.assertRaises(ValueError):
-            w.query("XS", "  ")
-        with self.assertRaises(ValueError):
-            w.query("LOCAL", "SELECT 1", max_rows=0)
-        with patch.object(w, "status", return_value={"replicas": 0}), \
-             patch.object(w, "transition") as wake:
-            with self.assertRaises(ValueError):
-                w.query("XS", "SELECT 1", no_auto_wake=True)
-            wake.assert_not_called()
-        for failure in ({"error": {"message": "bad SQL"}}, OSError("HTTP failed"), TimeoutError()):
-            with patch.object(w, "status", return_value={"replicas": 1}), \
-                 patch.object(w, "trino", return_value=nullcontext("http://localhost:1234")), \
-                 patch.object(w, "http_json", side_effect=[failure]), patch.object(w, "telemetry") as telemetry:
-                with self.assertRaises((RuntimeError, OSError)):
-                    w.query("S", "invalid SQL")
-                self.assertEqual(telemetry.call_args.args[0], "query")
-                self.assertIsInstance(telemetry.call_args.args[1], int)
-                self.assertEqual(telemetry.call_args.kwargs, {"status": "failed"})
-
-    def test_default_local(self):
-        for action in ("status", "chill", "wake", "query"):
-            argv = ["warehouse", action] + (["--sql", "SELECT 1"] if action == "query" else [])
-            with patch.object(w.sys, "argv", argv), patch.object(w, "status", return_value={}) as status, \
-                 patch.object(w, "transition", return_value={}) as transition, \
-                 patch.object(w, "query", return_value={}) as query, patch("sys.stdout", new_callable=io.StringIO):
-                self.assertEqual(w.main(), 0)
-                call = {"status": status, "query": query}.get(action, transition).call_args
-                self.assertEqual(call.args[1 if action in ("chill", "wake") else 0], "LOCAL")
-                if action == "query":
-                    self.assertEqual(call.args[-1], 1000)
-
-    def test_query_mode_parser(self):
-        with patch.object(w.sys, 'argv', ['warehouse', 'query', '--sql', 'SELECT 1', '--mode', 'admin-write']), \
-             patch.object(w, 'query', return_value={}) as query, patch('sys.stdout', new_callable=io.StringIO):
-            self.assertEqual(w.main(), 0)
-        self.assertEqual(query.call_args.kwargs, {'mode': 'admin-write'})
-        self.assertEqual(query.call_args.args[-1], 1000)
-
-    @patch.object(w, "telemetry", return_value="skipped")
-    def test_bounded_rows_and_best_effort_cancel(self, telemetry):
-        for count, next_uri, cancel_error in [(3, "http://localhost/next", False),
-                                             (2, "http://localhost/next", True), (3, None, False), (2, None, False)]:
-            with patch.object(w, "status", return_value={"replicas": 1}), \
-                 patch.object(w, "trino", return_value=nullcontext("http://localhost")), \
-                 patch.object(w, "http_json", return_value={"id": "bounded", "stats": {"state": "RUNNING" if next_uri else "FINISHED"}, "data": [[i] for i in range(count)],
-                              "nextUri": next_uri}) as http, \
-                 patch.object(w.urllib.request, "urlopen", side_effect=OSError() if cancel_error else None) as cancel:
-                report = w.query("LOCAL", "SELECT arbitrary", max_rows=2)
-                self.assertEqual(report["rows"], [[0], [1]])
-                self.assertEqual(report["truncated"], count > 2 or bool(next_uri))
-                http.assert_called_once()
-                self.assertEqual(cancel.call_count, int(bool(next_uri)))
-                if next_uri:
-                    self.assertEqual(cancel.call_args.args[0].get_method(), "DELETE")
-                    self.assertEqual(cancel.call_args.args[0].full_url, next_uri)
 
     def test_port_forward_cleanup_on_failure_and_success(self):
         for failure in (False, True):
@@ -2151,6 +1501,110 @@ class ResidentWarehouseTests(unittest.TestCase):
         self.assertEqual(fields["action"], "warehouse.query")
         self.assertEqual(fields["status"], "failed")
         self.assertEqual(set(fields), {"action", "target", "status", "agent_id", "task_id", "trace_id", "duration_ms"})
+
+    def test_database_runtime_profile_is_required_by_entrypoints(self):
+        with patch.object(w.sys, 'argv', ['warehouse', 'status']), \
+             patch.object(w.sys, 'stderr', new_callable=io.StringIO) as error:
+            self.assertEqual(w.main(), 1)
+        self.assertEqual(error.getvalue().strip(),
+            'shirokuma warehouse requires a database runtime profile: set SHIROKUMA_RUNTIME_PROFILE or provide var/shirokuma/runtime-profile.json')
+        with self.assertRaisesRegex(ValueError, 'Database runtime profile required'):
+            w.serve_endpoint(once=True)
+        with self.assertRaisesRegex(ValueError, 'Database runtime profile required'):
+            w.query('LOCAL', 'SELECT 1')
+
+
+class BIRelationPolicyTests(unittest.TestCase):
+    def test_relation_positions_cannot_smuggle_raw_relations(self):
+        denied = [
+            'SELECT * FROM iceberg.marts.t limit, iceberg.raw.secret',
+            'SELECT * FROM iceberg.marts.limit, iceberg.raw.secret',
+            'SELECT * FROM "iceberg"."marts"."limit" "where", "iceberg"."raw"."secret"',
+            'WITH x AS (SELECT * FROM iceberg.raw.secret) SELECT * FROM x',
+            'WITH x AS (SELECT * FROM iceberg.marts.t) SELECT * FROM x JOIN iceberg.raw.secret ON true',
+            'SELECT * FROM (SELECT * FROM iceberg.marts.t) limit, iceberg.raw.secret',
+            'SELECT * FROM TABLE(iceberg.raw.function())',
+            'SELECT * FROM marts.public window, raw.secret',
+            'SELECT * FROM marts.public fetch, raw.secret',
+            'SELECT * FROM (VALUES 1) window, raw.secret',
+            'SELECT * FROM marts.public t JOIN marts.other o ON t.window = o.window, raw.secret',
+            'SELECT * FROM marts.public t JOIN marts.other o ON limit = 1, raw.secret',
+        ]
+        allowed = [
+            'SELECT execute FROM iceberg.marts.limit',
+            'SELECT "from" FROM "iceberg"."marts"."t" "where"',
+            'WITH x AS (SELECT * FROM iceberg.marts.t) SELECT * FROM x',
+            'SELECT * FROM iceberg.marts.t limit, iceberg.marts.other',
+            'SELECT * FROM iceberg.marts.t a JOIN iceberg.marts.u b ON a.id=b.id LIMIT 5',
+            'SELECT * FROM (SELECT * FROM iceberg.marts.t) x',
+        ]
+        for sql in denied:
+            with self.subTest(sql=sql), self.assertRaisesRegex(ValueError, 'restricted to iceberg.marts'):
+                w.check_bi_policy(sql, 'bi_reader')
+        for sql in allowed:
+            with self.subTest(sql=sql):
+                self.assertEqual(w.check_bi_policy(sql, 'bi_reader'), sql)
+
+
+class ExecuteProtocolTests(unittest.TestCase):
+    """_execute is the shared Trino statement-protocol client for database jobs."""
+
+    def test_pagination_returns_rows_and_query_id(self):
+        sql = "SELECT name FROM arbitrary_table WHERE amount > 17"
+        with patch.object(w, "trino_http_json", side_effect=[
+                {"id": "query1", "stats": {"state": "RUNNING"}, "nextUri": "http://localhost:1234/next"},
+                {"id": "query1", "stats": {"state": "FINISHED"}, "columns": [{"name": "name"}], "data": [["a"], ["b"]]}]) as http:
+            result = w._execute("http://localhost:1234", sql, {"X-Trino-Catalog": "iceberg"})
+        self.assertEqual(result, dict(query_id="query1", columns=[{"name": "name"}], rows=[["a"], ["b"]], truncated=False))
+        self.assertEqual(http.call_args_list[0].args[0], "http://localhost:1234/v1/statement")
+        self.assertEqual(http.call_args_list[0].args[1], sql.encode())
+        self.assertEqual(http.call_args_list[1].args[0], "http://localhost:1234/next")
+
+    def test_job_query_drains_pages_without_retaining_rows(self):
+        with patch.object(w, "trino_http_json", side_effect=[
+                {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1], [2]], "nextUri": "http://localhost:1234/next"},
+                {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[3]], "nextUri": "http://localhost:1234/done"},
+                {"id": "job1", "stats": {"state": "FINISHED"}}]) as http, \
+             patch.object(w.urllib.request, "urlopen") as cancel:
+            result = w._execute("http://localhost:1234", "SELECT 1", {}, max_rows=None)
+        self.assertEqual(http.call_count, 3)
+        cancel.assert_not_called()
+        self.assertEqual(result["rows"], [])
+        self.assertEqual(result["row_count"], 3)
+        self.assertFalse(result["truncated"])
+
+    def test_job_query_reports_error_after_result_page(self):
+        with patch.object(w, "trino_http_json", side_effect=[
+                {"id": "job1", "stats": {"state": "RUNNING"}, "data": [[1]], "nextUri": "http://localhost:1234/next"},
+                {"id": "job1", "stats": {"state": "FAILED"}, "error": {"message": "private value", "errorName": "DIVISION_BY_ZERO"}}]), \
+             patch.object(w.urllib.request, "urlopen") as cancel:
+            with self.assertRaises(w.TrinoQueryError) as failure:
+                w._execute("http://localhost:1234", "SELECT 1", {}, max_rows=None)
+        cancel.assert_not_called()
+        self.assertEqual(failure.exception.error_name, "DIVISION_BY_ZERO")
+        self.assertEqual(w.TrinoQueryError("private", "unsafe value").error_name, "UNKNOWN")
+
+    def test_bounded_rows_and_best_effort_cancel(self):
+        for count, next_uri, cancel_error in [(3, "http://localhost/next", False),
+                                             (2, "http://localhost/next", True), (3, None, False), (2, None, False)]:
+            with self.subTest(count=count, next_uri=next_uri, cancel_error=cancel_error), \
+                 patch.object(w, "trino_http_json", return_value={"id": "bounded", "stats": {"state": "RUNNING" if next_uri else "FINISHED"},
+                              "data": [[i] for i in range(count)], "nextUri": next_uri}) as http, \
+                 patch.object(w.urllib.request, "urlopen", side_effect=OSError() if cancel_error else None) as cancel:
+                result = w._execute("http://localhost", "SELECT arbitrary", {}, max_rows=2)
+                self.assertEqual(result["rows"], [[0], [1]])
+                self.assertEqual(result["truncated"], count > 2 or bool(next_uri))
+                http.assert_called_once()
+                self.assertEqual(cancel.call_count, int(bool(next_uri)))
+                if next_uri:
+                    self.assertEqual(cancel.call_args.args[0].get_method(), "DELETE")
+                    self.assertEqual(cancel.call_args.args[0].full_url, next_uri)
+
+    def test_backend_failures_propagate(self):
+        for failure in ({"error": {"message": "bad SQL"}}, OSError("HTTP failed"), TimeoutError()):
+            with self.subTest(failure=repr(failure)), patch.object(w, "trino_http_json", side_effect=[failure]):
+                with self.assertRaises((RuntimeError, OSError)):
+                    w._execute("http://localhost:1234", "invalid SQL", {})
 
 
 class AutoChillMonitorTakeoverTests(unittest.TestCase):

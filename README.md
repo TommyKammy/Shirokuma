@@ -194,7 +194,7 @@ make verify
 |---|---|
 | [`cmd/shirokuma/`](cmd/shirokuma/) | Go CLI entrypoint (`shirokuma`) / CLI エントリポイント |
 | [`internal/cli/`](internal/cli/) | Go CLI commands (`warehouse`, `lake`, `workbench`, `doctor`, `version`) |
-| [`tools/local_experiment/`](tools/local_experiment/) | Resident Lakehouse modules (`warehouse_resident.py`, `ai_benchmark.py`, `workbench_server.py`, `lab_lifecycle.py`, `dataops_client.py`, `agenthouse/`, `loki/`, `workbench/`, `dataops/dbt_persistent/`) |
+| [`tools/local_experiment/`](tools/local_experiment/) | Resident Lakehouse modules (`warehouse_resident.py`, `workbench_server.py`, `lab_lifecycle.py`, `dataops_client.py`, `agenthouse/`, `loki/`, `workbench/`, `dataops/dbt_persistent/`) |
 | [`deploy/`](deploy/) | Kubernetes / Flux v2 GitOps manifests for SeaweedFS, Polaris, PostgreSQL, Trino, and local overlays |
 | [`opentofu/dev/`](opentofu/dev/) | OpenTofu infrastructure definitions for the local Kubernetes environment |
 | [`policies/kyverno/`](policies/kyverno/) | Kyverno admission security policies (`baseline.yaml`) |

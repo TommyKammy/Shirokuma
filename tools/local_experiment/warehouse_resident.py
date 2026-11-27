@@ -1,7 +1,6 @@
 """Resident Trino warehouse control for the dedicated local lab."""
 import argparse
 from contextlib import ExitStack, contextmanager
-from functools import wraps
 import control_store
 import warehouse_admission as admission
 import http.client
@@ -126,40 +125,6 @@ def _operation_finish(handle, state):
         if state != 'UNKNOWN' and any(row.get('parent_id') == handle.id for row in rows):
             state = 'UNKNOWN'
         admission.finish(db, handle, state=state)
-
-
-@contextmanager
-def warehouse_operation(*, sql=False):
-    """One durable compound boundary, and one child per logical legacy SQL."""
-    if _profile_active():
-        raise ValueError('Legacy warehouse operation is unsupported with the database profile')
-    parent = admission.current()
-    if parent is not None and (not sql or parent.kind == 'legacy_sql'):
-        with admission.accepted(parent):
-            yield parent
-        return
-    with control_store.connect() as db:
-        db.execute('BEGIN IMMEDIATE')
-        handle = admission.admit(db, actor=parent.actor if parent else 'shirokuma-local',
-            kind='legacy_sql' if sql else 'operation', subject_id=uuid.uuid4().hex,
-            parent=parent)
-    with admission.accepted(handle):
-        try:
-            yield handle
-        except BaseException as error:
-            state = 'FAILED' if not sql and isinstance(error, (ValueError, PermissionError)) else 'UNKNOWN'
-            _operation_finish(handle, state)
-            raise
-        else:
-            _operation_finish(handle, 'FINISHED')
-
-
-def legacy_operation(function):
-    @wraps(function)
-    def run(*args, **kwargs):
-        with warehouse_operation():
-            return function(*args, **kwargs)
-    return run
 
 
 def check_lifecycle(*, accepted_wake=False, db=None):
@@ -288,44 +253,7 @@ def check_auto_chill(size='LOCAL'):
             # Missing/failed observation and blockers always preserve compute.
             chilled = False
         return dict(chilled=chilled, **auto_chill_status())
-    # Serialize the poll and stop with lifecycle changes. Durable admissions
-    # additionally cover the gaps between backend requests and job steps.
-    with _warehouse_gate(exclusive=True):
-        try:
-            check_lifecycle()
-        except (admission.AdmissionDenied, admission.AdmissionConflict):
-            return dict(chilled=False, **auto_chill_status())
-        _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
-        last_activity = read_last_activity()
-        if (_AUTO_CHILL_MINUTES == 0 or
-                time.time() - last_activity < _AUTO_CHILL_MINUTES * 60 or
-                status(size)['replicas'] == 0):
-            return dict(chilled=False, **auto_chill_status())
-        with warehouse_operation(sql=True), trino() as url:
-            count = _execute(url,
-                "SELECT COUNT(*) FROM system.runtime.queries WHERE state IN ('QUEUED', 'WAITING_FOR_RESOURCES', 'DISPATCHING', 'PLANNING', 'STARTING', 'RUNNING', 'FINISHING') "
-                "AND query NOT LIKE '%system.runtime.queries%'",
-                {'X-Trino-User': 'shirokuma-warehouse'})['rows'][0][0]
-        if count > 0:
-            touch_activity()
-            return dict(chilled=False, active_queries=count, **auto_chill_status())
-        with _ACTIVITY_LOCK:
-            # Another process may have turned chilling off during the Trino poll.
-            _AUTO_CHILL_MINUTES = _load_auto_chill_minutes(_AUTO_CHILL_MINUTES)
-            latest = read_last_activity()
-            if (_AUTO_CHILL_MINUTES > 0 and latest == last_activity and
-                    time.time() - latest >= _AUTO_CHILL_MINUTES * 60):
-                try:
-                    transition('chill', size)
-                except (admission.AdmissionDenied, admission.AdmissionConflict):
-                    pass  # A new durable admission won the race with this poll.
-                else:
-                    chilled = True
-    return dict(chilled=chilled, **auto_chill_status())
-
-
-def identifier(value: str) -> str:
-    return '.'.join('"' + part.replace('"', '""') + '"' for part in value.split('.'))
+    return dict(chilled=False, **auto_chill_status())
 
 
 def literal(value: str) -> str:
@@ -876,13 +804,6 @@ def _transition(action, size):
                        result="noop" if noop else "verified", before_replicas=before["replicas"],
                        after_replicas=0 if chilled else 1,
                        state="chilled" if chilled else "active"), started)
-
-
-def execute(url, sql, headers, max_rows=1000, *, context=None, principal=None):
-    if _profile_active():
-        raise ValueError('Use the authenticated query service with an explicit context')
-    with warehouse_operation(sql=True), warehouse_activity():
-        return _execute(url, sql, headers, max_rows)
 
 
 def _statement_page(page, expected_id=None):
@@ -1451,32 +1372,17 @@ def _native_request(headers, path, method, body, endpoint, *, warehouse_id='LOCA
 
 def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
     """Serve Trino's client protocol, keeping result/cancel URLs on this endpoint."""
+    if not _profile_active():
+        raise ValueError('Database runtime profile required')
     import request_auth
-    import trino_auth
-    from contextlib import nullcontext
-    import collections
-    import threading
-    native = _profile_active()
-    if native:
-        import ipaddress
-        try:
-            loopback = ipaddress.ip_address(bind).is_loopback
-        except ValueError:
-            loopback = bind == 'localhost'
-        if not loopback:
-            raise request_auth.AuthenticationError('Profile endpoint requires a loopback bind')
-    else:
-        request_auth.validate_bind(bind)
-    continuation_owners = collections.OrderedDict()
-    continuation_admissions = {}
-    continuation_backend_ids = {}
-    owner_lock = threading.Lock()
+    import ipaddress
+    try:
+        loopback = ipaddress.ip_address(bind).is_loopback
+    except ValueError:
+        loopback = bind == 'localhost'
+    if not loopback:
+        raise request_auth.AuthenticationError('Profile endpoint requires a loopback bind')
     size = globals()['warehouse'](warehouse)
-    if not native:
-        initialize_auto_chill()
-    hop_headers = {'connection', 'keep-alive', 'proxy-authenticate',
-                   'proxy-authorization', 'te', 'trailer', 'transfer-encoding',
-                   'upgrade', 'host', 'content-length'}
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):
@@ -1580,228 +1486,51 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
             return True
 
         def proxy(self):
-            handle, attempted = None, False
-            if native:
-                path = urllib.parse.urlsplit(self.path).path
-                if any(path == '/api/v1/' + name or path.startswith('/api/v1/' + name + '/')
-                       for name in ('queries', 'table-clones', 'table-profiles', 'table-drops', 'dataops')):
-                    from workbench_server import WorkbenchHandler
-                    WorkbenchHandler.database_request(self, self.command)
-                    return
-                import database_creations
-                if database_creations.dispatch(self, self.command):
-                    return
-                import database_retirement_routes
-                if database_retirement_routes.dispatch(self, self.command):
-                    return
-                if self.stage_request():
-                    return
-                try:
-                    import runtime_profile
-                    import query_service
-                    lengths = self.headers.get_all('Content-Length', [])
-                    if (self.headers.get_all('Transfer-Encoding', []) or len(lengths) > 1 or
-                            lengths and not re.fullmatch(r'[0-9]+', lengths[0])):
-                        raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
-                    length = int(lengths[0]) if lengths else 0
-                    if length < 0 or length > 1024 * 1024:
-                        raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
-                    body = self.rfile.read(length) if length else b''
-                    page = _native_request(self.headers, self.path, self.command, body,
-                        runtime_profile.current().sql_endpoint_url, warehouse_id=size)
-                    if self.command == 'DELETE':
-                        self.send_response(204)
-                        self.send_header('Content-Length', '0')
-                        self.end_headers()
-                        return
-                    payload = json.dumps(page).encode('utf-8')
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Content-Length', str(len(payload)))
-                    self.end_headers()
-                    self.wfile.write(payload)
-                except request_auth.AuthenticationError:
-                    self.error_json(401, 'Valid Basic credentials are required')
-                except query_service.QueryError as exc:
-                    self.error_json(exc.status, exc.message)
-                except (ValueError, OSError, RuntimeError):
-                    self.error_json(400, 'Invalid native protocol request')
-                return
             path = urllib.parse.urlsplit(self.path).path
-            statement = self.command == 'POST' and path == '/v1/statement'
-            if not (statement or path.startswith('/v1/statement/') or path == '/v1/info'):
-                self.error_json(404, 'unknown Trino endpoint')
+            if any(path == '/api/v1/' + name or path.startswith('/api/v1/' + name + '/')
+                   for name in ('queries', 'table-clones', 'table-profiles', 'table-drops', 'dataops')):
+                from workbench_server import WorkbenchHandler
+                WorkbenchHandler.database_request(self, self.command)
+                return
+            import database_creations
+            if database_creations.dispatch(self, self.command):
+                return
+            import database_retirement_routes
+            if database_retirement_routes.dispatch(self, self.command):
+                return
+            if self.stage_request():
                 return
             try:
-                if self.headers.get('Transfer-Encoding'):
-                    self.error_json(400, 'Content-Length is required')
+                import runtime_profile
+                import query_service
+                lengths = self.headers.get_all('Content-Length', [])
+                if (self.headers.get_all('Transfer-Encoding', []) or len(lengths) > 1 or
+                        lengths and not re.fullmatch(r'[0-9]+', lengths[0])):
+                    raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
+                length = int(lengths[0]) if lengths else 0
+                if length < 0 or length > 1024 * 1024:
+                    raise query_service.QueryError('UNKNOWN_CONTEXT', 400)
+                body = self.rfile.read(length) if length else b''
+                page = _native_request(self.headers, self.path, self.command, body,
+                    runtime_profile.current().sql_endpoint_url, warehouse_id=size)
+                if self.command == 'DELETE':
+                    self.send_response(204)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
                     return
-                length = int(self.headers.get('Content-Length', '0'))
-                if length < 0:
-                    raise ValueError('invalid Content-Length')
-                body = self.rfile.read(length) if length else None
-                principal = request_auth.authenticate(self.headers)
-                user = principal[0] if principal else self.headers.get('X-Trino-User', '')
-                role = (request_auth.select_role(principal[1], self.headers.get_all('X-Shirokuma-Role', []))
-                        if principal else resolve_role(user, self.headers.get('X-Shirokuma-Role')))
-                if principal and path.startswith('/v1/statement/'):
-                    with owner_lock:
-                        if continuation_owners.get(path) != user:
-                            self.error_json(403, 'Query continuation does not belong to this identity')
-                            return
-                if principal and any(self.headers.get_all(name, []) for name in
-                                     ('X-Trino-Role', 'X-Trino-Session', 'X-Trino-Original-User')):
-                    self.error_json(403, 'Client role and session overrides are not permitted')
-                    return
-                try:
-                    for header in self.headers.get_all('X-Trino-Prepared-Statement', []):
-                        if role != 'admin':
-                            raise ValueError('SQL policy violation: restricted prepared statements are not allowed')
-                        for entry in header.split(','):
-                            name, separator, prepared = entry.partition('=')
-                            if not separator or not name.strip() or not prepared.strip():
-                                raise ValueError('SQL policy violation: invalid prepared statement header')
-                            check_sql_policy(urllib.parse.unquote(prepared))
-                except ValueError as exc:
-                    self.error_json(403, str(exc))
-                    return
-                if statement:
-                    try:
-                        source_sql = (body or b'').decode('utf-8')
-                        sql = (check_sql_policy(source_sql, mode='sandbox-write' if role == 'data_engineer' else 'read-only', role=role) if role != 'admin'
-                               else check_bi_policy(source_sql, user, role=role))
-                        if role == 'bi_viewer':
-                            catalog = self.headers.get('X-Trino-Catalog', '')
-                            _check_bi_schemas(sql)
-                            schema = self.headers.get('X-Trino-Schema', '')
-                            if schema:
-                                _check_bi_schemas('SHOW TABLES FROM ' +
-                                                  (identifier(catalog) + '.' if catalog else '') + identifier(schema))
-                            elif catalog and catalog.lower() not in {'iceberg', 'system'}:
-                                raise ValueError('SQL policy violation (bi_reader): query restricted to iceberg.marts and metadata')
-                    except ValueError as exc:
-                        self.error_json(403, str(exc))
-                        return
-                    body = sql.encode('utf-8')
-                if statement:
-                    with control_store.connect() as db:
-                        db.execute('BEGIN IMMEDIATE')
-                        handle = admission.admit(db, actor=user or 'shirokuma-local',
-                            kind='legacy_sql', subject_id=uuid.uuid4().hex)
-                elif path.startswith('/v1/statement/'):
-                    with owner_lock:
-                        handle = continuation_admissions.get(path)
-                    if handle is None:
-                        self.error_json(409, 'Query context lost')
-                        return
-                with (admission.accepted(handle, allow_unknown=self.command == 'DELETE')
-                      if handle is not None else nullcontext()), (warehouse_activity() if path != '/v1/info' else nullcontext()):
-                    if statement and status(size)['replicas'] == 0:
-                        transition('wake', size)
-                    excluded = hop_headers | {h.strip().lower() for h in self.headers.get('Connection', '').split(',')}
-                    headers = {k: v for k, v in self.headers.items() if k.lower() not in excluded}
-                    # Request uncompressed JSON so continuation URLs can be rewritten.
-                    if principal:
-                        headers = {k: v for k, v in headers.items() if k.lower() not in
-                                   {'authorization', 'x-trino-user', 'x-shirokuma-role'}}
-                        headers['X-Trino-User'] = user
-                    if role == 'bi_viewer':
-                        headers['X-Trino-Catalog'] = 'iceberg'
-                        headers['X-Trino-Schema'] = 'marts'
-                    headers['Accept-Encoding'] = 'identity'
-                    headers = trino_auth.backend_headers(headers, role=role)
-                    with trino() as url:
-                        trino_auth.validate_backend_url(url)
-                        backend = urllib.parse.urlsplit(url)
-                        if backend.scheme == 'https':
-                            conn = http.client.HTTPSConnection(backend.hostname, backend.port or 443,
-                                timeout=TIMEOUT, context=trino_auth.backend_ssl_context())
-                        else:
-                            conn = http.client.HTTPConnection(backend.hostname, backend.port or 80, timeout=TIMEOUT)
-                        try:
-                            parsed_path = urllib.parse.urlsplit(self.path)
-                            target = urllib.parse.urlunsplit(('', '', parsed_path.path, parsed_path.query, ''))
-                            attempted = True
-                            conn.request(self.command, target, body=body, headers=headers)
-                            response = conn.getresponse()
-                            data = response.read()
-                            response_headers = response.getheaders()
-                        finally:
-                            conn.close()
-                host, actual_port = self.server.server_address[:2]
-                endpoint = os.environ.get('TRINO_ADVERTISED_URL')
-                if not endpoint:
-                    authority = self.headers.get('Host')
-                    trust_forwarded = os.environ.get(
-                        'TRINO_TRUST_FORWARDED_HEADERS', '').lower() in {'1', 'true', 'yes', 'on'}
-                    proto = 'http'
-                    if trust_forwarded:
-                        authority = self.headers.get('X-Forwarded-Host') or authority
-                        proto = self.headers.get('X-Forwarded-Proto', 'http')
-                    endpoint = f'{proto}://{authority}' if authority else f'http://{host}:{actual_port}'
-                endpoint = endpoint.rstrip('/')
-
-                def local_uri(value):
-                    parsed = urllib.parse.urlsplit(value)
-                    return endpoint + urllib.parse.urlunsplit(('', '', parsed.path, parsed.query, parsed.fragment))
-
-                if data:
-                    try:
-                        page = json.loads(data)
-                    except (ValueError, UnicodeError):
-                        page = None
-                    if isinstance(page, dict):
-                        if handle is not None:
-                            if 200 <= response.status < 300 and self.command != 'DELETE':
-                                backend_id, terminal = _statement_page(page, continuation_backend_ids.get(handle.id))
-                                continuation_backend_ids[handle.id] = backend_id
-                            with owner_lock:
-                                for key in ('nextUri', 'partialCancelUri'):
-                                    if isinstance(page.get(key), str):
-                                        continuation_admissions[urllib.parse.urlsplit(page[key]).path] = handle
-                            if 200 <= response.status < 300 and self.command != 'DELETE':
-                                if not page.get('nextUri'):
-                                    _operation_finish(handle, terminal)
-                        if principal:
-                            with owner_lock:
-                                for key in ('nextUri', 'partialCancelUri'):
-                                    if isinstance(page.get(key), str):
-                                        continuation_owners[urllib.parse.urlsplit(page[key]).path] = user
-                                while len(continuation_owners) > 4096:
-                                    continuation_owners.popitem(last=False)
-                        for key in ('nextUri', 'partialCancelUri', 'infoUri'):
-                            if isinstance(page.get(key), str):
-                                page[key] = local_uri(page[key])
-                        data = json.dumps(page).encode('utf-8')
-                    elif handle is not None and self.command != 'DELETE':
-                        _operation_finish(handle, 'UNKNOWN')
-                if handle is not None:
-                    if self.command == 'DELETE' and 200 <= response.status < 300:
-                        with control_store.connect() as db:
-                            db.execute('BEGIN IMMEDIATE')
-                            admission.finish(db, handle, state='CANCELED', evidence_ref=uuid.uuid4().hex)
-                    elif response.status >= 300 or not data:
-                        _operation_finish(handle, 'UNKNOWN')
-                self.send_response(response.status)
-                excluded = hop_headers | {h.strip().lower() for h in response.getheader('Connection', '').split(',')}
-                for key, value in response_headers:
-                    if key.lower() not in excluded:
-                        self.send_header(key, local_uri(value) if key.lower() == 'location' else value)
-                self.send_header('Content-Length', str(len(data)))
+                payload = json.dumps(page).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(payload)))
                 self.end_headers()
-                self.wfile.write(data)
-            except (admission.AdmissionDenied, admission.AdmissionConflict, admission.GateTimeout) as exc:
-                self.error_json(exc.status, exc.code)
-            except request_auth.AuthenticationError as exc:
-                self.error_json(401, str(exc))
-            except PermissionError as exc:
-                self.error_json(403, str(exc))
-            except ValueError as exc:
-                self.error_json(400, str(exc))
-            except (OSError, RuntimeError, http.client.HTTPException, subprocess.SubprocessError) as exc:
-                if handle is not None and attempted:
-                    _operation_finish(handle, 'UNKNOWN')
-                self.error_json(502, str(exc))
+                self.wfile.write(payload)
+            except request_auth.AuthenticationError:
+                self.error_json(401, 'Valid Basic credentials are required')
+            except query_service.QueryError as exc:
+                self.error_json(exc.status, exc.message)
+            except (ValueError, OSError, RuntimeError):
+                self.error_json(400, 'Invalid native protocol request')
+            return
 
         do_POST = proxy
         do_GET = proxy
@@ -1828,51 +1557,13 @@ def serve_endpoint(port=8080, bind='127.0.0.1', warehouse='LOCAL', once=False):
 
 
 def query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only', *, context=None, principal=None):
-    if _profile_active():
-        if context is None or principal is None:
-            raise ValueError('Authenticated query context is required')
-        import query_service
-        return query_service.submit(principal, context, sql, mode=mode, max_rows=max_rows,
-                                    request_id=str(uuid.uuid4()), worksheet_id=None)
-    warehouse(size)
-    if not sql or not sql.strip():
-        raise ValueError('query requires non-empty SQL')
-    if max_rows is not None and max_rows < 1:
-        raise ValueError('max-rows must be >= 1')
-    check_sql_policy(sql, mode)
-    with warehouse_operation(sql=True), warehouse_activity():
-        return _query(size, sql, catalog, schema, no_auto_wake, max_rows, mode)
-
-
-def _query(size, sql, catalog=None, schema=None, no_auto_wake=False, max_rows=1000, mode='read-only'):
-    size = warehouse(size)
-    if not sql or not sql.strip():
-        raise ValueError("query requires non-empty SQL")
-    if max_rows is not None and max_rows < 1:
-        raise ValueError("max-rows must be >= 1")
-    sql = check_sql_policy(sql, mode)
-    touch_activity()
-    started = time.monotonic()
-    auto_woken = status(size)["replicas"] == 0
-    try:
-        if auto_woken:
-            if no_auto_wake:
-                raise ValueError("warehouse is chilled; auto-wake is disabled")
-            transition("wake", size)
-        headers = {"X-Trino-User": "shirokuma-warehouse", "X-Trino-Source": "shirokuma-warehouse-" + size}
-        if catalog:
-            headers["X-Trino-Catalog"] = catalog
-        if schema:
-            headers["X-Trino-Schema"] = schema
-        with trino() as url:
-            result = execute(url, sql, headers, max_rows)
-    except Exception:
-        telemetry("query", int((time.monotonic() - started) * 1000), status="failed")
-        raise
-    touch_activity()
-    row_count = result.pop('row_count', len(result['rows']))
-    return finish(dict(warehouse=size, action="query", result="verified", auto_woken=auto_woken,
-                       **result, row_count=row_count, mode=mode), started)
+    if not _profile_active():
+        raise ValueError('Database runtime profile required')
+    if context is None or principal is None:
+        raise ValueError('Authenticated query context is required')
+    import query_service
+    return query_service.submit(principal, context, sql, mode=mode, max_rows=max_rows,
+                                request_id=str(uuid.uuid4()), worksheet_id=None)
 
 
 def _profile_client_query(sql, catalog, schema, max_rows, *, mode='read-only'):
@@ -1979,16 +1670,15 @@ def main():
             command.add_argument("--max-rows", type=int, default=1000)
             command.add_argument("--mode", default="read-only", choices=['read-only', 'sandbox-write', 'admin-write'])
     args = parser.parse_args()
+    if not _profile_active():
+        print('shirokuma warehouse requires a database runtime profile: set SHIROKUMA_RUNTIME_PROFILE or provide var/shirokuma/runtime-profile.json', file=sys.stderr)
+        return 1
     try:
         if args.action == "status":
             result = status(args.warehouse)
         elif args.action == "query":
-            if _profile_active():
-                result = _profile_client_query(args.sql, args.catalog, args.schema, args.max_rows, mode=args.mode)
-                result['warehouse'] = args.warehouse
-            else:
-                result = query(args.warehouse, args.sql, args.catalog, args.schema,
-                               args.no_auto_wake, args.max_rows, mode=args.mode)
+            result = _profile_client_query(args.sql, args.catalog, args.schema, args.max_rows, mode=args.mode)
+            result['warehouse'] = args.warehouse
         elif args.action == 'endpoint':
             # SIGTERM unwinds like Ctrl-C so owned port-forwards and atexit cleanup run.
             signal.signal(signal.SIGTERM, signal.default_int_handler)

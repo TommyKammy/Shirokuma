@@ -1,6 +1,5 @@
 """Identity and relation authorization regressions at real localhost HTTP entrances."""
 import base64
-from contextlib import nullcontext
 from email.message import Message
 import http.client
 from http.server import ThreadingHTTPServer
@@ -12,7 +11,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools/local_experiment'))
 import request_auth as auth
@@ -21,12 +20,9 @@ validate_shared_backend = auth.validate_shared_backend
 import workbench_server as wb
 import runtime_profile
 from workbench_source import WorkbenchSource
-import test_warehouse_resident as warehouse_tests
-w = warehouse_tests.w
 
 
 class SecurityBoundaryTests(unittest.TestCase):
-    endpoint_request = warehouse_tests.ResidentWarehouseTests.endpoint_request
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -82,25 +78,6 @@ class SecurityBoundaryTests(unittest.TestCase):
         with self.assertRaises(auth.AuthenticationError):
             auth.authenticate(headers)
 
-    def test_sql_endpoint_identity_and_default_ceiling(self):
-        for user in ('vera', None):
-            code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement',
-                'SELECT * FROM iceberg.raw.secret', headers=self.headers(user, **{'X-Trino-User': 'ordinary_person'}))
-            self.assertEqual(code, 403 if user else 401)
-            backend.request.assert_not_called()
-        for user in ('alice', 'emily'):
-            code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement',
-                'SELECT * FROM iceberg.raw.secret', headers=self.headers(user))
-            self.assertEqual(code, 200)
-            self.assertEqual(backend.request.call_args.kwargs['headers']['X-Trino-User'], user)
-            self.assertNotIn('Authorization', backend.request.call_args.kwargs['headers'])
-        with patch.dict(os.environ, SHIROKUMA_AUTH_MODE='local', SHIROKUMA_AUTH_FILE='', SHIROKUMA_DEFAULT_ROLE='bi_viewer'):
-            for sql in ('SELECT * FROM iceberg.raw.secret', 'DROP TABLE iceberg.marts.t'):
-                code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement', sql,
-                    headers={'X-Trino-User': 'ordinary_person'})
-                self.assertEqual(code, 403)
-                backend.request.assert_not_called()
-
     def test_session_source_initializes_roles_without_selector(self):
         html = WorkbenchSource().source
         self.assertIn("const response=await fetch('/api/session')", html)
@@ -149,89 +126,6 @@ initializeSession().then(()=>{
 """
         result = subprocess.run(['node', '-'], input=script, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_engineer_endpoint_write_scope(self):
-        for schema in ('raw', 'sandbox', 'marts', 'staging'):
-            sql = 'INSERT INTO iceberg.' + schema + '.t SELECT 1'
-            for user in ('emily', 'vera', 'alice'):
-                expected = 200 if user == 'alice' or (user == 'emily' and schema in {'raw', 'sandbox'}) else 403
-                with self.subTest(schema=schema, user=user):
-                    code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement', sql, headers=self.headers(user))
-                    self.assertEqual(code, expected)
-                    self.assertEqual(backend.request.called, expected == 200)
-
-    def test_relation_positions_and_http_boundaries(self):
-        denied = [
-            'SELECT * FROM iceberg.marts.t limit, iceberg.raw.secret',
-            'SELECT * FROM iceberg.marts.limit, iceberg.raw.secret',
-            'SELECT * FROM "iceberg"."marts"."limit" "where", "iceberg"."raw"."secret"',
-            'WITH x AS (SELECT * FROM iceberg.raw.secret) SELECT * FROM x',
-            'WITH x AS (SELECT * FROM iceberg.marts.t) SELECT * FROM x JOIN iceberg.raw.secret ON true',
-            'SELECT * FROM (SELECT * FROM iceberg.marts.t) limit, iceberg.raw.secret',
-            'SELECT * FROM TABLE(iceberg.raw.function())',
-            'SELECT * FROM marts.public window, raw.secret',
-            'SELECT * FROM marts.public fetch, raw.secret',
-            'SELECT * FROM (VALUES 1) window, raw.secret',
-            'SELECT * FROM marts.public t JOIN marts.other o ON t.window = o.window, raw.secret',
-            'SELECT * FROM marts.public t JOIN marts.other o ON limit = 1, raw.secret',
-        ]
-        allowed = [
-            'SELECT execute FROM iceberg.marts.limit',
-            'SELECT "from" FROM "iceberg"."marts"."t" "where"',
-            'WITH x AS (SELECT * FROM iceberg.marts.t) SELECT * FROM x',
-            'SELECT * FROM iceberg.marts.t limit, iceberg.marts.other',
-            'SELECT * FROM iceberg.marts.t a JOIN iceberg.marts.u b ON a.id=b.id LIMIT 5',
-            'SELECT * FROM (SELECT * FROM iceberg.marts.t) x',
-        ]
-        for sql in denied + allowed:
-            expected = 403 if sql in denied else 200
-            with self.subTest(sql=sql):
-                code, _, _, backend, *_ = self.endpoint_request('POST', '/v1/statement', sql, headers=self.headers('vera'))
-                self.assertEqual(code, expected)
-                self.assertEqual(backend.request.called, expected == 200)
-
-    def test_endpoint_continuations_are_bound_to_identity(self):
-        server = ThreadingHTTPServer(('127.0.0.1', 0), wb.WorkbenchHandler)
-        client = http.client.HTTPConnection(*server.server_address, timeout=3)
-        backend = Mock()
-        response = backend.getresponse.return_value
-        response.status = 200
-        response.read.return_value = json.dumps({'id': 'query1', 'nextUri': 'http://backend/v1/statement/executing/query1/0/1',
-            'partialCancelUri': 'http://backend/v1/statement/partialCancel/query1/0',
-            'stats': {'state': 'RUNNING'}}).encode()
-        response.getheaders.return_value = []
-        response.getheader.return_value = ''
-        ready = threading.Event()
-        def factory(address, handler):
-            server.RequestHandlerClass = handler
-            ready.set()
-            return server
-        with patch.object(w.http.server, 'ThreadingHTTPServer', side_effect=factory), \
-             patch.object(w.http.client, 'HTTPConnection', return_value=backend), \
-             patch.object(w, 'trino', return_value=nullcontext('http://127.0.0.1:1234')), \
-             patch.object(w, 'status', return_value={'replicas': 1}):
-            thread = threading.Thread(target=w.serve_endpoint, daemon=True)
-            thread.start()
-            self.assertTrue(ready.wait(3))
-            try:
-                def request(method, path, user=None, body=None):
-                    client.request(method, path, body=body, headers=self.headers(user, **{'X-Trino-User': 'alice'}))
-                    result = client.getresponse()
-                    result.read()
-                    return result.status
-                self.assertEqual(request('POST', '/v1/statement', 'alice', 'SELECT 1'), 200)
-                for method, path in [('GET', '/v1/statement/executing/query1/0/1'),
-                                     ('DELETE', '/v1/statement/partialCancel/query1/0')]:
-                    self.assertEqual(request(method, path, 'vera'), 403)
-                    self.assertEqual(request(method, path), 401)
-                    self.assertEqual(request(method, path, 'alice'), 200)
-                self.assertEqual(request('GET', '/v1/statement/executing/unknown/0/1', 'alice'), 403)
-                self.assertEqual(backend.request.call_count, 3)
-            finally:
-                client.close()
-                server.shutdown()
-                thread.join(3)
-                server.server_close()
 
     @patch('runtime_profile.active', return_value=False)
     def test_shared_startup_requires_secure_backend(self, _profile_active):

@@ -104,34 +104,6 @@ class TrinoAuthTests(unittest.TestCase):
         self.path.write_text(json.dumps(self.config))
         self.assertNotEqual(auth.backend_headers(role='admin'), before)
 
-    def test_password_mode_ai_requests_keep_provider_credentials(self):
-        import ai_config
-        import ai_benchmark as benchmark
-        import trino_auth as backend_auth
-        active = dict(provider='openai', model='ai-model', api_url='https://ai.invalid/v1',
-                      api_key='ai-provider-secret', api_key_env='', timeout=5,
-                      temperature=0, max_tokens=10)
-        captured = []
-
-        def capture(request, **options):
-            captured.append(request)
-            return io.BytesIO(json.dumps(dict(choices=[dict(message=dict(content='SELECT 1'))])).encode())
-
-        paths = (lambda: self.assertEqual(benchmark.generate_data_sql('trino', 'one'), 'SELECT 1'),)
-        with patch.object(ai_config, 'load_ai_config', side_effect=lambda: dict(active)), \
-             patch.object(benchmark, 'sql', return_value={'rows': []}), \
-             patch.object(benchmark.wr.urllib.request, 'urlopen', side_effect=capture), \
-             patch.object(backend_auth, 'backend_ssl_context', return_value=None) as backend_tls:
-            for call in paths:
-                call()
-                request = captured[-1]
-                self.assertEqual(request.full_url, 'https://ai.invalid/v1/chat/completions')
-                self.assertEqual(request.get_header('Authorization'), 'Bearer ai-provider-secret')
-                self.assertIsNone(request.get_header('X-trino-user'))
-                self.assertNotIn('Basic ', str(request.headers))
-            backend_tls.assert_not_called()
-        self.assertEqual(len(captured), 1)
-
     def test_password_mode_rejects_plaintext_urls_and_missing_ca(self):
         for url in ('http://127.0.0.1:8080', 'https://user:password@localhost', 'https:relative'):
             with self.assertRaises(RuntimeError):
