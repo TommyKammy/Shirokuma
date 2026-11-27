@@ -338,7 +338,7 @@ class BaselineTests(unittest.TestCase):
                 'warehouse_lifecycle.ensure_awake', 'warehouse_lifecycle.shared_engine_proof',
                 'warehouse_lifecycle.invalidate_proof', 'warehouse_lifecycle._proof_path',
                 'warehouse_admission.admit', 'warehouse_resident.query',
-                'warehouse_resident.execute', 'warehouse_resident.kubectl',
+                'warehouse_resident.kubectl',
                 'logical_registry._credentials', 'runtime_profile.logical_config',
                 'urllib.request.urlopen', 'socket.create_connection'):
             self.forbidden.append(self.patch(patch(target, side_effect=AssertionError(target))))

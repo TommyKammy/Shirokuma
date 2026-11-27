@@ -135,7 +135,7 @@ class DatabaseAITests(unittest.TestCase):
         self.complete = self.patch(patch.object(ai, '_complete', return_value='説明'))
         self.forbidden = [self.patch(patch(target, side_effect=AssertionError(target))) for target in (
             'query_service.submit', 'warehouse_admission.admit', 'dataops_service.begin',
-            'warehouse_resident.execute', 'warehouse_resident.query', 'warehouse_resident.kubectl')]
+            'warehouse_resident.query', 'warehouse_resident.kubectl')]
 
     def patch(self, patcher):
         result = patcher.start()

@@ -106,7 +106,7 @@ class PlatformTests(unittest.TestCase):
                 'warehouse_lifecycle.ensure_awake', 'warehouse_lifecycle.shared_engine_proof',
                 'warehouse_lifecycle.invalidate_proof', 'warehouse_lifecycle._proof_path',
                 'warehouse_admission.admit', 'warehouse_resident.query',
-                'warehouse_resident.execute', 'warehouse_resident.kubectl',
+                'warehouse_resident.kubectl',
                 'warehouse_resident.runtime_status', 'logical_registry._credentials'):
             # No runtime_status exists in some revisions; all actual entry points are guarded.
             if target == 'warehouse_resident.runtime_status':

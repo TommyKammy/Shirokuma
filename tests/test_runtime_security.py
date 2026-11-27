@@ -40,16 +40,23 @@ class RuntimeSecurityTests(unittest.TestCase):
         cls.stack.callback(cls.cleanup_tables)
         for schema in ('marts', 'raw', 'sandbox'):
             with auth.effective_role('admin'):
-                w.execute(cls.backend, 'CREATE SCHEMA IF NOT EXISTS iceberg.' + schema, {})
+                page = cls.backend_sql(cls, 'CREATE SCHEMA IF NOT EXISTS iceberg.' + schema,
+                                       trino_auth.backend_headers(role='admin'))
+                if page.get('error'):
+                    raise RuntimeError(page['error'].get('message', 'backend setup failed'))
         for table in cls.tables:
             with auth.effective_role('admin'):
-                w.execute(cls.backend, 'CREATE TABLE ' + table + ' AS SELECT 7 AS id', {})
+                page = cls.backend_sql(cls, 'CREATE TABLE ' + table + ' AS SELECT 7 AS id',
+                                       trino_auth.backend_headers(role='admin'))
+                if page.get('error'):
+                    raise RuntimeError(page['error'].get('message', 'backend setup failed'))
 
     @classmethod
     def cleanup_tables(cls):
         with auth.effective_role('admin'):
             for table in cls.tables + cls.created_tables:
-                w.execute(cls.backend, 'DROP TABLE IF EXISTS ' + table, {})
+                cls.backend_sql(cls, 'DROP TABLE IF EXISTS ' + table,
+                                trino_auth.backend_headers(role='admin'))
 
     def backend_sql(self, sql, headers):
         page = None
