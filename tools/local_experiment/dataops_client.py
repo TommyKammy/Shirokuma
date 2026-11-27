@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import sys
 import tempfile
 from types import SimpleNamespace
 from urllib.parse import quote, urlencode, urlsplit
@@ -303,3 +304,25 @@ def main(argv=None, *, profile=None):
     if not args.preview:
         _successful(reply)
     return dict(action='ingest', **reply)
+
+
+def cli():
+    try:
+        profile = configured_profile()
+        if profile is None:
+            print('shirokuma lake requires a database runtime profile: set SHIROKUMA_RUNTIME_PROFILE '
+                  'or provide var/shirokuma/runtime-profile.json', file=sys.stderr)
+            return 1
+        result = main(sys.argv[1:], profile=profile)
+        print(json.dumps(dict(result, action=action_label(sys.argv[1:]))))
+        return 0
+    except Exception as exc:
+        if isinstance(exc, ClientError) and exc.reply is not None:
+            print(json.dumps(dict(exc.reply, action=action_label(sys.argv[1:]),
+                                  error=dict(code=str(exc)))))
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(cli())

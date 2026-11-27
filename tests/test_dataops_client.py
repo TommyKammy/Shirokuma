@@ -17,7 +17,6 @@ import dataops_client as cli
 import stages_client as stages
 import dbt_client as dbt
 import marts_client as marts
-import lake_ingest
 import runtime_profile
 
 
@@ -76,9 +75,19 @@ class ClientTests(unittest.TestCase):
     def test_main_dispatch_does_not_configure_backend_or_execute_adapter(self):
         with patch.object(cli, 'configured_profile', return_value=self.profile), patch.object(cli, 'main', return_value={'action': 'ingest'}) as main, \
                 patch.object(runtime_profile, 'configure_process', side_effect=AssertionError('backend credentials')), \
-                patch.object(lake_ingest, 'ingest', side_effect=AssertionError('direct adapter')), patch('builtins.print'):
-            self.assertEqual(lake_ingest.main(), 0)
+                patch('builtins.print'):
+            self.assertEqual(cli.cli(), 0)
         main.assert_called_once()
+
+    def test_cli_without_profile_requires_database_runtime(self):
+        with patch.object(cli, 'configured_profile', return_value=None), \
+                patch.object(cli, 'main', side_effect=AssertionError('direct adapter')), \
+                patch.object(sys, 'argv', ['dataops_client.py', '--wap', 'build']), \
+                patch.object(sys, 'stdout', new_callable=io.StringIO) as stdout, \
+                patch.object(sys, 'stderr', new_callable=io.StringIO) as stderr:
+            self.assertEqual(cli.cli(), 1)
+        self.assertEqual(stdout.getvalue(), '')
+        self.assertIn('shirokuma lake requires a database runtime profile', stderr.getvalue())
 
     def test_profile_reads_only_profile_and_client_reference(self):
         profile = self.root / 'profile.json'
@@ -148,7 +157,7 @@ class ClientTests(unittest.TestCase):
                     client.get.side_effect = cli.ClientError('DB_ACCESS_REVOKED')
                 if failure == 'content':
                     client.request.side_effect = cli.ClientError('DB_ACCESS_REVOKED')
-                argv = ['lake_ingest.py', '--database', 'sales', '--schema', 'raw', '--export',
+                argv = ['dataops_client.py', '--database', 'sales', '--schema', 'raw', '--export',
                         'orders', '--output', str(output), '--idempotency-key', 'once']
                 # fsync fails after a real temporary file was created and written.
                 fsync = patch.object(cli.os, 'fsync', side_effect=OSError('private path and OS details')) if failure == 'write' else patch.object(cli.os, 'fsync', wraps=cli.os.fsync)
@@ -157,7 +166,7 @@ class ClientTests(unittest.TestCase):
                         patch.object(sys, 'argv', argv), \
                         patch.object(sys, 'stdout', new_callable=io.StringIO) as stdout, \
                         patch.object(sys, 'stderr', new_callable=io.StringIO) as stderr:
-                    self.assertEqual(lake_ingest.main(), 1)
+                    self.assertEqual(cli.cli(), 1)
                 recovery = json.loads(stdout.getvalue())
                 self.assertEqual(recovery['action'], 'export')
                 self.assertEqual(recovery['context'], self.context())
@@ -199,10 +208,10 @@ class ClientTests(unittest.TestCase):
             reply = dict(context=self.context(), operation=dict(id='op', state=state))
             with self.subTest(state=state), patch.object(cli, 'configured_profile', return_value=self.profile), \
                     patch.object(cli, 'main', side_effect=cli.ClientError('OPERATION_' + state, reply)), \
-                    patch.object(sys, 'argv', ['lake_ingest.py', '--wap', 'build']), \
+                    patch.object(sys, 'argv', ['dataops_client.py', '--wap', 'build']), \
                     patch.object(sys, 'stdout', new_callable=io.StringIO) as output, \
                     patch.object(sys, 'stderr', new_callable=io.StringIO):
-                self.assertEqual(lake_ingest.main(), 1)
+                self.assertEqual(cli.cli(), 1)
                 record = json.loads(output.getvalue())
                 self.assertEqual(record['action'], 'wap-build')
                 self.assertEqual(record['operation'], reply['operation'])

@@ -34,7 +34,7 @@ class BenchmarkTests(unittest.TestCase):
                 self.assertTrue(entry['question']['en'])
                 self.assertRegex(entry['question']['ja'], r'[ぁ-んァ-ヶ一-龯]')
                 self.assertIn(clause, entry['gold_sql'])
-                self.assertEqual(benchmark.bears.wr.check_sql_policy(entry['gold_sql']), entry['gold_sql'])
+                self.assertEqual(benchmark.wr.check_sql_policy(entry['gold_sql']), entry['gold_sql'])
 
     def test_gold_business_results_on_varied_rows(self):
         """Exercise joins/status/date grains, translating only Trino date syntax.
@@ -86,7 +86,7 @@ class BenchmarkTests(unittest.TestCase):
                 with self.subTest(id=entry['id']):
                     self.assertEqual(db.execute(sql).fetchall(), rows)
 
-    @patch.object(benchmark.bears, 'sql')
+    @patch.object(benchmark, 'sql')
     def test_success_discrepancy_and_syntax_failure(self, query):
         def execute(url, sql, **kwargs):
             self.assertEqual(url, 'http://trino')
@@ -105,17 +105,17 @@ class BenchmarkTests(unittest.TestCase):
         self.assertTrue(report['details'][1]['syntax_valid'])
         self.assertFalse(report['details'][1]['semantic_correct'])
 
-    @patch.object(benchmark.bears, 'sql', return_value=result([[42]]))
+    @patch.object(benchmark, 'sql', return_value=result([[42]]))
     def test_real_generation_path_and_resident_tunnel(self, query):
-        with patch.object(benchmark.bears.wr, 'trino', return_value=nullcontext('resident')) as tunnel, \
-                patch.object(benchmark.bears, 'generate_data_sql', return_value='SELECT 42') as generate:
+        with patch.object(benchmark.wr, 'trino', return_value=nullcontext('resident')) as tunnel, \
+                patch.object(benchmark, 'generate_data_sql', return_value='SELECT 42') as generate:
             report = benchmark.run_benchmark()
         tunnel.assert_called_once_with()
         self.assertEqual(generate.call_count, 15)
         self.assertIn(benchmark.SOURCE_SQL, generate.call_args.args[1])
         self.assertEqual(report['semantic_passed'], 15)
 
-    @patch.object(benchmark.bears, 'sql')
+    @patch.object(benchmark, 'sql')
     def test_gold_failure_keeps_generated_syntax_success(self, query):
         query.side_effect = lambda url, sql, **kw: result([[1]]) if sql == 'SELECT 1' else (_ for _ in ()).throw(RuntimeError('missing gold table'))
         report = benchmark.run_benchmark('endpoint', lambda question: 'SELECT 1')
@@ -123,7 +123,7 @@ class BenchmarkTests(unittest.TestCase):
         self.assertEqual(report['semantic_passed'], 0)
         self.assertIn('missing gold table', report['details'][0]['gold_error'])
 
-    @patch.object(benchmark.bears, 'sql', return_value=result([[1]]))
+    @patch.object(benchmark, 'sql', return_value=result([[1]]))
     def test_generation_and_policy_failures_still_evaluate_gold(self, query):
         for generator in (lambda question: 'DROP TABLE iceberg.marts.fct_orders',
                           lambda question: (_ for _ in ()).throw(RuntimeError('model offline'))):

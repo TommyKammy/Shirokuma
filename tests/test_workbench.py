@@ -12,7 +12,6 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/local_experiment"))
 import ai_config
-import bears_resident
 import workbench_server as wb
 from workbench_source import WorkbenchSource
 
@@ -135,27 +134,7 @@ eval(SHARED+JOBS+`
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('calendar schedule behavior complete', result.stdout)
 
-    def test_ai_key_isolation_when_endpoint_changes(self):
-        active = dict(provider='openai', api_url='https://old.example/v1', api_key='old-secret')
-        for change in ({'provider': 'custom'}, {'api_url': 'https://new.example/v1'},
-                       {'provider': 'custom', 'api_url': 'https://new.example/v1'}):
-            for key in (None, '********', '', 'new-secret'):
-                supplied = {**change, **({'api_key': key} if key is not None else {})}
-                with self.subTest(change=change, key=key), \
-                     patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
-                     patch.dict(bears_resident._ai_config, {}, clear=True), \
-                     patch.object(bears_resident.wap, 'persist_json') as persist:
-                    result = bears_resident.save_ai_config(supplied)
-                    self.assertEqual(result['api_key'], 'new-secret' if key == 'new-secret' else '')
-                    self.assertEqual(persist.call_args.args[1]['api_key'], result['api_key'])
-        for change in ({'model': 'new'}, {'api_url': active['api_url']}, {'api_key': '********'}):
-            with patch.object(ai_config, 'load_ai_config', return_value=dict(active)), \
-                 patch.dict(bears_resident._ai_config, {}, clear=True), \
-                 patch.object(bears_resident.wap, 'persist_json'):
-                self.assertEqual(bears_resident.save_ai_config(change)['api_key'], 'old-secret')
-
     def test_ai_endpoint_changes_clear_environment_credentials(self):
-        bears = bears_resident
         for key_env in ('OPENAI_API_KEY', 'BEAR_API_KEY'):
             active = dict(provider='openai', api_url='https://api.openai.com/v1',
                           api_key='', api_key_env=key_env)
@@ -165,27 +144,25 @@ eval(SHARED+JOBS+`
                 for change in ({'api_url': 'https://new.example/v1'}, {'provider': 'custom'}):
                     for key in (None, '', '********'):
                         supplied = {**change, **({'api_key': key} if key is not None else {})}
-                        result = bears.merged_ai_config(supplied)
+                        result = ai_config.merged_ai_config(supplied)
                         self.assertEqual(result['api_key_env'], '')
-                        self.assertIsNone(bears.resolve_api_key(result))
-                    result = bears.merged_ai_config({**change, 'api_key_env': 'NEW_KEY'})
-                    self.assertEqual(bears.resolve_api_key(result), 'new-secret')
-                    result = bears.merged_ai_config({**change, 'api_key': 'direct-new'})
-                    self.assertEqual(bears.resolve_api_key(result), 'direct-new')
-                self.assertEqual(bears.resolve_api_key(bears.merged_ai_config({'model': 'new'})),
+                        self.assertIsNone(ai_config.resolve_api_key(result))
+                    result = ai_config.merged_ai_config({**change, 'api_key_env': 'NEW_KEY'})
+                    self.assertEqual(ai_config.resolve_api_key(result), 'new-secret')
+                    result = ai_config.merged_ai_config({**change, 'api_key': 'direct-new'})
+                    self.assertEqual(ai_config.resolve_api_key(result), 'direct-new')
+                self.assertEqual(ai_config.resolve_api_key(ai_config.merged_ai_config({'model': 'new'})),
                                  os.environ[key_env])
-                self.assertIsNone(bears.resolve_api_key({'api_key_env': ''}))
+                self.assertIsNone(ai_config.resolve_api_key({'api_key_env': ''}))
 
-    def test_catalog_bear_restricts_all_table_reads_before_dispatch(self):
-        from types import SimpleNamespace
-        with patch.object(bears_resident.wr, 'trino') as trino:
-            for action in ('describe', 'lineage', 'search'):
-                args = SimpleNamespace(bear='catalog', role='bi_viewer', action=action,
-                                       table='raw.orders', snapshot_id='123')
-                for dispatch in (bears_resident.catalog, bears_resident.run):
-                    with self.assertRaises(PermissionError):
-                        dispatch(args)
-            trino.assert_not_called()
+    def test_resolve_api_key_precedence(self):
+        with patch.dict(os.environ, {'CUSTOM_KEY': 'env-secret', 'OPENAI_API_KEY': 'openai-secret'}):
+            self.assertEqual(ai_config.resolve_api_key(dict(api_key='direct', api_key_env='CUSTOM_KEY')), 'direct')
+            self.assertEqual(ai_config.resolve_api_key(dict(api_key='', api_key_env='CUSTOM_KEY')), 'env-secret')
+            self.assertIsNone(ai_config.resolve_api_key(ai_config.load_ai_config()))
+            self.assertEqual(ai_config.resolve_api_key(dict(provider='openai', api_key_env='OPENAI_API_KEY')),
+                             'openai-secret')
+            self.assertIsNone(ai_config.resolve_api_key(dict(api_key_env='MISSING')))
 
     def test_role_selector_markup_and_translations(self):
         doc = self.workbench_document()

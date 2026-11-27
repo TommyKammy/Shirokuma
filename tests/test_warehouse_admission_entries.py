@@ -1,6 +1,5 @@
 """Entry/drain contracts using temporary ledgers and synthetic backends only."""
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
 import http.server
 import io
 import json
@@ -19,8 +18,6 @@ sys.path[:0] = [str(Path(__file__).resolve().parents[1] / 'tools/local_experimen
 import control_store
 import warehouse_admission as admission
 import warehouse_resident as wr
-import jobs_resident as jobs
-import schedule_resident as schedules
 import query_service as qs
 import test_query_corrections as query_tests
 
@@ -148,279 +145,6 @@ class LegacyEntries(unittest.TestCase):
         with control_store.connect():
             pass
 
-    def definition(self):
-        return dict(name='example', parameters={}, steps=[dict(action='sql', sql='SELECT 1', mode='read-only')])
-
-    def test_firing_preflight_has_no_writer_and_can_continue_through_drain(self):
-        now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-        jobs.save_job(self.definition(), 'local', 'admin')
-        with patch.object(schedules, '_utc', return_value=now):
-            schedules.save_schedule(dict(name='example', kind='interval', every_minutes=5,
-                enabled=True, arguments={}), 'local', 'admin')
-        with jobs._db() as db:
-            db.execute('UPDATE schedules SET next_run_at=?', (now.isoformat(),))
-        validate = jobs._validate
-        parent = []
-        def preflight(*args, **kwargs):
-            if kwargs.get('preflight'):
-                parent.append(admission.current())
-                with jobs._db() as db:
-                    db.execute('BEGIN IMMEDIATE')
-                    self.assertEqual(admission.blockers(db)[0]['id'], parent[0].id)
-                drain()
-                with patch.object(wr, 'trino_http_json', return_value={'id': 'preflight', 'stats': {'state': 'FINISHED'}}):
-                    wr.execute('http://synthetic', 'SELECT 1', {})
-            return validate(*args, **kwargs)
-        def step(value):
-            self.assertEqual(admission.current().kind, 'job')
-            with jobs._db() as db:
-                rows = admission.blockers(db)
-                child = next(row for row in rows if row['kind'] == 'job')
-                self.assertEqual(child['parent_id'], parent[0].id)
-            return {'result': 'success'}
-        with patch.object(jobs, '_validate', side_effect=preflight), \
-                patch.object(jobs, '_start_worker', side_effect=jobs._worker), \
-                patch.object(jobs, '_execute_step', side_effect=step), patch.object(wr, 'telemetry'):
-            self.assertEqual(len(schedules.tick(now)['started']), 1)
-        with jobs._db() as db:
-            self.assertFalse(admission.blockers(db))
-            self.assertEqual(db.execute("SELECT state FROM warehouse_admissions WHERE kind='schedule_firing'").fetchone()[0], 'FINISHED')
-
-    def test_schedule_edit_during_preflight_is_revalidated_without_overwrite(self):
-        now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-        jobs.save_job(self.definition(), 'local', 'admin')
-        with patch.object(schedules, '_utc', return_value=now):
-            schedules.save_schedule(dict(name='example', kind='interval', every_minutes=5,
-                enabled=True, arguments={}), 'local', 'admin')
-        with jobs._db() as db:
-            db.execute('UPDATE schedules SET next_run_at=?', (now.isoformat(),))
-        validate = jobs._validate
-        def preflight(*args, **kwargs):
-            if kwargs.get('preflight'):
-                with jobs._db() as db:
-                    db.execute("UPDATE schedules SET enabled=0,role='bi_viewer',next_run_at=NULL")
-            return validate(*args, **kwargs)
-        with patch.object(jobs, '_validate', side_effect=preflight), patch.object(jobs, '_start_worker') as worker:
-            self.assertEqual(len(schedules.tick(now)['skipped']), 1)
-            worker.assert_not_called()
-        with jobs._db() as db:
-            self.assertEqual(tuple(db.execute('SELECT enabled,role,next_run_at FROM schedules').fetchone()), (0, 'bi_viewer', None))
-            self.assertFalse(admission.blockers(db))
-
-    def test_orphaned_firing_is_not_preflighted_or_replayed(self):
-        now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-        jobs.save_job(self.definition(), 'local', 'admin')
-        with patch.object(schedules, '_utc', return_value=now):
-            schedules.save_schedule(dict(name='example', kind='interval', every_minutes=5,
-                enabled=True, arguments={}), 'local', 'admin')
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            db.execute('UPDATE schedules SET next_run_at=?', (now.isoformat(),))
-            saved = dict(db.execute('SELECT * FROM schedules').fetchone())
-            admission.admit(db, actor='local', kind='schedule_firing',
-                subject_id=schedules._firing_subject(saved))
-        with patch.object(jobs, '_validate') as preflight, patch.object(jobs, '_start_worker') as worker:
-            self.assertEqual(len(schedules.tick(now)['skipped']), 1)
-            preflight.assert_not_called()
-            worker.assert_not_called()
-        with jobs._db() as db:
-            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
-            self.assertEqual(db.execute('SELECT next_run_at FROM schedules').fetchone()[0], (now + timedelta(minutes=5)).isoformat())
-
-    def test_failed_job_keeps_unknown_sql_and_firing_blockers(self):
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            firing = admission.admit(db, actor='local', kind='schedule_firing', subject_id='synthetic')
-        with admission.accepted(firing), jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            run_id = jobs._insert_run(db, self.definition(), {}, self.definition()['steps'] * 2, 'local', 'admin')
-        count = []
-        def step(value):
-            count.append(1)
-            if len(count) == 2:
-                with patch.object(wr, 'trino_http_json', side_effect=OSError):
-                    try:
-                        wr.execute('http://synthetic', 'SELECT 1', {})
-                    except OSError:
-                        raise ValueError('converted transport error')
-            return {'result': 'success'}
-        with patch.object(jobs, '_execute_step', side_effect=step), patch.object(wr, 'telemetry'):
-            jobs._worker(run_id, self.definition()['steps'] * 2, 'local', 'admin', jobs._lock(), firing_handle=firing)
-        with jobs._db() as db:
-            self.assertEqual(db.execute('SELECT status FROM steps WHERE position=1').fetchone()[0], 'success')
-            self.assertEqual({row['kind'] for row in admission.blockers(db)}, {'schedule_firing', 'job', 'legacy_sql'})
-            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
-
-    def test_malformed_legacy_post_or_page_remains_unknown(self):
-        valid = {'id': 'q', 'stats': {'state': 'RUNNING'}, 'nextUri': 'http://synthetic/next'}
-        malformed = [{}, {'stats': {'state': 'FINISHED'}}, {'id': 'q'},
-            {'id': 'q', 'stats': {'state': 'RUNNING'}},
-            {'id': 'q', 'stats': {'state': 'FINISHED'}, 'data': {}},
-            {'id': 'different', 'stats': {'state': 'FINISHED'}}]
-        for index, page in enumerate(malformed):
-            pages = [valid, page] if index == len(malformed) - 1 else [page]
-            with patch.object(wr, 'trino_http_json', side_effect=pages), self.assertRaises(RuntimeError):
-                wr.execute('http://synthetic', 'SELECT 1', {})
-        with jobs._db() as db:
-            self.assertEqual(len(admission.blockers(db)), len(malformed))
-            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
-
-    def test_autochill_poll_is_admitted_and_malformed_poll_cannot_chill(self):
-        from contextlib import nullcontext
-        with patch.object(wr, '_load_auto_chill_minutes', return_value=1), \
-                patch.object(wr, 'read_last_activity', return_value=0), patch.object(wr.time, 'time', return_value=100), \
-                patch.object(wr, 'status', return_value={'replicas': 1}), \
-                patch.object(wr, 'trino', return_value=nullcontext('http://synthetic')), \
-                patch.object(wr, '_transition') as transition:
-            def poll(*args, **kwargs):
-                with jobs._db() as db:
-                    self.assertEqual(admission.blockers(db)[0]['state'], 'ACTIVE')
-                return {}
-            with patch.object(wr, 'trino_http_json', side_effect=poll), self.assertRaises(RuntimeError):
-                wr.check_auto_chill()
-            transition.assert_not_called()
-        with jobs._db() as db:
-            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
-
-    def test_legacy_proxy_malformed_2xx_is_unknown_without_sockets(self):
-        from contextlib import nullcontext
-        from email.message import Message
-        with patch.object(wr.http.server, 'ThreadingHTTPServer') as server, \
-                patch.object(wr, 'initialize_auto_chill'):
-            wr.serve_endpoint(once=True)
-            handler_type = server.call_args.args[1]
-        for payload in ({}, {'stats': {'state': 'FINISHED'}}):
-            handler = object.__new__(handler_type)
-            handler.headers = Message()
-            handler.headers['X-Trino-User'] = 'admin'
-            handler.headers['Content-Length'] = '8'
-            handler.command, handler.path = 'POST', '/v1/statement'
-            handler.rfile, handler.wfile = io.BytesIO(b'SELECT 1'), io.BytesIO()
-            handler.server = Mock(server_address=('127.0.0.1', 12345))
-            handler.send_response, handler.send_header, handler.end_headers = Mock(), Mock(), Mock()
-            with patch.object(wr, 'status', return_value={'replicas': 1}), \
-                    patch.object(wr, 'trino', return_value=nullcontext('http://127.0.0.1:12345')), \
-                    patch.object(wr.http.client, 'HTTPConnection') as connection:
-                response = connection.return_value.getresponse.return_value
-                response.status, response.read.return_value = 200, json.dumps(payload).encode()
-                response.getheaders.return_value = []
-                handler.proxy()
-                handler.send_response.assert_called_once_with(502)
-        with jobs._db() as db:
-            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
-
-    def test_run_denial_rolls_back_all_claims(self):
-        drain()
-        with self.assertRaises(admission.AdmissionDenied):
-            with jobs._db() as db:
-                db.execute('BEGIN IMMEDIATE')
-                jobs._insert_run(db, self.definition(), {}, self.definition()['steps'], 'local', 'admin')
-        with jobs._db() as db:
-            for table in ('runs', 'steps', 'stage_files', 'warehouse_admissions'):
-                self.assertEqual(db.execute('SELECT count(*) FROM ' + table).fetchone()[0], 0)
-
-    def test_job_steps_inherit_token_during_drain(self):
-        steps = self.definition()['steps'] * 2
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            run_id = jobs._insert_run(db, self.definition(), {}, steps, 'local', 'admin')
-        seen = []
-        def execute(step):
-            seen.append(admission.current())
-            if len(seen) == 1:
-                drain()
-            with control_store.connect() as db:
-                self.assertTrue(admission.blockers(db))
-            with patch.object(wr, 'trino_http_json', return_value={'id': 'q', 'stats': {'state': 'FINISHED'}}):
-                wr.execute('http://synthetic', 'SELECT 1', {})
-            return {'result': 'success'}
-        lock = jobs._lock()
-        with patch.object(jobs, '_execute_step', side_effect=execute), patch.object(wr, 'telemetry'):
-            jobs._worker(run_id, steps, 'local', 'admin', lock)
-        self.assertEqual(len(seen), 2)
-        self.assertEqual(seen[0], seen[1])
-        with jobs._db() as db:
-            self.assertFalse(admission.blockers(db))
-
-    def test_lost_job_preserves_success_and_blocks_without_replay(self):
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            run_id = jobs._insert_run(db, self.definition(), {}, self.definition()['steps'] * 2, 'local', 'admin')
-            db.execute("UPDATE steps SET status='success' WHERE position=1")
-            jobs._lost(db)
-        with jobs._db() as db:
-            self.assertEqual(db.execute('SELECT status FROM steps WHERE position=1').fetchone()[0], 'success')
-            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
-            self.assertEqual(db.execute('SELECT status FROM runs WHERE id=?', (run_id,)).fetchone()[0], 'unknown')
-
-    def test_converted_sql_transport_error_keeps_job_and_child_unknown(self):
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            run_id = jobs._insert_run(db, self.definition(), {}, self.definition()['steps'], 'local', 'admin')
-        def execute(step):
-            try:
-                with patch.object(wr, 'trino_http_json', side_effect=OSError):
-                    wr.execute('http://synthetic', 'SELECT 1', {})
-            except OSError:
-                raise ValueError('operation failed')
-        with patch.object(jobs, '_execute_step', side_effect=execute), patch.object(wr, 'telemetry'):
-            jobs._worker(run_id, self.definition()['steps'], 'local', 'admin', jobs._lock())
-        with jobs._db() as db:
-            self.assertEqual(db.execute('SELECT status FROM runs').fetchone()[0], 'unknown')
-            self.assertEqual(len(admission.blockers(db)), 2)
-            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
-
-    def test_worker_final_bookkeeping_failure_retains_admission(self):
-        with jobs._db() as db:
-            db.execute('BEGIN IMMEDIATE')
-            run_id = jobs._insert_run(db, self.definition(), {}, self.definition()['steps'], 'local', 'admin')
-        with patch.object(jobs, '_execute_step', return_value={'result': 'success'}), \
-                patch.object(admission, 'finish', side_effect=RuntimeError('bookkeeping failed')), \
-                patch.object(wr, 'telemetry'):
-            with self.assertRaises(RuntimeError):
-                jobs._worker(run_id, self.definition()['steps'], 'local', 'admin', jobs._lock())
-        with jobs._db() as db:
-            self.assertEqual(admission.blockers(db)[0]['state'], 'ACTIVE')
-            self.assertEqual(db.execute('SELECT status FROM steps').fetchone()[0], 'success')
-            jobs._lost(db)
-        with jobs._db() as db:
-            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
-
-    def test_schedule_late_denial_rolls_back_claims_and_consumes_due_slot(self):
-        now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-        jobs.save_job(self.definition(), 'local', 'admin')
-        with patch.object(schedules, '_utc', return_value=now):
-            schedules.save_schedule(dict(name='example', kind='interval', every_minutes=5,
-                                         enabled=True, arguments={}), 'local', 'admin')
-        with jobs._db() as db:
-            db.execute('UPDATE schedules SET next_run_at=?', (now.isoformat(),))
-        original = jobs._insert_run
-        def insert(db, *args, **kwargs):
-            run_id = original(db, *args, **kwargs)
-            if kwargs.get('status') == 'queued':
-                db.execute("INSERT INTO stage_files VALUES ('synthetic','claim','queued',?,1)", (run_id,))
-                raise admission.AdmissionDenied('maintenance')
-            return run_id
-        with patch.object(jobs, '_insert_run', side_effect=insert), patch.object(jobs, '_start_worker') as worker:
-            self.assertEqual(len(schedules.tick(now)['skipped']), 1)
-            worker.assert_not_called()
-        with jobs._db() as db:
-            self.assertFalse(admission.blockers(db))
-            self.assertEqual(db.execute('SELECT count(*) FROM stage_files').fetchone()[0], 0)
-            self.assertEqual(db.execute('SELECT count(*) FROM runs').fetchone()[0], 1)
-            self.assertEqual(db.execute('SELECT error FROM runs').fetchone()[0], 'maintenance_skipped')
-
-    def test_dbt_timeout_retains_durable_blocker(self):
-        import lake_pipeline
-        module = lake_pipeline.warehouse_resident
-        with patch.object(module, 'status', return_value={'replicas': 1}), \
-                patch.object(module, 'telemetry'), patch.object(module, 'trino') as trino, \
-                patch.object(lake_pipeline, 'run_dbt', side_effect=subprocess.TimeoutExpired('dbt', 1)):
-            trino.return_value.__enter__.return_value = 'http://synthetic'
-            self.assertEqual(lake_pipeline.run('test')['result'], 'failed')
-        with jobs._db() as db:
-            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
-
     def test_lab_mutations_refuse_before_commands_but_status_is_available(self):
         import lab_lifecycle
         with wr.warehouse_operation(), patch.object(lab_lifecycle, 'run') as run:
@@ -465,38 +189,68 @@ class LegacyEntries(unittest.TestCase):
             execute.assert_not_called()
             status.assert_not_called()
 
-    def test_maintenance_schedules_consume_slot_without_preflight(self):
-        now = datetime(2026, 10, 20, tzinfo=timezone.utc)
-        jobs.save_job(self.definition(), 'local', 'admin')
-        with patch.object(schedules, '_utc', return_value=now):
-            for kind, extra in [('once', {'date': '2026-10-20', 'time': '00:05', 'timezone': 'UTC'}),
-                                ('interval', {'every_minutes': 5})]:
-                payload = dict(name='example', kind=kind, enabled=True, arguments={}, **extra)
-                schedules.save_schedule(payload, 'local', 'admin')
-                with jobs._db() as db:
-                    db.execute('UPDATE schedules SET next_run_at=?', (now.isoformat(),))
-                if kind == 'once':
-                    drain()
-                with patch.object(jobs, '_validate', side_effect=AssertionError('preflight')), \
-                        patch.object(jobs, '_start_worker') as worker:
-                    result = schedules.tick(now)
-                    self.assertEqual(len(result['skipped']), 1)
-                    worker.assert_not_called()
-                with jobs._db() as db:
-                    row = db.execute('SELECT * FROM schedules').fetchone()
-                    self.assertEqual(row['enabled'], int(kind != 'once'))
-                    self.assertEqual(db.execute('SELECT error FROM runs ORDER BY created_at DESC LIMIT 1').fetchone()[0], 'maintenance_skipped')
-                    if kind == 'interval':
-                        self.assertEqual(row['next_run_at'], (now + timedelta(minutes=5)).isoformat())
+    def test_malformed_legacy_post_or_page_remains_unknown(self):
+        valid = {'id': 'q', 'stats': {'state': 'RUNNING'}, 'nextUri': 'http://synthetic/next'}
+        malformed = [{}, {'stats': {'state': 'FINISHED'}}, {'id': 'q'},
+            {'id': 'q', 'stats': {'state': 'RUNNING'}},
+            {'id': 'q', 'stats': {'state': 'FINISHED'}, 'data': {}},
+            {'id': 'different', 'stats': {'state': 'FINISHED'}}]
+        for index, page in enumerate(malformed):
+            pages = [valid, page] if index == len(malformed) - 1 else [page]
+            with patch.object(wr, 'trino_http_json', side_effect=pages), self.assertRaises(RuntimeError):
+                wr.execute('http://synthetic', 'SELECT 1', {})
+        with control_store.connect() as db:
+            self.assertEqual(len(admission.blockers(db)), len(malformed))
+            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
+
+    def test_autochill_poll_is_admitted_and_malformed_poll_cannot_chill(self):
+        from contextlib import nullcontext
+        with patch.object(wr, '_load_auto_chill_minutes', return_value=1), \
+                patch.object(wr, 'read_last_activity', return_value=0), patch.object(wr.time, 'time', return_value=100), \
+                patch.object(wr, 'status', return_value={'replicas': 1}), \
+                patch.object(wr, 'trino', return_value=nullcontext('http://synthetic')), \
+                patch.object(wr, '_transition') as transition:
+            def poll(*args, **kwargs):
+                with control_store.connect() as db:
+                    self.assertEqual(admission.blockers(db)[0]['state'], 'ACTIVE')
+                return {}
+            with patch.object(wr, 'trino_http_json', side_effect=poll), self.assertRaises(RuntimeError):
+                wr.check_auto_chill()
+            transition.assert_not_called()
+        with control_store.connect() as db:
+            self.assertEqual(admission.blockers(db)[0]['state'], 'UNKNOWN')
+
+    def test_legacy_proxy_malformed_2xx_is_unknown_without_sockets(self):
+        from contextlib import nullcontext
+        from email.message import Message
+        with patch.object(wr.http.server, 'ThreadingHTTPServer') as server, \
+                patch.object(wr, 'initialize_auto_chill'):
+            wr.serve_endpoint(once=True)
+            handler_type = server.call_args.args[1]
+        for payload in ({}, {'stats': {'state': 'FINISHED'}}):
+            handler = object.__new__(handler_type)
+            handler.headers = Message()
+            handler.headers['X-Trino-User'] = 'admin'
+            handler.headers['Content-Length'] = '8'
+            handler.command, handler.path = 'POST', '/v1/statement'
+            handler.rfile, handler.wfile = io.BytesIO(b'SELECT 1'), io.BytesIO()
+            handler.server = Mock(server_address=('127.0.0.1', 12345))
+            handler.send_response, handler.send_header, handler.end_headers = Mock(), Mock(), Mock()
+            with patch.object(wr, 'status', return_value={'replicas': 1}), \
+                    patch.object(wr, 'trino', return_value=nullcontext('http://127.0.0.1:12345')), \
+                    patch.object(wr.http.client, 'HTTPConnection') as connection:
+                response = connection.return_value.getresponse.return_value
+                response.status, response.read.return_value = 200, json.dumps(payload).encode()
+                response.getheaders.return_value = []
+                handler.proxy()
+                handler.send_response.assert_called_once_with(502)
+        with control_store.connect() as db:
+            self.assertTrue(all(row['state'] == 'UNKNOWN' for row in admission.blockers(db)))
 
     def test_compound_entries_refuse_v2_and_maintenance_before_side_effects(self):
-        import lake_ingest, lake_pipeline, lake_seed, sqlserver_sync, disaster_recovery, bears_resident
-        calls = [lambda: lake_ingest.ingest('/missing'), lambda: lake_ingest.export_table('raw.x'),
-            lambda: lake_pipeline.run('build'), lambda: lake_pipeline.run_dbt('build', 'http://synthetic'),
-            lambda: lake_seed.run('seed'), lambda: sqlserver_sync.sync('dbo.x', 'raw.x'),
-            lambda: sqlserver_sync.reconcile('dbo.x', 'raw.x'), lambda: disaster_recovery.backup(),
-            lambda: disaster_recovery.restore('/missing', restore_warehouse=True),
-            lambda: bears_resident.clone_table('raw.x'), lambda: bears_resident.drop_table('raw.x')]
+        import disaster_recovery
+        calls = [lambda: disaster_recovery.backup(),
+            lambda: disaster_recovery.restore('/missing', restore_warehouse=True)]
         with patch('runtime_profile.active', return_value=True), patch.object(subprocess, 'run') as run, \
                 patch.object(wr, 'trino') as trino, patch.object(wr, 'kubectl') as scale:
             for call in calls:

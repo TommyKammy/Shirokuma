@@ -25,7 +25,7 @@ func (execResidentWarehouse) RunLake(ctx context.Context, explicit string, args 
 	if err != nil {
 		return nil, err
 	}
-	command := exec.CommandContext(ctx, "python3", append([]string{filepath.Join(root, "tools", "local_experiment", "lake_ingest.py")}, args...)...)
+	command := exec.CommandContext(ctx, "python3", append([]string{filepath.Join(root, "tools", "local_experiment", "dataops_client.py")}, args...)...)
 	// Keep the caller's working directory so relative input paths retain their meaning.
 	data, err := command.Output()
 	if err != nil {

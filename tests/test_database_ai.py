@@ -22,7 +22,6 @@ from urllib.parse import unquote, urlsplit, urlencode
 sys.path.insert(0, str(Path(__file__).parents[1] / 'tools/local_experiment'))
 import ai_config
 import ai_routes
-import bears_resident
 import control_store as store
 import data_management as dm
 import database_inventory as inv
@@ -136,8 +135,7 @@ class DatabaseAITests(unittest.TestCase):
         self.complete = self.patch(patch.object(ai, '_complete', return_value='説明'))
         self.forbidden = [self.patch(patch(target, side_effect=AssertionError(target))) for target in (
             'query_service.submit', 'warehouse_admission.admit', 'dataops_service.begin',
-            'warehouse_resident.execute', 'warehouse_resident.query', 'warehouse_resident.kubectl',
-            'bears_resident.sql')]
+            'warehouse_resident.execute', 'warehouse_resident.query', 'warehouse_resident.kubectl')]
 
     def patch(self, patcher):
         result = patcher.start()
@@ -700,8 +698,7 @@ JSON '{"json_secret":829}', ARRAY['array_secret', 937],
             self.config = dict(original, **{key: value})
             self.assert_error('AI_PROVIDER_UNAVAILABLE', ai._config)
         self.config = original
-        with patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError('key resolution')), \
-                patch.object(bears_resident, 'resolve_api_key', side_effect=AssertionError('key resolution')):
+        with patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError('key resolution')):
             self.assertNotIn('api_key', ai._config())
 
     def test_failure_classification_is_durable_and_replay_never_retries(self):
@@ -823,8 +820,7 @@ class ProviderTransportTests(unittest.TestCase):
     def test_local_http_only_content_and_no_key_proxy_or_tools(self):
         config = self.serve()
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'SECRET', 'HTTP_PROXY': 'http://192.0.2.1:1'}), \
-                patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError()), \
-                patch.object(bears_resident, 'resolve_api_key', side_effect=AssertionError()):
+                patch.object(ai_config, 'resolve_api_key', side_effect=AssertionError()):
             self.assertEqual(ai._complete(config, 'SELECT ?', [], 'en'), 'Only content')
         self.assertEqual(len(self.requests), 1)
         path, headers, body = self.requests[0]

@@ -4,7 +4,6 @@ import json
 from email.message import Message
 from pathlib import Path
 import sys
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -15,7 +14,6 @@ import request_auth
 import query_context
 import query_service
 import database_inventory as inventory
-import bears_resident
 
 
 class WorkbenchDatabaseTests(unittest.TestCase):
@@ -271,12 +269,6 @@ class WorkbenchDatabaseTests(unittest.TestCase):
             with patch.object(query_service, function, return_value={'id': 'q'}) as service:
                 self.assertEqual(self.request(path), (200, {'id': 'q'}))
                 service.assert_called_once()
-
-    def test_bears_helpers_are_guarded_without_autoload(self):
-        with patch.object(runtime_profile, 'configure_process', side_effect=AssertionError('must not load')):
-            self.assertEqual(bears_resident.run(SimpleNamespace(bear='catalog'))['code'], 'FEATURE_UNAVAILABLE')
-            with self.assertRaisesRegex(ValueError, 'FEATURE_UNAVAILABLE'):
-                bears_resident.catalog(SimpleNamespace(include_config=True, role='admin'))
 
     def test_v2_startup_configures_profile_without_legacy_background_work(self):
         events = []

@@ -1,5 +1,4 @@
 """Database Job contracts using real SQLite, flock and the P3 transport boundary."""
-import ast
 import base64
 from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
@@ -21,7 +20,7 @@ import control_store
 import data_management as dm
 import dataops_service as ds
 import db_jobs as jobs
-import jobs_resident as legacy
+import job_support
 import manual_wap
 import query_service as qs
 from query_context import QueryError
@@ -582,7 +581,7 @@ class DatabaseJobsTests(unittest.TestCase):
     def test_global_double_run_and_legacy_share_lock(self):
         job = self.save()
         run = self.submit(job)
-        self.assertIsNone(legacy._lock())
+        self.assertIsNone(job_support._lock())
         self.assert_code('JOB_BUSY', lambda: self.submit(job, key='other'))
         self.assertEqual(self.submit(job)['id'], run['id'])
         self.finish(run)
@@ -593,12 +592,10 @@ class DatabaseJobsTests(unittest.TestCase):
             db.execute("INSERT INTO runs (id,job_name,actor,role,definition,arguments,status,created_at,started_at) "
                 "VALUES ('legacy-running','legacy','owner','admin','{}','{}','running','2026-01-01T00:00:00Z',"
                 "'2026-01-01T00:00:00Z')")
-        with patch.object(legacy, '_lost', wraps=legacy._lost) as legacy_lost:
-            with self.assertRaises(QueryError) as caught:
-                self.submit(job, key='blocked')
+        with self.assertRaises(QueryError) as caught:
+            self.submit(job, key='blocked')
         self.assertEqual((caught.exception.code, caught.exception.status),
                          ('UNKNOWN_RECONCILIATION_REQUIRED', 409))
-        legacy_lost.assert_not_called()
         with control_store.connect() as db:
             self.assertEqual(tuple(db.execute(
                 "SELECT status,finished_at,error FROM runs WHERE id='legacy-running'").fetchone()),
@@ -833,16 +830,6 @@ with patch.object(j.queries,'_capture_dataops',return_value=SimpleNamespace(head
         first.communicate('', timeout=20)
         self.assertEqual(jobs.get_run(self.p, self.c, run_id)['status'], 'unknown')
         self.assertEqual(jobs.reconcile_run(self.p, self.c, run_id)['status'], 'failed')
-
-
-class DatabaseJobsLegacyIsolationTests(unittest.TestCase):
-    def test_module_does_not_import_legacy_resident_runner(self):
-        tree = ast.parse(Path(jobs.__file__).read_text())
-        imported = {alias.name.split('.')[0] for node in ast.walk(tree)
-                    if isinstance(node, ast.Import) for alias in node.names}
-        imported |= {node.module.split('.')[0] for node in ast.walk(tree)
-                     if isinstance(node, ast.ImportFrom) and node.module}
-        self.assertNotIn('jobs_resident', imported)
 
 
 class JobMigrationTests(unittest.TestCase):

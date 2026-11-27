@@ -50,8 +50,7 @@ class ObservationTests(unittest.TestCase):
                 'db_ai._complete', 'database_inventory.catalog_api',
                 'database_inventory.resolve_object', 'database_inventory.object_detail',
                 'warehouse_lifecycle.ensure_awake', 'logical_registry._credentials',
-                'bears_resident.resolve_api_key', 'ai_config.resolve_api_key',
-                'bears_resident.sre', 'bears_resident.policy'):
+                'ai_config.resolve_api_key'):
             self.patch(patch(target, side_effect=AssertionError(target)))
 
     def observe(self, context=None, principal=None):
